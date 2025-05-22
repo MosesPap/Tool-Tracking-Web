@@ -72,7 +72,7 @@
         <!-- Main App Section -->
         <div id="appSection" style="display: none;">
             <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2>Welcome, <span id="technicianName"></span></h2>
+                <h2>Welcome, <span id="fullName"></span></h2>
                 <div>
                     <button onclick="toggleAdmin()" id="adminButton" class="btn btn-info me-2" style="display: none;">
                         <i class="fas fa-cog"></i> Admin
@@ -202,11 +202,17 @@
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
                 console.log('Login successful:', userCredential.user.email);
                 
-                // Get technician name from technicians collection
-                const technicianDoc = await db.collection('technician').doc(userCredential.user.email).get();
-                if (technicianDoc.exists) {
+                // Get technician name from technicians collection using query
+                const technicianQuery = await db.collection('technician')
+                    .where('email', '==', userCredential.user.email)
+                    .get();
+                
+                if (!technicianQuery.empty) {
+                    const technicianDoc = technicianQuery.docs[0];
                     const technicianData = technicianDoc.data();
-                    localStorage.setItem('technicianName', technicianData.fullname || userCredential.user.email);
+                    // Store both the document ID and full name
+                    localStorage.setItem('technicianId', technicianDoc.id);
+                    localStorage.setItem('fullName', technicianData.fullName || userCredential.user.email);
                     if (technicianData.isAdmin) {
                         document.getElementById('adminButton').style.display = 'inline-block';
                     }
@@ -223,7 +229,7 @@
             if (html5QrcodeScanner) {
                 html5QrcodeScanner.clear();
             }
-            localStorage.removeItem('technicianName'); // Clear stored name on logout
+            localStorage.removeItem('fullName'); // Clear stored name on logout
         }
 
         // Toggle Admin Section
@@ -506,30 +512,31 @@
                 loginSection.style.display = 'none';
                 appSection.style.display = 'block';
                 
-                // Get technician name from localStorage or fetch from Firestore
-                const displayName = localStorage.getItem('fullname');
-                if (displayName) {
-                    document.getElementById('fullname').textContent = displayName;
-                }
-                
                 // Always fetch fresh data from Firestore
-                db.collection('technician').doc(user.email).get().then(doc => {
-                    if (doc.exists) {
-                        const technicianData = doc.data();
-                        const name = technicianData.fullname || user.email;
-                        localStorage.setItem('fullname', name);
-                        document.getElementById('fullname').textContent = name;
-                        
-                        if (technicianData.isAdmin) {
-                            document.getElementById('adminButton').style.display = 'inline-block';
+                db.collection('technician')
+                    .where('email', '==', user.email)
+                    .get()
+                    .then(querySnapshot => {
+                        if (!querySnapshot.empty) {
+                            const technicianDoc = querySnapshot.docs[0];
+                            const technicianData = technicianDoc.data();
+                            const name = technicianData.fullName || user.email;
+                            
+                            // Store both the document ID and full name
+                            localStorage.setItem('technicianId', technicianDoc.id);
+                            localStorage.setItem('fullName', name);
+                            document.getElementById('fullName').textContent = name;
+                            
+                            if (technicianData.isAdmin) {
+                                document.getElementById('adminButton').style.display = 'inline-block';
+                            }
+                        } else {
+                            document.getElementById('fullName').textContent = user.email;
                         }
-                    } else {
-                        document.getElementById('fullname').textContent = user.email;
-                    }
-                }).catch(error => {
-                    console.error('Error fetching technician data:', error);
-                    document.getElementById('fullname').textContent = user.email;
-                });
+                    }).catch(error => {
+                        console.error('Error fetching technician data:', error);
+                        document.getElementById('fullName').textContent = user.email;
+                    });
                 
                 loadTools();
             } else {
@@ -537,7 +544,7 @@
                 appSection.style.display = 'none';
                 adminSection.style.display = 'none';
                 document.getElementById('adminButton').style.display = 'none';
-                localStorage.removeItem('fullname');
+                localStorage.removeItem('fullName');
             }
         });
     </script>
