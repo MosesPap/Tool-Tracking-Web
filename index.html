@@ -106,11 +106,11 @@
                             <div class="card mb-4">
                                 <div class="card-body">
                                     <h4>Scan Tool</h4>
+                                    <button onclick="toggleCamera()" class="btn btn-primary btn-scan mb-3">
+                                        <i class="fas fa-camera"></i> Start Scanner
+                                    </button>
                                     <div id="cameraContainer" class="hidden">
                                         <video id="qrScanner" class="camera-view"></video>
-                                        <button onclick="toggleCamera()" class="btn btn-secondary btn-scan">
-                                            <i class="fas fa-camera"></i> Toggle Camera
-                                        </button>
                                     </div>
                                     <div class="input-group mb-3">
                                         <input type="text" id="toolCode" class="form-control" placeholder="Enter Tool Code">
@@ -202,10 +202,14 @@
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
                 console.log('Login successful:', userCredential.user.email);
                 
-                // Check if admin
-                const userDoc = await db.collection('users').doc(userCredential.user.email).get();
-                if (userDoc.exists && userDoc.data().isAdmin) {
-                    document.getElementById('adminButton').style.display = 'inline-block';
+                // Get technician name from technicians collection
+                const technicianDoc = await db.collection('technician').doc(userCredential.user.email).get();
+                if (technicianDoc.exists) {
+                    const technicianData = technicianDoc.data();
+                    localStorage.setItem('technicianName', technicianData.fullname || userCredential.user.email);
+                    if (technicianData.isAdmin) {
+                        document.getElementById('adminButton').style.display = 'inline-block';
+                    }
                 }
             } catch (error) {
                 console.error('Login error:', error);
@@ -219,6 +223,7 @@
             if (html5QrcodeScanner) {
                 html5QrcodeScanner.clear();
             }
+            localStorage.removeItem('technicianName'); // Clear stored name on logout
         }
 
         // Toggle Admin Section
@@ -277,23 +282,51 @@
                     }
                     
                     const status = data.status === 'OUT' ? 'IN' : 'OUT';
+                    const timestamp = firebase.firestore.FieldValue.serverTimestamp();
+
+                    // Update tool status
                     await toolRef.update({
                         status: status,
                         technician: user.email,
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        timestamp: timestamp
+                    });
+
+                    // Add log entry
+                    await db.collection('logtoolmovements').add({
+                        toolId: code,
+                        toolName: data.toolName || 'Unknown',
+                        partNumber: data.partNumber || code,
+                        location: data.location || '',
+                        status: status,
+                        technician: user.email,
+                        timestamp: timestamp
                     });
 
                     document.getElementById('toolCode').value = '';
                     loadTools();
                 } else {
+                    const timestamp = firebase.firestore.FieldValue.serverTimestamp();
+                    // Create new tool
                     await toolRef.set({
                         status: 'OUT',
                         technician: user.email,
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                        timestamp: timestamp,
                         toolName: 'Unknown',
                         partNumber: code,
                         location: ''
                     });
+
+                    // Add log entry for new tool
+                    await db.collection('logtoolmovements').add({
+                        toolId: code,
+                        toolName: 'Unknown',
+                        partNumber: code,
+                        location: '',
+                        status: 'OUT',
+                        technician: user.email,
+                        timestamp: timestamp
+                    });
+
                     loadTools();
                 }
             } catch (error) {
@@ -390,45 +423,60 @@
         }
 
         // QR Code Scanner
-        function initializeScanner() {
-            if (html5QrcodeScanner) {
-                return;
-            }
-
-            html5QrcodeScanner = new Html5Qrcode("qrScanner");
-        }
-
         async function toggleCamera() {
             const cameraContainer = document.getElementById('cameraContainer');
+            const toggleButton = document.querySelector('.btn-scan');
             
             if (!isScanning) {
                 try {
-                    initializeScanner();
+                    if (!html5QrcodeScanner) {
+                        html5QrcodeScanner = new Html5Qrcode("qrScanner");
+                    }
+
+                    const devices = await Html5Qrcode.getCameras();
+                    if (!devices || devices.length === 0) {
+                        alert('No cameras found. Please check camera permissions.');
+                        return;
+                    }
+
+                    // Prefer back camera on mobile
+                    const config = {
+                        fps: 10,
+                        qrbox: { width: 250, height: 250 },
+                        aspectRatio: 1.0
+                    };
+
                     await html5QrcodeScanner.start(
                         { facingMode: "environment" },
-                        {
-                            fps: 10,
-                            qrbox: { width: 250, height: 250 }
-                        },
+                        config,
                         (decodedText) => {
                             document.getElementById('toolCode').value = decodedText;
                             submitCode();
+                            // Optional: automatically stop scanning after successful scan
+                            // toggleCamera();
                         },
                         (error) => {
-                            // console.error(error);
+                            // Ignore errors during scanning
                         }
                     );
+
                     isScanning = true;
                     cameraContainer.classList.remove('hidden');
+                    toggleButton.innerHTML = '<i class="fas fa-camera"></i> Stop Scanner';
+                    toggleButton.classList.remove('btn-primary');
+                    toggleButton.classList.add('btn-danger');
                 } catch (err) {
                     console.error('Error starting camera:', err);
-                    alert('Error accessing camera. Please check camera permissions.');
+                    alert('Error accessing camera. Please check camera permissions and try again.');
                 }
             } else {
                 try {
                     await html5QrcodeScanner.stop();
                     isScanning = false;
                     cameraContainer.classList.add('hidden');
+                    toggleButton.innerHTML = '<i class="fas fa-camera"></i> Start Scanner';
+                    toggleButton.classList.remove('btn-danger');
+                    toggleButton.classList.add('btn-primary');
                 } catch (err) {
                     console.error('Error stopping camera:', err);
                 }
@@ -450,20 +498,34 @@
             if (user) {
                 loginSection.style.display = 'none';
                 appSection.style.display = 'block';
-                document.getElementById('technicianName').textContent = user.email;
-                loadTools();
                 
-                // Check if admin
-                db.collection('users').doc(user.email).get().then(doc => {
-                    if (doc.exists && doc.data().isAdmin) {
-                        document.getElementById('adminButton').style.display = 'inline-block';
-                    }
-                });
+                // Get technician name from localStorage or fetch from Firestore
+                const displayName = localStorage.getItem('technicianName') || 'Technician';
+                document.getElementById('technicianName').textContent = displayName;
+                
+                // If name not in localStorage, try to fetch from Firestore
+                if (!localStorage.getItem('technicianName')) {
+                    db.collection('technician').doc(user.email).get().then(doc => {
+                        if (doc.exists) {
+                            const technicianData = doc.data();
+                            const name = technicianData.fullname || user.email;
+                            localStorage.setItem('technicianName', name);
+                            document.getElementById('technicianName').textContent = name;
+                            
+                            if (technicianData.isAdmin) {
+                                document.getElementById('adminButton').style.display = 'inline-block';
+                            }
+                        }
+                    });
+                }
+                
+                loadTools();
             } else {
                 loginSection.style.display = 'block';
                 appSection.style.display = 'none';
                 adminSection.style.display = 'none';
                 document.getElementById('adminButton').style.display = 'none';
+                localStorage.removeItem('technicianName'); // Clear stored name on logout
             }
         });
     </script>
