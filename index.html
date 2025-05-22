@@ -13,10 +13,14 @@
         .camera-view {
             width: 100%;
             max-width: 640px;
+            height: 480px;
+            border: 2px solid #ccc;
             margin: 10px auto;
+            position: relative;
         }
         #reader {
             width: 100% !important;
+            height: 100% !important;
         }
         #reader video {
             object-fit: cover !important;
@@ -436,37 +440,53 @@
             
             if (!isScanning) {
                 try {
-                    // First check if we have camera permissions
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-                    stream.getTracks().forEach(track => track.stop()); // Stop the test stream
-                    
                     if (html5QrcodeScanner) {
                         html5QrcodeScanner.clear();
                         html5QrcodeScanner = null;
                     }
 
-                    const config = {
-                        fps: 10,
-                        qrbox: { width: 250, height: 250 },
-                        aspectRatio: 1.0,
-                        rememberLastUsedCamera: true,
-                        showTorchButtonIfSupported: true,
-                        showZoomSliderIfSupported: true
-                    };
+                    html5QrcodeScanner = new Html5Qrcode("reader");
+                    
+                    const devices = await Html5Qrcode.getCameras();
+                    console.log('Available cameras:', devices);
+                    
+                    if (!devices || devices.length === 0) {
+                        throw new Error('No cameras found on the device.');
+                    }
 
-                    html5QrcodeScanner = new Html5QrcodeScanner(
-                        "reader",
-                        config,
-                        /* verbose= */ false
+                    // Always try to use the back camera
+                    let cameraId = devices[0].id;
+                    const backCamera = devices.find(device => 
+                        device.label.toLowerCase().includes('back') || 
+                        device.label.toLowerCase().includes('rear'));
+                    if (backCamera) {
+                        cameraId = backCamera.id;
+                    }
+                    
+                    await html5QrcodeScanner.start(
+                        cameraId,
+                        {
+                            fps: 10,
+                            qrbox: { width: 250, height: 250 },
+                            aspectRatio: 1.0
+                        },
+                        async (decodedText) => {
+                            // Stop scanning after successful scan
+                            await html5QrcodeScanner.stop();
+                            document.getElementById('toolCode').value = decodedText;
+                            submitCode();
+                            // Reset the scanner state
+                            isScanning = false;
+                            cameraContainer.classList.add('hidden');
+                            toggleButton.innerHTML = '<i class="fas fa-camera"></i> Start Scanner';
+                            toggleButton.classList.remove('btn-danger');
+                            toggleButton.classList.add('btn-primary');
+                        },
+                        (error) => {
+                            // Handle scanning errors silently
+                            console.log(error);
+                        }
                     );
-
-                    html5QrcodeScanner.render((decodedText) => {
-                        document.getElementById('toolCode').value = decodedText;
-                        submitCode();
-                    }, (error) => {
-                        // Handle scanning errors silently
-                        console.log(error);
-                    });
 
                     isScanning = true;
                     cameraContainer.classList.remove('hidden');
@@ -488,6 +508,7 @@
             } else {
                 try {
                     if (html5QrcodeScanner) {
+                        await html5QrcodeScanner.stop();
                         html5QrcodeScanner.clear();
                         html5QrcodeScanner = null;
                     }
