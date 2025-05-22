@@ -211,7 +211,7 @@
                     const technicianDoc = technicianQuery.docs[0];
                     const technicianData = technicianDoc.data();
                     // Store both the document ID and full name
-                    localStorage.setItem('technicianId', technicianDoc.id);
+                    localStorage.setItem('techniciansId', technicianDoc.id);
                     localStorage.setItem('fullName', technicianData.fullName || userCredential.user.email);
                     if (technicianData.isAdmin) {
                         document.getElementById('adminButton').style.display = 'inline-block';
@@ -523,7 +523,7 @@
                             const name = technicianData.fullName || user.email;
                             
                             // Store both the document ID and full name
-                            localStorage.setItem('technicianId', technicianDoc.id);
+                            localStorage.setItem('techniciansId', technicianDoc.id);
                             localStorage.setItem('fullName', name);
                             document.getElementById('fullName').textContent = name;
                             
