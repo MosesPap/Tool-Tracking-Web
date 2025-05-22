@@ -202,15 +202,12 @@
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
                 console.log('Login successful:', userCredential.user.email);
                 
-                // Get technician name from technicians collection using query
-                const technicianQuery = await db.collection('technician')
-                    .where('email', '==', userCredential.user.email)
-                    .get();
+                // Get technician document using DocumentId
+                const technicianDoc = await db.collection('technicians').doc(userCredential.user.uid).get();
                 
-                if (!technicianQuery.empty) {
-                    const technicianDoc = technicianQuery.docs[0];
+                if (technicianDoc.exists) {
                     const technicianData = technicianDoc.data();
-                    // Store both the document ID and full name
+                    // Store the document ID
                     localStorage.setItem('techniciansId', technicianDoc.id);
                     localStorage.setItem('fullName', technicianData.fullName || userCredential.user.email);
                     if (technicianData.isAdmin) {
@@ -513,17 +510,15 @@
                 appSection.style.display = 'block';
                 
                 // Always fetch fresh data from Firestore
-                db.collection('technician')
-                    .where('email', '==', user.email)
+                db.collection('technicians').doc(user.uid)
                     .get()
-                    .then(querySnapshot => {
-                        if (!querySnapshot.empty) {
-                            const technicianDoc = querySnapshot.docs[0];
-                            const technicianData = technicianDoc.data();
+                    .then(doc => {
+                        if (doc.exists) {
+                            const technicianData = doc.data();
                             const name = technicianData.fullName || user.email;
                             
-                            // Store both the document ID and full name
-                            localStorage.setItem('techniciansId', technicianDoc.id);
+                            // Store the document ID
+                            localStorage.setItem('techniciansId', doc.id);
                             localStorage.setItem('fullName', name);
                             document.getElementById('fullName').textContent = name;
                             
