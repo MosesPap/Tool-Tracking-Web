@@ -426,34 +426,38 @@
         async function toggleCamera() {
             const cameraContainer = document.getElementById('cameraContainer');
             const toggleButton = document.querySelector('.btn-scan');
+            const videoElement = document.getElementById('qrScanner');
             
             if (!isScanning) {
                 try {
-                    if (!html5QrcodeScanner) {
-                        html5QrcodeScanner = new Html5Qrcode("qrScanner");
+                    if (html5QrcodeScanner) {
+                        await html5QrcodeScanner.clear();
+                        html5QrcodeScanner = null;
                     }
 
+                    html5QrcodeScanner = new Html5Qrcode("qrScanner");
+                    
                     const devices = await Html5Qrcode.getCameras();
+                    console.log('Available cameras:', devices);
+                    
                     if (!devices || devices.length === 0) {
                         alert('No cameras found. Please check camera permissions.');
                         return;
                     }
 
-                    // Prefer back camera on mobile
-                    const config = {
-                        fps: 10,
-                        qrbox: { width: 250, height: 250 },
-                        aspectRatio: 1.0
-                    };
-
+                    // Try to use the back camera first
+                    const cameraId = devices.length > 1 ? devices[1].id : devices[0].id;
+                    
                     await html5QrcodeScanner.start(
-                        { facingMode: "environment" },
-                        config,
+                        cameraId,
+                        {
+                            fps: 10,
+                            qrbox: { width: 250, height: 250 },
+                            aspectRatio: 1.0
+                        },
                         (decodedText) => {
                             document.getElementById('toolCode').value = decodedText;
                             submitCode();
-                            // Optional: automatically stop scanning after successful scan
-                            // toggleCamera();
                         },
                         (error) => {
                             // Ignore errors during scanning
@@ -471,7 +475,10 @@
                 }
             } else {
                 try {
-                    await html5QrcodeScanner.stop();
+                    if (html5QrcodeScanner) {
+                        await html5QrcodeScanner.stop();
+                        await html5QrcodeScanner.clear();
+                    }
                     isScanning = false;
                     cameraContainer.classList.add('hidden');
                     toggleButton.innerHTML = '<i class="fas fa-camera"></i> Start Scanner';
@@ -500,24 +507,29 @@
                 appSection.style.display = 'block';
                 
                 // Get technician name from localStorage or fetch from Firestore
-                const displayName = localStorage.getItem('technicianName') || 'Technician';
-                document.getElementById('technicianName').textContent = displayName;
-                
-                // If name not in localStorage, try to fetch from Firestore
-                if (!localStorage.getItem('technicianName')) {
-                    db.collection('technician').doc(user.email).get().then(doc => {
-                        if (doc.exists) {
-                            const technicianData = doc.data();
-                            const name = technicianData.fullname || user.email;
-                            localStorage.setItem('technicianName', name);
-                            document.getElementById('technicianName').textContent = name;
-                            
-                            if (technicianData.isAdmin) {
-                                document.getElementById('adminButton').style.display = 'inline-block';
-                            }
-                        }
-                    });
+                const displayName = localStorage.getItem('fullname');
+                if (displayName) {
+                    document.getElementById('fullname').textContent = displayName;
                 }
+                
+                // Always fetch fresh data from Firestore
+                db.collection('technician').doc(user.email).get().then(doc => {
+                    if (doc.exists) {
+                        const technicianData = doc.data();
+                        const name = technicianData.fullname || user.email;
+                        localStorage.setItem('fullname', name);
+                        document.getElementById('fullname').textContent = name;
+                        
+                        if (technicianData.isAdmin) {
+                            document.getElementById('adminButton').style.display = 'inline-block';
+                        }
+                    } else {
+                        document.getElementById('fullname').textContent = user.email;
+                    }
+                }).catch(error => {
+                    console.error('Error fetching technician data:', error);
+                    document.getElementById('fullname').textContent = user.email;
+                });
                 
                 loadTools();
             } else {
@@ -525,7 +537,7 @@
                 appSection.style.display = 'none';
                 adminSection.style.display = 'none';
                 document.getElementById('adminButton').style.display = 'none';
-                localStorage.removeItem('technicianName'); // Clear stored name on logout
+                localStorage.removeItem('fullname');
             }
         });
     </script>
