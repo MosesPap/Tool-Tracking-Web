@@ -457,16 +457,8 @@
 
                     html5QrcodeScanner.render(
                         (decodedText) => {
-                            // Stop scanning after successful scan
-                            html5QrcodeScanner.clear();
+                            // Just update the input field with the scanned code
                             document.getElementById('toolCode').value = decodedText;
-                            submitCode();
-                            // Reset the scanner state
-                            isScanning = false;
-                            cameraContainer.classList.add('hidden');
-                            toggleButton.innerHTML = '<i class="fas fa-camera"></i> Start Scanner';
-                            toggleButton.classList.remove('btn-danger');
-                            toggleButton.classList.add('btn-primary');
                         },
                         (error) => {
                             // Handle scanning errors silently
