@@ -395,7 +395,7 @@
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="outstandingToolsModalLabel">Outstanding Tool Checkouts</h5>
+            <h5 class="modal-title" id="outstandingToolsModalLabel">YOUR TOOLS CHECKED OUT BY OTHERS</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body" id="outstandingToolsBody">
@@ -413,7 +413,7 @@
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="outToolsNotifModalLabel">Outstanding Tools</h5>
+            <h5 class="modal-title" id="outToolsNotifModalLabel">TOOLS YOU HAVE CHECKED OUT</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body" id="outToolsNotifBody">
@@ -1302,9 +1302,10 @@
                 }
             });
             if (outToday > 0 || outPrevious > 0) {
-                let msg = '';
-                if (outToday > 0) msg += `You have <b>${outToday}</b> tool${outToday > 1 ? 's' : ''} checked out today that require your attention.<br>`;
-                if (outPrevious > 0) msg += `You have <b>${outPrevious}</b> tool${outPrevious > 1 ? 's' : ''} checked out from previous dates that require your attention.`;
+                let msg = '<b>ACTION REQUIRED:</b> THE FOLLOWING TOOLS YOU OWN ARE STILL CHECKED OUT BY OTHERS.';
+                if (outToday > 0) msg += `<br>- <b>${outToday}</b> TOOL${outToday > 1 ? 'S' : ''} CHECKED OUT TODAY.`;
+                if (outPrevious > 0) msg += `<br>- <b>${outPrevious}</b> TOOL${outPrevious > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES.`;
+                msg += '<br>PLEASE FOLLOW UP TO ENSURE THESE TOOLS ARE RETURNED.';
                 document.getElementById('outstandingToolsBody').innerHTML = msg;
                 const modal = new bootstrap.Modal(document.getElementById('outstandingToolsModal'));
                 modal.show();
@@ -1318,7 +1319,7 @@
             if (!(await isAfterNotificationTime())) return;
             // Get technician name
             const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-            const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+            const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'UNKNOWN TECHNICIAN';
             const now = new Date();
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -1341,12 +1342,19 @@
                 }
             });
             if (outToday > 0 || outPrev > 0) {
-                document.getElementById('outToolsNotifBody').innerHTML =
-                  `<p>You have <b>${outToday}</b> tool(s) checked out today and <b>${outPrev}</b> tool(s) checked out from previous dates that require your attention.</p>`;
+                let msg = '<b>REMINDER:</b> YOU HAVE TOOLS CHECKED OUT THAT NEED TO BE RETURNED.';
+                if (outToday > 0) msg += `<br>- <b>${outToday}</b> TOOL${outToday > 1 ? 'S' : ''} CHECKED OUT TODAY.`;
+                if (outPrev > 0) msg += `<br>- <b>${outPrev}</b> TOOL${outPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES.`;
+                msg += '<br>PLEASE RETURN THESE TOOLS AS SOON AS POSSIBLE.';
+                document.getElementById('outToolsNotifBody').innerHTML = msg;
                 const notifModal = new bootstrap.Modal(document.getElementById('outToolsNotifModal'));
                 notifModal.show();
             }
         }
+
+        // Update modal titles for clarity (all caps)
+        document.getElementById('outstandingToolsModalLabel').textContent = 'YOUR TOOLS CHECKED OUT BY OTHERS';
+        document.getElementById('outToolsNotifModalLabel').textContent = 'TOOLS YOU HAVE CHECKED OUT';
     </script>
 </body>
 </html> 
