@@ -59,19 +59,77 @@
     <div class="container mt-4">
         <!-- Login Section -->
         <div id="loginSection" class="mb-4">
-            <h2>Tool Tracking System</h2>
-            <div class="card">
+            <div class="card mx-auto" style="max-width: 400px;">
                 <div class="card-body">
-                    <h3 class="card-title">Login</h3>
+                    <h3 class="card-title text-center mb-3">Sign In</h3>
+                    <div id="loginAlert" class="alert alert-danger d-none" role="alert"></div>
                     <div class="mb-3">
-                        <input type="email" id="email" class="form-control" placeholder="Email">
+                        <input type="email" id="loginEmail" class="form-control" placeholder="Email">
                     </div>
-                    <div class="mb-3">
-                        <input type="password" id="password" class="form-control" placeholder="Password">
+                    <div class="mb-3 input-group">
+                        <input type="password" id="loginPassword" class="form-control" placeholder="Password">
+                        <button class="btn btn-outline-secondary" type="button" id="toggleLoginPassword">
+                            <i class="fas fa-eye"></i>
+                        </button>
                     </div>
-                    <button onclick="login()" class="btn btn-primary">Login</button>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="keepSignedIn">
+                            <label class="form-check-label" for="keepSignedIn">Keep me signed in</label>
+                        </div>
+                        <a href="#" id="forgotPasswordLink">Forgot my password?</a>
+                    </div>
+                    <button onclick="login()" class="btn btn-primary w-100 mb-2" id="loginBtn">Sign In</button>
+                    <button onclick="showSignUp()" class="btn btn-link w-100">Don't have an account? Sign Up</button>
                 </div>
             </div>
+        </div>
+
+        <!-- Sign Up Section -->
+        <div id="signUpSection" class="mb-4 d-none">
+            <div class="card mx-auto" style="max-width: 400px;">
+                <div class="card-body">
+                    <h3 class="card-title text-center mb-3">Sign Up</h3>
+                    <div id="signUpAlert" class="alert alert-danger d-none" role="alert"></div>
+                    <div class="mb-3">
+                        <input type="email" id="signUpEmail" class="form-control" placeholder="Email">
+                    </div>
+                    <div class="mb-3 input-group">
+                        <input type="password" id="signUpPassword" class="form-control" placeholder="Password">
+                        <button class="btn btn-outline-secondary" type="button" id="toggleSignUpPassword">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <div class="mb-3 input-group">
+                        <input type="password" id="signUpConfirmPassword" class="form-control" placeholder="Confirm Password">
+                        <button class="btn btn-outline-secondary" type="button" id="toggleSignUpConfirmPassword">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <button onclick="signUp()" class="btn btn-success w-100 mb-2" id="signUpBtn">Sign Up</button>
+                    <button onclick="showLogin()" class="btn btn-link w-100">Already have an account? Sign In</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Forgot Password Modal -->
+        <div class="modal fade" id="forgotPasswordModal" tabindex="-1" aria-labelledby="forgotPasswordModalLabel" aria-hidden="true">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" id="forgotPasswordModalLabel">Reset Password</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                <input type="email" id="resetEmail" class="form-control mb-2" placeholder="Enter your email">
+                <div id="resetAlert" class="alert alert-info d-none" role="alert"></div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="resetPassword()">Send Reset Email</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Main App Section -->
@@ -197,31 +255,133 @@
         let html5QrcodeScanner = null;
         let isScanning = false;
 
-        // Login function
+        // Show/Hide password logic
+        const loginPassword = document.getElementById('loginPassword');
+        document.getElementById('toggleLoginPassword').onclick = function() {
+            if (loginPassword.type === 'password') {
+                loginPassword.type = 'text';
+                this.innerHTML = '<i class="fas fa-eye-slash"></i>';
+            } else {
+                loginPassword.type = 'password';
+                this.innerHTML = '<i class="fas fa-eye"></i>';
+            }
+        };
+        const signUpPassword = document.getElementById('signUpPassword');
+        document.getElementById('toggleSignUpPassword').onclick = function() {
+            if (signUpPassword.type === 'password') {
+                signUpPassword.type = 'text';
+                this.innerHTML = '<i class="fas fa-eye-slash"></i>';
+            } else {
+                signUpPassword.type = 'password';
+                this.innerHTML = '<i class="fas fa-eye"></i>';
+            }
+        };
+        const signUpConfirmPassword = document.getElementById('signUpConfirmPassword');
+        document.getElementById('toggleSignUpConfirmPassword').onclick = function() {
+            if (signUpConfirmPassword.type === 'password') {
+                signUpConfirmPassword.type = 'text';
+                this.innerHTML = '<i class="fas fa-eye-slash"></i>';
+            } else {
+                signUpConfirmPassword.type = 'password';
+                this.innerHTML = '<i class="fas fa-eye"></i>';
+            }
+        };
+
+        // Show/Hide login/signup
+        function showSignUp() {
+            document.getElementById('loginSection').classList.add('d-none');
+            document.getElementById('signUpSection').classList.remove('d-none');
+        }
+        function showLogin() {
+            document.getElementById('signUpSection').classList.add('d-none');
+            document.getElementById('loginSection').classList.remove('d-none');
+        }
+
+        // Forgot password modal
+        const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+        forgotPasswordLink.onclick = function() {
+            const email = document.getElementById('loginEmail').value;
+            document.getElementById('resetEmail').value = email;
+            document.getElementById('resetAlert').classList.add('d-none');
+            const modal = new bootstrap.Modal(document.getElementById('forgotPasswordModal'));
+            modal.show();
+        };
+
+        // Login logic
         async function login() {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value.trim();
+            const keepSignedIn = document.getElementById('keepSignedIn').checked;
+            const alertBox = document.getElementById('loginAlert');
+            alertBox.classList.add('d-none');
+            if (!email || !password) {
+                alertBox.textContent = 'Please fill in all fields.';
+                alertBox.classList.remove('d-none');
+                return;
+            }
             try {
-                console.log('Attempting login...');
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
-                console.log('Login successful:', userCredential.user.email);
-                
-                // Get technician document using DocumentId
-                const technicianDoc = await db.collection('technicians').doc(userCredential.user.uid).get();
-                
-                if (technicianDoc.exists) {
-                    const technicianData = technicianDoc.data();
-                    // Store the document ID
-                    localStorage.setItem('techniciansId', technicianDoc.id);
-                    localStorage.setItem('fullName', technicianData.fullName || userCredential.user.email);
-                    if (technicianData.isAdmin) {
-                        document.getElementById('adminButton').style.display = 'inline-block';
-                    }
+                if (keepSignedIn) {
+                    localStorage.setItem('keep_signed_in', 'true');
+                    localStorage.setItem('user_email', email);
+                } else {
+                    localStorage.removeItem('keep_signed_in');
+                    localStorage.removeItem('user_email');
                 }
+                // Success: hide login, show app
+                document.getElementById('loginSection').classList.add('d-none');
+                document.getElementById('appSection').style.display = 'block';
             } catch (error) {
-                console.error('Login error:', error);
-                alert('Login failed: ' + error.message);
+                alertBox.textContent = error.message;
+                alertBox.classList.remove('d-none');
+            }
+        }
+
+        // Sign up logic
+        async function signUp() {
+            const email = document.getElementById('signUpEmail').value.trim();
+            const password = document.getElementById('signUpPassword').value.trim();
+            const confirmPassword = document.getElementById('signUpConfirmPassword').value.trim();
+            const alertBox = document.getElementById('signUpAlert');
+            alertBox.classList.add('d-none');
+            if (!email || !password || !confirmPassword) {
+                alertBox.textContent = 'Please fill in all fields.';
+                alertBox.classList.remove('d-none');
+                return;
+            }
+            if (password !== confirmPassword) {
+                alertBox.textContent = 'Passwords do not match.';
+                alertBox.classList.remove('d-none');
+                return;
+            }
+            try {
+                await auth.createUserWithEmailAndPassword(email, password);
+                alertBox.classList.add('d-none');
+                showLogin();
+                alert('Account created! You can now sign in.');
+            } catch (error) {
+                alertBox.textContent = error.message;
+                alertBox.classList.remove('d-none');
+            }
+        }
+
+        // Password reset logic
+        async function resetPassword() {
+            const email = document.getElementById('resetEmail').value.trim();
+            const alertBox = document.getElementById('resetAlert');
+            alertBox.classList.add('d-none');
+            if (!email) {
+                alertBox.textContent = 'Please enter your email.';
+                alertBox.classList.remove('d-none');
+                return;
+            }
+            try {
+                await auth.sendPasswordResetEmail(email);
+                alertBox.textContent = 'Password reset email sent!';
+                alertBox.classList.remove('d-none');
+            } catch (error) {
+                alertBox.textContent = error.message;
+                alertBox.classList.remove('d-none');
             }
         }
 
@@ -446,7 +606,18 @@
                         fps: 10,
                         qrbox: 250,
                         aspectRatio: 1.0,
-                        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
+                        formatsToSupport: [
+                            Html5QrcodeSupportedFormats.QR_CODE,
+                            Html5QrcodeSupportedFormats.CODE_128,
+                            Html5QrcodeSupportedFormats.CODE_39,
+                            Html5QrcodeSupportedFormats.EAN_13,
+                            Html5QrcodeSupportedFormats.EAN_8,
+                            Html5QrcodeSupportedFormats.UPC_A,
+                            Html5QrcodeSupportedFormats.UPC_E,
+                            Html5QrcodeSupportedFormats.ITF,
+                            Html5QrcodeSupportedFormats.AZTEC,
+                            Html5QrcodeSupportedFormats.DATA_MATRIX
+                        ]
                     };
 
                     html5QrcodeScanner = new Html5QrcodeScanner(
