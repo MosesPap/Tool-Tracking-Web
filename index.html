@@ -701,10 +701,10 @@
                     .get();
 
                 const previousList = document.getElementById('previousToolsList');
-                previousList.innerHTML = '<h4 class="tool-title">Previous OUT Tools</h4>';
+                previousList.innerHTML = '<h4 class="tool-title">Previous OUT Tools (Total: 0)</h4><p>No previous OUT tools found.</p>';
 
                 if (snapshot.empty) {
-                    previousList.innerHTML += '<p>No previous OUT tools found.</p>';
+                    previousList.innerHTML = '<h4 class="tool-title">Previous OUT Tools (Total: 0)</h4><p>No previous OUT tools found.</p>';
                     return;
                 }
 
@@ -716,10 +716,11 @@
                     .sort((a, b) => b.data().timestamp.toDate() - a.data().timestamp.toDate());
 
                 if (previousTools.length === 0) {
-                    previousList.innerHTML += '<p>No previous OUT tools found.</p>';
+                    previousList.innerHTML = '<h4 class="tool-title">Previous OUT Tools (Total: 0)</h4><p>No previous OUT tools found.</p>';
                     return;
                 }
 
+                previousList.innerHTML = `<h4 class="tool-title">Previous OUT Tools (Total: ${previousTools.length})</h4>`;
                 let count = 0;
                 previousTools.forEach((doc, index) => {
                     const data = doc.data();
@@ -930,8 +931,6 @@
                 <div class="mb-2"><strong>Owner:</strong> ${tool.owner}</div>
                 <div class="mb-2"><strong>Collection:</strong> ${tool.collectionCode || 'N/A'}</div>
                 <div class="mb-2"><strong>Location:</strong> ${tool.location}</div>
-                <div class="mb-2"><strong>Status:</strong> <span class="status-badge status-${tool.status === 'OUT' ? 'out' : 'in'}">${tool.status}</span></div>
-                <div class="mb-2"><strong>Timestamp:</strong> ${tool.timestamp}</div>
             `;
             const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
             modal.show();
