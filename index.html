@@ -1123,6 +1123,12 @@
             modal.show();
         }
 
+        // Enable/disable Tool Details button based on input
+        document.getElementById('toolCode').addEventListener('input', function() {
+            const btn = document.getElementById('toolDetailsBtn');
+            btn.disabled = !this.value.trim();
+        });
+
         // Show tool details for the code in the input field, even if not submitted
         async function showLastScannedToolDetails() {
             const code = document.getElementById('toolCode').value.trim();
@@ -1250,55 +1256,51 @@
             document.getElementById('previous-tab').innerHTML = `<i class="fas fa-history"></i> Previous Tools (${previousTools.length})`;
         }
 
-        // Fetch notification time (in minutes) from Firestore config
-        async function getNotificationTimeMinutes() {
+        // Helper to check if current time is after notificationTime (HH:mm)
+        async function isAfterNotificationTime() {
             try {
                 const settingsDoc = await db.collection('settings').doc('admin').get();
                 if (settingsDoc.exists && settingsDoc.data().notificationTime) {
-                    // Parse HH:mm format to minutes
-                    const [hours, minutes] = settingsDoc.data().notificationTime.split(':').map(Number);
-                    return hours * 60 + minutes;
+                    const [notifHour, notifMin] = settingsDoc.data().notificationTime.split(':').map(Number);
+                    const now = new Date();
+                    const notifTime = new Date(now);
+                    notifTime.setHours(notifHour, notifMin, 0, 0);
+                    return now >= notifTime;
                 }
             } catch (e) {
                 console.error('Error fetching notification time:', e);
             }
-            // Default to 60 minutes if not set
-            return 60;
+            // If missing or error, do nothing (return false)
+            return false;
         }
 
-        // Check for outstanding OUT tools and show notification if needed
+        // Check for outstanding OUT tools and show notification if needed (clock time logic)
         async function checkOutstandingToolsNotification() {
             const user = auth.currentUser;
             if (!user) return;
+            if (!(await isAfterNotificationTime())) return;
             const fullName = localStorage.getItem('fullName') || user.email;
-            const notificationTimeMinutes = await getNotificationTimeMinutes();
             const now = new Date();
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-
             // Query all OUT tools for this user
             const snapshot = await db.collection('tools')
                 .where('owner', '==', fullName)
                 .where('status', '==', 'OUT')
                 .get();
-
             let outToday = 0;
             let outPrevious = 0;
             snapshot.docs.forEach(doc => {
                 const data = doc.data();
                 if (data.timestamp && data.timestamp.toDate) {
                     const outTime = data.timestamp.toDate();
-                    const diffMinutes = (now - outTime) / 60000;
-                    if (diffMinutes >= notificationTimeMinutes) {
-                        if (outTime >= today) {
-                            outToday++;
-                        } else {
-                            outPrevious++;
-                        }
+                    if (outTime >= today) {
+                        outToday++;
+                    } else {
+                        outPrevious++;
                     }
                 }
             });
-
             if (outToday > 0 || outPrevious > 0) {
                 let msg = '';
                 if (outToday > 0) msg += `You have <b>${outToday}</b> tool${outToday > 1 ? 's' : ''} checked out today that require your attention.<br>`;
@@ -1309,25 +1311,11 @@
             }
         }
 
-        // Check for overdue OUT tools and show notification
+        // Check for overdue OUT tools and show notification (clock time logic)
         async function checkOverdueOutToolsNotification() {
             const user = auth.currentUser;
             if (!user) return;
-            // Get notificationTime from settings/admin
-            let notificationTime = 0;
-            try {
-                const settingsDoc = await db.collection('settings').doc('admin').get();
-                if (settingsDoc.exists && settingsDoc.data().notificationTime) {
-                    // Parse HH:mm format to minutes
-                    const [hours, minutes] = settingsDoc.data().notificationTime.split(':').map(Number);
-                    notificationTime = hours * 60 + minutes;
-                } else {
-                    notificationTime = 60; // fallback default 60 minutes
-                }
-            } catch (e) {
-                console.error('Error fetching notification time:', e);
-                notificationTime = 60;
-            }
+            if (!(await isAfterNotificationTime())) return;
             // Get technician name
             const technicianDoc = await db.collection('technicians').doc(user.uid).get();
             const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
@@ -1345,13 +1333,10 @@
                 const data = doc.data();
                 if (data.timestamp && data.timestamp.toDate) {
                     const outTime = data.timestamp.toDate();
-                    const diffMin = (now - outTime) / 60000;
-                    if (diffMin >= notificationTime) {
-                        if (outTime >= today) {
-                            outToday++;
-                        } else {
-                            outPrev++;
-                        }
+                    if (outTime >= today) {
+                        outToday++;
+                    } else {
+                        outPrev++;
                     }
                 }
             });
