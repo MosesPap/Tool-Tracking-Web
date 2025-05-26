@@ -354,6 +354,42 @@
       </div>
     </div>
 
+    <!-- 5-Minute Cooldown Info Modal -->
+    <div class="modal fade" id="cooldownInfoModal" tabindex="-1" aria-labelledby="cooldownInfoModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="cooldownInfoModalLabel">5-Minute Cooldown</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            When you check out a tool, you must wait at least 5 minutes before returning it. This helps ensure accurate tool tracking. You will not see this message again today.
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5-Minute Cooldown Warning Modal -->
+    <div class="modal fade" id="cooldownWarnModal" tabindex="-1" aria-labelledby="cooldownWarnModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="cooldownWarnModalLabel">Return Not Allowed</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            You must wait at least 5 minutes after checking out a tool before you can return it.
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -592,6 +628,43 @@
                     if (data.status === 'OUT' && data.technician !== technicianName) {
                         alert(`This tool is currently checked out by ${data.technician}`);
                         return;
+                    }
+                    // Prevent returning previous OUT tools (checked out before today)
+                    if (data.status === 'OUT' && data.timestamp && data.timestamp.toDate) {
+                        const toolDate = data.timestamp.toDate();
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        if (toolDate < today) {
+                            alert('This tool was checked out on a previous day and cannot be returned. Please contact an administrator if you believe this is an error.');
+                            document.getElementById('toolCode').value = '';
+                            lastScannedToolData = null;
+                            document.getElementById('toolDetailsBtn').style.display = 'none';
+                            return;
+                        }
+                    }
+                    // Enforce 5-minute cooldown for returning tools
+                    if (data.status === 'OUT' && data.timestamp && data.timestamp.toDate) {
+                        const outTime = data.timestamp.toDate();
+                        const now = new Date();
+                        const diffMs = now - outTime;
+                        if (diffMs < 5 * 60 * 1000) {
+                            // Show cooldown warning modal
+                            const warnModal = new bootstrap.Modal(document.getElementById('cooldownWarnModal'));
+                            warnModal.show();
+                            document.getElementById('toolCode').value = '';
+                            lastScannedToolData = null;
+                            document.getElementById('toolDetailsBtn').style.display = 'none';
+                            return;
+                        }
+                    }
+                    // Show 5-minute cooldown info dialog only once per day, when first tool is checked OUT
+                    if (data.status === 'OUT') {
+                        const todayKey = 'cooldownInfoShown_' + (new Date()).toISOString().slice(0, 10);
+                        if (!localStorage.getItem(todayKey)) {
+                            const infoModal = new bootstrap.Modal(document.getElementById('cooldownInfoModal'));
+                            infoModal.show();
+                            localStorage.setItem(todayKey, '1');
+                        }
                     }
                     const status = data.status === 'OUT' ? 'IN' : 'OUT';
                     const timestamp = firebase.firestore.FieldValue.serverTimestamp();
@@ -1046,8 +1119,6 @@
                     });
 
                     let html = '';
-                    html += `<div class="mytools-title">MY TOOLS</div>`;
-                    html += `<button class="mytools-back" type="button" data-bs-dismiss="modal">Back</button>`;
                     Object.keys(grouped).forEach(collection => {
                         html += `<div class="mytools-collection"><span>Collection:</span><span>${collection}</span></div>`;
                         Object.keys(grouped[collection]).forEach(location => {
