@@ -78,11 +78,13 @@
             font-size: 20px;
             font-weight: bold;
             margin-bottom: 5px;
+            padding-left: 15px;
         }
         .tool-time {
-            font-size: 14px;
+            font-size: 16px;
             color: #666;
             margin-bottom: 10px;
+            padding-left: 15px;
         }
         .tool-headers {
             color: #388E3C;
@@ -91,13 +93,19 @@
             margin-bottom: 5px;
         }
         .tool-values {
-            font-size: 14px;
+            font-size: 16px;
         }
         .tool-out-text {
             color: #d32f2f;
         }
         .tool-in-text {
             color: #000;
+        }
+        .tool-id-value {
+            font-weight: bold;
+        }
+        .tool-pn-value {
+            font-weight: bold;
         }
     </style>
 </head>
@@ -614,8 +622,8 @@
                         </div>
                         <div class="tool-values ${textColorClass}">
                             <div class="row">
-                                <div class="col-4">${doc.id}</div>
-                                <div class="col-4">${data.partNumber || doc.id}</div>
+                                <div class="col-4 tool-id-value">${doc.id}</div>
+                                <div class="col-4 tool-pn-value">${data.partNumber || doc.id}</div>
                                 <div class="col-4">
                                     <span class="status-badge status-${isOut ? 'out' : 'in'}">${data.status}</span>
                                 </div>
