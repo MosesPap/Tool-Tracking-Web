@@ -79,17 +79,19 @@
             font-weight: bold;
             margin-bottom: 5px;
             padding-left: 15px;
+            text-align: left;
         }
         .tool-time {
             font-size: 16px;
             color: #666;
             margin-bottom: 10px;
             padding-left: 15px;
+            text-align: left;
         }
         .tool-headers {
             color: #388E3C;
             font-weight: bold;
-            font-size: 14px;
+            font-size: 18px;
             margin-bottom: 5px;
         }
         .tool-values {
@@ -603,7 +605,15 @@
                     
                     div.className = `tool-item tool-${isOut ? 'out' : 'in'}-${evenOdd}`;
                     
-                    const time = data.timestamp ? data.timestamp.toDate().toLocaleTimeString() : 'N/A';
+                    const time = data.timestamp ? data.timestamp.toDate().toLocaleString('en-GB', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    }) : 'N/A';
                     const textColorClass = isOut ? 'tool-out-text' : 'tool-in-text';
                     
                     div.innerHTML = `
