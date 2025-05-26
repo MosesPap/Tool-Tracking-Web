@@ -12,12 +12,13 @@
         .hidden { display: none; }
         .camera-view {
             width: 100%;
-            max-width: 640px;
+            max-width: 320px;
             margin: 10px auto;
         }
         #reader {
             border: 1px solid #ccc !important;
             width: 100% !important;
+            max-width: 320px;
         }
         #reader video {
             object-fit: cover !important;
@@ -109,6 +110,30 @@
         .tool-pn-value {
             font-weight: bold;
         }
+        .mytools-title {
+            color: orange; font-weight: bold; font-size: 2.2rem; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 0.5rem;
+        }
+        .mytools-back {
+            background: orange; color: white; font-weight: bold; border: none; border-radius: 6px; padding: 8px 24px; font-size: 1.2rem; margin-bottom: 1rem;
+        }
+        .mytools-collection {
+            background: orange; color: white; font-weight: bold; font-size: 1.2rem; border-radius: 6px 6px 0 0; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;
+        }
+        .mytools-location {
+            background: #cbe7ff; color: #222; font-weight: bold; font-size: 1.1rem; border-radius: 0 0 6px 6px; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;
+        }
+        .mytools-tool-item {
+            padding: 12px 12px 8px 12px; border-radius: 0 0 6px 6px; margin-bottom: 0.5rem; font-size: 1.08rem;
+        }
+        .mytools-tool-bg1 { background: #fff; }
+        .mytools-tool-bg2 { background: #fff7e6; }
+        .mytools-tool-name { font-weight: bold; font-size: 1.13rem; }
+        .mytools-tool-tid { font-weight: bold; }
+        .mytools-tool-part { font-size: 1.01rem; color: #444; }
+        .mytools-status-in { color: #388E3C; font-weight: bold; font-size: 1.05rem; }
+        .mytools-status-out { color: #d32f2f; font-weight: bold; font-size: 1.05rem; }
+        .mytools-tool-extra { font-size: 1.01rem; color: #222; margin-top: 2px; }
+        .mytools-tool-cal { color: #388E3C; font-size: 1.01rem; margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -849,7 +874,7 @@
 
                     const config = {
                         fps: 10,
-                        qrbox: 250,
+                        qrbox: 150,
                         aspectRatio: 1.0,
                         formatsToSupport: [
                             Html5QrcodeSupportedFormats.QR_CODE,
@@ -989,7 +1014,7 @@
             }
         }
 
-        // Show My Tools Modal
+        // My Tools Modal with app-like formatting
         async function showMyTools() {
             const user = auth.currentUser;
             if (!user) return;
@@ -1021,35 +1046,31 @@
                     });
 
                     let html = '';
+                    html += `<div class="mytools-title">MY TOOLS</div>`;
+                    html += `<button class="mytools-back" type="button" data-bs-dismiss="modal">Back</button>`;
                     Object.keys(grouped).forEach(collection => {
-                        html += `<div class="mt-4 mb-2" style="font-size: 1.3rem; color: orange; font-weight: bold; letter-spacing: 1px;">${collection}</div>`;
+                        html += `<div class="mytools-collection"><span>Collection:</span><span>${collection}</span></div>`;
                         Object.keys(grouped[collection]).forEach(location => {
                             const toolsAtLocation = grouped[collection][location];
-                            html += `<div class="mb-2" style="font-size: 1.1rem; color: #1976d2; font-weight: bold;">${location} <span style="font-weight: normal; color: #333; font-size: 1rem;">(Total: ${toolsAtLocation.length} tools)</span></div>`;
+                            html += `<div class="mytools-location"><span>Location:</span><span>${location} (Total: ${toolsAtLocation.length} tools)</span></div>`;
                             toolsAtLocation.forEach((tool, idx) => {
-                                html += `<div class="mb-2" style="padding-left: 15px;">
-                                    <span style="font-weight: bold; font-size: 1.1rem;">${idx + 1}. ${tool.toolName || 'Unknown Tool'}</span>
-                                    <span style="font-size: 1rem; color: #555; margin-left: 8px;">- TID: ${tool.id}</span>
-                                `;
-                                // If OUT, show technician and timestamp
+                                const bgClass = idx % 2 === 0 ? 'mytools-tool-bg1' : 'mytools-tool-bg2';
+                                html += `<div class="mytools-tool-item ${bgClass}">
+                                    <span class="mytools-tool-name">${idx + 1}. ${tool.toolName || 'Unknown Tool'}</span> - <span class="mytools-tool-tid">TID: ${tool.id}</span><br>
+                                    <span class="mytools-tool-part">Part #: ${tool.partNumber || ''}</span><br>
+                                    <span class="${tool.status === 'OUT' ? 'mytools-status-out' : 'mytools-status-in'}">Status: ${tool.status || ''}</span>`;
                                 if (tool.status === 'OUT') {
-                                    html += `<div style="font-size: 0.95rem; color: #d32f2f; margin-left: 24px;">
-                                        <span style="font-weight: bold;">OUT</span>`;
-                                    if (tool.technician) {
-                                        html += ` by <span style="font-weight: bold;">${tool.technician}</span>`;
-                                    }
+                                    html += `<div class="mytools-tool-extra">Technician: ${tool.technician || ''}</div>`;
                                     if (tool.timestamp && tool.timestamp.toDate) {
                                         const outTime = tool.timestamp.toDate().toLocaleString('en-GB', {
                                             day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
                                         });
-                                        html += ` at <span>${outTime}</span>`;
+                                        html += `<div class="mytools-tool-extra">Checked out: ${outTime}</div>`;
                                     }
-                                    html += `</div>`;
                                 }
-                                // If calDueDate is present, show it
                                 if (tool.calDueDate && tool.calDueDate.toDate) {
                                     const calDue = tool.calDueDate.toDate().toLocaleDateString('en-GB');
-                                    html += `<div style="font-size: 0.95rem; color: #388E3C; margin-left: 24px;">Cal Due: <span style="font-weight: bold;">${calDue}</span></div>`;
+                                    html += `<div class="mytools-tool-cal">Cal Due: <span style="font-weight: bold;">${calDue}</span></div>`;
                                 }
                                 html += `</div>`;
                             });
