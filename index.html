@@ -196,6 +196,9 @@
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2>Welcome, <span id="fullName"></span></h2>
                 <div>
+                    <button onclick="showMyTools()" id="myToolsButton" class="btn btn-warning me-2">
+                        <i class="fas fa-toolbox"></i> My Tools
+                    </button>
                     <button onclick="toggleAdmin()" id="adminButton" class="btn btn-info me-2" style="display: none;">
                         <i class="fas fa-cog"></i> Admin
                     </button>
@@ -240,6 +243,7 @@
                                             <i class="fas fa-check"></i> Submit
                                         </button>
                                     </div>
+                                    <button id="toolDetailsBtn" class="btn btn-info w-100 mb-2" style="display:none;" onclick="showLastScannedToolDetails()">Tool Details</button>
                                 </div>
                             </div>
 
@@ -295,6 +299,24 @@
           </div>
           <div class="modal-body" id="toolDetailsBody">
             <!-- Tool details will be populated here -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- My Tools Modal -->
+    <div class="modal fade" id="myToolsModal" tabindex="-1" aria-labelledby="myToolsModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h4 class="modal-title w-100 text-center" id="myToolsModalLabel" style="color: orange; font-weight: bold; font-size: 2rem; letter-spacing: 2px;">MY TOOLS</h4>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="myToolsBody">
+            <!-- My tools list will be populated here -->
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -517,6 +539,9 @@
             }
         }
 
+        // Store last scanned tool data
+        let lastScannedToolData = null;
+
         // Submit tool code
         async function submitCode() {
             const code = document.getElementById('toolCode').value.trim();
@@ -539,7 +564,6 @@
                         alert(`This tool is currently checked out by ${data.technician}`);
                         return;
                     }
-                    
                     const status = data.status === 'OUT' ? 'IN' : 'OUT';
                     const timestamp = firebase.firestore.FieldValue.serverTimestamp();
 
@@ -563,13 +587,28 @@
 
                     document.getElementById('toolCode').value = '';
                     loadTools();
+
+                    // Store last scanned tool data for modal
+                    lastScannedToolData = {
+                        toolName: data.toolName || 'Unknown Tool',
+                        toolId: doc.id,
+                        partNumber: data.partNumber || doc.id,
+                        collectionCode: data.collectionCode || '',
+                        location: data.location || 'N/A',
+                        owner: data.owner || 'N/A',
+                    };
+                    document.getElementById('toolDetailsBtn').style.display = 'block';
                 } else {
                     alert('Warning: This tool does not exist in the system. Please contact an administrator to add the tool.');
                     document.getElementById('toolCode').value = '';
+                    lastScannedToolData = null;
+                    document.getElementById('toolDetailsBtn').style.display = 'none';
                 }
             } catch (error) {
                 console.error('Error:', error);
                 alert('Error: ' + error.message);
+                lastScannedToolData = null;
+                document.getElementById('toolDetailsBtn').style.display = 'none';
             }
         }
 
@@ -705,6 +744,7 @@
 
                 if (snapshot.empty) {
                     previousList.innerHTML = '<h4 class="tool-title">Previous OUT Tools (Total: 0)</h4><p>No previous OUT tools found.</p>';
+                    document.getElementById('previous-tab').innerHTML = '<i class="fas fa-history"></i> Previous Tools (0)';
                     return;
                 }
 
@@ -717,10 +757,12 @@
 
                 if (previousTools.length === 0) {
                     previousList.innerHTML = '<h4 class="tool-title">Previous OUT Tools (Total: 0)</h4><p>No previous OUT tools found.</p>';
+                    document.getElementById('previous-tab').innerHTML = '<i class="fas fa-history"></i> Previous Tools (0)';
                     return;
                 }
 
                 previousList.innerHTML = `<h4 class="tool-title">Previous OUT Tools (Total: ${previousTools.length})</h4>`;
+                document.getElementById('previous-tab').innerHTML = `<i class=\"fas fa-history\"></i> Previous Tools (${previousTools.length})`;
                 let count = 0;
                 previousTools.forEach((doc, index) => {
                     const data = doc.data();
@@ -933,6 +975,70 @@
                 <div class="mb-2"><strong>Location:</strong> ${tool.location}</div>
             `;
             const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
+            modal.show();
+        }
+
+        // Show last scanned tool details in modal
+        function showLastScannedToolDetails() {
+            if (lastScannedToolData) {
+                showToolDetails(lastScannedToolData);
+            }
+        }
+
+        // Show My Tools Modal
+        async function showMyTools() {
+            const user = auth.currentUser;
+            if (!user) return;
+            const fullName = localStorage.getItem('fullName') || user.email;
+            const myToolsBody = document.getElementById('myToolsBody');
+            myToolsBody.innerHTML = '<div class="text-center">Loading...</div>';
+
+            try {
+                // Query all tools where owner matches the logged-in user
+                const snapshot = await db.collection('tools')
+                    .where('owner', '==', fullName)
+                    .get();
+
+                if (snapshot.empty) {
+                    myToolsBody.innerHTML = '<div class="text-center">No tools found for you.</div>';
+                } else {
+                    // Group by collectionCode and location
+                    const tools = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    const grouped = {};
+                    tools.forEach(tool => {
+                        const collection = tool.collectionCode || 'N/A';
+                        const location = tool.location || 'N/A';
+                        if (!grouped[collection]) grouped[collection] = {};
+                        if (!grouped[collection][location]) grouped[collection][location] = [];
+                        grouped[collection][location].push(tool);
+                    });
+
+                    let html = '';
+                    Object.keys(grouped).forEach(collection => {
+                        html += `<div class="mt-3 mb-2 p-2" style="background: orange; color: white; font-weight: bold; font-size: 1.2rem; border-radius: 6px;">${collection}</div>`;
+                        Object.keys(grouped[collection]).forEach(location => {
+                            const toolsAtLocation = grouped[collection][location];
+                            html += `<div class="mb-1 p-2" style="background: #e3f2fd; color: #222; font-weight: bold; border-radius: 6px;">${location} <span style="font-weight: normal; float: right;">Total: ${toolsAtLocation.length} tools</span></div>`;
+                            toolsAtLocation.forEach((tool, idx) => {
+                                html += `<div class="d-flex align-items-center mb-1" style="padding-left: 15px;">
+                                    <span style="font-weight: bold; margin-right: 8px;">${idx + 1}.</span>
+                                    <span style="font-weight: bold; font-size: 1.1rem; margin-right: 8px;">${tool.toolName || 'Unknown Tool'}</span>
+                                    <span style="font-size: 1rem; color: #555; margin-right: 8px;">- TID: ${tool.id}</span>
+                                    <span style="font-weight: bold; color: #388E3C; margin-left: auto;">${tool.status || ''}</span>
+                                </div>`;
+                            });
+                        });
+                    });
+                    myToolsBody.innerHTML = html;
+                }
+            } catch (error) {
+                myToolsBody.innerHTML = `<div class="text-danger text-center">Error loading your tools: ${error.message}</div>`;
+            }
+
+            const modal = new bootstrap.Modal(document.getElementById('myToolsModal'));
             modal.show();
         }
     </script>
