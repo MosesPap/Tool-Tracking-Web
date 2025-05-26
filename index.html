@@ -272,7 +272,7 @@
                                             <i class="fas fa-check"></i> Submit
                                         </button>
                                     </div>
-                                    <button id="toolDetailsBtn" class="btn btn-info w-100 mb-2" style="display:none;" onclick="showLastScannedToolDetails()">Tool Details</button>
+                                    <button id="toolDetailsBtn" class="btn btn-info w-100 mb-2" disabled onclick="showLastScannedToolDetails()">Tool Details</button>
                                 </div>
                             </div>
 
@@ -638,7 +638,7 @@
                             alert('This tool was checked out on a previous day and cannot be returned. Please contact an administrator if you believe this is an error.');
                             document.getElementById('toolCode').value = '';
                             lastScannedToolData = null;
-                            document.getElementById('toolDetailsBtn').style.display = 'none';
+                            document.getElementById('toolDetailsBtn').disabled = true;
                             return;
                         }
                     }
@@ -654,7 +654,7 @@
                             warnModal.show();
                             document.getElementById('toolCode').value = '';
                             lastScannedToolData = null;
-                            document.getElementById('toolDetailsBtn').style.display = 'none';
+                            document.getElementById('toolDetailsBtn').disabled = true;
                             return;
                         }
                     }
@@ -700,18 +700,18 @@
                         location: data.location || 'N/A',
                         owner: data.owner || 'N/A',
                     };
-                    document.getElementById('toolDetailsBtn').style.display = 'block';
+                    document.getElementById('toolDetailsBtn').disabled = false;
                 } else {
                     alert('Warning: This tool does not exist in the system. Please contact an administrator to add the tool.');
                     document.getElementById('toolCode').value = '';
                     lastScannedToolData = null;
-                    document.getElementById('toolDetailsBtn').style.display = 'none';
+                    document.getElementById('toolDetailsBtn').disabled = true;
                 }
             } catch (error) {
                 console.error('Error:', error);
                 alert('Error: ' + error.message);
                 lastScannedToolData = null;
-                document.getElementById('toolDetailsBtn').style.display = 'none';
+                document.getElementById('toolDetailsBtn').disabled = true;
             }
         }
 
