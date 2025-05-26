@@ -285,6 +285,24 @@
         </div>
     </div>
 
+    <!-- Tool Details Modal -->
+    <div class="modal fade" id="toolDetailsModal" tabindex="-1" aria-labelledby="toolDetailsModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="toolDetailsModalLabel">Tool Details</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="toolDetailsBody">
+            <!-- Tool details will be populated here -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -604,7 +622,22 @@
                     const evenOdd = count % 2 === 0 ? 'even' : 'odd';
                     
                     div.className = `tool-item tool-${isOut ? 'out' : 'in'}-${evenOdd}`;
-                    
+                    div.style.cursor = 'pointer';
+                    div.onclick = function() {
+                        showToolDetails({
+                            toolName: data.toolName || 'Unknown Tool',
+                            toolId: doc.id,
+                            partNumber: data.partNumber || doc.id,
+                            collectionCode: data.collectionCode || '',
+                            location: data.location || 'N/A',
+                            status: data.status || (isOut ? 'OUT' : 'IN'),
+                            owner: data.owner || 'N/A',
+                            technician: data.technician || 'N/A',
+                            timestamp: data.timestamp ? data.timestamp.toDate().toLocaleString('en-GB', {
+                                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                            }) : 'N/A'
+                        });
+                    };
                     const time = data.timestamp ? data.timestamp.toDate().toLocaleString('en-GB', {
                         day: '2-digit',
                         month: '2-digit',
@@ -680,7 +713,7 @@
                         const data = doc.data();
                         return data.timestamp && data.timestamp.toDate() < today;
                     })
-                    .sort((a, b) => b.data().timestamp.toDate() - a.data().timestamp.toDate()); // Sort by timestamp, newest first
+                    .sort((a, b) => b.data().timestamp.toDate() - a.data().timestamp.toDate());
 
                 if (previousTools.length === 0) {
                     previousList.innerHTML += '<p>No previous OUT tools found.</p>';
@@ -688,32 +721,62 @@
                 }
 
                 let count = 0;
-                previousTools.forEach(doc => {
+                previousTools.forEach((doc, index) => {
                     const data = doc.data();
                     const div = document.createElement('div');
                     count++;
                     const evenOdd = count % 2 === 0 ? 'even' : 'odd';
                     
                     div.className = `tool-item tool-out-${evenOdd}`;
-                    
+                    div.style.cursor = 'pointer';
+                    div.onclick = function() {
+                        showToolDetails({
+                            toolName: data.toolName || 'Unknown Tool',
+                            toolId: doc.id,
+                            partNumber: data.partNumber || doc.id,
+                            collectionCode: data.collectionCode || '',
+                            location: data.location || 'N/A',
+                            status: data.status || 'OUT',
+                            owner: data.owner || 'N/A',
+                            technician: data.technician || 'N/A',
+                            timestamp: data.timestamp ? data.timestamp.toDate().toLocaleString('en-GB', {
+                                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                            }) : 'N/A'
+                        });
+                    };
                     const date = data.timestamp.toDate();
-                    const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                    const formattedDate = date.toLocaleString('en-GB', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    });
                     
                     div.innerHTML = `
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <div class="tool-details">
-                                    <strong>${data.toolName || 'Unknown Tool'}</strong>
-                                    <br>
-                                    <small>TID: ${doc.id}</small>
-                                    <br>
-                                    <small>Part: ${data.partNumber || doc.id} | Location: ${data.location || 'N/A'}</small>
-                                </div>
-                                <div class="tool-time">
-                                    <small>Out since: ${formattedDate}</small>
+                        <div class="tool-name tool-out-text">
+                            ${index + 1}. ${data.toolName || 'Unknown Tool'}
+                        </div>
+                        <div class="tool-time tool-out-text">
+                            ${formattedDate}
+                        </div>
+                        <div class="tool-headers">
+                            <div class="row">
+                                <div class="col-4">TID</div>
+                                <div class="col-4">P/N</div>
+                                <div class="col-4">STS</div>
+                            </div>
+                        </div>
+                        <div class="tool-values tool-out-text">
+                            <div class="row">
+                                <div class="col-4 tool-id-value">${doc.id}</div>
+                                <div class="col-4 tool-pn-value">${data.partNumber || doc.id}</div>
+                                <div class="col-4">
+                                    <span class="status-badge status-out">OUT</span>
                                 </div>
                             </div>
-                            <span class="status-badge status-out">OUT</span>
                         </div>
                     `;
                     previousList.appendChild(div);
@@ -856,6 +919,23 @@
                 localStorage.removeItem('fullName');
             }
         });
+
+        // Add this function to show tool details in the modal
+        function showToolDetails(tool) {
+            const body = document.getElementById('toolDetailsBody');
+            body.innerHTML = `
+                <div class="mb-2"><strong>Tool ID:</strong> ${tool.toolId}</div>
+                <div class="mb-2"><strong>Tool Name:</strong> ${tool.toolName}</div>
+                <div class="mb-2"><strong>Part Number:</strong> ${tool.partNumber}</div>
+                <div class="mb-2"><strong>Owner:</strong> ${tool.owner}</div>
+                <div class="mb-2"><strong>Collection:</strong> ${tool.collectionCode || 'N/A'}</div>
+                <div class="mb-2"><strong>Location:</strong> ${tool.location}</div>
+                <div class="mb-2"><strong>Status:</strong> <span class="status-badge status-${tool.status === 'OUT' ? 'out' : 'in'}">${tool.status}</span></div>
+                <div class="mb-2"><strong>Timestamp:</strong> ${tool.timestamp}</div>
+            `;
+            const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
+            modal.show();
+        }
     </script>
 </body>
 </html> 
