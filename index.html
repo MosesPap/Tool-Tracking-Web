@@ -1281,77 +1281,79 @@
             let outstandingMsg = '';
             let overdueMsg = '';
 
-            // Prepare Outstanding Tools Checked Out by Others
             const user = auth.currentUser;
             if (user && await isAfterNotificationTime()) {
                 const fullName = localStorage.getItem('fullName') || user.email;
                 const now = new Date();
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
+                // Query all OUT tools for this user as owner
                 const snapshot = await db.collection('tools')
                     .where('owner', '==', fullName)
                     .where('status', '==', 'OUT')
                     .get();
-                let outToday = 0;
-                let outPrevious = 0;
+                let ownerToday = 0;
+                let ownerPrev = 0;
+                let techToolIds = new Set();
+                // Also collect tool IDs where user is technician for later
                 snapshot.docs.forEach(doc => {
                     const data = doc.data();
-                    if (data.timestamp && data.timestamp.toDate) {
-                        const outTime = data.timestamp.toDate();
-                        if (outTime >= today) {
-                            outToday++;
-                        } else {
-                            outPrevious++;
+                    // Only count if technician is NOT the owner
+                    if (data.technician !== fullName) {
+                        if (data.timestamp && data.timestamp.toDate) {
+                            const outTime = data.timestamp.toDate();
+                            if (outTime >= today) {
+                                ownerToday++;
+                            } else {
+                                ownerPrev++;
+                            }
                         }
+                    } else {
+                        techToolIds.add(doc.id);
                     }
                 });
-                if (outToday > 0 || outPrevious > 0) {
+                if (ownerToday > 0 || ownerPrev > 0) {
                     outstandingNeeded = true;
                     outstandingMsg = '<b>ACTION REQUIRED:</b> THE FOLLOWING TOOLS YOU OWN ARE STILL CHECKED OUT BY OTHERS.';
-                    if (outToday > 0) outstandingMsg += `<br>- <b>${outToday}</b> TOOL${outToday > 1 ? 'S' : ''} CHECKED OUT TODAY.`;
-                    if (outPrevious > 0) outstandingMsg += `<br>- <b>${outPrevious}</b> TOOL${outPrevious > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES.`;
+                    if (ownerToday > 0) outstandingMsg += `<br>- <b>${ownerToday}</b> TOOL${ownerToday > 1 ? 'S' : ''} CHECKED OUT TODAY.`;
+                    if (ownerPrev > 0) outstandingMsg += `<br>- <b>${ownerPrev}</b> TOOL${ownerPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES.`;
                     outstandingMsg += '<br>PLEASE FOLLOW UP TO ENSURE THESE TOOLS ARE RETURNED.';
                 }
-            }
-
-            // Prepare Tools You Have Checked Out
-            if (user && await isAfterNotificationTime()) {
+                // Now check as technician, but exclude tools where user is also owner
                 const technicianDoc = await db.collection('technicians').doc(user.uid).get();
                 const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'UNKNOWN TECHNICIAN';
-                const now = new Date();
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const snapshot = await db.collection('tools')
+                const techSnapshot = await db.collection('tools')
                     .where('technician', '==', technicianName)
                     .where('status', '==', 'OUT')
                     .get();
-                let outToday = 0;
-                let outPrev = 0;
-                snapshot.docs.forEach(doc => {
-                    const data = doc.data();
-                    if (data.timestamp && data.timestamp.toDate) {
-                        const outTime = data.timestamp.toDate();
-                        if (outTime >= today) {
-                            outToday++;
-                        } else {
-                            outPrev++;
+                let techToday = 0;
+                let techPrev = 0;
+                techSnapshot.docs.forEach(doc => {
+                    // Exclude if user is also owner (already counted)
+                    if (!techToolIds.has(doc.id)) {
+                        const data = doc.data();
+                        if (data.timestamp && data.timestamp.toDate) {
+                            const outTime = data.timestamp.toDate();
+                            if (outTime >= today) {
+                                techToday++;
+                            } else {
+                                techPrev++;
+                            }
                         }
                     }
                 });
-                if (outToday > 0 || outPrev > 0) {
+                if (techToday > 0 || techPrev > 0) {
                     overdueNeeded = true;
                     overdueMsg = '<b>REMINDER:</b> YOU HAVE TOOLS CHECKED OUT THAT NEED TO BE RETURNED.';
-                    if (outToday > 0) overdueMsg += `<br>- <b>${outToday}</b> TOOL${outToday > 1 ? 'S' : ''} CHECKED OUT TODAY.`;
-                    if (outPrev > 0) overdueMsg += `<br>- <b>${outPrev}</b> TOOL${outPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES.`;
+                    if (techToday > 0) overdueMsg += `<br>- <b>${techToday}</b> TOOL${techToday > 1 ? 'S' : ''} CHECKED OUT TODAY.`;
+                    if (techPrev > 0) overdueMsg += `<br>- <b>${techPrev}</b> TOOL${techPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES.`;
                     overdueMsg += '<br>PLEASE RETURN THESE TOOLS AS SOON AS POSSIBLE.';
                 }
             }
-
             // Show modals in sequence
             if (outstandingNeeded) {
                 document.getElementById('outstandingToolsBody').innerHTML = outstandingMsg;
                 const outstandingModal = new bootstrap.Modal(document.getElementById('outstandingToolsModal'));
-                // When OK is pressed, show the next if needed
                 document.querySelector('#outstandingToolsModal .btn-primary').onclick = function() {
                     outstandingModal.hide();
                     if (overdueNeeded) {
