@@ -648,7 +648,8 @@
                         const now = new Date();
                         const diffMs = now - outTime;
                         if (diffMs < 5 * 60 * 1000) {
-                            // Show cooldown warning modal
+                            // Show cooldown warning modal with remaining time
+                            setCooldownWarnMessage(5 * 60 * 1000 - diffMs);
                             const warnModal = new bootstrap.Modal(document.getElementById('cooldownWarnModal'));
                             warnModal.show();
                             document.getElementById('toolCode').value = '';
@@ -864,7 +865,7 @@
                 }
 
                 previousList.innerHTML = `<h4 class="tool-title">Previous OUT Tools (Total: ${previousTools.length})</h4>`;
-                document.getElementById('previous-tab').innerHTML = `<i class=\"fas fa-history\"></i> Previous Tools (${previousTools.length})`;
+                document.getElementById('previous-tab').innerHTML = `<i class="fas fa-history"></i> Previous Tools (${previousTools.length})`;
                 let count = 0;
                 previousTools.forEach((doc, index) => {
                     const data = doc.data();
@@ -1050,9 +1051,12 @@
                         } else {
                             document.getElementById('fullName').textContent = user.email;
                         }
+                        // Update previous tools tab count on login
+                        updatePreviousToolsTabCount();
                     }).catch(error => {
                         console.error('Error fetching technician data:', error);
                         document.getElementById('fullName').textContent = user.email;
+                        updatePreviousToolsTabCount();
                     });
                 
                 loadTools();
@@ -1155,6 +1159,32 @@
 
             const modal = new bootstrap.Modal(document.getElementById('myToolsModal'));
             modal.show();
+        }
+
+        // Helper to set cooldown warning message
+        function setCooldownWarnMessage(remainingMs) {
+            const mins = Math.floor(remainingMs / 60000);
+            const secs = Math.ceil((remainingMs % 60000) / 1000);
+            document.querySelector('#cooldownWarnModal .modal-body').textContent = `You must wait ${mins} minute${mins !== 1 ? 's' : ''} and ${secs} second${secs !== 1 ? 's' : ''} before you can return this tool.`;
+        }
+
+        // Fetch and update previous OUT tools count for the tab
+        async function updatePreviousToolsTabCount() {
+            const user = auth.currentUser;
+            if (!user) return;
+            const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+            const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const snapshot = await db.collection('tools')
+                .where('technician', '==', technicianName)
+                .where('status', '==', 'OUT')
+                .get();
+            const previousTools = snapshot.docs.filter(doc => {
+                const data = doc.data();
+                return data.timestamp && data.timestamp.toDate() < today;
+            });
+            document.getElementById('previous-tab').innerHTML = `<i class="fas fa-history"></i> Previous Tools (${previousTools.length})`;
         }
     </script>
 </body>
