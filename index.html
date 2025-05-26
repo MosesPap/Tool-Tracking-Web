@@ -92,6 +92,9 @@
                     <h3 class="card-title text-center mb-3">Sign Up</h3>
                     <div id="signUpAlert" class="alert alert-danger d-none" role="alert"></div>
                     <div class="mb-3">
+                        <input type="text" id="signUpFullName" class="form-control" placeholder="Full Name">
+                    </div>
+                    <div class="mb-3">
                         <input type="email" id="signUpEmail" class="form-control" placeholder="Email">
                     </div>
                     <div class="mb-3 input-group">
@@ -339,12 +342,13 @@
 
         // Sign up logic
         async function signUp() {
+            const fullName = document.getElementById('signUpFullName').value.trim();
             const email = document.getElementById('signUpEmail').value.trim();
             const password = document.getElementById('signUpPassword').value.trim();
             const confirmPassword = document.getElementById('signUpConfirmPassword').value.trim();
             const alertBox = document.getElementById('signUpAlert');
             alertBox.classList.add('d-none');
-            if (!email || !password || !confirmPassword) {
+            if (!fullName || !email || !password || !confirmPassword) {
                 alertBox.textContent = 'Please fill in all fields.';
                 alertBox.classList.remove('d-none');
                 return;
@@ -355,7 +359,14 @@
                 return;
             }
             try {
-                await auth.createUserWithEmailAndPassword(email, password);
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                
+                // Create technician document with just name and email
+                await db.collection('technicians').doc(userCredential.user.uid).set({
+                    fullName: fullName,
+                    email: email
+                });
+
                 alertBox.classList.add('d-none');
                 showLogin();
                 alert('Account created! You can now sign in.');
@@ -452,10 +463,14 @@
                     const status = data.status === 'OUT' ? 'IN' : 'OUT';
                     const timestamp = firebase.firestore.FieldValue.serverTimestamp();
 
+                    // Get technician name from technicians collection
+                    const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                    const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+
                     // Update tool status
                     await toolRef.update({
                         status: status,
-                        technician: user.email,
+                        technician: technicianName,
                         timestamp: timestamp
                     });
 
@@ -466,36 +481,15 @@
                         partNumber: data.partNumber || code,
                         location: data.location || '',
                         status: status,
-                        technician: user.email,
+                        technician: technicianName,
                         timestamp: timestamp
                     });
 
                     document.getElementById('toolCode').value = '';
                     loadTools();
                 } else {
-                    const timestamp = firebase.firestore.FieldValue.serverTimestamp();
-                    // Create new tool
-                    await toolRef.set({
-                        status: 'OUT',
-                        technician: user.email,
-                        timestamp: timestamp,
-                        toolName: 'Unknown',
-                        partNumber: code,
-                        location: ''
-                    });
-
-                    // Add log entry for new tool
-                    await db.collection('logtoolmovements').add({
-                        toolId: code,
-                        toolName: 'Unknown',
-                        partNumber: code,
-                        location: '',
-                        status: 'OUT',
-                        technician: user.email,
-                        timestamp: timestamp
-                    });
-
-                    loadTools();
+                    alert('Warning: This tool does not exist in the system. Please contact an administrator to add the tool.');
+                    document.getElementById('toolCode').value = '';
                 }
             } catch (error) {
                 console.error('Error:', error);
@@ -508,17 +502,26 @@
             const user = auth.currentUser;
             if (!user) return;
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-
             try {
+                // Get technician name
+                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
                 const snapshot = await db.collection('tools')
-                    .where('technician', '==', user.email)
+                    .where('technician', '==', technicianName)
                     .where('timestamp', '>=', today)
                     .get();
 
                 const toolList = document.getElementById('toolList');
                 toolList.innerHTML = '<h4>Today\'s Tools</h4>';
+
+                if (snapshot.empty) {
+                    toolList.innerHTML += '<p>No tools scanned today.</p>';
+                    return;
+                }
 
                 snapshot.forEach(doc => {
                     const data = doc.data();
@@ -530,9 +533,9 @@
                     div.innerHTML = `
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <strong>${doc.id}</strong> - ${data.toolName}
+                                <strong>${doc.id}</strong> - ${data.toolName || 'Unknown Tool'}
                                 <br>
-                                <small>Part: ${data.partNumber} | Location: ${data.location}</small>
+                                <small>Part: ${data.partNumber || doc.id} | Location: ${data.location || 'N/A'}</small>
                             </div>
                             ${statusBadge}
                         </div>
@@ -541,6 +544,8 @@
                 });
             } catch (error) {
                 console.error('Error loading tools:', error);
+                const toolList = document.getElementById('toolList');
+                toolList.innerHTML = '<h4>Today\'s Tools</h4><p class="text-danger">Error loading tools. Please try again.</p>';
             }
         }
 
