@@ -27,9 +27,22 @@
             margin: 5px 0;
             border: 1px solid #ddd;
             border-radius: 5px;
+            transition: background-color 0.3s ease;
         }
         .tool-item:hover {
             background-color: #f8f9fa;
+        }
+        .tool-out-even {
+            background-color: #fff3e0; /* Very light orange */
+        }
+        .tool-out-odd {
+            background-color: #ffe0b2; /* Light orange */
+        }
+        .tool-in-even {
+            background-color: #e8f5e9; /* Very light green */
+        }
+        .tool-in-odd {
+            background-color: #c8e6c9; /* Light green */
         }
         .nav-tabs {
             margin-bottom: 20px;
@@ -52,6 +65,21 @@
         .status-in {
             background-color: #e8f5e9;
             color: #2e7d32;
+        }
+        .tool-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .tool-details {
+            font-size: 0.9em;
+            color: #666;
+        }
+        .tool-time {
+            font-size: 0.8em;
+            color: #888;
+            margin-top: 5px;
         }
     </style>
 </head>
@@ -455,17 +483,19 @@
 
                 if (doc.exists) {
                     const data = doc.data();
-                    if (data.status === 'OUT' && data.technician !== user.email) {
+                    
+                    // Get current technician name
+                    const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                    const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+
+                    // Only show warning if tool is OUT and checked out by a different technician
+                    if (data.status === 'OUT' && data.technician !== technicianName) {
                         alert(`This tool is currently checked out by ${data.technician}`);
                         return;
                     }
                     
                     const status = data.status === 'OUT' ? 'IN' : 'OUT';
                     const timestamp = firebase.firestore.FieldValue.serverTimestamp();
-
-                    // Get technician name from technicians collection
-                    const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-                    const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
 
                     // Update tool status
                     await toolRef.update({
@@ -516,26 +546,41 @@
                     .get();
 
                 const toolList = document.getElementById('toolList');
-                toolList.innerHTML = '<h4>Today\'s Tools</h4>';
+                toolList.innerHTML = '<h4 class="tool-title">Today\'s Tools</h4>';
 
                 if (snapshot.empty) {
                     toolList.innerHTML += '<p>No tools scanned today.</p>';
                     return;
                 }
 
+                let outCount = 0;
+                let inCount = 0;
+
                 snapshot.forEach(doc => {
                     const data = doc.data();
                     const div = document.createElement('div');
-                    div.className = `tool-item ${data.status === 'OUT' ? 'tool-out' : 'tool-in'}`;
+                    const isOut = data.status === 'OUT';
+                    const count = isOut ? ++outCount : ++inCount;
+                    const evenOdd = count % 2 === 0 ? 'even' : 'odd';
                     
-                    const statusBadge = `<span class="status-badge ${data.status === 'OUT' ? 'status-out' : 'status-in'}">${data.status}</span>`;
+                    div.className = `tool-item tool-${isOut ? 'out' : 'in'}-${evenOdd}`;
+                    
+                    const statusBadge = `<span class="status-badge status-${isOut ? 'out' : 'in'}">${data.status}</span>`;
+                    const time = data.timestamp ? data.timestamp.toDate().toLocaleTimeString() : 'N/A';
                     
                     div.innerHTML = `
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <strong>${doc.id}</strong> - ${data.toolName || 'Unknown Tool'}
-                                <br>
-                                <small>Part: ${data.partNumber || doc.id} | Location: ${data.location || 'N/A'}</small>
+                                <div class="tool-details">
+                                    <strong>${data.toolName || 'Unknown Tool'}</strong>
+                                    <br>
+                                    <small>TID: ${doc.id}</small>
+                                    <br>
+                                    <small>Part: ${data.partNumber || doc.id} | Location: ${data.location || 'N/A'}</small>
+                                </div>
+                                <div class="tool-time">
+                                    <small>${time}</small>
+                                </div>
                             </div>
                             ${statusBadge}
                         </div>
@@ -545,7 +590,7 @@
             } catch (error) {
                 console.error('Error loading tools:', error);
                 const toolList = document.getElementById('toolList');
-                toolList.innerHTML = '<h4>Today\'s Tools</h4><p class="text-danger">Error loading tools. Please try again.</p>';
+                toolList.innerHTML = '<h4 class="tool-title">Today\'s Tools</h4><p class="text-danger">Error loading tools. Please try again.</p>';
             }
         }
 
@@ -554,44 +599,74 @@
             const user = auth.currentUser;
             if (!user) return;
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-
             try {
+                // Get technician name
+                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
                 const snapshot = await db.collection('tools')
-                    .where('technician', '==', user.email)
+                    .where('technician', '==', technicianName)
                     .where('status', '==', 'OUT')
                     .get();
 
                 const previousList = document.getElementById('previousToolsList');
-                previousList.innerHTML = '<h4>Previous OUT Tools</h4>';
+                previousList.innerHTML = '<h4 class="tool-title">Previous OUT Tools</h4>';
 
-                snapshot.docs
-                    .filter(doc => doc.data().timestamp.toDate() < today)
-                    .forEach(doc => {
+                if (snapshot.empty) {
+                    previousList.innerHTML += '<p>No previous OUT tools found.</p>';
+                    return;
+                }
+
+                const previousTools = snapshot.docs
+                    .filter(doc => {
                         const data = doc.data();
-                        const div = document.createElement('div');
-                        div.className = 'tool-item tool-out';
-                        
-                        const date = data.timestamp.toDate();
-                        const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-                        
-                        div.innerHTML = `
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <strong>${doc.id}</strong> - ${data.toolName}
+                        return data.timestamp && data.timestamp.toDate() < today;
+                    })
+                    .sort((a, b) => b.data().timestamp.toDate() - a.data().timestamp.toDate());
+
+                if (previousTools.length === 0) {
+                    previousList.innerHTML += '<p>No previous OUT tools found.</p>';
+                    return;
+                }
+
+                let count = 0;
+                previousTools.forEach(doc => {
+                    const data = doc.data();
+                    const div = document.createElement('div');
+                    count++;
+                    const evenOdd = count % 2 === 0 ? 'even' : 'odd';
+                    
+                    div.className = `tool-item tool-out-${evenOdd}`;
+                    
+                    const date = data.timestamp.toDate();
+                    const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                    
+                    div.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="tool-details">
+                                    <strong>${data.toolName || 'Unknown Tool'}</strong>
                                     <br>
-                                    <small>Part: ${data.partNumber} | Location: ${data.location}</small>
+                                    <small>TID: ${doc.id}</small>
                                     <br>
-                                    <small class="text-muted">Out since: ${formattedDate}</small>
+                                    <small>Part: ${data.partNumber || doc.id} | Location: ${data.location || 'N/A'}</small>
                                 </div>
-                                <span class="status-badge status-out">OUT</span>
+                                <div class="tool-time">
+                                    <small>Out since: ${formattedDate}</small>
+                                </div>
                             </div>
-                        `;
-                        previousList.appendChild(div);
-                    });
+                            <span class="status-badge status-out">OUT</span>
+                        </div>
+                    `;
+                    previousList.appendChild(div);
+                });
             } catch (error) {
                 console.error('Error loading previous tools:', error);
+                const previousList = document.getElementById('previousToolsList');
+                previousList.innerHTML = '<h4 class="tool-title">Previous OUT Tools</h4><p class="text-danger">Error loading previous tools. Please try again.</p>';
             }
         }
 
