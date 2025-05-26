@@ -1319,7 +1319,7 @@
                     if (ownerPrev > 0) outstandingMsg += `<br>- <b>${ownerPrev}</b> TOOL${ownerPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES.`;
                     outstandingMsg += '<br>PLEASE FOLLOW UP TO ENSURE THESE TOOLS ARE RETURNED.';
                 }
-                // Now check as technician, but exclude tools where user is also owner
+                // Now check as technician, count all tools where user is technician (regardless of owner)
                 const technicianDoc = await db.collection('technicians').doc(user.uid).get();
                 const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'UNKNOWN TECHNICIAN';
                 const techSnapshot = await db.collection('tools')
@@ -1329,16 +1329,13 @@
                 let techToday = 0;
                 let techPrev = 0;
                 techSnapshot.docs.forEach(doc => {
-                    // Exclude if user is also owner (already counted)
-                    if (!techToolIds.has(doc.id)) {
-                        const data = doc.data();
-                        if (data.timestamp && data.timestamp.toDate) {
-                            const outTime = data.timestamp.toDate();
-                            if (outTime >= today) {
-                                techToday++;
-                            } else {
-                                techPrev++;
-                            }
+                    const data = doc.data();
+                    if (data.timestamp && data.timestamp.toDate) {
+                        const outTime = data.timestamp.toDate();
+                        if (outTime >= today) {
+                            techToday++;
+                        } else {
+                            techPrev++;
                         }
                     }
                 });
