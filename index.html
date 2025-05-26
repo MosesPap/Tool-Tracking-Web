@@ -390,6 +390,42 @@
       </div>
     </div>
 
+    <!-- Outstanding Tools Notification Modal -->
+    <div class="modal fade" id="outstandingToolsModal" tabindex="-1" aria-labelledby="outstandingToolsModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="outstandingToolsModalLabel">Outstanding Tool Checkouts</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="outstandingToolsBody">
+            <!-- Notification content will be set by JS -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Overdue OUT Tools Notification Modal -->
+    <div class="modal fade" id="outToolsNotifModal" tabindex="-1" aria-labelledby="outToolsNotifModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="outToolsNotifModalLabel">Outstanding Tools</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="outToolsNotifBody">
+            <!-- Content will be set by JS -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -1060,6 +1096,9 @@
                     });
                 
                 loadTools();
+                // Add notification checks on login
+                checkOutstandingToolsNotification();
+                checkOverdueOutToolsNotification();
             } else {
                 loginSection.style.display = 'block';
                 appSection.style.display = 'none';
@@ -1209,6 +1248,119 @@
                 return data.timestamp && data.timestamp.toDate() < today;
             });
             document.getElementById('previous-tab').innerHTML = `<i class="fas fa-history"></i> Previous Tools (${previousTools.length})`;
+        }
+
+        // Fetch notification time (in minutes) from Firestore config
+        async function getNotificationTimeMinutes() {
+            try {
+                const settingsDoc = await db.collection('settings').doc('admin').get();
+                if (settingsDoc.exists && settingsDoc.data().notificationTime) {
+                    // Parse HH:mm format to minutes
+                    const [hours, minutes] = settingsDoc.data().notificationTime.split(':').map(Number);
+                    return hours * 60 + minutes;
+                }
+            } catch (e) {
+                console.error('Error fetching notification time:', e);
+            }
+            // Default to 60 minutes if not set
+            return 60;
+        }
+
+        // Check for outstanding OUT tools and show notification if needed
+        async function checkOutstandingToolsNotification() {
+            const user = auth.currentUser;
+            if (!user) return;
+            const fullName = localStorage.getItem('fullName') || user.email;
+            const notificationTimeMinutes = await getNotificationTimeMinutes();
+            const now = new Date();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // Query all OUT tools for this user
+            const snapshot = await db.collection('tools')
+                .where('owner', '==', fullName)
+                .where('status', '==', 'OUT')
+                .get();
+
+            let outToday = 0;
+            let outPrevious = 0;
+            snapshot.docs.forEach(doc => {
+                const data = doc.data();
+                if (data.timestamp && data.timestamp.toDate) {
+                    const outTime = data.timestamp.toDate();
+                    const diffMinutes = (now - outTime) / 60000;
+                    if (diffMinutes >= notificationTimeMinutes) {
+                        if (outTime >= today) {
+                            outToday++;
+                        } else {
+                            outPrevious++;
+                        }
+                    }
+                }
+            });
+
+            if (outToday > 0 || outPrevious > 0) {
+                let msg = '';
+                if (outToday > 0) msg += `You have <b>${outToday}</b> tool${outToday > 1 ? 's' : ''} checked out today that require your attention.<br>`;
+                if (outPrevious > 0) msg += `You have <b>${outPrevious}</b> tool${outPrevious > 1 ? 's' : ''} checked out from previous dates that require your attention.`;
+                document.getElementById('outstandingToolsBody').innerHTML = msg;
+                const modal = new bootstrap.Modal(document.getElementById('outstandingToolsModal'));
+                modal.show();
+            }
+        }
+
+        // Check for overdue OUT tools and show notification
+        async function checkOverdueOutToolsNotification() {
+            const user = auth.currentUser;
+            if (!user) return;
+            // Get notificationTime from settings/admin
+            let notificationTime = 0;
+            try {
+                const settingsDoc = await db.collection('settings').doc('admin').get();
+                if (settingsDoc.exists && settingsDoc.data().notificationTime) {
+                    // Parse HH:mm format to minutes
+                    const [hours, minutes] = settingsDoc.data().notificationTime.split(':').map(Number);
+                    notificationTime = hours * 60 + minutes;
+                } else {
+                    notificationTime = 60; // fallback default 60 minutes
+                }
+            } catch (e) {
+                console.error('Error fetching notification time:', e);
+                notificationTime = 60;
+            }
+            // Get technician name
+            const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+            const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+            const now = new Date();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            // Query all OUT tools for this user
+            const snapshot = await db.collection('tools')
+                .where('technician', '==', technicianName)
+                .where('status', '==', 'OUT')
+                .get();
+            let outToday = 0;
+            let outPrev = 0;
+            snapshot.docs.forEach(doc => {
+                const data = doc.data();
+                if (data.timestamp && data.timestamp.toDate) {
+                    const outTime = data.timestamp.toDate();
+                    const diffMin = (now - outTime) / 60000;
+                    if (diffMin >= notificationTime) {
+                        if (outTime >= today) {
+                            outToday++;
+                        } else {
+                            outPrev++;
+                        }
+                    }
+                }
+            });
+            if (outToday > 0 || outPrev > 0) {
+                document.getElementById('outToolsNotifBody').innerHTML =
+                  `<p>You have <b>${outToday}</b> tool(s) checked out today and <b>${outPrev}</b> tool(s) checked out from previous dates that require your attention.</p>`;
+                const notifModal = new bootstrap.Modal(document.getElementById('outToolsNotifModal'));
+                notifModal.show();
+            }
         }
     </script>
 </body>
