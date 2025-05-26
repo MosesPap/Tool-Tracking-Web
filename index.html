@@ -1084,10 +1084,34 @@
             modal.show();
         }
 
-        // Show last scanned tool details in modal
-        function showLastScannedToolDetails() {
-            if (lastScannedToolData) {
-                showToolDetails(lastScannedToolData);
+        // Show tool details for the code in the input field, even if not submitted
+        async function showLastScannedToolDetails() {
+            const code = document.getElementById('toolCode').value.trim();
+            if (!code) return;
+            try {
+                const toolRef = db.collection('tools').doc(code);
+                const doc = await toolRef.get();
+                if (doc.exists) {
+                    const data = doc.data();
+                    showToolDetails({
+                        toolName: data.toolName || 'Unknown Tool',
+                        toolId: doc.id,
+                        partNumber: data.partNumber || doc.id,
+                        collectionCode: data.collectionCode || '',
+                        location: data.location || 'N/A',
+                        owner: data.owner || 'N/A',
+                        status: data.status || '',
+                        technician: data.technician || '',
+                        timestamp: data.timestamp && data.timestamp.toDate ? data.timestamp.toDate().toLocaleString('en-GB', {
+                            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                        }) : '',
+                        calDueDate: data.calDueDate && data.calDueDate.toDate ? data.calDueDate.toDate().toLocaleDateString('en-GB') : ''
+                    });
+                } else {
+                    alert('Tool not found. Please check the code.');
+                }
+            } catch (error) {
+                alert('Error fetching tool details: ' + error.message);
             }
         }
 
