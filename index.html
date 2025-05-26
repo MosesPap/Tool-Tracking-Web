@@ -26,23 +26,23 @@
             padding: 10px;
             margin: 5px 0;
             border: 1px solid #ddd;
-            border-radius: 5px;
+            border-radius: 8px;
             transition: background-color 0.3s ease;
         }
         .tool-item:hover {
             background-color: #f8f9fa;
         }
         .tool-out-even {
-            background-color: #fff3e0; /* Very light orange */
+            background-color: #FFF3E0; /* Very light orange */
         }
         .tool-out-odd {
-            background-color: #ffe0b2; /* Light orange */
+            background-color: #FFE0B2; /* Light orange */
         }
         .tool-in-even {
-            background-color: #e8f5e9; /* Very light green */
+            background-color: #E8F5E9; /* Very light green */
         }
         .tool-in-odd {
-            background-color: #c8e6c9; /* Light green */
+            background-color: #A5D6A7; /* Light green */
         }
         .nav-tabs {
             margin-bottom: 20px;
@@ -57,6 +57,7 @@
             padding: 5px 10px;
             border-radius: 15px;
             font-weight: bold;
+            font-size: 18px;
         }
         .status-out {
             background-color: #ffebee;
@@ -64,22 +65,39 @@
         }
         .status-in {
             background-color: #e8f5e9;
-            color: #2e7d32;
+            color: #388E3C;
         }
         .tool-title {
             font-size: 1.2em;
             font-weight: bold;
             color: #333;
             margin-bottom: 10px;
+            text-decoration: underline;
         }
-        .tool-details {
-            font-size: 0.9em;
-            color: #666;
+        .tool-name {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 5px;
         }
         .tool-time {
-            font-size: 0.8em;
-            color: #888;
-            margin-top: 5px;
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .tool-headers {
+            color: #388E3C;
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        .tool-values {
+            font-size: 14px;
+        }
+        .tool-out-text {
+            color: #d32f2f;
+        }
+        .tool-in-text {
+            color: #000;
         }
     </style>
 </head>
@@ -546,17 +564,29 @@
                     .get();
 
                 const toolList = document.getElementById('toolList');
-                toolList.innerHTML = '<h4 class="tool-title">Today\'s Tools</h4>';
+                toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4>';
 
                 if (snapshot.empty) {
                     toolList.innerHTML += '<p>No tools scanned today.</p>';
                     return;
                 }
 
+                // Sort tools: OUT first, then IN, and by timestamp within each group
+                const sortedTools = snapshot.docs.sort((a, b) => {
+                    const aData = a.data();
+                    const bData = b.data();
+                    // First sort by status (OUT before IN)
+                    if (aData.status !== bData.status) {
+                        return aData.status === 'OUT' ? -1 : 1;
+                    }
+                    // Then sort by timestamp (newest first)
+                    return bData.timestamp.toDate() - aData.timestamp.toDate();
+                });
+
                 let outCount = 0;
                 let inCount = 0;
 
-                snapshot.forEach(doc => {
+                sortedTools.forEach((doc, index) => {
                     const data = doc.data();
                     const div = document.createElement('div');
                     const isOut = data.status === 'OUT';
@@ -565,24 +595,31 @@
                     
                     div.className = `tool-item tool-${isOut ? 'out' : 'in'}-${evenOdd}`;
                     
-                    const statusBadge = `<span class="status-badge status-${isOut ? 'out' : 'in'}">${data.status}</span>`;
                     const time = data.timestamp ? data.timestamp.toDate().toLocaleTimeString() : 'N/A';
+                    const textColorClass = isOut ? 'tool-out-text' : 'tool-in-text';
                     
                     div.innerHTML = `
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <div class="tool-details">
-                                    <strong>${data.toolName || 'Unknown Tool'}</strong>
-                                    <br>
-                                    <small>TID: ${doc.id}</small>
-                                    <br>
-                                    <small>Part: ${data.partNumber || doc.id} | Location: ${data.location || 'N/A'}</small>
-                                </div>
-                                <div class="tool-time">
-                                    <small>${time}</small>
+                        <div class="tool-name ${textColorClass}">
+                            ${index + 1}. ${data.toolName || 'Unknown Tool'}
+                        </div>
+                        <div class="tool-time ${textColorClass}">
+                            ${time}
+                        </div>
+                        <div class="tool-headers">
+                            <div class="row">
+                                <div class="col-4">TID</div>
+                                <div class="col-4">P/N</div>
+                                <div class="col-4">STS</div>
+                            </div>
+                        </div>
+                        <div class="tool-values ${textColorClass}">
+                            <div class="row">
+                                <div class="col-4">${doc.id}</div>
+                                <div class="col-4">${data.partNumber || doc.id}</div>
+                                <div class="col-4">
+                                    <span class="status-badge status-${isOut ? 'out' : 'in'}">${data.status}</span>
                                 </div>
                             </div>
-                            ${statusBadge}
                         </div>
                     `;
                     toolList.appendChild(div);
@@ -590,7 +627,7 @@
             } catch (error) {
                 console.error('Error loading tools:', error);
                 const toolList = document.getElementById('toolList');
-                toolList.innerHTML = '<h4 class="tool-title">Today\'s Tools</h4><p class="text-danger">Error loading tools. Please try again.</p>';
+                toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4><p class="text-danger">Error loading tools. Please try again.</p>';
             }
         }
 
@@ -625,7 +662,7 @@
                         const data = doc.data();
                         return data.timestamp && data.timestamp.toDate() < today;
                     })
-                    .sort((a, b) => b.data().timestamp.toDate() - a.data().timestamp.toDate());
+                    .sort((a, b) => b.data().timestamp.toDate() - a.data().timestamp.toDate()); // Sort by timestamp, newest first
 
                 if (previousTools.length === 0) {
                     previousList.innerHTML += '<p>No previous OUT tools found.</p>';
