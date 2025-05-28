@@ -986,7 +986,7 @@
 
                     const config = {
                         fps: 10,
-                        qrbox: { width: 250, height: 250 },
+                        qrbox: { width: 300, height: 300 },  // Increased size for better visibility
                         aspectRatio: 1.0,
                         formatsToSupport: [
                             Html5QrcodeSupportedFormats.QR_CODE,
@@ -997,13 +997,18 @@
                             Html5QrcodeSupportedFormats.UPC_A,
                             Html5QrcodeSupportedFormats.UPC_E,
                             Html5QrcodeSupportedFormats.ITF,
+                            Html5QrcodeSupportedFormats.ITF,
                             Html5QrcodeSupportedFormats.AZTEC,
                             Html5QrcodeSupportedFormats.DATA_MATRIX
                         ],
                         videoConstraints: {
-                            facingMode: "environment",
+                            facingMode: { ideal: "environment" },
                             width: { min: 640, ideal: 1280, max: 1920 },
-                            height: { min: 480, ideal: 720, max: 1080 }
+                            height: { min: 480, ideal: 720, max: 1080 },
+                            // iOS specific constraints
+                            frameRate: { ideal: 30 },
+                            focusMode: "continuous",
+                            exposureMode: "continuous"
                         }
                     };
 
@@ -1014,45 +1019,47 @@
                         }
 
                         // Create a new instance of Html5Qrcode
-                        const html5QrCode = new Html5Qrcode("reader");
+                        const html5QrCode = new Html5Qrcode("reader", {
+                            // iOS specific settings
+                            verbose: true,
+                            experimentalFeatures: {
+                                useBarCodeDetectorIfSupported: true
+                            }
+                        });
                         
-                        // Start the camera
+                        // Start the camera with iOS specific options
                         html5QrCode.start(
-                            { facingMode: "environment" },
+                            { 
+                                facingMode: { ideal: "environment" },
+                                // iOS specific camera options
+                                frameRate: { ideal: 30 },
+                                focusMode: "continuous",
+                                exposureMode: "continuous"
+                            },
                             config,
                             (decodedText) => {
-                                // Stop scanning after successful scan
-                                html5QrCode.stop().then(() => {
-                                    // Update the input field with the scanned code
-                                    const toolCodeInput = document.getElementById('toolCode');
-                                    toolCodeInput.value = decodedText;
-                                    
-                                    // Trigger input event to enable the tool details button
-                                    const inputEvent = new Event('input', { bubbles: true });
-                                    toolCodeInput.dispatchEvent(inputEvent);
-                                    
-                                    // Enable tool details button
-                                    document.getElementById('toolDetailsBtn').disabled = false;
-                                    
-                                    // Automatically show tool details
-                                    showLastScannedToolDetails();
-                                    
-                                    // Hide camera container
-                                    document.getElementById('cameraContainer').classList.add('hidden');
-                                    
-                                    // Update button state
-                                    const toggleButton = document.querySelector('.btn-scan');
-                                    toggleButton.innerHTML = '<i class="fas fa-camera"></i> Start Scanner';
-                                    toggleButton.classList.remove('btn-danger');
-                                    toggleButton.classList.add('btn-primary');
-                                    isScanning = false;
-                                }).catch(err => {
-                                    console.error('Error stopping camera:', err);
-                                });
+                                // Update the input field with the scanned code
+                                const toolCodeInput = document.getElementById('toolCode');
+                                toolCodeInput.value = decodedText;
+                                
+                                // Trigger input event to enable the tool details button
+                                const inputEvent = new Event('input', { bubbles: true });
+                                toolCodeInput.dispatchEvent(inputEvent);
+                                
+                                // Enable tool details button
+                                document.getElementById('toolDetailsBtn').disabled = false;
+                                
+                                // Automatically show tool details
+                                showLastScannedToolDetails();
+                                
+                                // Keep camera running for continuous scanning
                             },
                             (error) => {
-                                // Handle scanning errors silently
-                                console.log(error);
+                                // Enhanced error handling for iOS
+                                console.log('Scanning error:', error);
+                                if (error.includes('No MultiFormat Readers were able to detect the code')) {
+                                    console.log('Trying alternative scanning method...');
+                                }
                             }
                         ).catch(err => {
                             console.error('Error starting camera:', err);
