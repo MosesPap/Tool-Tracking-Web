@@ -986,7 +986,7 @@
 
                     const config = {
                         fps: 10,
-                        qrbox: { width: 300, height: 300 },  // Increased size for better visibility
+                        qrbox: { width: 300, height: 300 },
                         aspectRatio: 1.0,
                         formatsToSupport: [
                             Html5QrcodeSupportedFormats.QR_CODE,
@@ -997,18 +997,15 @@
                             Html5QrcodeSupportedFormats.UPC_A,
                             Html5QrcodeSupportedFormats.UPC_E,
                             Html5QrcodeSupportedFormats.ITF,
-                            Html5QrcodeSupportedFormats.ITF,
                             Html5QrcodeSupportedFormats.AZTEC,
-                            Html5QrcodeSupportedFormats.DATA_MATRIX
+                            Html5QrcodeSupportedFormats.DATA_MATRIX,
+                            Html5QrcodeSupportedFormats.CODABAR,
+                            Html5QrcodeSupportedFormats.PDF_417
                         ],
                         videoConstraints: {
-                            facingMode: { ideal: "environment" },
+                            facingMode: { exact: "environment" },
                             width: { min: 640, ideal: 1280, max: 1920 },
-                            height: { min: 480, ideal: 720, max: 1080 },
-                            // iOS specific constraints
-                            frameRate: { ideal: 30 },
-                            focusMode: "continuous",
-                            exposureMode: "continuous"
+                            height: { min: 480, ideal: 720, max: 1080 }
                         }
                     };
 
@@ -1018,24 +1015,17 @@
                             html5QrcodeScanner = null;
                         }
 
-                        // Create a new instance of Html5Qrcode
+                        // Create a new instance of Html5Qrcode with enhanced barcode support
                         const html5QrCode = new Html5Qrcode("reader", {
-                            // iOS specific settings
-                            verbose: true,
+                            verbose: false,
                             experimentalFeatures: {
                                 useBarCodeDetectorIfSupported: true
                             }
                         });
                         
-                        // Start the camera with iOS specific options
+                        // Start the camera with enhanced barcode detection
                         html5QrCode.start(
-                            { 
-                                facingMode: { ideal: "environment" },
-                                // iOS specific camera options
-                                frameRate: { ideal: 30 },
-                                focusMode: "continuous",
-                                exposureMode: "continuous"
-                            },
+                            { facingMode: { exact: "environment" } },
                             config,
                             (decodedText) => {
                                 // Update the input field with the scanned code
@@ -1049,17 +1039,11 @@
                                 // Enable tool details button
                                 document.getElementById('toolDetailsBtn').disabled = false;
                                 
-                                // Automatically show tool details
-                                showLastScannedToolDetails();
-                                
                                 // Keep camera running for continuous scanning
                             },
                             (error) => {
-                                // Enhanced error handling for iOS
-                                console.log('Scanning error:', error);
-                                if (error.includes('No MultiFormat Readers were able to detect the code')) {
-                                    console.log('Trying alternative scanning method...');
-                                }
+                                // Handle scanning errors silently
+                                console.log(error);
                             }
                         ).catch(err => {
                             console.error('Error starting camera:', err);
@@ -1098,7 +1082,7 @@
             } else {
                 try {
                     if (html5QrcodeScanner) {
-                        html5QrcodeScanner.clear();
+                        await html5QrcodeScanner.clear();
                         html5QrcodeScanner = null;
                     }
                     isScanning = false;
@@ -1106,6 +1090,12 @@
                     toggleButton.innerHTML = '<i class="fas fa-camera"></i> Start Scanner';
                     toggleButton.classList.remove('btn-danger');
                     toggleButton.classList.add('btn-primary');
+                    
+                    // Clear the reader element
+                    const reader = document.getElementById('reader');
+                    if (reader) {
+                        reader.innerHTML = '';
+                    }
                 } catch (err) {
                     console.error('Error stopping camera:', err);
                     alert('Error stopping camera. Please refresh the page and try again.');
