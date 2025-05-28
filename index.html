@@ -263,12 +263,12 @@
                                     <button onclick="startScanner()" class="btn btn-primary btn-scan mb-3">
                                         <i class="fas fa-camera"></i> Start Scanner
                                     </button>
+                                    <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-3" style="display:none;">Stop Scanner</button>
                                     <div id="androidScanner" style="display:none;">
                                         <div id="reader" style="width:320px;height:240px;"></div>
-                                        <button onclick="stopCamera()" class="btn btn-danger mt-2">Stop Scanner</button>
                                     </div>
                                     <div id="iosScanner" style="display:none;">
-                                        <input type="text" id="qrInput" placeholder="Paste QR code here" class="form-control mb-2" />
+                                        <input type="text" id="qrInput" placeholder="Paste QR or barcode here" class="form-control mb-2" />
                                         <button onclick="showIosInstructions()" class="btn btn-warning mb-2">How to scan on iPhone/iPad</button>
                                     </div>
                                     <div class="input-group mb-3">
@@ -988,7 +988,7 @@
             if (isIOS()) {
                 document.getElementById('androidScanner').style.display = 'none';
                 document.getElementById('iosScanner').style.display = 'block';
-                // When user pastes in qrInput, copy to toolCode
+                document.getElementById('stopScannerBtn').style.display = 'none';
                 document.getElementById('qrInput').oninput = function() {
                     document.getElementById('toolCode').value = this.value;
                     document.getElementById('toolDetailsBtn').disabled = !this.value.trim();
@@ -996,10 +996,28 @@
             } else {
                 document.getElementById('androidScanner').style.display = 'block';
                 document.getElementById('iosScanner').style.display = 'none';
+                document.getElementById('stopScannerBtn').style.display = 'inline-block';
                 html5QrCode = new Html5Qrcode("reader");
                 html5QrCode.start(
                     { facingMode: "environment" },
-                    { fps: 10, qrbox: 250 },
+                    {
+                        fps: 10,
+                        qrbox: 250,
+                        formatsToSupport: [
+                            Html5QrcodeSupportedFormats.QR_CODE,
+                            Html5QrcodeSupportedFormats.CODE_128,
+                            Html5QrcodeSupportedFormats.CODE_39,
+                            Html5QrcodeSupportedFormats.EAN_13,
+                            Html5QrcodeSupportedFormats.EAN_8,
+                            Html5QrcodeSupportedFormats.UPC_A,
+                            Html5QrcodeSupportedFormats.UPC_E,
+                            Html5QrcodeSupportedFormats.ITF,
+                            Html5QrcodeSupportedFormats.AZTEC,
+                            Html5QrcodeSupportedFormats.DATA_MATRIX,
+                            Html5QrcodeSupportedFormats.CODABAR,
+                            Html5QrcodeSupportedFormats.PDF_417
+                        ]
+                    },
                     (decodedText) => {
                         document.getElementById('toolCode').value = decodedText;
                         document.getElementById('toolDetailsBtn').disabled = false;
@@ -1007,6 +1025,7 @@
                     }
                 ).catch(err => {
                     alert('Camera error: ' + err);
+                    document.getElementById('stopScannerBtn').style.display = 'none';
                 });
             }
         }
@@ -1017,6 +1036,7 @@
                 html5QrCode = null;
             }
             document.getElementById('androidScanner').style.display = 'none';
+            document.getElementById('stopScannerBtn').style.display = 'none';
         }
 
         function showIosInstructions() {
