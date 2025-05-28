@@ -976,7 +976,12 @@
         async function toggleCamera() {
             const cameraContainer = document.getElementById('cameraContainer');
             const toggleButton = document.querySelector('.btn-scan');
-            
+
+            // iOS detection
+            function isIOS() {
+                return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            }
+
             if (!isScanning) {
                 try {
                     if (html5QrcodeScanner) {
@@ -992,12 +997,25 @@
                         }
                     });
 
-                    // Configure camera settings for better iOS compatibility and auto-focus
-                    const config = {
-                        fps: 10,
-                        qrbox: { width: 250, height: 250 },
-                        aspectRatio: 1.0,
-                        formatsToSupport: [
+                    // iOS-specific config
+                    let config;
+                    let formatsToSupport;
+                    if (isIOS()) {
+                        formatsToSupport = [Html5QrcodeSupportedFormats.QR_CODE];
+                        config = {
+                            fps: 10,
+                            qrbox: { width: 300, height: 300 },
+                            aspectRatio: 1.0,
+                            formatsToSupport: formatsToSupport,
+                            videoConstraints: {
+                                facingMode: { exact: "environment" },
+                                width: { min: 320, ideal: 640, max: 1280 },
+                                height: { min: 240, ideal: 480, max: 720 }
+                                // No advanced constraints for iOS
+                            }
+                        };
+                    } else {
+                        formatsToSupport = [
                             Html5QrcodeSupportedFormats.QR_CODE,
                             Html5QrcodeSupportedFormats.CODE_128,
                             Html5QrcodeSupportedFormats.CODE_39,
@@ -1010,53 +1028,56 @@
                             Html5QrcodeSupportedFormats.DATA_MATRIX,
                             Html5QrcodeSupportedFormats.CODABAR,
                             Html5QrcodeSupportedFormats.PDF_417
-                        ],
-                        videoConstraints: {
-                            facingMode: { exact: "environment" },
-                            width: { min: 320, ideal: 640, max: 1280 },
-                            height: { min: 240, ideal: 480, max: 720 },
-                            // Add auto-focus settings
-                            advanced: [
-                                {
-                                    focusMode: "continuous",
-                                    exposureMode: "continuous",
-                                    whiteBalanceMode: "continuous"
-                                }
-                            ]
-                        }
-                    };
+                        ];
+                        config = {
+                            fps: 10,
+                            qrbox: { width: 250, height: 250 },
+                            aspectRatio: 1.0,
+                            formatsToSupport: formatsToSupport,
+                            videoConstraints: {
+                                facingMode: { exact: "environment" },
+                                width: { min: 320, ideal: 640, max: 1280 },
+                                height: { min: 240, ideal: 480, max: 720 },
+                                advanced: [
+                                    {
+                                        focusMode: "continuous",
+                                        exposureMode: "continuous",
+                                        whiteBalanceMode: "continuous"
+                                    }
+                                ]
+                            }
+                        };
+                    }
 
-                    // Start the camera with enhanced barcode detection and auto-focus
+                    // Show iOS user message
+                    if (isIOS()) {
+                        setTimeout(() => {
+                            alert("Note: On iPhone/iPad, only QR codes are supported in the web app. If scanning does not work, use the Camera app to scan the QR code and paste it here.");
+                        }, 500);
+                    }
+
+                    // Start the camera
                     await html5QrCode.start(
-                        { 
-                            facingMode: { exact: "environment" },
-                            // Add auto-focus settings for the stream
-                            advanced: [
-                                {
-                                    focusMode: "continuous",
-                                    exposureMode: "continuous",
-                                    whiteBalanceMode: "continuous"
-                                }
-                            ]
-                        },
+                        { facingMode: { exact: "environment" } },
                         config,
                         (decodedText) => {
                             // Update the input field with the scanned code
                             const toolCodeInput = document.getElementById('toolCode');
                             toolCodeInput.value = decodedText;
-                            
                             // Trigger input event to enable the tool details button
                             const inputEvent = new Event('input', { bubbles: true });
                             toolCodeInput.dispatchEvent(inputEvent);
-                            
                             // Enable tool details button
                             document.getElementById('toolDetailsBtn').disabled = false;
-                            
                             // Keep camera running for continuous scanning
                         },
                         (error) => {
+                            // On iOS, if scanning fails, suggest manual entry
+                            if (isIOS()) {
+                                document.getElementById('toolDetailsBtn').disabled = false;
+                            }
                             // Handle scanning errors silently
-                            console.log(error);
+                            // console.log(error);
                         }
                     );
 
@@ -1091,7 +1112,6 @@
                     toggleButton.innerHTML = '<i class="fas fa-camera"></i> Start Scanner';
                     toggleButton.classList.remove('btn-danger');
                     toggleButton.classList.add('btn-primary');
-                    
                     // Clear the reader element
                     const reader = document.getElementById('reader');
                     if (reader) {
