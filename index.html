@@ -695,8 +695,11 @@
                             return;
                         }
                     }
+                    const status = data.status === 'OUT' ? 'IN' : 'OUT';
+                    const timestamp = firebase.firestore.FieldValue.serverTimestamp();
+
                     // Show 5-minute cooldown info dialog only once per day, when first tool is checked OUT
-                    if (data.status === 'OUT') {
+                    if (status === 'OUT') {  // Check new status instead of current status
                         const todayKey = 'cooldownInfoShown_' + (new Date()).toISOString().slice(0, 10);
                         if (!localStorage.getItem(todayKey)) {
                             const infoModal = new bootstrap.Modal(document.getElementById('cooldownInfoModal'));
@@ -704,8 +707,6 @@
                             localStorage.setItem(todayKey, '1');
                         }
                     }
-                    const status = data.status === 'OUT' ? 'IN' : 'OUT';
-                    const timestamp = firebase.firestore.FieldValue.serverTimestamp();
 
                     // Update tool status
                     await toolRef.update({
@@ -985,7 +986,7 @@
 
                     const config = {
                         fps: 10,
-                        qrbox: 150,
+                        qrbox: { width: 250, height: 250 },  // Increased box size for better scanning
                         aspectRatio: 1.0,
                         formatsToSupport: [
                             Html5QrcodeSupportedFormats.QR_CODE,
@@ -998,7 +999,12 @@
                             Html5QrcodeSupportedFormats.ITF,
                             Html5QrcodeSupportedFormats.AZTEC,
                             Html5QrcodeSupportedFormats.DATA_MATRIX
-                        ]
+                        ],
+                        videoConstraints: {
+                            facingMode: { exact: "environment" },  // Force using back camera
+                            width: { min: 640, ideal: 1280, max: 1920 },  // Higher resolution
+                            height: { min: 480, ideal: 720, max: 1080 }
+                        }
                     };
 
                     html5QrcodeScanner = new Html5QrcodeScanner(
@@ -1009,8 +1015,12 @@
 
                     html5QrcodeScanner.render(
                         (decodedText) => {
-                            // Just update the input field with the scanned code
+                            // Update the input field with the scanned code
                             document.getElementById('toolCode').value = decodedText;
+                            // Enable tool details button immediately after scan
+                            document.getElementById('toolDetailsBtn').disabled = false;
+                            // Automatically show tool details after successful scan
+                            showLastScannedToolDetails();
                         },
                         (error) => {
                             // Handle scanning errors silently
@@ -1108,27 +1118,6 @@
             }
         });
 
-        // Add this function to show tool details in the modal
-        function showToolDetails(tool) {
-            const body = document.getElementById('toolDetailsBody');
-            body.innerHTML = `
-                <div class="mb-2"><strong>Tool ID:</strong> ${tool.toolId}</div>
-                <div class="mb-2"><strong>Tool Name:</strong> ${tool.toolName}</div>
-                <div class="mb-2"><strong>Part Number:</strong> ${tool.partNumber}</div>
-                <div class="mb-2"><strong>Owner:</strong> ${tool.owner}</div>
-                <div class="mb-2"><strong>Collection:</strong> ${tool.collectionCode || 'N/A'}</div>
-                <div class="mb-2"><strong>Location:</strong> ${tool.location}</div>
-            `;
-            const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
-            modal.show();
-        }
-
-        // Enable/disable Tool Details button based on input
-        document.getElementById('toolCode').addEventListener('input', function() {
-            const btn = document.getElementById('toolDetailsBtn');
-            btn.disabled = !this.value.trim();
-        });
-
         // Show tool details for the code in the input field, even if not submitted
         async function showLastScannedToolDetails() {
             const code = document.getElementById('toolCode').value.trim();
@@ -1138,7 +1127,8 @@
                 const doc = await toolRef.get();
                 if (doc.exists) {
                     const data = doc.data();
-                    showToolDetails({
+                    // Store the data for the modal
+                    lastScannedToolData = {
                         toolName: data.toolName || 'Unknown Tool',
                         toolId: doc.id,
                         partNumber: data.partNumber || doc.id,
@@ -1151,14 +1141,43 @@
                             day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
                         }) : '',
                         calDueDate: data.calDueDate && data.calDueDate.toDate ? data.calDueDate.toDate().toLocaleDateString('en-GB') : ''
-                    });
+                    };
+                    
+                    // Show the modal with the tool details
+                    showToolDetails(lastScannedToolData);
                 } else {
                     alert('Tool not found. Please check the code.');
                 }
             } catch (error) {
+                console.error('Error fetching tool details:', error);
                 alert('Error fetching tool details: ' + error.message);
             }
         }
+
+        // Add this function to show tool details in the modal
+        function showToolDetails(tool) {
+            const body = document.getElementById('toolDetailsBody');
+            body.innerHTML = `
+                <div class="mb-2"><strong>Tool ID:</strong> ${tool.toolId}</div>
+                <div class="mb-2"><strong>Tool Name:</strong> ${tool.toolName}</div>
+                <div class="mb-2"><strong>Part Number:</strong> ${tool.partNumber}</div>
+                <div class="mb-2"><strong>Owner:</strong> ${tool.owner}</div>
+                <div class="mb-2"><strong>Collection:</strong> ${tool.collectionCode || 'N/A'}</div>
+                <div class="mb-2"><strong>Location:</strong> ${tool.location}</div>
+                ${tool.status ? `<div class="mb-2"><strong>Status:</strong> ${tool.status}</div>` : ''}
+                ${tool.technician ? `<div class="mb-2"><strong>Technician:</strong> ${tool.technician}</div>` : ''}
+                ${tool.timestamp ? `<div class="mb-2"><strong>Last Updated:</strong> ${tool.timestamp}</div>` : ''}
+                ${tool.calDueDate ? `<div class="mb-2"><strong>Calibration Due:</strong> ${tool.calDueDate}</div>` : ''}
+            `;
+            const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
+            modal.show();
+        }
+
+        // Enable/disable Tool Details button based on input
+        document.getElementById('toolCode').addEventListener('input', function() {
+            const btn = document.getElementById('toolDetailsBtn');
+            btn.disabled = !this.value.trim();
+        });
 
         // My Tools Modal with app-like formatting
         async function showMyTools() {
