@@ -986,7 +986,7 @@
 
                     const config = {
                         fps: 10,
-                        qrbox: { width: 250, height: 250 },  // Increased box size for better scanning
+                        qrbox: { width: 300, height: 300 },  // Increased box size for iOS
                         aspectRatio: 1.0,
                         formatsToSupport: [
                             Html5QrcodeSupportedFormats.QR_CODE,
@@ -1001,38 +1001,79 @@
                             Html5QrcodeSupportedFormats.DATA_MATRIX
                         ],
                         videoConstraints: {
-                            facingMode: { exact: "environment" },  // Force using back camera
-                            width: { min: 640, ideal: 1280, max: 1920 },  // Higher resolution
+                            facingMode: { exact: "environment" },
+                            width: { min: 640, ideal: 1280, max: 1920 },
                             height: { min: 480, ideal: 720, max: 1080 }
                         }
                     };
 
-                    html5QrcodeScanner = new Html5QrcodeScanner(
-                        "reader",
-                        config,
-                        /* verbose= */ false
-                    );
-
-                    html5QrcodeScanner.render(
-                        (decodedText) => {
-                            // Update the input field with the scanned code
-                            document.getElementById('toolCode').value = decodedText;
-                            // Enable tool details button immediately after scan
-                            document.getElementById('toolDetailsBtn').disabled = false;
-                            // Automatically show tool details after successful scan
-                            showLastScannedToolDetails();
-                        },
-                        (error) => {
-                            // Handle scanning errors silently
-                            console.log(error);
+                    try {
+                        if (html5QrcodeScanner) {
+                            html5QrcodeScanner.clear();
+                            html5QrcodeScanner = null;
                         }
-                    );
 
-                    isScanning = true;
-                    cameraContainer.classList.remove('hidden');
-                    toggleButton.innerHTML = '<i class="fas fa-camera"></i> Stop Scanner';
-                    toggleButton.classList.remove('btn-primary');
-                    toggleButton.classList.add('btn-danger');
+                        html5QrcodeScanner = new Html5QrcodeScanner(
+                            "reader",
+                            config,
+                            /* verbose= */ false
+                        );
+
+                        html5QrcodeScanner.render(
+                            (decodedText) => {
+                                // Stop scanning after successful scan
+                                if (html5QrcodeScanner) {
+                                    html5QrcodeScanner.clear();
+                                    html5QrcodeScanner = null;
+                                }
+                                
+                                // Update the input field with the scanned code
+                                const toolCodeInput = document.getElementById('toolCode');
+                                toolCodeInput.value = decodedText;
+                                
+                                // Trigger input event to enable the tool details button
+                                const inputEvent = new Event('input', { bubbles: true });
+                                toolCodeInput.dispatchEvent(inputEvent);
+                                
+                                // Enable tool details button
+                                document.getElementById('toolDetailsBtn').disabled = false;
+                                
+                                // Automatically show tool details
+                                showLastScannedToolDetails();
+                                
+                                // Hide camera container
+                                document.getElementById('cameraContainer').classList.add('hidden');
+                                
+                                // Update button state
+                                const toggleButton = document.querySelector('.btn-scan');
+                                toggleButton.innerHTML = '<i class="fas fa-camera"></i> Start Scanner';
+                                toggleButton.classList.remove('btn-danger');
+                                toggleButton.classList.add('btn-primary');
+                                isScanning = false;
+                            },
+                            (error) => {
+                                // Handle scanning errors silently
+                                console.log(error);
+                            }
+                        );
+
+                        isScanning = true;
+                        cameraContainer.classList.remove('hidden');
+                        toggleButton.innerHTML = '<i class="fas fa-camera"></i> Stop Scanner';
+                        toggleButton.classList.remove('btn-primary');
+                        toggleButton.classList.add('btn-danger');
+                    } catch (err) {
+                        console.error('Camera Error:', err);
+                        if (err.name === 'NotAllowedError') {
+                            alert('Camera access was denied. Please enable camera permissions in your browser settings.');
+                        } else if (err.name === 'NotFoundError') {
+                            alert('No camera found on your device. Please make sure your camera is connected and working.');
+                        } else if (err.name === 'NotReadableError') {
+                            alert('Your camera might be in use by another application. Please close other apps using the camera.');
+                        } else {
+                            alert('Error accessing camera: ' + err.message + '\nPlease make sure your camera is connected and permissions are granted.');
+                        }
+                    }
                 } catch (err) {
                     console.error('Camera Error:', err);
                     if (err.name === 'NotAllowedError') {
@@ -1135,12 +1176,12 @@
                         collectionCode: data.collectionCode || '',
                         location: data.location || 'N/A',
                         owner: data.owner || 'N/A',
-                        status: data.status || '',
-                        technician: data.technician || '',
+                        status: data.status || 'N/A',
+                        technician: data.technician || 'N/A',
                         timestamp: data.timestamp && data.timestamp.toDate ? data.timestamp.toDate().toLocaleString('en-GB', {
                             day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-                        }) : '',
-                        calDueDate: data.calDueDate && data.calDueDate.toDate ? data.calDueDate.toDate().toLocaleDateString('en-GB') : ''
+                        }) : 'N/A',
+                        calDueDate: data.calDueDate && data.calDueDate.toDate ? data.calDueDate.toDate().toLocaleDateString('en-GB') : 'N/A'
                     };
                     
                     // Show the modal with the tool details
@@ -1157,17 +1198,20 @@
         // Add this function to show tool details in the modal
         function showToolDetails(tool) {
             const body = document.getElementById('toolDetailsBody');
+            // Show status, technician, and timestamp only if status is OUT
             body.innerHTML = `
                 <div class="mb-2"><strong>Tool ID:</strong> ${tool.toolId}</div>
                 <div class="mb-2"><strong>Tool Name:</strong> ${tool.toolName}</div>
                 <div class="mb-2"><strong>Part Number:</strong> ${tool.partNumber}</div>
                 <div class="mb-2"><strong>Owner:</strong> ${tool.owner}</div>
-                <div class="mb-2"><strong>Collection:</strong> ${tool.collectionCode || 'N/A'}</div>
+                <div class="mb-2"><strong>Collection:</strong> ${tool.collectionCode}</div>
                 <div class="mb-2"><strong>Location:</strong> ${tool.location}</div>
-                ${tool.status ? `<div class="mb-2"><strong>Status:</strong> ${tool.status}</div>` : ''}
-                ${tool.technician ? `<div class="mb-2"><strong>Technician:</strong> ${tool.technician}</div>` : ''}
-                ${tool.timestamp ? `<div class="mb-2"><strong>Last Updated:</strong> ${tool.timestamp}</div>` : ''}
-                ${tool.calDueDate ? `<div class="mb-2"><strong>Calibration Due:</strong> ${tool.calDueDate}</div>` : ''}
+                ${tool.status === 'OUT' ? `
+                    <div class="mb-2"><strong>Status:</strong> ${tool.status}</div>
+                    <div class="mb-2"><strong>Technician:</strong> ${tool.technician}</div>
+                    <div class="mb-2"><strong>Last Updated:</strong> ${tool.timestamp}</div>
+                ` : ''}
+                ${tool.calDueDate !== 'N/A' ? `<div class="mb-2"><strong>Calibration Due:</strong> ${tool.calDueDate}</div>` : ''}
             `;
             const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
             modal.show();
