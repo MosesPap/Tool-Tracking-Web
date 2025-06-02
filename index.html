@@ -176,9 +176,11 @@
     </style>
 </head>
 <body>
-    <h1 class="ams-title">AMS SQUADRON</h1>
-    <div class="ams-subtitle">Tool Tracking</div>
-    <img src="ams_logo.png" alt="AMS Squadron Logo" class="ams-logo">
+    <div id="headerBranding">
+        <h1 class="ams-title">AMS SQUADRON</h1>
+        <div class="ams-subtitle">Tool Tracking</div>
+        <img src="ams_logo.png" alt="AMS Squadron Logo" class="ams-logo">
+    </div>
     <div class="container">
         <!-- Login Section -->
         <div id="loginSection" class="auth-container">
@@ -562,6 +564,7 @@
                 document.getElementById('loginSection').classList.add('d-none');
                 document.getElementById('appSection').style.display = 'block';
                 showNotificationsInSequence();
+                document.getElementById('headerBranding').style.display = 'none';
             } catch (error) {
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
@@ -631,6 +634,7 @@
                 html5QrCode.clear();
             }
             localStorage.removeItem('fullName'); // Clear stored name on logout
+            document.getElementById('headerBranding').style.display = 'block';
         }
 
         // Toggle Admin Section
