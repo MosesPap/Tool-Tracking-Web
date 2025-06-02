@@ -19,9 +19,13 @@
             border: 1px solid #ccc !important;
             width: 100% !important;
             max-width: 320px;
+            aspect-ratio: 1/1 !important; /* Make the reader square */
+            overflow: hidden !important;
         }
         #reader video {
             object-fit: cover !important;
+            width: 100% !important;
+            height: 100% !important;
         }
         .tool-item {
             padding: 10px;
@@ -134,13 +138,57 @@
         .mytools-status-out { color: #d32f2f; font-weight: bold; font-size: 1.05rem; }
         .mytools-tool-extra { font-size: 1.01rem; color: #222; margin-top: 2px; }
         .mytools-tool-cal { color: #388E3C; font-size: 1.01rem; margin-top: 2px; }
+        .ams-title {
+            color: orange;
+            font-weight: bold;
+            font-size: 2.5rem;
+            text-align: center;
+            margin-bottom: 0.5rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .ams-logo {
+            display: block;
+            margin: 0.5rem auto 1.2rem auto;
+            max-width: 180px;
+            height: auto;
+        }
+        .ams-subtitle {
+            color: #00bfff;
+            font-weight: bold;
+            font-size: 2rem;
+            text-align: center;
+            margin-bottom: 0.2rem;
+            letter-spacing: 1px;
+        }
+        .auth-container {
+            margin-top: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 1rem 0 1rem;
+        }
+        .auth-card {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        .technician-name {
+            color: #00bfff;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
-    <div class="container mt-4">
+    <div id="headerBranding">
+        <h1 class="ams-title">AMS SQUADRON</h1>
+        <div class="ams-subtitle">Tool Tracking</div>
+        <img src="ams_logo.png" alt="AMS Squadron Logo" class="ams-logo">
+    </div>
+    <div class="container">
         <!-- Login Section -->
-        <div id="loginSection" class="mb-4">
-            <div class="card mx-auto" style="max-width: 400px;">
+        <div id="loginSection" class="auth-container">
+            <div class="card auth-card">
                 <div class="card-body">
                     <h3 class="card-title text-center mb-3">Sign In</h3>
                     <div id="loginAlert" class="alert alert-danger d-none" role="alert"></div>
@@ -153,11 +201,7 @@
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="keepSignedIn">
-                            <label class="form-check-label" for="keepSignedIn">Keep me signed in</label>
-                        </div>
+                    <div class="d-flex justify-content-end align-items-center mb-2">
                         <a href="#" id="forgotPasswordLink">Forgot my password?</a>
                     </div>
                     <button onclick="login()" class="btn btn-primary w-100 mb-2" id="loginBtn">Sign In</button>
@@ -167,8 +211,8 @@
         </div>
 
         <!-- Sign Up Section -->
-        <div id="signUpSection" class="mb-4 d-none">
-            <div class="card mx-auto" style="max-width: 400px;">
+        <div id="signUpSection" class="auth-container d-none">
+            <div class="card auth-card">
                 <div class="card-body">
                     <h3 class="card-title text-center mb-3">Sign Up</h3>
                     <div id="signUpAlert" class="alert alert-danger d-none" role="alert"></div>
@@ -219,7 +263,7 @@
         <!-- Main App Section -->
         <div id="appSection" style="display: none;">
             <div class="mb-2">
-                <h2 class="mb-0">Welcome, <span id="fullName"></span></h2>
+                <h2 class="mb-0">Welcome, <span id="fullName" class="technician-name"></span></h2>
             </div>
             <div class="row align-items-center mb-4">
                 <div class="col-6 d-flex align-items-center">
@@ -264,13 +308,7 @@
                                         <i class="fas fa-camera"></i> Start Scanner
                                     </button>
                                     <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-3" style="display:none;">Stop Scanner</button>
-                                    <div id="androidScanner" style="display:none;">
-                                        <div id="reader" style="width:320px;height:240px;"></div>
-                                    </div>
-                                    <div id="iosScanner" style="display:none;">
-                                        <input type="text" id="qrInput" placeholder="Paste QR or barcode here" class="form-control mb-2" />
-                                        <button onclick="showIosInstructions()" class="btn btn-warning mb-2">How to scan on iPhone/iPad</button>
-                                    </div>
+                                    <div id="reader" style="display:none;"></div>
                                     <div class="input-group mb-3">
                                         <input type="text" id="toolCode" class="form-control" placeholder="Enter Tool Code">
                                         <button onclick="submitCode()" class="btn btn-primary">
@@ -456,9 +494,11 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
+        // Ensure user stays logged in across refreshes and browser restarts
+        auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
         // QR Scanner
-        let html5QrcodeScanner = null;
-        let isScanning = false;
+        let html5QrCode;
 
         // Show/Hide password logic
         const loginPassword = document.getElementById('loginPassword');
@@ -516,7 +556,6 @@
         async function login() {
             const email = document.getElementById('loginEmail').value.trim();
             const password = document.getElementById('loginPassword').value.trim();
-            const keepSignedIn = document.getElementById('keepSignedIn').checked;
             const alertBox = document.getElementById('loginAlert');
             alertBox.classList.add('d-none');
             if (!email || !password) {
@@ -526,17 +565,13 @@
             }
             try {
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
-                if (keepSignedIn) {
-                    localStorage.setItem('keep_signed_in', 'true');
-                    localStorage.setItem('user_email', email);
-                } else {
-                    localStorage.removeItem('keep_signed_in');
-                    localStorage.removeItem('user_email');
-                }
+                // Always keep user signed in until logout
+                // No need to handle keep_signed_in logic
                 // Success: hide login, show app
                 document.getElementById('loginSection').classList.add('d-none');
                 document.getElementById('appSection').style.display = 'block';
                 showNotificationsInSequence();
+                document.getElementById('headerBranding').style.display = 'none';
             } catch (error) {
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
@@ -602,10 +637,11 @@
         // Logout function
         function logout() {
             auth.signOut();
-            if (html5QrcodeScanner) {
-                html5QrcodeScanner.clear();
+            if (html5QrCode) {
+                html5QrCode.clear();
             }
             localStorage.removeItem('fullName'); // Clear stored name on logout
+            document.getElementById('headerBranding').style.display = 'block';
         }
 
         // Toggle Admin Section
@@ -897,9 +933,13 @@
                 const previousTools = snapshot.docs
                     .filter(doc => {
                         const data = doc.data();
-                        return data.timestamp && data.timestamp.toDate() < today;
+                        return data.timestamp && typeof data.timestamp.toDate === 'function' && data.timestamp.toDate() < today;
                     })
-                    .sort((a, b) => b.data().timestamp.toDate() - a.data().timestamp.toDate());
+                    .sort((a, b) => {
+                        const aTime = a.data().timestamp && typeof a.data().timestamp.toDate === 'function' ? a.data().timestamp.toDate() : 0;
+                        const bTime = b.data().timestamp && typeof b.data().timestamp.toDate === 'function' ? b.data().timestamp.toDate() : 0;
+                        return bTime - aTime;
+                    });
 
                 if (previousTools.length === 0) {
                     previousList.innerHTML = '<h4 class="tool-title">Previous OUT Tools (Total: 0)</h4><p>No previous OUT tools found.</p>';
@@ -970,6 +1010,8 @@
                     `;
                     previousList.appendChild(div);
                 });
+                // Debug log to help diagnose data issues
+                console.log('Previous OUT tools snapshot:', snapshot.docs.map(doc => doc.data()));
             } catch (error) {
                 console.error('Error loading previous tools:', error);
                 const previousList = document.getElementById('previousToolsList');
@@ -978,125 +1020,74 @@
         }
 
         // QR Code Scanner
-        function isIOS() {
-            return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        }
-
-        let html5QrCode;
-
         function startScanner() {
-            if (isIOS()) {
-                document.getElementById('androidScanner').style.display = 'none';
-                document.getElementById('iosScanner').style.display = 'block';
-                document.getElementById('stopScannerBtn').style.display = 'none';
-                document.getElementById('qrInput').oninput = function() {
-                    document.getElementById('toolCode').value = this.value;
-                    document.getElementById('toolDetailsBtn').disabled = !this.value.trim();
-                };
-            } else {
-                document.getElementById('androidScanner').style.display = 'block';
-                document.getElementById('iosScanner').style.display = 'none';
-                document.getElementById('stopScannerBtn').style.display = 'inline-block';
-                html5QrCode = new Html5Qrcode("reader");
+            document.getElementById('reader').style.display = 'block';
+            document.getElementById('stopScannerBtn').style.display = 'inline-block';
+            
+            html5QrCode = new Html5Qrcode("reader");
+            const config = {
+                fps: 10,
+                qrbox: { width: 250, height: 250 }, // Square QR box
+                aspectRatio: 1.0, // Square aspect ratio
+                formatsToSupport: [
+                    Html5QrcodeSupportedFormats.QR_CODE,
+                    Html5QrcodeSupportedFormats.CODE_128,
+                    Html5QrcodeSupportedFormats.CODE_39,
+                    Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.EAN_8,
+                    Html5QrcodeSupportedFormats.UPC_A,
+                    Html5QrcodeSupportedFormats.UPC_E,
+                    Html5QrcodeSupportedFormats.ITF,
+                    Html5QrcodeSupportedFormats.AZTEC,
+                    Html5QrcodeSupportedFormats.DATA_MATRIX,
+                    Html5QrcodeSupportedFormats.CODABAR,
+                    Html5QrcodeSupportedFormats.PDF_417
+                ]
+            };
+
+            // Try to use the environment camera (back camera) first
+            html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText) => {
+                    document.getElementById('toolCode').value = decodedText;
+                    document.getElementById('toolDetailsBtn').disabled = false;
+                    stopCamera();
+                },
+                (errorMessage) => {
+                    // Ignore errors during scanning
+                }
+            ).catch(err => {
+                // If environment camera fails, try user camera (front camera)
                 html5QrCode.start(
-                    { facingMode: "environment" },
-                    {
-                        fps: 10,
-                        qrbox: 250,
-                        formatsToSupport: [
-                            Html5QrcodeSupportedFormats.QR_CODE,
-                            Html5QrcodeSupportedFormats.CODE_128,
-                            Html5QrcodeSupportedFormats.CODE_39,
-                            Html5QrcodeSupportedFormats.EAN_13,
-                            Html5QrcodeSupportedFormats.EAN_8,
-                            Html5QrcodeSupportedFormats.UPC_A,
-                            Html5QrcodeSupportedFormats.UPC_E,
-                            Html5QrcodeSupportedFormats.ITF,
-                            Html5QrcodeSupportedFormats.AZTEC,
-                            Html5QrcodeSupportedFormats.DATA_MATRIX,
-                            Html5QrcodeSupportedFormats.CODABAR,
-                            Html5QrcodeSupportedFormats.PDF_417
-                        ]
-                    },
+                    { facingMode: "user" },
+                    config,
                     (decodedText) => {
                         document.getElementById('toolCode').value = decodedText;
                         document.getElementById('toolDetailsBtn').disabled = false;
                         stopCamera();
+                    },
+                    (errorMessage) => {
+                        // Ignore errors during scanning
                     }
                 ).catch(err => {
                     alert('Camera error: ' + err);
                     document.getElementById('stopScannerBtn').style.display = 'none';
+                    document.getElementById('reader').style.display = 'none';
                 });
-            }
+            });
         }
 
         function stopCamera() {
             if (html5QrCode) {
-                html5QrCode.stop().then(() => html5QrCode.clear());
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                    document.getElementById('reader').style.display = 'none';
+                    document.getElementById('stopScannerBtn').style.display = 'none';
+                });
                 html5QrCode = null;
             }
-            document.getElementById('androidScanner').style.display = 'none';
-            document.getElementById('stopScannerBtn').style.display = 'none';
         }
-
-        function showIosInstructions() {
-            alert("On iPhone/iPad, open the Camera app, point it at the QR code, and tap the notification to copy the code. Then paste it in the field above.");
-        }
-
-        // Tab change handler
-        document.addEventListener('DOMContentLoaded', function() {
-            const previousTab = document.getElementById('previous-tab');
-            previousTab.addEventListener('click', loadPreviousTools);
-        });
-
-        // Auth state observer
-        auth.onAuthStateChanged(user => {
-            const loginSection = document.getElementById('loginSection');
-            const appSection = document.getElementById('appSection');
-            const adminSection = document.getElementById('adminSection');
-
-            if (user) {
-                loginSection.style.display = 'none';
-                appSection.style.display = 'block';
-                
-                // Always fetch fresh data from Firestore
-                db.collection('technicians').doc(user.uid)
-                    .get()
-                    .then(doc => {
-                        if (doc.exists) {
-                            const technicianData = doc.data();
-                            const name = technicianData.fullName || user.email;
-                            
-                            // Store the document ID
-                            localStorage.setItem('techniciansId', doc.id);
-                            localStorage.setItem('fullName', name);
-                            document.getElementById('fullName').textContent = name;
-                            
-                            if (technicianData.isAdmin) {
-                                document.getElementById('adminButton').style.display = 'inline-block';
-                            }
-                        } else {
-                            document.getElementById('fullName').textContent = user.email;
-                        }
-                        // Update previous tools tab count on login
-                        updatePreviousToolsTabCount();
-                    }).catch(error => {
-                        console.error('Error fetching technician data:', error);
-                        document.getElementById('fullName').textContent = user.email;
-                        updatePreviousToolsTabCount();
-                    });
-                
-                loadTools();
-                // Add notification checks on login
-                showNotificationsInSequence();
-            } else {
-                loginSection.style.display = 'block';
-                appSection.style.display = 'none';
-                adminSection.style.display = 'none';
-                document.getElementById('adminButton').style.display = 'none';
-                localStorage.removeItem('fullName');
-            }
-        });
 
         // Show tool details for the code in the input field, even if not submitted
         async function showLastScannedToolDetails() {
@@ -1370,6 +1361,46 @@
                 notifModal.show();
             }
         }
+
+        // Auth state observer
+        auth.onAuthStateChanged(user => {
+            const loginSection = document.getElementById('loginSection');
+            const appSection = document.getElementById('appSection');
+            const adminSection = document.getElementById('adminSection');
+
+            if (user) {
+                loginSection.style.display = 'none';
+                appSection.style.display = 'block';
+                document.getElementById('headerBranding').style.display = 'none';
+                // Always fetch fresh data from Firestore
+                db.collection('technicians').doc(user.uid)
+                    .get()
+                    .then(doc => {
+                        let name = user.email;
+                        if (doc.exists) {
+                            const technicianData = doc.data();
+                            name = technicianData.fullName || user.email;
+                            // Store the document ID
+                            localStorage.setItem('techniciansId', doc.id);
+                            localStorage.setItem('fullName', name);
+                            if (technicianData.isAdmin) {
+                                document.getElementById('adminButton').style.display = 'inline-block';
+                            }
+                        }
+                        document.getElementById('fullName').textContent = name;
+                        // Update previous tools tab count on login
+                        updatePreviousToolsTabCount();
+                    }).catch(error => {
+                        console.error('Error fetching technician data:', error);
+                        document.getElementById('fullName').textContent = user.email;
+                        updatePreviousToolsTabCount();
+                    });
+            } else {
+                loginSection.style.display = 'block';
+                appSection.style.display = 'none';
+                document.getElementById('headerBranding').style.display = 'block';
+            }
+        });
     </script>
 </body>
 </html> 
