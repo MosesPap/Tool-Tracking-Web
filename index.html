@@ -1362,6 +1362,12 @@
             }
         }
 
+        // Tab change handler
+        document.addEventListener('DOMContentLoaded', function() {
+            const previousTab = document.getElementById('previous-tab');
+            previousTab.addEventListener('click', loadPreviousTools);
+        });
+
         // Auth state observer
         auth.onAuthStateChanged(user => {
             const loginSection = document.getElementById('loginSection');
