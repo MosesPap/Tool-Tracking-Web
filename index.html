@@ -916,7 +916,7 @@
                 today.setHours(0, 0, 0, 0);
 
                 const snapshot = await db.collection('tools')
-                    .where('technician', '==', technicianName)
+                    .where('owner', '==', technicianName)
                     .where('status', '==', 'OUT')
                     .get();
 
