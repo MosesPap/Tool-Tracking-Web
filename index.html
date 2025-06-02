@@ -909,9 +909,8 @@
             if (!user) return;
 
             try {
-                // Get technician name
-                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-                const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+                // Use global technician name
+                const technicianName = window.technicianName || 'Unknown Technician';
 
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
@@ -1234,8 +1233,7 @@
         async function updatePreviousToolsTabCount() {
             const user = auth.currentUser;
             if (!user) return;
-            const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-            const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+            const technicianName = window.technicianName || 'Unknown Technician';
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const snapshot = await db.collection('tools')
@@ -1388,11 +1386,13 @@
                             }
                         }
                         document.getElementById('fullName').textContent = name;
+                        window.technicianName = name;
                         // Update previous tools tab count on login
                         updatePreviousToolsTabCount();
                     }).catch(error => {
                         console.error('Error fetching technician data:', error);
                         document.getElementById('fullName').textContent = user.email;
+                        window.technicianName = user.email;
                         updatePreviousToolsTabCount();
                     });
             } else {
