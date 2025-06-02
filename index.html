@@ -494,6 +494,9 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
+        // Ensure user stays logged in across refreshes and browser restarts
+        auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
         // QR Scanner
         let html5QrCode;
 
@@ -1352,6 +1355,46 @@
                 notifModal.show();
             }
         }
+
+        // Auth state observer
+        auth.onAuthStateChanged(user => {
+            const loginSection = document.getElementById('loginSection');
+            const appSection = document.getElementById('appSection');
+            const adminSection = document.getElementById('adminSection');
+
+            if (user) {
+                loginSection.style.display = 'none';
+                appSection.style.display = 'block';
+                document.getElementById('headerBranding').style.display = 'none';
+                // Always fetch fresh data from Firestore
+                db.collection('technicians').doc(user.uid)
+                    .get()
+                    .then(doc => {
+                        let name = user.email;
+                        if (doc.exists) {
+                            const technicianData = doc.data();
+                            name = technicianData.fullName || user.email;
+                            // Store the document ID
+                            localStorage.setItem('techniciansId', doc.id);
+                            localStorage.setItem('fullName', name);
+                            if (technicianData.isAdmin) {
+                                document.getElementById('adminButton').style.display = 'inline-block';
+                            }
+                        }
+                        document.getElementById('fullName').textContent = name;
+                        // Update previous tools tab count on login
+                        updatePreviousToolsTabCount();
+                    }).catch(error => {
+                        console.error('Error fetching technician data:', error);
+                        document.getElementById('fullName').textContent = user.email;
+                        updatePreviousToolsTabCount();
+                    });
+            } else {
+                loginSection.style.display = 'block';
+                appSection.style.display = 'none';
+                document.getElementById('headerBranding').style.display = 'block';
+            }
+        });
     </script>
 </body>
 </html> 
