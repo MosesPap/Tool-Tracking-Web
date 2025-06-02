@@ -933,9 +933,13 @@
                 const previousTools = snapshot.docs
                     .filter(doc => {
                         const data = doc.data();
-                        return data.timestamp && data.timestamp.toDate() < today;
+                        return data.timestamp && typeof data.timestamp.toDate === 'function' && data.timestamp.toDate() < today;
                     })
-                    .sort((a, b) => b.data().timestamp.toDate() - a.data().timestamp.toDate());
+                    .sort((a, b) => {
+                        const aTime = a.data().timestamp && typeof a.data().timestamp.toDate === 'function' ? a.data().timestamp.toDate() : 0;
+                        const bTime = b.data().timestamp && typeof b.data().timestamp.toDate === 'function' ? b.data().timestamp.toDate() : 0;
+                        return bTime - aTime;
+                    });
 
                 if (previousTools.length === 0) {
                     previousList.innerHTML = '<h4 class="tool-title">Previous OUT Tools (Total: 0)</h4><p>No previous OUT tools found.</p>';
@@ -1006,6 +1010,8 @@
                     `;
                     previousList.appendChild(div);
                 });
+                // Debug log to help diagnose data issues
+                console.log('Previous OUT tools snapshot:', snapshot.docs.map(doc => doc.data()));
             } catch (error) {
                 console.error('Error loading previous tools:', error);
                 const previousList = document.getElementById('previousToolsList');
