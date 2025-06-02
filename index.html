@@ -1372,22 +1372,26 @@
                 loginSection.style.display = 'none';
                 appSection.style.display = 'block';
                 document.getElementById('headerBranding').style.display = 'none';
+                
                 // Always fetch fresh data from Firestore
                 db.collection('technicians').doc(user.uid)
                     .get()
                     .then(doc => {
-                        let name = user.email;
                         if (doc.exists) {
                             const technicianData = doc.data();
-                            name = technicianData.fullName || user.email;
+                            const name = technicianData.fullName || user.email;
+                            
                             // Store the document ID
                             localStorage.setItem('techniciansId', doc.id);
                             localStorage.setItem('fullName', name);
+                            document.getElementById('fullName').textContent = name;
+                            
                             if (technicianData.isAdmin) {
                                 document.getElementById('adminButton').style.display = 'inline-block';
                             }
+                        } else {
+                            document.getElementById('fullName').textContent = user.email;
                         }
-                        document.getElementById('fullName').textContent = name;
                         // Update previous tools tab count on login
                         updatePreviousToolsTabCount();
                     }).catch(error => {
@@ -1395,10 +1399,17 @@
                         document.getElementById('fullName').textContent = user.email;
                         updatePreviousToolsTabCount();
                     });
+                
+                loadTools();
+                // Add notification checks on login
+                showNotificationsInSequence();
             } else {
                 loginSection.style.display = 'block';
                 appSection.style.display = 'none';
+                adminSection.style.display = 'none';
+                document.getElementById('adminButton').style.display = 'none';
                 document.getElementById('headerBranding').style.display = 'block';
+                localStorage.removeItem('fullName');
             }
         });
     </script>
