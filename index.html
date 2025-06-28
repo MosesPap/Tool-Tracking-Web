@@ -1,1421 +1,418 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#FF9800">
+    <meta name="description" content="Tool tracking and management system">
+    
+    <!-- PWA Support -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    
+    <!-- iOS Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="ToolTrack">
+    <link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180x180.png">
+    <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167x167.png">
+    
     <title>Tool Tracking</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- HTML5 QR Code Scanner -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    
     <style>
-        .tool-out { color: red; font-weight: bold; }
-        .tool-in { color: green; }
-        .hidden { display: none; }
         .camera-view {
             width: 100%;
             max-width: 320px;
             margin: 10px auto;
+            display: block;
         }
         #reader {
             border: 1px solid #ccc !important;
             width: 100% !important;
             max-width: 320px;
-            aspect-ratio: 1/1 !important; /* Make the reader square */
-            overflow: hidden !important;
+            height: 240px !important;
+            position: relative !important;
         }
         #reader video {
             object-fit: cover !important;
             width: 100% !important;
             height: 100% !important;
         }
-        .tool-item {
-            padding: 10px;
-            margin: 5px 0;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            transition: background-color 0.3s ease;
+        .btn-scan {
+            width: 100%;
+            max-width: 320px;
         }
-        .tool-item:hover {
-            background-color: #f8f9fa;
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
-        .tool-out-even {
-            background-color: #FFF3E0; /* Very light orange */
+        .card-body {
+            padding: 2rem;
         }
-        .tool-out-odd {
-            background-color: #FFE0B2; /* Light orange */
+        .form-control {
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
         }
-        .tool-in-even {
-            background-color: #E8F5E9; /* Very light green */
+        .form-control:focus {
+            border-color: #FF9800;
+            box-shadow: 0 0 0 0.2rem rgba(255, 152, 0, 0.25);
         }
-        .tool-in-odd {
-            background-color: #A5D6A7; /* Light green */
+        .btn-primary {
+            background-color: #FF9800;
+            border-color: #FF9800;
+            border-radius: 10px;
+        }
+        .btn-primary:hover {
+            background-color: #F57C00;
+            border-color: #F57C00;
+        }
+        .btn-danger {
+            border-radius: 10px;
+        }
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        .container {
+            max-width: 800px;
+        }
+        .tab-content {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
         }
         .nav-tabs {
-            margin-bottom: 20px;
+            border-bottom: none;
         }
-        #scannerView {
-            text-align: center;
+        .nav-tabs .nav-link {
+            border: none;
+            border-radius: 10px 10px 0 0;
+            margin-right: 5px;
+            color: #6c757d;
         }
-        .btn-scan {
-            margin: 10px 0;
-        }
-        .status-badge {
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-weight: bold;
-            font-size: 18px;
-        }
-        .status-out {
-            background-color: #ffebee;
-            color: #d32f2f;
-        }
-        .status-in {
-            background-color: #e8f5e9;
-            color: #388E3C;
-        }
-        .tool-title {
-            font-size: 1.2em;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 10px;
-            text-decoration: underline;
-        }
-        .tool-name {
-            font-size: 20px;
-            font-weight: bold;
-            margin-bottom: 5px;
-            padding-left: 15px;
-            text-align: left;
-        }
-        .tool-time {
-            font-size: 16px;
-            color: #666;
-            margin-bottom: 10px;
-            padding-left: 15px;
-            text-align: left;
-        }
-        .tool-headers {
-            color: #388E3C;
-            font-weight: bold;
-            font-size: 18px;
-            margin-bottom: 5px;
-        }
-        .tool-values {
-            font-size: 16px;
-        }
-        .tool-out-text {
-            color: #d32f2f;
-        }
-        .tool-in-text {
-            color: #000;
-        }
-        .tool-id-value {
-            font-weight: bold;
-        }
-        .tool-pn-value {
-            font-weight: bold;
-        }
-        .mytools-title {
-            color: orange; font-weight: bold; font-size: 2.2rem; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 0.5rem;
-        }
-        .mytools-back {
-            background: orange; color: white; font-weight: bold; border: none; border-radius: 6px; padding: 8px 24px; font-size: 1.2rem; margin-bottom: 1rem;
-        }
-        .mytools-collection {
-            background: orange; color: white; font-weight: bold; font-size: 1.2rem; border-radius: 6px 6px 0 0; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;
-        }
-        .mytools-location {
-            background: #cbe7ff; color: #222; font-weight: bold; font-size: 1.1rem; border-radius: 0 0 6px 6px; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;
-        }
-        .mytools-tool-item {
-            padding: 12px 12px 8px 12px; border-radius: 0 0 6px 6px; margin-bottom: 0.5rem; font-size: 1.08rem;
-        }
-        .mytools-tool-bg1 { background: #fff; }
-        .mytools-tool-bg2 { background: #fff7e6; }
-        .mytools-tool-name { font-weight: bold; font-size: 1.13rem; }
-        .mytools-tool-tid { font-weight: bold; }
-        .mytools-tool-part { font-size: 1.01rem; color: #444; }
-        .mytools-status-in { color: #388E3C; font-weight: bold; font-size: 1.05rem; }
-        .mytools-status-out { color: #d32f2f; font-weight: bold; font-size: 1.05rem; }
-        .mytools-tool-extra { font-size: 1.01rem; color: #222; margin-top: 2px; }
-        .mytools-tool-cal { color: #388E3C; font-size: 1.01rem; margin-top: 2px; }
-        .ams-title {
-            color: orange;
-            font-weight: bold;
-            font-size: 2.5rem;
-            text-align: center;
-            margin-bottom: 0.5rem;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-        }
-        .ams-logo {
-            display: block;
-            margin: 0.5rem auto 1.2rem auto;
-            max-width: 180px;
-            height: auto;
-        }
-        .ams-subtitle {
-            color: #00bfff;
-            font-weight: bold;
-            font-size: 2rem;
-            text-align: center;
-            margin-bottom: 0.2rem;
-            letter-spacing: 1px;
-        }
-        .auth-container {
-            margin-top: 2rem;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 2rem 1rem 0 1rem;
-        }
-        .auth-card {
-            width: 100%;
-            max-width: 400px;
-            margin: 0 auto;
-        }
-        .technician-name {
-            color: #00bfff;
-            font-weight: bold;
+        .nav-tabs .nav-link.active {
+            background-color: white;
+            color: #FF9800;
+            border-bottom: 3px solid #FF9800;
         }
     </style>
 </head>
 <body>
-    <div id="headerBranding">
-        <h1 class="ams-title">AMS SQUADRON</h1>
-        <div class="ams-subtitle">Tool Tracking</div>
-        <img src="ams_logo.png" alt="AMS Squadron Logo" class="ams-logo">
-    </div>
     <div class="container">
-        <!-- Login Section -->
-        <div id="loginSection" class="auth-container">
-            <div class="card auth-card">
-                <div class="card-body">
-                    <h3 class="card-title text-center mb-3">Sign In</h3>
-                    <div id="loginAlert" class="alert alert-danger d-none" role="alert"></div>
-                    <div class="mb-3">
-                        <input type="email" id="loginEmail" class="form-control" placeholder="Email">
-                    </div>
-                    <div class="mb-3 input-group">
-                        <input type="password" id="loginPassword" class="form-control" placeholder="Password">
-                        <button class="btn btn-outline-secondary" type="button" id="toggleLoginPassword">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                    </div>
-                    <div class="d-flex justify-content-end align-items-center mb-2">
-                        <a href="#" id="forgotPasswordLink">Forgot my password?</a>
-                    </div>
-                    <button onclick="login()" class="btn btn-primary w-100 mb-2" id="loginBtn">Sign In</button>
-                    <button onclick="showSignUp()" class="btn btn-link w-100">Don't have an account? Sign Up</button>
-                </div>
-            </div>
+        <div class="text-center mb-4">
+            <h1 class="text-white mb-3">
+                <i class="fas fa-tools"></i> Tool Tracking
+            </h1>
+            <p class="text-white-50">Scan and manage your tools efficiently</p>
         </div>
 
-        <!-- Sign Up Section -->
-        <div id="signUpSection" class="auth-container d-none">
-            <div class="card auth-card">
-                <div class="card-body">
-                    <h3 class="card-title text-center mb-3">Sign Up</h3>
-                    <div id="signUpAlert" class="alert alert-danger d-none" role="alert"></div>
-                    <div class="mb-3">
-                        <input type="text" id="signUpFullName" class="form-control" placeholder="Full Name">
-                    </div>
-                    <div class="mb-3">
-                        <input type="email" id="signUpEmail" class="form-control" placeholder="Email">
-                    </div>
-                    <div class="mb-3 input-group">
-                        <input type="password" id="signUpPassword" class="form-control" placeholder="Password">
-                        <button class="btn btn-outline-secondary" type="button" id="toggleSignUpPassword">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                    </div>
-                    <div class="mb-3 input-group">
-                        <input type="password" id="signUpConfirmPassword" class="form-control" placeholder="Confirm Password">
-                        <button class="btn btn-outline-secondary" type="button" id="toggleSignUpConfirmPassword">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                    </div>
-                    <button onclick="signUp()" class="btn btn-success w-100 mb-2" id="signUpBtn">Sign Up</button>
-                    <button onclick="showLogin()" class="btn btn-link w-100">Already have an account? Sign In</button>
-                </div>
-            </div>
-        </div>
+        <!-- Navigation Tabs -->
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="scanner-tab" data-bs-toggle="tab" data-bs-target="#scannerView" type="button" role="tab">
+                    <i class="fas fa-camera"></i> Scanner
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manualView" type="button" role="tab">
+                    <i class="fas fa-keyboard"></i> Manual Entry
+                </button>
+            </li>
+        </ul>
 
-        <!-- Forgot Password Modal -->
-        <div class="modal fade" id="forgotPasswordModal" tabindex="-1" aria-labelledby="forgotPasswordModalLabel" aria-hidden="true">
-          <div class="modal-dialog">
-            <div class="modal-content">
-              <div class="modal-header">
-                <h5 class="modal-title" id="forgotPasswordModalLabel">Reset Password</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-              </div>
-              <div class="modal-body">
-                <input type="email" id="resetEmail" class="form-control mb-2" placeholder="Enter your email">
-                <div id="resetAlert" class="alert alert-info d-none" role="alert"></div>
-              </div>
-              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" onclick="resetPassword()">Send Reset Email</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Main App Section -->
-        <div id="appSection" style="display: none;">
-            <div class="mb-2">
-                <h2 class="mb-0">Welcome, <span id="fullName" class="technician-name"></span></h2>
-            </div>
-            <div class="row align-items-center mb-4">
-                <div class="col-6 d-flex align-items-center">
-                    <button onclick="showMyTools()" id="myToolsButton" class="btn btn-warning">
-                        <i class="fas fa-toolbox"></i> My Tools
-                    </button>
-                </div>
-                <div class="col-6 d-flex justify-content-end align-items-center">
-                    <button onclick="toggleAdmin()" id="adminButton" class="btn btn-info me-2" style="display: none;">
-                        <i class="fas fa-cog"></i> Admin
-                    </button>
-                    <button onclick="logout()" class="btn btn-secondary">
-                        <i class="fas fa-sign-out-alt"></i> Logout
-                    </button>
-                </div>
-            </div>
-
-            <!-- Navigation Tabs -->
-            <ul class="nav nav-tabs" id="mainTabs" role="tablist">
-                <li class="nav-item">
-                    <a class="nav-link active" id="scanner-tab" data-bs-toggle="tab" href="#scannerView" role="tab">
-                        <i class="fas fa-barcode"></i> Scanner
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" id="previous-tab" data-bs-toggle="tab" href="#previousView" role="tab">
-                        <i class="fas fa-history"></i> Previous Tools
-                    </a>
-                </li>
-            </ul>
-
-            <!-- Tab Content -->
-            <div class="tab-content">
-                <!-- Scanner View -->
-                <div class="tab-pane fade show active" id="scannerView" role="tabpanel">
-                    <div class="row">
-                        <div class="col-md-6 mx-auto">
-                            <div class="card mb-4">
-                                <div class="card-body">
-                                    <h4>Scan Tool</h4>
-                                    <button onclick="startScanner()" class="btn btn-primary btn-scan mb-3">
-                                        <i class="fas fa-camera"></i> Start Scanner
-                                    </button>
-                                    <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-3" style="display:none;">Stop Scanner</button>
-                                    <div id="reader" style="display:none;"></div>
-                                    <div class="input-group mb-3">
-                                        <input type="text" id="toolCode" class="form-control" placeholder="Enter Tool Code">
-                                        <button onclick="submitCode()" class="btn btn-primary">
-                                            <i class="fas fa-check"></i> Submit
-                                        </button>
-                                    </div>
-                                    <button id="toolDetailsBtn" class="btn btn-info w-100 mb-2" disabled onclick="showLastScannedToolDetails()">Tool Details</button>
+        <!-- Tab Content -->
+        <div class="tab-content" id="myTabContent">
+            <!-- Scanner View -->
+            <div class="tab-pane fade show active" id="scannerView" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6 mx-auto">
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <h4><i class="fas fa-qrcode"></i> Scan Tool</h4>
+                                <button onclick="toggleCamera()" class="btn btn-primary btn-scan mb-3">
+                                    <i class="fas fa-camera"></i> Start Scanner
+                                </button>
+                                <div id="cameraContainer" class="camera-view" style="display: none;">
+                                    <div id="reader"></div>
                                 </div>
-                            </div>
-
-                            <div id="toolList" class="mt-4">
-                                <h4>Today's Tools</h4>
-                                <!-- Tools will be listed here -->
+                                <div class="mt-3">
+                                    <label for="toolCode" class="form-label">Tool Code:</label>
+                                    <input type="text" class="form-control" id="toolCode" placeholder="Scanned code will appear here">
+                                </div>
+                                <button id="toolDetailsBtn" class="btn btn-success w-100 mt-3" onclick="getToolDetails()" disabled>
+                                    <i class="fas fa-search"></i> Get Tool Details
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Previous Tools View -->
-                <div class="tab-pane fade" id="previousView" role="tabpanel">
-                    <div id="previousToolsList">
-                        <h4>Previous OUT Tools</h4>
-                        <!-- Previous tools will be listed here -->
+            <!-- Manual Entry View -->
+            <div class="tab-pane fade" id="manualView" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6 mx-auto">
+                        <div class="card">
+                            <div class="card-body">
+                                <h4><i class="fas fa-edit"></i> Manual Entry</h4>
+                                <div class="mb-3">
+                                    <label for="manualToolCode" class="form-label">Enter Tool Code:</label>
+                                    <input type="text" class="form-control" id="manualToolCode" placeholder="Enter tool code manually">
+                                </div>
+                                <button class="btn btn-primary w-100" onclick="getManualToolDetails()">
+                                    <i class="fas fa-search"></i> Get Tool Details
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Admin Section -->
-        <div id="adminSection" class="mt-4" style="display: none;">
+        <!-- Results Section -->
+        <div id="resultsSection" class="mt-4" style="display: none;">
             <div class="card">
                 <div class="card-body">
-                    <h3>Tool Administration</h3>
-                    <div class="mb-3">
-                        <input type="text" id="adminToolId" class="form-control" placeholder="Tool ID">
-                    </div>
-                    <div class="mb-3">
-                        <input type="text" id="adminToolName" class="form-control" placeholder="Tool Name">
-                    </div>
-                    <div class="mb-3">
-                        <input type="text" id="adminPartNumber" class="form-control" placeholder="Part Number">
-                    </div>
-                    <div class="mb-3">
-                        <input type="text" id="adminLocation" class="form-control" placeholder="Location">
-                    </div>
-                    <button onclick="saveToolAdmin()" class="btn btn-success">Save Tool</button>
-                    <button onclick="toggleAdmin()" class="btn btn-secondary">Close Admin</button>
+                    <h4><i class="fas fa-info-circle"></i> Tool Information</h4>
+                    <div id="toolResults"></div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Tool Details Modal -->
-    <div class="modal fade" id="toolDetailsModal" tabindex="-1" aria-labelledby="toolDetailsModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="toolDetailsModalLabel">Tool Details</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body" id="toolDetailsBody">
-            <!-- Tool details will be populated here -->
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- My Tools Modal -->
-    <div class="modal fade" id="myToolsModal" tabindex="-1" aria-labelledby="myToolsModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h4 class="modal-title w-100 text-center" id="myToolsModalLabel" style="color: orange; font-weight: bold; font-size: 2rem; letter-spacing: 2px;">MY TOOLS</h4>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body" id="myToolsBody">
-            <!-- My tools list will be populated here -->
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 5-Minute Cooldown Info Modal -->
-    <div class="modal fade" id="cooldownInfoModal" tabindex="-1" aria-labelledby="cooldownInfoModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="cooldownInfoModalLabel">5-Minute Cooldown</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            When you check out a tool, you must wait at least 5 minutes before returning it. This helps ensure accurate tool tracking. You will not see this message again today.
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 5-Minute Cooldown Warning Modal -->
-    <div class="modal fade" id="cooldownWarnModal" tabindex="-1" aria-labelledby="cooldownWarnModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="cooldownWarnModalLabel">Return Not Allowed</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            You must wait at least 5 minutes after checking out a tool before you can return it.
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Outstanding Tools Notification Modal -->
-    <div class="modal fade" id="outstandingToolsModal" tabindex="-1" aria-labelledby="outstandingToolsModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="outstandingToolsModalLabel">YOUR TOOLS CHECKED OUT BY OTHERS</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body" id="outstandingToolsBody">
-            <!-- Notification content will be set by JS -->
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Overdue OUT Tools Notification Modal -->
-    <div class="modal fade" id="outToolsNotifModal" tabindex="-1" aria-labelledby="outToolsNotifModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="outToolsNotifModalLabel">TOOLS YOU HAVE CHECKED OUT</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body" id="outToolsNotifBody">
-            <!-- Content will be set by JS -->
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <!-- QR Code Scanner -->
-    <script src="https://unpkg.com/html5-qrcode"></script>
     <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
     <script>
-        // Your Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyDmI0v_pVt_qFJlsqmw8QlIOi-4VLjyn54",
-            authDomain: "tool-tracking-system-15e84.firebaseapp.com",
-            projectId: "tool-tracking-system-15e84",
-            storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
-            messagingSenderId: "813615362050",
-            appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
-        };
-
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-
-        // Ensure user stays logged in across refreshes and browser restarts
-        auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-
-        // QR Scanner
-        let html5QrCode;
-
-        // Show/Hide password logic
-        const loginPassword = document.getElementById('loginPassword');
-        document.getElementById('toggleLoginPassword').onclick = function() {
-            if (loginPassword.type === 'password') {
-                loginPassword.type = 'text';
-                this.innerHTML = '<i class="fas fa-eye-slash"></i>';
-            } else {
-                loginPassword.type = 'password';
-                this.innerHTML = '<i class="fas fa-eye"></i>';
-            }
-        };
-        const signUpPassword = document.getElementById('signUpPassword');
-        document.getElementById('toggleSignUpPassword').onclick = function() {
-            if (signUpPassword.type === 'password') {
-                signUpPassword.type = 'text';
-                this.innerHTML = '<i class="fas fa-eye-slash"></i>';
-            } else {
-                signUpPassword.type = 'password';
-                this.innerHTML = '<i class="fas fa-eye"></i>';
-            }
-        };
-        const signUpConfirmPassword = document.getElementById('signUpConfirmPassword');
-        document.getElementById('toggleSignUpConfirmPassword').onclick = function() {
-            if (signUpConfirmPassword.type === 'password') {
-                signUpConfirmPassword.type = 'text';
-                this.innerHTML = '<i class="fas fa-eye-slash"></i>';
-            } else {
-                signUpConfirmPassword.type = 'password';
-                this.innerHTML = '<i class="fas fa-eye"></i>';
-            }
-        };
-
-        // Show/Hide login/signup
-        function showSignUp() {
-            document.getElementById('loginSection').classList.add('d-none');
-            document.getElementById('signUpSection').classList.remove('d-none');
-        }
-        function showLogin() {
-            document.getElementById('signUpSection').classList.add('d-none');
-            document.getElementById('loginSection').classList.remove('d-none');
-        }
-
-        // Forgot password modal
-        const forgotPasswordLink = document.getElementById('forgotPasswordLink');
-        forgotPasswordLink.onclick = function() {
-            const email = document.getElementById('loginEmail').value;
-            document.getElementById('resetEmail').value = email;
-            document.getElementById('resetAlert').classList.add('d-none');
-            const modal = new bootstrap.Modal(document.getElementById('forgotPasswordModal'));
-            modal.show();
-        };
-
-        // Login logic
-        async function login() {
-            const email = document.getElementById('loginEmail').value.trim();
-            const password = document.getElementById('loginPassword').value.trim();
-            const alertBox = document.getElementById('loginAlert');
-            alertBox.classList.add('d-none');
-            if (!email || !password) {
-                alertBox.textContent = 'Please fill in all fields.';
-                alertBox.classList.remove('d-none');
-                return;
-            }
-            try {
-                const userCredential = await auth.signInWithEmailAndPassword(email, password);
-                // Always keep user signed in until logout
-                // No need to handle keep_signed_in logic
-                // Success: hide login, show app
-                document.getElementById('loginSection').classList.add('d-none');
-                document.getElementById('appSection').style.display = 'block';
-                showNotificationsInSequence();
-                document.getElementById('headerBranding').style.display = 'none';
-            } catch (error) {
-                alertBox.textContent = error.message;
-                alertBox.classList.remove('d-none');
-            }
-        }
-
-        // Sign up logic
-        async function signUp() {
-            const fullName = document.getElementById('signUpFullName').value.trim();
-            const email = document.getElementById('signUpEmail').value.trim();
-            const password = document.getElementById('signUpPassword').value.trim();
-            const confirmPassword = document.getElementById('signUpConfirmPassword').value.trim();
-            const alertBox = document.getElementById('signUpAlert');
-            alertBox.classList.add('d-none');
-            if (!fullName || !email || !password || !confirmPassword) {
-                alertBox.textContent = 'Please fill in all fields.';
-                alertBox.classList.remove('d-none');
-                return;
-            }
-            if (password !== confirmPassword) {
-                alertBox.textContent = 'Passwords do not match.';
-                alertBox.classList.remove('d-none');
-                return;
-            }
-            try {
-                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-                
-                // Create technician document with just name and email
-                await db.collection('technicians').doc(userCredential.user.uid).set({
-                    fullName: fullName,
-                    email: email
-                });
-
-                alertBox.classList.add('d-none');
-                showLogin();
-                alert('Account created! You can now sign in.');
-            } catch (error) {
-                alertBox.textContent = error.message;
-                alertBox.classList.remove('d-none');
-            }
-        }
-
-        // Password reset logic
-        async function resetPassword() {
-            const email = document.getElementById('resetEmail').value.trim();
-            const alertBox = document.getElementById('resetAlert');
-            alertBox.classList.add('d-none');
-            if (!email) {
-                alertBox.textContent = 'Please enter your email.';
-                alertBox.classList.remove('d-none');
-                return;
-            }
-            try {
-                await auth.sendPasswordResetEmail(email);
-                alertBox.textContent = 'Password reset email sent!';
-                alertBox.classList.remove('d-none');
-            } catch (error) {
-                alertBox.textContent = error.message;
-                alertBox.classList.remove('d-none');
-            }
-        }
-
-        // Logout function
-        function logout() {
-            auth.signOut();
-            if (html5QrCode) {
-                html5QrCode.clear();
-            }
-            localStorage.removeItem('fullName'); // Clear stored name on logout
-            document.getElementById('headerBranding').style.display = 'block';
-        }
-
-        // Toggle Admin Section
-        function toggleAdmin() {
-            const adminSection = document.getElementById('adminSection');
-            adminSection.style.display = adminSection.style.display === 'none' ? 'block' : 'none';
-        }
-
-        // Save Tool Admin
-        async function saveToolAdmin() {
-            const toolId = document.getElementById('adminToolId').value.trim();
-            const toolName = document.getElementById('adminToolName').value.trim();
-            const partNumber = document.getElementById('adminPartNumber').value.trim();
-            const location = document.getElementById('adminLocation').value.trim();
-
-            if (!toolId || !toolName) {
-                alert('Tool ID and Name are required');
-                return;
-            }
-
-            try {
-                await db.collection('tools').doc(toolId).set({
-                    toolName: toolName,
-                    partNumber: partNumber,
-                    location: location,
-                    status: 'IN',
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
-
-                alert('Tool saved successfully');
-                document.getElementById('adminToolId').value = '';
-                document.getElementById('adminToolName').value = '';
-                document.getElementById('adminPartNumber').value = '';
-                document.getElementById('adminLocation').value = '';
-            } catch (error) {
-                console.error('Error saving tool:', error);
-                alert('Error saving tool: ' + error.message);
-            }
-        }
-
-        // Store last scanned tool data
-        let lastScannedToolData = null;
-
-        // Submit tool code
-        async function submitCode() {
-            const code = document.getElementById('toolCode').value.trim();
-            if (!code) return;
-
-            try {
-                const user = auth.currentUser;
-                const toolRef = db.collection('tools').doc(code);
-                const doc = await toolRef.get();
-
-                if (doc.exists) {
-                    const data = doc.data();
-                    
-                    // Get current technician name
-                    const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-                    const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
-
-                    // Only show warning if tool is OUT and checked out by a different technician
-                    if (data.status === 'OUT' && data.technician !== technicianName) {
-                        alert(`This tool is currently checked out by ${data.technician}`);
-                        return;
-                    }
-                    // Prevent returning previous OUT tools (checked out before today)
-                    if (data.status === 'OUT' && data.timestamp && data.timestamp.toDate) {
-                        const toolDate = data.timestamp.toDate();
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        if (toolDate < today) {
-                            alert('This tool was checked out on a previous day and cannot be returned. Please contact an administrator if you believe this is an error.');
-                            document.getElementById('toolCode').value = '';
-                            lastScannedToolData = null;
-                            document.getElementById('toolDetailsBtn').disabled = true;
-                            return;
-                        }
-                    }
-                    // Enforce 5-minute cooldown for returning tools
-                    if (data.status === 'OUT' && data.timestamp && data.timestamp.toDate) {
-                        const outTime = data.timestamp.toDate();
-                        const now = new Date();
-                        const diffMs = now - outTime;
-                        if (diffMs < 5 * 60 * 1000) {
-                            // Show cooldown warning modal with remaining time
-                            setCooldownWarnMessage(5 * 60 * 1000 - diffMs);
-                            const warnModal = new bootstrap.Modal(document.getElementById('cooldownWarnModal'));
-                            warnModal.show();
-                            document.getElementById('toolCode').value = '';
-                            lastScannedToolData = null;
-                            document.getElementById('toolDetailsBtn').disabled = true;
-                            return;
-                        }
-                    }
-                    const status = data.status === 'OUT' ? 'IN' : 'OUT';
-                    const timestamp = firebase.firestore.FieldValue.serverTimestamp();
-
-                    // Show 5-minute cooldown info dialog only once per day, when first tool is checked OUT
-                    if (status === 'OUT') {  // Check new status instead of current status
-                        const todayKey = 'cooldownInfoShown_' + (new Date()).toISOString().slice(0, 10);
-                        if (!localStorage.getItem(todayKey)) {
-                            const infoModal = new bootstrap.Modal(document.getElementById('cooldownInfoModal'));
-                            infoModal.show();
-                            localStorage.setItem(todayKey, '1');
-                        }
-                    }
-
-                    // Update tool status
-                    await toolRef.update({
-                        status: status,
-                        technician: technicianName,
-                        timestamp: timestamp
-                    });
-
-                    // Add log entry
-                    await db.collection('logtoolmovements').add({
-                        toolId: code,
-                        toolName: data.toolName || 'Unknown',
-                        partNumber: data.partNumber || code,
-                        location: data.location || '',
-                        status: status,
-                        technician: technicianName,
-                        timestamp: timestamp
-                    });
-
-                    document.getElementById('toolCode').value = '';
-                    loadTools();
-
-                    // Store last scanned tool data for modal
-                    lastScannedToolData = {
-                        toolName: data.toolName || 'Unknown Tool',
-                        toolId: doc.id,
-                        partNumber: data.partNumber || doc.id,
-                        collectionCode: data.collectionCode || '',
-                        location: data.location || 'N/A',
-                        owner: data.owner || 'N/A',
-                    };
-                    document.getElementById('toolDetailsBtn').disabled = false;
-                } else {
-                    alert('Warning: This tool does not exist in the system. Please contact an administrator to add the tool.');
-                    document.getElementById('toolCode').value = '';
-                    lastScannedToolData = null;
-                    document.getElementById('toolDetailsBtn').disabled = true;
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Error: ' + error.message);
-                lastScannedToolData = null;
-                document.getElementById('toolDetailsBtn').disabled = true;
-            }
-        }
-
-        // Load today's tools
-        async function loadTools() {
-            const user = auth.currentUser;
-            if (!user) return;
-
-            try {
-                // Get technician name
-                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-                const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
-
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-
-                const snapshot = await db.collection('tools')
-                    .where('technician', '==', technicianName)
-                    .where('timestamp', '>=', today)
-                    .get();
-
-                const toolList = document.getElementById('toolList');
-                toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4>';
-
-                if (snapshot.empty) {
-                    toolList.innerHTML += '<p>No tools scanned today.</p>';
-                    return;
-                }
-
-                // Sort tools: OUT first, then IN, and by timestamp within each group
-                const sortedTools = snapshot.docs.sort((a, b) => {
-                    const aData = a.data();
-                    const bData = b.data();
-                    // First sort by status (OUT before IN)
-                    if (aData.status !== bData.status) {
-                        return aData.status === 'OUT' ? -1 : 1;
-                    }
-                    // Then sort by timestamp (newest first)
-                    return bData.timestamp.toDate() - aData.timestamp.toDate();
-                });
-
-                let outCount = 0;
-                let inCount = 0;
-
-                sortedTools.forEach((doc, index) => {
-                    const data = doc.data();
-                    const div = document.createElement('div');
-                    const isOut = data.status === 'OUT';
-                    const count = isOut ? ++outCount : ++inCount;
-                    const evenOdd = count % 2 === 0 ? 'even' : 'odd';
-                    
-                    div.className = `tool-item tool-${isOut ? 'out' : 'in'}-${evenOdd}`;
-                    div.style.cursor = 'pointer';
-                    div.onclick = function() {
-                        showToolDetails({
-                            toolName: data.toolName || 'Unknown Tool',
-                            toolId: doc.id,
-                            partNumber: data.partNumber || doc.id,
-                            collectionCode: data.collectionCode || '',
-                            location: data.location || 'N/A',
-                            status: data.status || (isOut ? 'OUT' : 'IN'),
-                            owner: data.owner || 'N/A',
-                            technician: data.technician || 'N/A',
-                            timestamp: data.timestamp ? data.timestamp.toDate().toLocaleString('en-GB', {
-                                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-                            }) : 'N/A'
-                        });
-                    };
-                    const time = data.timestamp ? data.timestamp.toDate().toLocaleString('en-GB', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        hour12: false
-                    }) : 'N/A';
-                    const textColorClass = isOut ? 'tool-out-text' : 'tool-in-text';
-                    
-                    div.innerHTML = `
-                        <div class="tool-name ${textColorClass}">
-                            ${index + 1}. ${data.toolName || 'Unknown Tool'}
-                        </div>
-                        <div class="tool-time ${textColorClass}">
-                            ${time}
-                        </div>
-                        <div class="tool-headers">
-                            <div class="row">
-                                <div class="col-4">TID</div>
-                                <div class="col-4">P/N</div>
-                                <div class="col-4">STS</div>
-                            </div>
-                        </div>
-                        <div class="tool-values ${textColorClass}">
-                            <div class="row">
-                                <div class="col-4 tool-id-value">${doc.id}</div>
-                                <div class="col-4 tool-pn-value">${data.partNumber || doc.id}</div>
-                                <div class="col-4">
-                                    <span class="status-badge status-${isOut ? 'out' : 'in'}">${data.status}</span>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    toolList.appendChild(div);
-                });
-            } catch (error) {
-                console.error('Error loading tools:', error);
-                const toolList = document.getElementById('toolList');
-                toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4><p class="text-danger">Error loading tools. Please try again.</p>';
-            }
-        }
-
-        // Load previous out tools
-        async function loadPreviousTools() {
-            const user = auth.currentUser;
-            if (!user) return;
-
-            try {
-                // Get technician name
-                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-                const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
-
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-
-                const snapshot = await db.collection('tools')
-                    .where('technician', '==', technicianName)
-                    .where('status', '==', 'OUT')
-                    .get();
-
-                const previousList = document.getElementById('previousToolsList');
-                previousList.innerHTML = '<h4 class="tool-title">Previous OUT Tools (Total: 0)</h4><p>No previous OUT tools found.</p>';
-
-                if (snapshot.empty) {
-                    previousList.innerHTML = '<h4 class="tool-title">Previous OUT Tools (Total: 0)</h4><p>No previous OUT tools found.</p>';
-                    document.getElementById('previous-tab').innerHTML = '<i class="fas fa-history"></i> Previous Tools (0)';
-                    return;
-                }
-
-                const previousTools = snapshot.docs
-                    .filter(doc => {
-                        const data = doc.data();
-                        return data.timestamp && typeof data.timestamp.toDate === 'function' && data.timestamp.toDate() < today;
-                    })
-                    .sort((a, b) => {
-                        const aTime = a.data().timestamp && typeof a.data().timestamp.toDate === 'function' ? a.data().timestamp.toDate() : 0;
-                        const bTime = b.data().timestamp && typeof b.data().timestamp.toDate === 'function' ? b.data().timestamp.toDate() : 0;
-                        return bTime - aTime;
-                    });
-
-                if (previousTools.length === 0) {
-                    previousList.innerHTML = '<h4 class="tool-title">Previous OUT Tools (Total: 0)</h4><p>No previous OUT tools found.</p>';
-                    document.getElementById('previous-tab').innerHTML = '<i class="fas fa-history"></i> Previous Tools (0)';
-                    return;
-                }
-
-                previousList.innerHTML = `<h4 class="tool-title">Previous OUT Tools (Total: ${previousTools.length})</h4>`;
-                document.getElementById('previous-tab').innerHTML = `<i class="fas fa-history"></i> Previous Tools (${previousTools.length})`;
-                let count = 0;
-                previousTools.forEach((doc, index) => {
-                    const data = doc.data();
-                    const div = document.createElement('div');
-                    count++;
-                    const evenOdd = count % 2 === 0 ? 'even' : 'odd';
-                    
-                    div.className = `tool-item tool-out-${evenOdd}`;
-                    div.style.cursor = 'pointer';
-                    div.onclick = function() {
-                        showToolDetails({
-                            toolName: data.toolName || 'Unknown Tool',
-                            toolId: doc.id,
-                            partNumber: data.partNumber || doc.id,
-                            collectionCode: data.collectionCode || '',
-                            location: data.location || 'N/A',
-                            status: data.status || 'OUT',
-                            owner: data.owner || 'N/A',
-                            technician: data.technician || 'N/A',
-                            timestamp: data.timestamp ? data.timestamp.toDate().toLocaleString('en-GB', {
-                                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-                            }) : 'N/A'
-                        });
-                    };
-                    const date = data.timestamp.toDate();
-                    const formattedDate = date.toLocaleString('en-GB', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        hour12: false
-                    });
-                    
-                    div.innerHTML = `
-                        <div class="tool-name tool-out-text">
-                            ${index + 1}. ${data.toolName || 'Unknown Tool'}
-                        </div>
-                        <div class="tool-time tool-out-text">
-                            ${formattedDate}
-                        </div>
-                        <div class="tool-headers">
-                            <div class="row">
-                                <div class="col-4">TID</div>
-                                <div class="col-4">P/N</div>
-                                <div class="col-4">STS</div>
-                            </div>
-                        </div>
-                        <div class="tool-values tool-out-text">
-                            <div class="row">
-                                <div class="col-4 tool-id-value">${doc.id}</div>
-                                <div class="col-4 tool-pn-value">${data.partNumber || doc.id}</div>
-                                <div class="col-4">
-                                    <span class="status-badge status-out">OUT</span>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    previousList.appendChild(div);
-                });
-                // Debug log to help diagnose data issues
-                console.log('Previous OUT tools snapshot:', snapshot.docs.map(doc => doc.data()));
-            } catch (error) {
-                console.error('Error loading previous tools:', error);
-                const previousList = document.getElementById('previousToolsList');
-                previousList.innerHTML = '<h4 class="tool-title">Previous OUT Tools</h4><p class="text-danger">Error loading previous tools. Please try again.</p>';
-            }
-        }
+        let html5QrcodeScanner = null;
+        let isScanning = false;
 
         // QR Code Scanner
-        function startScanner() {
-            document.getElementById('reader').style.display = 'block';
-            document.getElementById('stopScannerBtn').style.display = 'inline-block';
-            
-            html5QrCode = new Html5Qrcode("reader");
-            const config = {
-                fps: 10,
-                qrbox: { width: 250, height: 250 }, // Square QR box
-                aspectRatio: 1.0, // Square aspect ratio
-                formatsToSupport: [
-                    Html5QrcodeSupportedFormats.QR_CODE,
-                    Html5QrcodeSupportedFormats.CODE_128,
-                    Html5QrcodeSupportedFormats.CODE_39,
-                    Html5QrcodeSupportedFormats.EAN_13,
-                    Html5QrcodeSupportedFormats.EAN_8,
-                    Html5QrcodeSupportedFormats.UPC_A,
-                    Html5QrcodeSupportedFormats.UPC_E,
-                    Html5QrcodeSupportedFormats.ITF,
-                    Html5QrcodeSupportedFormats.AZTEC,
-                    Html5QrcodeSupportedFormats.DATA_MATRIX,
-                    Html5QrcodeSupportedFormats.CODABAR,
-                    Html5QrcodeSupportedFormats.PDF_417
-                ]
-            };
+        async function toggleCamera() {
+            const cameraContainer = document.getElementById('cameraContainer');
+            const toggleButton = document.querySelector('.btn-scan');
 
-            // Try to use the environment camera (back camera) first
-            html5QrCode.start(
-                { facingMode: "environment" },
-                config,
-                (decodedText) => {
-                    document.getElementById('toolCode').value = decodedText;
-                    document.getElementById('toolDetailsBtn').disabled = false;
-                    stopCamera();
-                },
-                (errorMessage) => {
-                    // Ignore errors during scanning
-                }
-            ).catch(err => {
-                // If environment camera fails, try user camera (front camera)
-                html5QrCode.start(
-                    { facingMode: "user" },
-                    config,
-                    (decodedText) => {
-                        document.getElementById('toolCode').value = decodedText;
-                        document.getElementById('toolDetailsBtn').disabled = false;
-                        stopCamera();
-                    },
-                    (errorMessage) => {
-                        // Ignore errors during scanning
+            // iOS detection
+            function isIOS() {
+                return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            }
+
+            if (!isScanning) {
+                try {
+                    if (html5QrcodeScanner) {
+                        html5QrcodeScanner.clear();
+                        html5QrcodeScanner = null;
                     }
-                ).catch(err => {
-                    alert('Camera error: ' + err);
-                    document.getElementById('stopScannerBtn').style.display = 'none';
-                    document.getElementById('reader').style.display = 'none';
-                });
-            });
-        }
 
-        function stopCamera() {
-            if (html5QrCode) {
-                html5QrCode.stop().then(() => {
-                    html5QrCode.clear();
-                    document.getElementById('reader').style.display = 'none';
-                    document.getElementById('stopScannerBtn').style.display = 'none';
-                });
-                html5QrCode = null;
-            }
-        }
-
-        // Show tool details for the code in the input field, even if not submitted
-        async function showLastScannedToolDetails() {
-            const code = document.getElementById('toolCode').value.trim();
-            if (!code) return;
-            try {
-                const toolRef = db.collection('tools').doc(code);
-                const doc = await toolRef.get();
-                if (doc.exists) {
-                    const data = doc.data();
-                    // Store the data for the modal
-                    lastScannedToolData = {
-                        toolName: data.toolName || 'Unknown Tool',
-                        toolId: doc.id,
-                        partNumber: data.partNumber || doc.id,
-                        collectionCode: data.collectionCode || '',
-                        location: data.location || 'N/A',
-                        owner: data.owner || 'N/A',
-                        status: data.status || 'N/A',
-                        technician: data.technician || 'N/A',
-                        timestamp: data.timestamp && data.timestamp.toDate ? data.timestamp.toDate().toLocaleString('en-GB', {
-                            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-                        }) : 'N/A',
-                        calDueDate: data.calDueDate && data.calDueDate.toDate ? data.calDueDate.toDate().toLocaleDateString('en-GB') : 'N/A'
-                    };
-                    
-                    // Show the modal with the tool details
-                    showToolDetails(lastScannedToolData);
-                } else {
-                    alert('Tool not found. Please check the code.');
-                }
-            } catch (error) {
-                console.error('Error fetching tool details:', error);
-                alert('Error fetching tool details: ' + error.message);
-            }
-        }
-
-        // Add this function to show tool details in the modal
-        function showToolDetails(tool) {
-            const body = document.getElementById('toolDetailsBody');
-            // Show status, technician, and timestamp only if status is OUT
-            body.innerHTML = `
-                <div class="mb-2"><strong>Tool ID:</strong> ${tool.toolId}</div>
-                <div class="mb-2"><strong>Tool Name:</strong> ${tool.toolName}</div>
-                <div class="mb-2"><strong>Part Number:</strong> ${tool.partNumber}</div>
-                <div class="mb-2"><strong>Owner:</strong> ${tool.owner}</div>
-                <div class="mb-2"><strong>Collection:</strong> ${tool.collectionCode}</div>
-                <div class="mb-2"><strong>Location:</strong> ${tool.location}</div>
-                ${tool.status === 'OUT' ? `
-                    <div class="mb-2"><strong>Status:</strong> ${tool.status}</div>
-                    <div class="mb-2"><strong>Technician:</strong> ${tool.technician}</div>
-                    <div class="mb-2"><strong>Last Updated:</strong> ${tool.timestamp}</div>
-                ` : ''}
-                ${tool.calDueDate !== 'N/A' ? `<div class="mb-2"><strong>Calibration Due:</strong> ${tool.calDueDate}</div>` : ''}
-            `;
-            const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
-            modal.show();
-        }
-
-        // Enable/disable Tool Details button based on input
-        document.getElementById('toolCode').addEventListener('input', function() {
-            const btn = document.getElementById('toolDetailsBtn');
-            btn.disabled = !this.value.trim();
-        });
-
-        // My Tools Modal with app-like formatting
-        async function showMyTools() {
-            const user = auth.currentUser;
-            if (!user) return;
-            const fullName = localStorage.getItem('fullName') || user.email;
-            const myToolsBody = document.getElementById('myToolsBody');
-            myToolsBody.innerHTML = '<div class="text-center">Loading...</div>';
-
-            try {
-                // Query all tools where owner matches the logged-in user
-                const snapshot = await db.collection('tools')
-                    .where('owner', '==', fullName)
-                    .get();
-
-                if (snapshot.empty) {
-                    myToolsBody.innerHTML = '<div class="text-center">No tools found for you.</div>';
-                } else {
-                    // Group by collectionCode and location
-                    const tools = snapshot.docs.map(doc => ({
-                        id: doc.id,
-                        ...doc.data()
-                    }));
-                    const grouped = {};
-                    tools.forEach(tool => {
-                        const collection = tool.collectionCode || 'N/A';
-                        const location = tool.location || 'N/A';
-                        if (!grouped[collection]) grouped[collection] = {};
-                        if (!grouped[collection][location]) grouped[collection][location] = [];
-                        grouped[collection][location].push(tool);
-                    });
-
-                    let html = '';
-                    Object.keys(grouped).forEach(collection => {
-                        html += `<div class="mytools-collection"><span>Collection:</span><span>${collection}</span></div>`;
-                        Object.keys(grouped[collection]).forEach(location => {
-                            const toolsAtLocation = grouped[collection][location];
-                            html += `<div class="mytools-location"><span>Location:</span><span>${location} (Total: ${toolsAtLocation.length} tools)</span></div>`;
-                            toolsAtLocation.forEach((tool, idx) => {
-                                const bgClass = idx % 2 === 0 ? 'mytools-tool-bg1' : 'mytools-tool-bg2';
-                                html += `<div class="mytools-tool-item ${bgClass}">
-                                    <span class="mytools-tool-name">${idx + 1}. ${tool.toolName || 'Unknown Tool'}</span> - <span class="mytools-tool-tid">TID: ${tool.id}</span><br>
-                                    <span class="mytools-tool-part">Part #: ${tool.partNumber || ''}</span><br>
-                                    <span class="${tool.status === 'OUT' ? 'mytools-status-out' : 'mytools-status-in'}">Status: ${tool.status || ''}</span>`;
-                                if (tool.status === 'OUT') {
-                                    html += `<div class="mytools-tool-extra">Technician: ${tool.technician || ''}</div>`;
-                                    if (tool.timestamp && tool.timestamp.toDate) {
-                                        const outTime = tool.timestamp.toDate().toLocaleString('en-GB', {
-                                            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-                                        });
-                                        html += `<div class="mytools-tool-extra">Checked out: ${outTime}</div>`;
-                                    }
-                                }
-                                if (tool.calDueDate && tool.calDueDate.toDate) {
-                                    const calDue = tool.calDueDate.toDate().toLocaleDateString('en-GB');
-                                    html += `<div class="mytools-tool-cal">Cal Due: <span style="font-weight: bold;">${calDue}</span></div>`;
-                                }
-                                html += `</div>`;
-                            });
-                        });
-                    });
-                    myToolsBody.innerHTML = html;
-                }
-            } catch (error) {
-                myToolsBody.innerHTML = `<div class="text-danger text-center">Error loading your tools: ${error.message}</div>`;
-            }
-
-            const modal = new bootstrap.Modal(document.getElementById('myToolsModal'));
-            modal.show();
-        }
-
-        // Helper to set cooldown warning message
-        function setCooldownWarnMessage(remainingMs) {
-            const mins = Math.floor(remainingMs / 60000);
-            const secs = Math.ceil((remainingMs % 60000) / 1000);
-            document.querySelector('#cooldownWarnModal .modal-body').textContent = `You must wait ${mins} minute${mins !== 1 ? 's' : ''} and ${secs} second${secs !== 1 ? 's' : ''} before you can return this tool.`;
-        }
-
-        // Fetch and update previous OUT tools count for the tab
-        async function updatePreviousToolsTabCount() {
-            const user = auth.currentUser;
-            if (!user) return;
-            const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-            const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const snapshot = await db.collection('tools')
-                .where('technician', '==', technicianName)
-                .where('status', '==', 'OUT')
-                .get();
-            const previousTools = snapshot.docs.filter(doc => {
-                const data = doc.data();
-                return data.timestamp && data.timestamp.toDate() < today;
-            });
-            document.getElementById('previous-tab').innerHTML = `<i class="fas fa-history"></i> Previous Tools (${previousTools.length})`;
-        }
-
-        // Helper to check if current time is after notificationTime (HH:mm)
-        async function isAfterNotificationTime() {
-            try {
-                const settingsDoc = await db.collection('settings').doc('admin').get();
-                if (settingsDoc.exists && settingsDoc.data().notificationTime) {
-                    const [notifHour, notifMin] = settingsDoc.data().notificationTime.split(':').map(Number);
-                    const now = new Date();
-                    const notifTime = new Date(now);
-                    notifTime.setHours(notifHour, notifMin, 0, 0);
-                    return now >= notifTime;
-                }
-            } catch (e) {
-                console.error('Error fetching notification time:', e);
-            }
-            // If missing or error, do nothing (return false)
-            return false;
-        }
-
-        // Show notifications in sequence, not simultaneously
-        async function showNotificationsInSequence() {
-            let outstandingNeeded = false;
-            let overdueNeeded = false;
-            let outstandingMsg = '';
-            let overdueMsg = '';
-
-            const user = auth.currentUser;
-            if (user && await isAfterNotificationTime()) {
-                const fullName = localStorage.getItem('fullName') || user.email;
-                const now = new Date();
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                // Query all OUT tools for this user as owner
-                const snapshot = await db.collection('tools')
-                    .where('owner', '==', fullName)
-                    .where('status', '==', 'OUT')
-                    .get();
-                let ownerToday = 0;
-                let ownerPrev = 0;
-                let techToolIds = new Set();
-                // Also collect tool IDs where user is technician for later
-                snapshot.docs.forEach(doc => {
-                    const data = doc.data();
-                    // Only count if technician is NOT the owner
-                    if (data.technician !== fullName) {
-                        if (data.timestamp && data.timestamp.toDate) {
-                            const outTime = data.timestamp.toDate();
-                            if (outTime >= today) {
-                                ownerToday++;
-                            } else {
-                                ownerPrev++;
-                            }
+                    // Create a new instance of Html5Qrcode with enhanced barcode support
+                    const html5QrCode = new Html5Qrcode("reader", {
+                        verbose: false,
+                        experimentalFeatures: {
+                            useBarCodeDetectorIfSupported: true
                         }
+                    });
+
+                    // iOS-specific config
+                    let config;
+                    let formatsToSupport;
+                    if (isIOS()) {
+                        formatsToSupport = [Html5QrcodeSupportedFormats.QR_CODE];
+                        config = {
+                            fps: 10,
+                            qrbox: { width: 300, height: 300 },
+                            aspectRatio: 1.0,
+                            formatsToSupport: formatsToSupport,
+                            videoConstraints: {
+                                facingMode: { exact: "environment" },
+                                width: { min: 320, ideal: 640, max: 1280 },
+                                height: { min: 240, ideal: 480, max: 720 }
+                            }
+                        };
                     } else {
-                        techToolIds.add(doc.id);
+                        formatsToSupport = [
+                            Html5QrcodeSupportedFormats.QR_CODE,
+                            Html5QrcodeSupportedFormats.CODE_128,
+                            Html5QrcodeSupportedFormats.CODE_39,
+                            Html5QrcodeSupportedFormats.EAN_13,
+                            Html5QrcodeSupportedFormats.EAN_8,
+                            Html5QrcodeSupportedFormats.UPC_A,
+                            Html5QrcodeSupportedFormats.UPC_E,
+                            Html5QrcodeSupportedFormats.ITF,
+                            Html5QrcodeSupportedFormats.AZTEC,
+                            Html5QrcodeSupportedFormats.DATA_MATRIX,
+                            Html5QrcodeSupportedFormats.CODABAR,
+                            Html5QrcodeSupportedFormats.PDF_417
+                        ];
+                        config = {
+                            fps: 10,
+                            qrbox: { width: 250, height: 250 },
+                            aspectRatio: 1.0,
+                            formatsToSupport: formatsToSupport,
+                            videoConstraints: {
+                                facingMode: { exact: "environment" },
+                                width: { min: 320, ideal: 640, max: 1280 },
+                                height: { min: 240, ideal: 480, max: 720 },
+                                advanced: [
+                                    {
+                                        focusMode: "continuous",
+                                        exposureMode: "continuous",
+                                        whiteBalanceMode: "continuous"
+                                    }
+                                ]
+                            }
+                        };
                     }
-                });
-                if (ownerToday > 0 || ownerPrev > 0) {
-                    outstandingNeeded = true;
-                    outstandingMsg = '<b>ACTION REQUIRED:</b> THE FOLLOWING TOOLS YOU OWN ARE STILL CHECKED OUT BY OTHERS.';
-                    if (ownerToday > 0) outstandingMsg += `<br>- <b>${ownerToday}</b> TOOL${ownerToday > 1 ? 'S' : ''} CHECKED OUT TODAY.`;
-                    if (ownerPrev > 0) outstandingMsg += `<br>- <b>${ownerPrev}</b> TOOL${ownerPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES.`;
-                    outstandingMsg += '<br>PLEASE FOLLOW UP TO ENSURE THESE TOOLS ARE RETURNED.';
-                }
-                // Now check as technician, count all tools where user is technician (regardless of owner)
-                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-                const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'UNKNOWN TECHNICIAN';
-                const techSnapshot = await db.collection('tools')
-                    .where('technician', '==', technicianName)
-                    .where('status', '==', 'OUT')
-                    .get();
-                let techToday = 0;
-                let techPrev = 0;
-                techSnapshot.docs.forEach(doc => {
-                    const data = doc.data();
-                    if (data.timestamp && data.timestamp.toDate) {
-                        const outTime = data.timestamp.toDate();
-                        if (outTime >= today) {
-                            techToday++;
-                        } else {
-                            techPrev++;
-                        }
-                    }
-                });
-                if (techToday > 0 || techPrev > 0) {
-                    overdueNeeded = true;
-                    overdueMsg = '<b>REMINDER:</b> YOU HAVE TOOLS CHECKED OUT THAT NEED TO BE RETURNED.';
-                    if (techToday > 0) overdueMsg += `<br>- <b>${techToday}</b> TOOL${techToday > 1 ? 'S' : ''} CHECKED OUT TODAY.`;
-                    if (techPrev > 0) overdueMsg += `<br>- <b>${techPrev}</b> TOOL${techPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES.`;
-                    overdueMsg += '<br>PLEASE RETURN THESE TOOLS AS SOON AS POSSIBLE.';
-                }
-            }
-            // Show modals in sequence
-            if (outstandingNeeded) {
-                document.getElementById('outstandingToolsBody').innerHTML = outstandingMsg;
-                const outstandingModal = new bootstrap.Modal(document.getElementById('outstandingToolsModal'));
-                document.querySelector('#outstandingToolsModal .btn-primary').onclick = function() {
-                    outstandingModal.hide();
-                    if (overdueNeeded) {
+
+                    // Show iOS user message
+                    if (isIOS()) {
                         setTimeout(() => {
-                            document.getElementById('outToolsNotifBody').innerHTML = overdueMsg;
-                            const notifModal = new bootstrap.Modal(document.getElementById('outToolsNotifModal'));
-                            notifModal.show();
-                        }, 300);
+                            alert("Note: On iPhone/iPad, only QR codes are supported in the web app. If scanning does not work, use the Camera app to scan the QR code and paste it here.");
+                        }, 500);
                     }
-                };
-                outstandingModal.show();
-            } else if (overdueNeeded) {
-                document.getElementById('outToolsNotifBody').innerHTML = overdueMsg;
-                const notifModal = new bootstrap.Modal(document.getElementById('outToolsNotifModal'));
-                notifModal.show();
+
+                    // Start the camera
+                    await html5QrCode.start(
+                        { facingMode: { exact: "environment" } },
+                        config,
+                        (decodedText) => {
+                            // Update the input field with the scanned code
+                            const toolCodeInput = document.getElementById('toolCode');
+                            toolCodeInput.value = decodedText;
+                            // Trigger input event to enable the tool details button
+                            const inputEvent = new Event('input', { bubbles: true });
+                            toolCodeInput.dispatchEvent(inputEvent);
+                            // Enable tool details button
+                            document.getElementById('toolDetailsBtn').disabled = false;
+                        },
+                        (error) => {
+                            // On iOS, if scanning fails, suggest manual entry
+                            if (isIOS()) {
+                                document.getElementById('toolDetailsBtn').disabled = false;
+                            }
+                        }
+                    );
+
+                    html5QrcodeScanner = html5QrCode;
+                    isScanning = true;
+                    cameraContainer.style.display = 'block';
+                    toggleButton.innerHTML = '<i class="fas fa-camera"></i> Stop Scanner';
+                    toggleButton.classList.remove('btn-primary');
+                    toggleButton.classList.add('btn-danger');
+
+                } catch (err) {
+                    console.error('Camera Error:', err);
+                    if (err.name === 'NotAllowedError') {
+                        alert('Camera access was denied. Please enable camera permissions in your browser settings.');
+                    } else if (err.name === 'NotFoundError') {
+                        alert('No camera found on your device. Please make sure your camera is connected and working.');
+                    } else if (err.name === 'NotReadableError') {
+                        alert('Your camera might be in use by another application. Please close other apps using the camera.');
+                    } else {
+                        alert('Error accessing camera: ' + err.message + '\nPlease make sure your camera is connected and permissions are granted.');
+                    }
+                }
+            } else {
+                try {
+                    if (html5QrcodeScanner) {
+                        await html5QrcodeScanner.stop();
+                        await html5QrcodeScanner.clear();
+                        html5QrcodeScanner = null;
+                    }
+                    isScanning = false;
+                    cameraContainer.style.display = 'none';
+                    toggleButton.innerHTML = '<i class="fas fa-camera"></i> Start Scanner';
+                    toggleButton.classList.remove('btn-danger');
+                    toggleButton.classList.add('btn-primary');
+                    // Clear the reader element
+                    const reader = document.getElementById('reader');
+                    if (reader) {
+                        reader.innerHTML = '';
+                    }
+                } catch (err) {
+                    console.error('Error stopping camera:', err);
+                    alert('Error stopping camera. Please refresh the page and try again.');
+                }
             }
         }
 
-        // Tab change handler
-        document.addEventListener('DOMContentLoaded', function() {
-            const previousTab = document.getElementById('previous-tab');
-            previousTab.addEventListener('click', loadPreviousTools);
+        // Get tool details from scanned code
+        function getToolDetails() {
+            const toolCode = document.getElementById('toolCode').value;
+            if (toolCode.trim() === '') {
+                alert('Please scan a tool code first.');
+                return;
+            }
+            displayToolResults(toolCode);
+        }
+
+        // Get tool details from manual entry
+        function getManualToolDetails() {
+            const toolCode = document.getElementById('manualToolCode').value;
+            if (toolCode.trim() === '') {
+                alert('Please enter a tool code.');
+                return;
+            }
+            displayToolResults(toolCode);
+        }
+
+        // Display tool results
+        function displayToolResults(toolCode) {
+            const resultsSection = document.getElementById('resultsSection');
+            const toolResults = document.getElementById('toolResults');
+            
+            // Simulate API call - replace with your actual API endpoint
+            // For now, we'll show a sample result
+            toolResults.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Tool Code:</strong> ${toolCode}</p>
+                        <p><strong>Tool Name:</strong> Sample Tool</p>
+                        <p><strong>Status:</strong> <span class="badge bg-success">Available</span></p>
+                        <p><strong>Location:</strong> Workshop A</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Last Checked:</strong> ${new Date().toLocaleDateString()}</p>
+                        <p><strong>Assigned To:</strong> John Doe</p>
+                        <p><strong>Category:</strong> Hand Tools</p>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-primary me-2">
+                        <i class="fas fa-edit"></i> Edit Details
+                    </button>
+                    <button class="btn btn-info me-2">
+                        <i class="fas fa-history"></i> View History
+                    </button>
+                    <button class="btn btn-warning">
+                        <i class="fas fa-exchange-alt"></i> Check Out
+                    </button>
+                </div>
+            `;
+            
+            resultsSection.style.display = 'block';
+            resultsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Enable tool details button when input changes
+        document.getElementById('toolCode').addEventListener('input', function() {
+            document.getElementById('toolDetailsBtn').disabled = this.value.trim() === '';
         });
 
-        // Auth state observer
-        auth.onAuthStateChanged(user => {
-            const loginSection = document.getElementById('loginSection');
-            const appSection = document.getElementById('appSection');
-            const adminSection = document.getElementById('adminSection');
-
-            if (user) {
-                loginSection.style.display = 'none';
-                appSection.style.display = 'block';
-                document.getElementById('headerBranding').style.display = 'none';
-                
-                // Always fetch fresh data from Firestore
-                db.collection('technicians').doc(user.uid)
-                    .get()
-                    .then(doc => {
-                        if (doc.exists) {
-                            const technicianData = doc.data();
-                            const name = technicianData.fullName || user.email;
-                            
-                            // Store the document ID
-                            localStorage.setItem('techniciansId', doc.id);
-                            localStorage.setItem('fullName', name);
-                            document.getElementById('fullName').textContent = name;
-                            
-                            if (technicianData.isAdmin) {
-                                document.getElementById('adminButton').style.display = 'inline-block';
-                            }
-                        } else {
-                            document.getElementById('fullName').textContent = user.email;
-                        }
-                        // Update previous tools tab count on login
-                        updatePreviousToolsTabCount();
-                    }).catch(error => {
-                        console.error('Error fetching technician data:', error);
-                        document.getElementById('fullName').textContent = user.email;
-                        updatePreviousToolsTabCount();
-                    });
-                
-                loadTools();
-                // Add notification checks on login
-                showNotificationsInSequence();
-            } else {
-                loginSection.style.display = 'block';
-                appSection.style.display = 'none';
-                adminSection.style.display = 'none';
-                document.getElementById('adminButton').style.display = 'none';
-                document.getElementById('headerBranding').style.display = 'block';
-                localStorage.removeItem('fullName');
+        // Handle manual tool code input
+        document.getElementById('manualToolCode').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                getManualToolDetails();
             }
         });
     </script>
