@@ -915,7 +915,7 @@ class ToolTrackingApp {
                     <p><strong>Location:</strong> ${tool.location || 'N/A'}</p>
                     <p><strong>Calibration Due:</strong> ${tool.calibrationDueDate || tool.calDueDate || 'N/A'}</p>
                     <p><strong>Owner:</strong> ${tool.owner || 'N/A'}</p>
-                    <p><strong>Collection:</strong> <a href="#" id="collectionLink">${tool.collectionCode || 'N/A'}</a></p>
+                    <p><strong>Collection:</strong> <a href="/collection/${tool.collectionCode || ''}" id="collectionLink">${tool.collectionCode || 'N/A'}</a></p>
                 </div>
             </div>
         `;
@@ -924,9 +924,9 @@ class ToolTrackingApp {
         setTimeout(() => {
             const collectionLink = document.getElementById('collectionLink');
             if (collectionLink && tool.collectionCode) {
-                collectionLink.addEventListener('click', async (e) => {
+                collectionLink.addEventListener('click', (e) => {
                     e.preventDefault();
-                    await this.showCollectionDetails(tool.collectionCode);
+                    this.navigateTo(`/collection/${tool.collectionCode}`);
                 });
             }
         }, 0);
@@ -1228,6 +1228,11 @@ class ToolTrackingApp {
     }
 
     route(path) {
+        if (path.startsWith('/collection/')) {
+            const collectionCode = decodeURIComponent(path.split('/collection/')[1]);
+            this.showCollectionDetailsScreen(collectionCode);
+            return;
+        }
         switch (path) {
             case '/login':
                 this.showScreen('loginScreen');
@@ -1289,7 +1294,12 @@ class ToolTrackingApp {
             </div>
         `;
         card.addEventListener('click', () => {
-            this.showToolDetails(tool);
+            // Show tool details dialog with collection as clickable link
+            this.showToolDetails({
+                ...tool,
+                // Ensure collectionCode is passed for the dialog
+                collectionCode: tool.collectionCode || tool.collection || ''
+            });
         });
         list.appendChild(card);
     }
@@ -1439,12 +1449,13 @@ class ToolTrackingApp {
         return this.cooldownWarningShownDate && this.cooldownWarningShownDate.getTime() === today.getTime();
     }
 
-    async showCollectionDetails(collectionCode) {
-        const modal = new bootstrap.Modal(document.getElementById('collectionDetailsModal'));
-        const content = document.getElementById('collectionDetailsContent');
-        const title = document.getElementById('collectionDetailsTitle');
+    async showCollectionDetailsScreen(collectionCode) {
+        this.showScreen('collectionDetailsScreen');
+        const title = document.getElementById('collectionDetailsScreenTitle');
+        const content = document.getElementById('collectionDetailsScreenContent');
+        title.textContent = 'Collection Details';
+        content.innerHTML = '<div class="text-center text-muted">Loading...</div>';
         try {
-            // Query collections where collectionName == collectionCode
             const querySnapshot = await this.db.collection('collections')
                 .where('collectionName', '==', collectionCode)
                 .limit(1)
@@ -1452,7 +1463,6 @@ class ToolTrackingApp {
             if (querySnapshot.empty) {
                 content.innerHTML = `<div class='text-danger'>Collection not found.</div>`;
                 title.textContent = 'Collection Details';
-                modal.show();
                 return;
             }
             const doc = querySnapshot.docs[0];
@@ -1476,7 +1486,6 @@ class ToolTrackingApp {
         } catch (error) {
             content.innerHTML = `<div class='text-danger'>Error loading collection details.</div>`;
         }
-        modal.show();
     }
 }
 
