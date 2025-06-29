@@ -50,9 +50,17 @@ class Scanner {
                 }
             });
 
-            // Start camera
+            // Proactively request camera permission
+            try {
+                await navigator.mediaDevices.getUserMedia({ video: true });
+            } catch (permError) {
+                window.app.showAlert('Camera permission denied. Please allow camera access in your browser settings.', 'error');
+                return;
+            }
+
+            // Start camera with no constraints for maximum compatibility
             await this.html5QrcodeScanner.start(
-                { facingMode: "environment" },
+                {},
                 config,
                 (decodedText) => {
                     this.onScanSuccess(decodedText);
