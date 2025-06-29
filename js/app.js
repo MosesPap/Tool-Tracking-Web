@@ -377,8 +377,8 @@ class ToolTrackingApp {
                                 owner: toolData.owner || '',
                                 calDueDate: calDueDate
                             });
-                            // Remove the tool card from scanned tools list (since it's now checked in)
-                            this.removeScannedToolCard(toolId);
+                            // Reload today's tool movements so the card remains and updates status
+                            await this.loadTodayToolMovements();
                             this.showAlert('Tool checked in successfully!', 'success');
                         } else {
                             // Different user - show error
@@ -393,7 +393,7 @@ class ToolTrackingApp {
                             return;
                         }
                         // 2. Calibration due date expired
-                        if (calDueDate && !this.isCalDueDateValid(calDueDate)) {
+                        if (calDueDate && calDueDate !== 'N/A' && !this.isCalDueDateValid(calDueDate)) {
                             this.showAlert('Calibration due date is expired. Tool cannot be checked out.', 'error');
                             return;
                         }
@@ -1360,15 +1360,8 @@ class ToolTrackingApp {
                 calDueDate: calDueDate
             });
             
-            // Show tool as a card in scannedToolsList
-            this.addScannedToolCard({
-                toolName: toolData.toolName,
-                partNumber: toolData.partNumber,
-                status: 'OUT',
-                id: toolId,
-                timestamp: new Date(),
-                technician: technicianName
-            });
+            // Reload today's tool movements so the card appears/updates
+            await this.loadTodayToolMovements();
             
             this.showAlert('Tool checked out successfully!', 'success');
             
