@@ -56,14 +56,35 @@ class ToolTrackingApp {
             });
         }
 
-        // Password toggle
+        // Signup form
+        const signupForm = document.getElementById('signupForm');
+        if (signupForm) {
+            signupForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.handleSignup();
+            });
+        }
+
+        // Password toggles
         document.getElementById('togglePassword').addEventListener('click', () => {
-            this.togglePasswordVisibility();
+            this.togglePasswordVisibility('password');
+        });
+
+        document.getElementById('toggleSignupPassword').addEventListener('click', () => {
+            this.togglePasswordVisibility('signupPassword');
+        });
+
+        document.getElementById('toggleSignupConfirmPassword').addEventListener('click', () => {
+            this.togglePasswordVisibility('signupConfirmPassword');
         });
 
         // Navigation buttons
         document.getElementById('createAccountBtn').addEventListener('click', () => {
-            this.showSignUpScreen();
+            this.showScreen('signup');
+        });
+
+        document.getElementById('backToLogin').addEventListener('click', () => {
+            this.showScreen('login');
         });
 
         document.getElementById('adminBtn').addEventListener('click', () => {
@@ -171,8 +192,8 @@ class ToolTrackingApp {
         if (keepSignedIn && user) {
             this.technicianName = localStorage.getItem('technicianName') || 'Technician';
             this.currentUser = user;
-            this.showScreen('main');
-            this.updateTechnicianName();
+            this.showScreen('toolScannerMenu');
+            this.updateMenuUsername();
             this.loadPreviousOutCount();
         } else {
             this.showScreen('login');
@@ -216,8 +237,9 @@ class ToolTrackingApp {
                     localStorage.setItem('technicianName', this.technicianName);
                 }
 
-                this.showScreen('main');
-                this.updateTechnicianName();
+                // Show ToolScanner menu screen instead of main screen
+                this.showScreen('toolScannerMenu');
+                this.updateMenuUsername();
                 this.loadPreviousOutCount();
                 this.showAlert('Login successful!', 'success');
             } else {
@@ -244,6 +266,95 @@ class ToolTrackingApp {
         }
     }
 
+    async handleSignup() {
+        const fullName = document.getElementById('signupFullName').value.trim();
+        const email = document.getElementById('signupEmail').value.trim();
+        const password = document.getElementById('signupPassword').value;
+        const confirmPassword = document.getElementById('signupConfirmPassword').value;
+
+        // Validation
+        if (!fullName || !email || !password || !confirmPassword) {
+            this.showSignupAlert('Please fill in all fields', 'error');
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            this.showSignupAlert('Passwords do not match', 'error');
+            return;
+        }
+
+        if (password.length < 6) {
+            this.showSignupAlert('Password must be at least 6 characters long', 'error');
+            return;
+        }
+
+        const signupBtn = document.querySelector('#signupForm .btn-success');
+        const btnText = signupBtn.querySelector('.btn-text');
+        const btnLoading = signupBtn.querySelector('.btn-loading');
+
+        try {
+            // Show loading state
+            btnText.classList.add('d-none');
+            btnLoading.classList.remove('d-none');
+            signupBtn.disabled = true;
+
+            // Create user account
+            const userCredential = await this.auth.createUserWithEmailAndPassword(email, password);
+            const user = userCredential.user;
+
+            // Create technician document in Firestore
+            await this.db.collection('technicians').doc(user.uid).set({
+                fullName: fullName,
+                email: email,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            this.showAlert('Account created successfully! Please log in.', 'success');
+            this.showScreen('login');
+            
+            // Clear signup form
+            document.getElementById('signupForm').reset();
+            
+        } catch (error) {
+            console.error('Signup error:', error);
+            let errorMessage = 'Account creation failed. Please try again.';
+            
+            if (error.code === 'auth/email-already-in-use') {
+                errorMessage = 'An account with this email already exists.';
+            } else if (error.code === 'auth/weak-password') {
+                errorMessage = 'Password is too weak.';
+            } else if (error.code === 'auth/invalid-email') {
+                errorMessage = 'Invalid email format.';
+            }
+            
+            this.showSignupAlert(errorMessage, 'error');
+        } finally {
+            // Reset loading state
+            btnText.classList.remove('d-none');
+            btnLoading.classList.add('d-none');
+            signupBtn.disabled = false;
+        }
+    }
+
+    showSignupAlert(message, type = 'error') {
+        const alertBox = document.getElementById('signupAlert');
+        alertBox.textContent = message;
+        alertBox.className = `alert alert-${type === 'error' ? 'danger' : 'success'}`;
+        alertBox.classList.remove('d-none');
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            alertBox.classList.add('d-none');
+        }, 5000);
+    }
+
+    updateMenuUsername() {
+        const menuUsername = document.getElementById('menuUsername');
+        if (menuUsername) {
+            menuUsername.textContent = this.technicianName;
+        }
+    }
+
     handleLogout() {
         this.auth.signOut();
         localStorage.removeItem('keepSignedIn');
@@ -256,17 +367,25 @@ class ToolTrackingApp {
 
     showScreen(screenId) {
         // Hide all screens/sections
-        document.querySelectorAll('.app-screen').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.app-screen, .screen').forEach(el => el.style.display = 'none');
+        
         // Show the requested screen
-        const screen = document.getElementById(screenId);
+        const screen = document.getElementById(screenId + 'Screen') || document.getElementById(screenId);
         if (screen) {
             screen.style.display = 'block';
+            this.currentScreen = screenId;
+            
+            // Load data for specific screens
+            this.loadScreenData(screenId);
         }
     }
 
     loadScreenData(screenName) {
         switch (screenName) {
             case 'main':
+                this.loadPreviousOutCount();
+                break;
+            case 'toolScannerMenu':
                 this.loadPreviousOutCount();
                 break;
             case 'previousOut':
@@ -295,10 +414,18 @@ class ToolTrackingApp {
                 .get();
             
             const count = snapshot.size;
+            
+            // Update main screen badge
             const badge = document.getElementById('previousOutCount');
             if (badge) {
                 badge.textContent = count;
                 badge.style.display = count > 0 ? 'inline' : 'none';
+            }
+            
+            // Update menu badge
+            const menuBadge = document.getElementById('outToolsCount');
+            if (menuBadge) {
+                menuBadge.textContent = count;
             }
         } catch (error) {
             console.error('Error loading previous out count:', error);
@@ -495,9 +622,9 @@ class ToolTrackingApp {
         }
     }
 
-    togglePasswordVisibility() {
-        const passwordInput = document.getElementById('password');
-        const toggleBtn = document.getElementById('togglePassword');
+    togglePasswordVisibility(inputType) {
+        const passwordInput = document.getElementById(inputType);
+        const toggleBtn = document.getElementById(`toggle${inputType.charAt(0).toUpperCase() + inputType.slice(1)}`);
         const icon = toggleBtn.querySelector('i');
 
         if (passwordInput.type === 'password') {

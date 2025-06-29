@@ -53,13 +53,19 @@
             <div class="row justify-content-center">
                 <div class="col-md-6 col-lg-4">
                     <div class="login-card">
+                        <!-- Title at top -->
                         <div class="text-center mb-4">
                             <h1 class="app-title">AMS SQUADRON</h1>
+                        </div>
+                        
+                        <!-- Logo -->
+                        <div class="text-center mb-4">
                             <div class="logo-container">
                                 <img src="/ams_logo.png" alt="AMS Logo" class="logo">
                             </div>
                         </div>
                         
+                        <!-- Credential fields -->
                         <form id="loginForm">
                             <div class="mb-3">
                                 <label for="email" class="form-label">Email</label>
@@ -76,11 +82,18 @@
                                 </div>
                             </div>
                             
+                            <!-- Forgot password text -->
+                            <div class="text-center mb-3">
+                                <a href="#" id="forgotPassword" class="text-decoration-none">Forgot my password?</a>
+                            </div>
+                            
+                            <!-- Keep me signed in -->
                             <div class="mb-3 form-check">
                                 <input type="checkbox" class="form-check-input" id="keepSignedIn">
                                 <label class="form-check-label" for="keepSignedIn">Keep me signed in</label>
                             </div>
                             
+                            <!-- Login button -->
                             <button type="submit" class="btn btn-primary w-100 mb-3">
                                 <span class="btn-text">Login</span>
                                 <span class="btn-loading d-none">
@@ -88,18 +101,90 @@
                                 </span>
                             </button>
                             
+                            <!-- Create account button -->
                             <button type="button" class="btn btn-primary w-100 mb-3" id="createAccountBtn">
                                 CREATE ACCOUNT
                             </button>
                             
+                            <!-- Admin button -->
                             <button type="button" class="btn btn-warning w-100" id="adminBtn">
                                 Tool Admin
                             </button>
                         </form>
-                        
-                        <div class="text-center mt-3">
-                            <a href="#" id="forgotPassword" class="text-decoration-none">Forgot my password?</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Signup Screen -->
+    <div id="signupScreen" class="app-screen" style="display:none;">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-md-6 col-lg-4">
+                    <div class="login-card">
+                        <!-- Back button -->
+                        <div class="text-center mb-3">
+                            <button class="btn btn-outline-secondary" id="backToLogin">
+                                <i class="fas fa-arrow-left"></i> Back to Login
+                            </button>
                         </div>
+                        
+                        <!-- Title -->
+                        <div class="text-center mb-4">
+                            <h1 class="app-title">Create Account</h1>
+                        </div>
+                        
+                        <!-- Logo -->
+                        <div class="text-center mb-4">
+                            <div class="logo-container">
+                                <img src="/ams_logo.png" alt="AMS Logo" class="logo">
+                            </div>
+                        </div>
+                        
+                        <!-- Signup form -->
+                        <form id="signupForm">
+                            <div class="mb-3">
+                                <label for="signupFullName" class="form-label">Full Name</label>
+                                <input type="text" class="form-control" id="signupFullName" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="signupEmail" class="form-label">Email</label>
+                                <input type="email" class="form-control" id="signupEmail" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="signupPassword" class="form-label">Password</label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="signupPassword" required>
+                                    <button class="btn btn-outline-secondary" type="button" id="toggleSignupPassword">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="signupConfirmPassword" class="form-label">Confirm Password</label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="signupConfirmPassword" required>
+                                    <button class="btn btn-outline-secondary" type="button" id="toggleSignupConfirmPassword">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Create account button -->
+                            <button type="submit" class="btn btn-success w-100 mb-3">
+                                <span class="btn-text">Create Account</span>
+                                <span class="btn-loading d-none">
+                                    <span class="spinner-border spinner-border-sm me-2"></span>Creating...
+                                </span>
+                            </button>
+                        </form>
+                        
+                        <!-- Alert for signup errors -->
+                        <div id="signupAlert" class="alert alert-danger d-none" role="alert"></div>
                     </div>
                 </div>
             </div>

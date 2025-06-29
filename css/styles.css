@@ -25,7 +25,7 @@
 }
 
 body {
-    font-family: Arial, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     background: #fefbff;
     min-height: 100vh;
     color: #222;
@@ -73,6 +73,9 @@ body {
     padding: 2rem;
     box-shadow: var(--shadow);
     margin-top: 2rem;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .app-title {
@@ -84,6 +87,7 @@ body {
     padding: 0.5rem 1rem;
     border-radius: var(--border-radius-small);
     display: inline-block;
+    margin-bottom: 1rem;
 }
 
 .logo-container {
@@ -96,6 +100,7 @@ body {
     border-radius: var(--border-radius-small);
     padding: 0.5rem;
     background: var(--white);
+    box-shadow: var(--shadow);
 }
 
 /* Form Controls */
@@ -156,6 +161,12 @@ body {
     color: var(--white);
 }
 
+.btn-success:hover {
+    background-color: #45a049;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+}
+
 .btn-danger {
     background-color: var(--danger-color);
     color: var(--white);
@@ -166,6 +177,12 @@ body {
     color: var(--white);
 }
 
+.btn-warning:hover {
+    background-color: #e6a700;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+}
+
 .btn-outline-secondary {
     border-color: var(--dark-gray);
     color: var(--dark-gray);
@@ -174,6 +191,55 @@ body {
 .btn-outline-secondary:hover {
     background-color: var(--dark-gray);
     color: var(--white);
+}
+
+/* Forgot password link */
+#forgotPassword {
+    color: var(--primary-color);
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+#forgotPassword:hover {
+    color: var(--primary-dark);
+    text-decoration: underline !important;
+}
+
+/* Checkbox styling */
+.form-check-input:checked {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.form-check-input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(255, 152, 0, 0.25);
+}
+
+/* Alert styling */
+.alert {
+    border-radius: var(--border-radius-small);
+    border: none;
+    font-weight: 500;
+}
+
+.alert-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-left: 4px solid var(--danger-color);
+}
+
+.alert-success {
+    background-color: #d4edda;
+    color: #155724;
+    border-left: 4px solid var(--success-color);
+}
+
+/* Back button styling */
+#backToLogin {
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
 }
 
 /* Main App Header */
@@ -465,6 +531,16 @@ body {
     .login-card {
         margin-top: 1rem;
         padding: 1.5rem;
+        margin-left: 1rem;
+        margin-right: 1rem;
+    }
+    
+    .app-title {
+        font-size: 1.5rem;
+    }
+    
+    .logo {
+        max-width: 150px;
     }
     
     .nav-btn {
@@ -580,7 +656,7 @@ body {
     background: #FFB300;
     color: #fff;
     font-size: 2rem;
-    font-family: 'Fredoka One', Arial, 'Comic Sans MS', cursive, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
     font-weight: bold;
     text-align: center;
     padding: 24px 0 16px 0;
@@ -611,7 +687,7 @@ body {
 .menu-username {
     text-align: center;
     font-size: 2rem;
-    font-family: 'Fredoka One', Arial, 'Comic Sans MS', cursive, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
     font-weight: bold;
     margin: 24px 0 32px 0;
     color: #222;
@@ -625,7 +701,7 @@ body {
     border: none;
     border-radius: 32px;
     font-size: 1.5rem;
-    font-family: 'Fredoka One', Arial, 'Comic Sans MS', cursive, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
     font-weight: bold;
     color: #fff;
     padding: 18px 0;
