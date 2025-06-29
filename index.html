@@ -32,30 +32,23 @@
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-    <div class="header-bar">
-        <span class="header-title">ToolScanner Menu</span>
-        <span class="header-settings"><i class="fas fa-cog"></i></span>
-    </div>
-    <div class="menu-username" id="menuUsername">Moses Papakyriakou</div>
-    <button class="menu-btn orange" id="logoutBtn">Logout</button>
-    <button class="menu-btn orange" id="refreshBtn">Refresh</button>
-    <button class="menu-btn green" id="registerBtn">Register Tools</button>
-    <button class="menu-btn red" id="previousOutBtn">View OUT Tools <span class="menu-badge" id="outToolsCount">11</span></button>
-    <button class="menu-btn orange" id="myToolsBtn">My Tools</button>
-    <button class="menu-btn orange" id="searchBtn">Search for Tools</button>
-
-    <!-- Loading Screen -->
-    <div id="loadingScreen" class="loading-screen">
-        <div class="loading-content">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="mt-3">Loading Tool Tracking System...</p>
+    <!-- ToolScanner Menu Screen -->
+    <div id="toolScannerMenu" class="app-screen" style="display:none;">
+        <div class="header-bar">
+            <span class="header-title">ToolScanner Menu</span>
+            <span class="header-settings"><i class="fas fa-cog"></i></span>
         </div>
+        <div class="menu-username" id="menuUsername">Moses Papakyriakou</div>
+        <button class="menu-btn orange" id="logoutBtn">Logout</button>
+        <button class="menu-btn orange" id="refreshBtn">Refresh</button>
+        <button class="menu-btn green" id="registerBtn">Register Tools</button>
+        <button class="menu-btn red" id="previousOutBtn">View OUT Tools <span class="menu-badge" id="outToolsCount">11</span></button>
+        <button class="menu-btn orange" id="myToolsBtn">My Tools</button>
+        <button class="menu-btn orange" id="searchBtn">Search for Tools</button>
     </div>
 
     <!-- Login Screen -->
-    <div id="loginScreen" class="screen active">
+    <div id="loginScreen" class="app-screen" style="display:block;">
         <div class="container">
             <div class="row justify-content-center">
                 <div class="col-md-6 col-lg-4">
