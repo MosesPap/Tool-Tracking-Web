@@ -378,6 +378,51 @@
         .register-tool-status.lost { background: rgba(255, 179, 0, 0.8); }
         .register-tool-status.calibration { background: rgba(33, 150, 243, 0.8); }
         .register-tool-status.in { background: rgba(76, 175, 80, 0.8); }
+        
+        /* Scanner expansion styles */
+        .scanner-container {
+            transition: all 0.3s ease;
+        }
+        
+        .scanner-container.expanded {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .scanner-container.expanded .card {
+            max-width: 90vw;
+            max-height: 90vh;
+            width: 100%;
+        }
+        
+        .scanner-container.expanded #reader {
+            width: 100% !important;
+            max-width: 500px !important;
+            height: auto !important;
+            aspect-ratio: 1/1 !important;
+        }
+        
+        .scanner-container.expanded #reader video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
+        }
+        
+        .scanner-overlay {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+        }
     </style>
 </head>
 <body>
@@ -501,21 +546,29 @@
                 <div class="tab-pane fade show active" id="scannerView" role="tabpanel">
                     <div class="row">
                         <div class="col-md-6 mx-auto">
-                            <div class="card mb-4">
-                                <div class="card-body">
-                                    <h4>Scan Tool</h4>
-                                    <button onclick="startScanner()" class="btn btn-primary btn-scan mb-3">
-                                        <i class="fas fa-camera"></i> Start Scanner
-                                    </button>
-                                    <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-3" style="display:none;">Stop Scanner</button>
-                                    <div id="reader" style="display:none;"></div>
-                                    <div class="input-group mb-3">
-                                        <input type="text" id="toolCode" class="form-control" placeholder="Enter Tool Code">
-                                        <button onclick="submitCode()" class="btn btn-primary">
-                                            <i class="fas fa-check"></i> Submit
+                            <div class="scanner-container" id="scannerContainer">
+                                <div class="card mb-4">
+                                    <div class="card-body">
+                                        <h4>Scan Tool</h4>
+                                        <button onclick="startScanner()" class="btn btn-primary btn-scan mb-3">
+                                            <i class="fas fa-camera"></i> Start Scanner
                                         </button>
+                                        <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-3" style="display:none;">Stop Scanner</button>
+                                        <div id="reader" style="display:none;"></div>
+                                        <div class="input-group mb-3">
+                                            <input type="text" id="toolCode" class="form-control" placeholder="Enter Tool Code">
+                                            <button onclick="submitCode()" class="btn btn-primary">
+                                                <i class="fas fa-check"></i> Submit
+                                            </button>
+                                        </div>
+                                        <button id="toolDetailsBtn" class="btn btn-info w-100 mb-2" disabled onclick="showLastScannedToolDetails()">Tool Details</button>
                                     </div>
-                                    <button id="toolDetailsBtn" class="btn btn-info w-100 mb-2" disabled onclick="showLastScannedToolDetails()">Tool Details</button>
+                                </div>
+                                <!-- Overlay for expanded scanner -->
+                                <div class="scanner-overlay" id="scannerOverlay" style="display:none;">
+                                    <button onclick="stopCamera()" class="btn btn-danger btn-lg">
+                                        <i class="fas fa-times"></i> Close Scanner
+                                    </button>
                                 </div>
                             </div>
 
@@ -1387,7 +1440,9 @@
 
         // QR Code Scanner
         function startScanner() {
-            document.getElementById('reader').style.display = 'block';
+            var reader = document.getElementById('reader');
+            reader.style.display = 'block';
+            reader.style.height = '320px';
             document.getElementById('stopScannerBtn').style.display = 'inline-block';
             
             html5QrCode = new Html5Qrcode("reader");
@@ -1438,18 +1493,20 @@
                     }
                 ).catch(err => {
                     alert('Camera error: ' + err);
-                    document.getElementById('stopScannerBtn').style.display = 'none';
-                    document.getElementById('reader').style.display = 'none';
+                    stopCamera();
                 });
             });
         }
 
         function stopCamera() {
+            var reader = document.getElementById('reader');
+            // Immediately hide and collapse the scanner area
+            reader.style.display = 'none';
+            reader.style.height = '0';
+            document.getElementById('stopScannerBtn').style.display = 'none';
             if (html5QrCode) {
                 html5QrCode.stop().then(() => {
                     html5QrCode.clear();
-                    document.getElementById('reader').style.display = 'none';
-                    document.getElementById('stopScannerBtn').style.display = 'none';
                 });
                 html5QrCode = null;
             }
