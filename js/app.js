@@ -13,24 +13,13 @@ class ToolTrackingApp {
         this.init();
     }
 
-    init() {
+    async init() {
         try {
-            // Add mobile-specific initialization
             this.handleMobileInitialization();
-            
-            // Initialize Firebase
-            this.initFirebase();
-            
-            // Load cooldown minutes
-            this.loadCooldownMinutes();
-            
-            // Set up event listeners
+            await this.initFirebase(); // Wait for Firebase to be ready!
+            await this.loadCooldownMinutes();
             this.setupEventListeners();
-            
-            // Check for existing session
             this.checkExistingSession();
-            
-            // Hide loading screen after initialization with timeout
             setTimeout(() => {
                 this.hideLoadingScreen();
             }, 2000);
@@ -60,52 +49,33 @@ class ToolTrackingApp {
     }
 
     initFirebase() {
-        try {
-            // Check if Firebase is available
-            if (typeof firebase === 'undefined') {
-                throw new Error('Firebase is not loaded');
-            }
-
-            // Use config from config.js if available, otherwise use default
-            const config = typeof firebaseConfig !== 'undefined' ? firebaseConfig : {
-            apiKey: "AIzaSyBltucXfxN3xzOxX5s8s7Kv8yCBa5azxzU",
-            authDomain: "tool-tracking-system-15e84.firebaseapp.com",
-            projectId: "tool-tracking-system-15e84",
-            storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
-            messagingSenderId: "813615362050",
-                appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
-            };
-
-            // Initialize Firebase with timeout for mobile
-            const initPromise = new Promise((resolve, reject) => {
-                try {
-                    firebase.initializeApp(config);
-                    resolve();
-                } catch (error) {
-                    reject(error);
+        return new Promise((resolve, reject) => {
+            try {
+                // Check if Firebase is available
+                if (typeof firebase === 'undefined') {
+                    throw new Error('Firebase is not loaded');
                 }
-            });
 
-            // Add timeout for mobile devices
-            const timeoutPromise = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error('Firebase initialization timeout')), 10000);
-            });
+                // Use config from config.js if available, otherwise use default
+                const config = typeof firebaseConfig !== 'undefined' ? firebaseConfig : {
+                    apiKey: "AIzaSyBltucXfxN3xzOxX5s8s7Kv8yCBa5azxzU",
+                    authDomain: "tool-tracking-system-15e84.firebaseapp.com",
+                    projectId: "tool-tracking-system-15e84",
+                    storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
+                    messagingSenderId: "813615362050",
+                    appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
+                };
 
-            Promise.race([initPromise, timeoutPromise])
-                .then(() => {
-        // Initialize services
-        this.auth = firebase.auth();
-        this.db = firebase.firestore();
-                    console.log('Firebase initialized successfully');
-                })
-                .catch(error => {
-                    throw error;
-                });
-
-        } catch (error) {
-            console.error('Firebase initialization error:', error);
-            throw new Error('Failed to initialize Firebase: ' + error.message);
-        }
+                firebase.initializeApp(config);
+                this.auth = firebase.auth();
+                this.db = firebase.firestore();
+                console.log('Firebase initialized successfully');
+                resolve();
+            } catch (error) {
+                console.error('Firebase initialization error:', error);
+                reject(error);
+            }
+        });
     }
 
     setupEventListeners() {
