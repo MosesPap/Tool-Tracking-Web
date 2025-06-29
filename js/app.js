@@ -1233,13 +1233,23 @@ class ToolTrackingApp {
         card.className = 'tool-card mb-3';
         card.style.background = statusColor + '22';
         card.innerHTML = `
-            <div class="tool-card-header d-flex justify-content-between align-items-center">
-                <div class="tool-name fw-bold">${cardNumber}. ${tool.toolName || ''}</div>
+            <div class="tool-card-header" style="padding-bottom: 0;">
+                <div class="fw-bold" style="font-size: 1.1em;">${cardNumber}. ${tool.toolName || ''}</div>
+                <div class="small" style="margin-top:2px; color:#555;">${tool.timestamp ? new Date(tool.timestamp).toLocaleString() : ''}</div>
             </div>
-            <div class="tool-details d-flex justify-content-between align-items-center mt-2">
-                <div><span class="fw-bold" style="text-decoration: underline;">TID</span><br>${tool.id}</div>
-                <div><span class="fw-bold" style="text-decoration: underline;">P/N</span><br>${tool.partNumber}<br><span class="small" style="display:block; margin-top:4px;">${tool.timestamp ? new Date(tool.timestamp).toLocaleString() : ''}</span></div>
-                <div><span class="fw-bold" style="text-decoration: underline;">STS</span><br><span style="color: white; background: ${statusColor}; border-radius: 8px; padding: 2px 12px; font-weight: bold;">${statusText}</span></div>
+            <div class="tool-details" style="display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 8px; margin-top: 8px;">
+                <div style="flex:1; text-align:center;">
+                    <span class="fw-bold" style="text-decoration: underline;">TID</span><br>
+                    <span>${tool.id}</span>
+                </div>
+                <div style="flex:1; text-align:center;">
+                    <span class="fw-bold" style="text-decoration: underline;">P/N</span><br>
+                    <span>${tool.partNumber}</span>
+                </div>
+                <div style="flex:1; text-align:center;">
+                    <span class="fw-bold" style="text-decoration: underline;">STS</span><br>
+                    <span style="color: white; background: ${statusColor}; border-radius: 8px; padding: 2px 12px; font-weight: bold; display:inline-block;">${statusText}</span>
+                </div>
             </div>
         `;
         list.appendChild(card);
