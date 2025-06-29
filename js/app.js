@@ -22,6 +22,10 @@ class ToolTrackingApp {
             this.checkExistingSession();
             setTimeout(() => {
                 this.hideLoadingScreen();
+                // Fallback: always show login screen if no user is logged in
+                if (!this.currentUser) {
+                    this.showScreen('loginScreen');
+                }
             }, 2000);
         } catch (error) {
             console.error('App initialization error:', error);
