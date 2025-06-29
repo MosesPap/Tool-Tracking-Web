@@ -100,7 +100,6 @@ body {
     border-radius: var(--border-radius-small);
     padding: 0.5rem;
     background: var(--white);
-    box-shadow: var(--shadow);
 }
 
 /* Form Controls */

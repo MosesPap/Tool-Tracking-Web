@@ -939,7 +939,50 @@ class ToolTrackingApp {
         document.getElementById('menuUsername').textContent = this.technicianName;
         document.getElementById('outToolsCount').textContent = this.outToolsCount;
     }
+
+    navigateTo(path) {
+        history.pushState({}, '', path);
+        this.route(path);
+    }
+
+    route(path) {
+        switch (path) {
+            case '/login':
+                this.showScreen('login');
+                break;
+            case '/toolscannermenu':
+                this.showScreen('toolScannerMenu');
+                break;
+            case '/register':
+                this.showScreen('registerScreen');
+                break;
+            case '/search':
+                this.showScreen('searchScreen');
+                break;
+            case '/mytools':
+                this.showScreen('myToolsScreen');
+                break;
+            case '/previousout':
+                this.showScreen('previousOutScreen');
+                break;
+            case '/signup':
+                this.showScreen('signup');
+                break;
+            default:
+                this.showScreen('login');
+        }
+    }
 }
+
+// Listen for browser navigation
+window.addEventListener('popstate', () => {
+    app.route(location.pathname);
+});
+
+// On page load, route to the correct screen
+window.addEventListener('DOMContentLoaded', () => {
+    app.route(location.pathname);
+});
 
 // Initialize app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
