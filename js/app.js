@@ -681,13 +681,6 @@ class ToolTrackingApp {
 
     async loadTodayToolMovements() {
         try {
-            const technicianName = this.technicianName;
-            if (!technicianName) {
-                console.error('No technician name available');
-                return;
-            }
-
-            // Get today's start and end timestamps
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const tomorrow = new Date(today);
@@ -715,6 +708,7 @@ class ToolTrackingApp {
             snapshot.docs.forEach(doc => {
                 const toolData = doc.data();
                 const timestamp = toolData.timestamp ? toolData.timestamp.toDate() : new Date();
+                console.log('Rendering tool:', toolData.toolName, 'Status:', toolData.status, 'Technician:', toolData.technician);
                 this.addScannedToolCard({
                     toolName: toolData.toolName || 'Unknown Tool',
                     partNumber: toolData.partNumber || 'N/A',
