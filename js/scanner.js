@@ -320,7 +320,7 @@ class Scanner {
         };
         try {
             await this.html5QrcodeScanner.start(
-                {}, // No constraints at all
+                { facingMode: "environment" },
                 config,
                 (decodedText) => {
                     input.value = decodedText;
@@ -332,8 +332,24 @@ class Scanner {
                 (errorMessage) => { /* ignore scan errors */ }
             );
         } catch (err) {
-            window.app.showAlert('Camera error: ' + err, 'error');
-            this.stopCamera();
+            // If environment camera fails, try user camera
+            try {
+                await this.html5QrcodeScanner.start(
+                    { facingMode: "user" },
+                    config,
+                    (decodedText) => {
+                        input.value = decodedText;
+                        const inputEvent = new Event('input', { bubbles: true });
+                        input.dispatchEvent(inputEvent);
+                        window.app.showAlert(`Successfully scanned: ${decodedText}`, 'success');
+                        this.stopCamera();
+                    },
+                    (errorMessage) => { /* ignore scan errors */ }
+                );
+            } catch (err2) {
+                window.app.showAlert('Camera error: ' + err2, 'error');
+                this.stopCamera();
+            }
         }
     }
 
