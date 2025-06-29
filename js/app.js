@@ -17,40 +17,18 @@ class ToolTrackingApp {
     async init() {
         try {
             this.handleMobileInitialization();
-            await this.initFirebase(); // Wait for Firebase to be ready!
+            await this.initFirebase();
             await this.loadCooldownMinutes();
             this.setupEventListeners();
-            
-            // Wait for Firebase auth state to be ready
-            await new Promise(resolve => {
-                const unsubscribe = this.auth.onAuthStateChanged((user) => {
-                    unsubscribe(); // Only listen once
-                    resolve();
-                });
-            });
-            
             this.checkExistingSession();
-            
-            // Hide loading screen with fallback
             setTimeout(() => {
                 this.hideLoadingScreen();
-                // Fallback: always show login screen if no user is logged in
                 if (!this.currentUser) {
                     this.showScreen('loginScreen');
                 }
             }, 2000);
-            
-            // Fallback timeout to ensure loading screen is hidden
-            setTimeout(() => {
-                this.hideLoadingScreen();
-                if (!this.currentUser) {
-                    this.showScreen('loginScreen');
-                }
-            }, 5000);
-            
         } catch (error) {
             console.error('App initialization error:', error);
-            this.hideLoadingScreen();
             this.showErrorScreen('Failed to initialize application. Please refresh the page.');
         }
     }
@@ -96,18 +74,6 @@ class ToolTrackingApp {
         this.auth = firebase.auth();
         this.db = firebase.firestore();
                 
-                // Set up auth state listener
-                this.auth.onAuthStateChanged((user) => {
-                    if (user) {
-                        this.currentUser = user;
-                        // Load technician data if needed
-                        this.loadTechnicianDataIfNeeded(user.uid);
-                    } else {
-                        this.currentUser = null;
-                        this.technicianName = '';
-                    }
-                });
-                
                 console.log('Firebase initialized successfully');
                 resolve();
             } catch (error) {
@@ -115,22 +81,6 @@ class ToolTrackingApp {
                 reject(error);
             }
         });
-    }
-
-    async loadTechnicianDataIfNeeded(uid) {
-        // Only load if technician name is not already set or is default
-        if (!this.technicianName || this.technicianName === 'Technician') {
-            try {
-                const technicianDoc = await this.db.collection('technicians').doc(uid).get();
-                if (technicianDoc.exists) {
-                    this.technicianName = technicianDoc.data().fullName || 'Technician';
-                    localStorage.setItem('technicianName', this.technicianName);
-                    this.updateMenuUsername();
-                }
-            } catch (error) {
-                console.error('Error loading technician data:', error);
-            }
-        }
     }
 
     setupEventListeners() {
@@ -510,15 +460,7 @@ class ToolTrackingApp {
         if (keepSignedIn && user) {
             this.currentUser = user;
             this.technicianName = localStorage.getItem('technicianName') || 'Technician';
-            
-            // Show the appropriate screen
-            const lastRoute = localStorage.getItem('lastRoute');
-            if (lastRoute && lastRoute !== '/login' && lastRoute !== '/signup') {
-                this.route(lastRoute);
-            } else {
-                this.showScreen('toolScannerMenu');
-            }
-            
+            this.showScreen('toolScannerMenu');
             this.updateMenuUsername();
             this.loadPreviousOutCount();
         } else {
