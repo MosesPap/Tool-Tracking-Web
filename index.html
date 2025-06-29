@@ -502,9 +502,16 @@
     <!-- My Tools by Collection Screen -->
     <div id="myToolsByCollectionScreen" style="display:none;">
       <div class="container py-4">
-        <button id="backToCollectionSelectBtn" class="btn btn-outline-secondary mb-3"><i class="fas fa-arrow-left"></i> Back to Collections</button>
+        <button id="backToCollectionSelectBtn" class="btn btn-outline-secondary mb-3"><i class="fas fa-arrow-left"></i> Back to Menu</button>
         <h3 id="myToolsCollectionTitle" class="mb-3" style="color: orange; font-weight: bold;"></h3>
-        <button id="collectionCheckupBtn" class="btn btn-success mb-3"><i class="fas fa-clipboard-check"></i> Collection Checkup</button>
+        <div class="row mb-3">
+          <div class="col-6">
+            <button id="collectionCheckupBtn" class="btn btn-success w-100"><i class="fas fa-clipboard-check"></i> Collection Checkup</button>
+          </div>
+          <div class="col-6">
+            <button id="selectDifferentCollectionBtn" class="btn btn-primary w-100"><i class="fas fa-exchange-alt"></i> Select Collection</button>
+          </div>
+        </div>
         <div id="myToolsByCollectionList"></div>
       </div>
     </div>
@@ -818,6 +825,13 @@
 
         // Store last scanned tool data
         let lastScannedToolData = null;
+
+        // Checkup functionality variables
+        let lastViewedCollectionName = null;
+        let lastViewedCollectionTools = [];
+        let checkupCheckedTools = new Set();
+        let checkupSelectedLocation = 'All';
+        let checkupLocationStats = {};
 
         // Submit tool code
         async function submitCode() {
@@ -1575,8 +1589,71 @@
                 // Group tools by location
                 const tools = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 lastViewedCollectionTools = tools;
-                // ... existing code for rendering tools ...
-                // (rest of your existing showMyToolsByCollection logic)
+                const locations = [...new Set(tools.map(t => t.location || 'No Location'))];
+                locations.sort();
+                // OUT tools first, then IN, then others
+                const getStatusOrder = status => {
+                    if (!status) return 2;
+                    const s = status.toUpperCase();
+                    if (s === 'OUT') return 0;
+                    if (s === 'IN') return 1;
+                    return 2;
+                };
+                // Filtering state
+                let selectedLocation = 'All';
+                // Render location filter row (make sticky)
+                let filterHtml = '<div id="locationFilterBar" style="display:flex;gap:8px;overflow-x:auto;position:sticky;top:0;z-index:10;background:#fff;padding:8px 0 8px 0;border-bottom:2px solid #FF9800;margin-bottom:10px;">';
+                filterHtml += `<button class="btn btn-sm ${selectedLocation==='All'?'btn-orange':'btn-outline-secondary'}" data-location="All" style="${selectedLocation==='All'?'background-color:#FF9800;color:white;border-color:#FF9800;':'background-color:transparent;color:#6c757d;border-color:#6c757d;'}">All</button>`;
+                locations.forEach(loc => {
+                  filterHtml += `<button class="btn btn-sm ${selectedLocation===loc?'btn-orange':'btn-outline-secondary'}" data-location="${loc}" style="${selectedLocation===loc?'background-color:#FF9800;color:white;border-color:#FF9800;':'background-color:transparent;color:#6c757d;border-color:#6c757d;'}">${loc}</button>`;
+                });
+                filterHtml += '</div>';
+                // Initial filtered tools
+                let filteredTools = tools.slice();
+                // Render function
+                function renderToolsByLocation(selectedLoc) {
+                    // Update the filter bar with new selected state
+                    let filterHtml = '<div id="locationFilterBar" style="display:flex;gap:8px;overflow-x:auto;position:sticky;top:0;z-index:10;background:#fff;padding:8px 0 8px 0;border-bottom:2px solid #FF9800;margin-bottom:10px;">';
+                    filterHtml += `<button class="btn btn-sm ${selectedLoc==='All'?'btn-orange':'btn-outline-secondary'}" data-location="All" style="${selectedLoc==='All'?'background-color:#FF9800;color:white;border-color:#FF9800;':'background-color:transparent;color:#6c757d;border-color:#6c757d;'}">All</button>`;
+                    locations.forEach(loc => {
+                      filterHtml += `<button class="btn btn-sm ${selectedLoc===loc?'btn-orange':'btn-outline-secondary'}" data-location="${loc}" style="${selectedLoc===loc?'background-color:#FF9800;color:white;border-color:#FF9800;':'background-color:transparent;color:#6c757d;border-color:#6c757d;'}">${loc}</button>`;
+                    });
+                    filterHtml += '</div>';
+                    
+                    let html = '';
+                    const locs = selectedLoc === 'All' ? locations : [selectedLoc];
+                    locs.forEach(loc => {
+                        const toolsAtLoc = tools.filter(t => (t.location || 'No Location') === loc);
+                        if (!toolsAtLoc.length) return;
+                        html += `<div style="background:#FF9800;color:white;font-weight:bold;font-size:1.1em;padding:4px 12px;border-radius:6px 6px 0 0;position:sticky;top:0;z-index:5;">Location: ${loc} (Total: ${toolsAtLoc.length} tools)</div>`;
+                        // OUT first, then IN, then others
+                        const sorted = toolsAtLoc.slice().sort((a, b) => getStatusOrder(a.status) - getStatusOrder(b.status));
+                        sorted.forEach((tool, idx) => {
+                            const status = (tool.status || '').toUpperCase();
+                            let bg = '#E8F5E9';
+                            let statusColor = '#388E3C';
+                            if (status === 'OUT') { bg = '#FFEBEE'; statusColor = '#d32f2f'; }
+                            else if (status === 'BROKEN') { bg = '#FFF3E0'; statusColor = '#ff6f00'; }
+                            else if (status === 'LOST') { bg = '#FFE0B2'; statusColor = '#ff8f00'; }
+                            else if (status === 'CALIBRATION') { bg = '#E3F2FD'; statusColor = '#1976d2'; }
+                            html += `<div style="background:${bg};border-radius:0 0 6px 6px;margin-bottom:8px;padding:12px 12px 8px 12px;">
+                                <span style="font-weight:bold;font-size:1.13rem;color:#1976d2;">${idx + 1}. ${tool.toolName || 'Unknown Tool'}</span> - <span style="font-weight:bold;">TID: ${tool.id}</span><br>
+                                <span style="font-size:1.01rem;color:#444;">Part #: ${tool.partNumber || ''}</span><br>
+                                <span style="font-weight:bold;color:${statusColor};">Status: ${tool.status || ''}</span><br>
+                                <span style="font-size:1.01rem;color:#222;">Location: ${tool.location || ''}</span>
+                            </div>`;
+                        });
+                    });
+                    list.innerHTML = filterHtml + `<div style="height:calc(100vh - 300px);overflow-y:auto;padding-right:5px;">` + html + `</div>`;
+                    // Add event listeners for filter buttons
+                    list.querySelectorAll('button[data-location]').forEach(btn => {
+                        btn.onclick = function() {
+                            selectedLocation = this.getAttribute('data-location');
+                            renderToolsByLocation(selectedLocation);
+                        };
+                    });
+                }
+                renderToolsByLocation(selectedLocation);
             } catch (e) {
                 title.textContent = collectionName;
                 list.innerHTML = '<div class="text-center text-danger">Error loading tools.</div>';
@@ -1750,6 +1827,80 @@
             collectionCheckupBtn.onclick = function() {
                 showCollectionCheckupScreen();
             };
+        }
+
+        // Select Different Collection logic
+        const selectDifferentCollectionBtn = document.getElementById('selectDifferentCollectionBtn');
+        if (selectDifferentCollectionBtn) {
+            selectDifferentCollectionBtn.onclick = function() {
+                showCollectionSelectionDialog();
+            };
+        }
+
+        async function showCollectionSelectionDialog() {
+            const user = auth.currentUser;
+            if (!user) return;
+            const fullName = localStorage.getItem('fullName') || user.email;
+            console.log('WebApp: Querying tools for owner:', fullName);
+            const modal = new bootstrap.Modal(document.getElementById('collectionSelectModal'));
+            const body = document.getElementById('collectionSelectBody');
+            body.innerHTML = '<div class="text-center">Loading...</div>';
+            try {
+                // 1. Query tools for this owner
+                const toolsSnapshot = await db.collection('tools').where('owner', '==', fullName).get();
+                if (toolsSnapshot.empty) {
+                    body.innerHTML = '<div class="text-center text-danger">No tools found for you.</div>';
+                    modal.show();
+                    return;
+                }
+                // 2. Extract unique collectionCodes
+                const collectionCodes = [...new Set(toolsSnapshot.docs.map(doc => doc.data().collectionCode).filter(Boolean))];
+                if (collectionCodes.length === 0) {
+                    body.innerHTML = '<div class="text-center text-danger">No collections found for your tools.</div>';
+                    modal.show();
+                    return;
+                }
+                // 3. Query collections for those codes (batch if >10)
+                let collections = [];
+                if (collectionCodes.length <= 10) {
+                  const colSnap = await db.collection('collections').where('collectionName', 'in', collectionCodes).get();
+                  collections = colSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                } else {
+                  // Firestore 'in' query limit is 10, so batch if needed
+                  for (let i = 0; i < collectionCodes.length; i += 10) {
+                    const batch = collectionCodes.slice(i, i + 10);
+                    const colSnap = await db.collection('collections').where('collectionName', 'in', batch).get();
+                    collections = collections.concat(colSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                  }
+                }
+                if (collections.length === 0) {
+                    body.innerHTML = '<div class="text-center text-danger">No collections found for your tools.</div>';
+                } else {
+                    let html = '<div class="list-group">';
+                    collections.forEach(data => {
+                        const isCurrentCollection = data.collectionName === lastViewedCollectionName;
+                        html += `<button class="list-group-item list-group-item-action ${isCurrentCollection ? 'active' : ''}" style="font-weight:bold;color:${isCurrentCollection ? 'white' : '#1976d2'};" data-collection="${data.collectionName}">
+                            <span style="font-size:1.1em;">${data.collectionName}</span><br>
+                            <span style="font-size:0.9em;color:${isCurrentCollection ? 'rgba(255,255,255,0.8)' : '#888'};">
+                                ${isCurrentCollection ? 'Current Collection' : 'Code: ' + data.collectionName}
+                            </span>
+                        </button>`;
+                    });
+                    html += '</div>';
+                    body.innerHTML = html;
+                    // Add click handlers
+                    body.querySelectorAll('button[data-collection]').forEach(btn => {
+                        btn.onclick = function() {
+                            modal.hide();
+                            showMyToolsByCollection(this.getAttribute('data-collection'));
+                        };
+                    });
+                }
+                modal.show();
+            } catch (e) {
+                body.innerHTML = '<div class="text-center text-danger">Error loading collections.</div>';
+                modal.show();
+            }
         }
 
         function showCollectionCheckupScreen() {
