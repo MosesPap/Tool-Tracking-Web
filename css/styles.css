@@ -750,4 +750,8 @@ body {
         padding: 12px 0;
         border-radius: 24px;
     }
+}
+
+#menuUsername {
+    font-size: 14px;
 } 

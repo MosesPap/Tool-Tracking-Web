@@ -320,8 +320,8 @@ class ToolTrackingApp {
             if (registerScannerBtn) {
                 registerScannerBtn.addEventListener('click', () => {
                     // Open scanner and fill TOOL ID field
-                    if (window.ScannerManager && window.ScannerManager.startCameraForInput) {
-                        window.ScannerManager.startCameraForInput('registerToolCode');
+                    if (window.Scanner && window.Scanner.startCameraForInput) {
+                        window.Scanner.startCameraForInput('registerToolCode');
                     } else {
                         this.showAlert('Scanner not available', 'error');
                     }
