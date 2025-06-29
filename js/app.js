@@ -1207,28 +1207,26 @@ class ToolTrackingApp {
         const list = document.getElementById('scannedToolsList');
         if (!list) return;
         const card = document.createElement('div');
-        card.className = 'tool-card out mb-3';
+        let statusColor = '#e57373'; // Default red for OUT
+        let statusText = 'OUT';
+        if (tool.status && tool.status.toUpperCase() === 'IN') {
+            statusColor = '#81c784'; // Green for IN
+            statusText = 'IN';
+        }
+        card.className = 'tool-card mb-3';
+        card.style.background = statusColor + '22';
         card.innerHTML = `
-            <div class="tool-card-header">
-                <div class="tool-name">${tool.toolName}</div>
-                <div class="tool-date">${tool.timestamp.toLocaleString()}</div>
+            <div class="tool-card-header d-flex justify-content-between align-items-center">
+                <div class="tool-name fw-bold">${tool.toolName || ''}</div>
+                <div class="tool-date small">${tool.timestamp ? new Date(tool.timestamp).toLocaleString() : ''}</div>
             </div>
-            <div class="tool-details">
-                <div class="tool-detail-item">
-                    <div class="tool-detail-label">TID</div>
-                    <div class="tool-detail-value">${tool.id}</div>
-                </div>
-                <div class="tool-detail-item">
-                    <div class="tool-detail-label">P/N</div>
-                    <div class="tool-detail-value">${tool.partNumber}</div>
-                </div>
-                <div class="tool-detail-item">
-                    <div class="tool-detail-label">STS</div>
-                    <div class="tool-status out">OUT</div>
-                </div>
+            <div class="tool-details d-flex justify-content-between align-items-center mt-2">
+                <div><span class="fw-bold">TID</span><br>${tool.id}</div>
+                <div><span class="fw-bold">P/N</span><br>${tool.partNumber}</div>
+                <div><span class="fw-bold">STS</span><br><span style="color: white; background: ${statusColor}; border-radius: 8px; padding: 2px 12px; font-weight: bold;">${statusText}</span></div>
             </div>
         `;
-        list.prepend(card);
+        list.appendChild(card);
     }
 
     removeScannedToolCard(toolId) {
