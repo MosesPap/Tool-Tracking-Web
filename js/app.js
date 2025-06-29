@@ -14,6 +14,9 @@ class ToolTrackingApp {
 
     init() {
         try {
+            // Add mobile-specific initialization
+            this.handleMobileInitialization();
+            
             // Initialize Firebase
             this.initFirebase();
             
@@ -23,7 +26,7 @@ class ToolTrackingApp {
             // Check for existing session
             this.checkExistingSession();
             
-            // Hide loading screen after initialization
+            // Hide loading screen after initialization with timeout
             setTimeout(() => {
                 this.hideLoadingScreen();
             }, 2000);
@@ -31,6 +34,25 @@ class ToolTrackingApp {
             console.error('App initialization error:', error);
             this.showErrorScreen('Failed to initialize application. Please refresh the page.');
         }
+    }
+
+    handleMobileInitialization() {
+        // Prevent zoom on input focus for mobile
+        const inputs = document.querySelectorAll('input, textarea, select');
+        inputs.forEach(input => {
+            input.addEventListener('focus', () => {
+                input.style.fontSize = '16px'; // Prevents zoom on iOS
+            });
+        });
+
+        // Handle mobile viewport issues
+        if (window.innerWidth <= 768) {
+            document.body.style.minHeight = '100vh';
+            document.body.style.minHeight = '-webkit-fill-available';
+        }
+
+        // Add touch event handling for mobile
+        document.addEventListener('touchstart', function() {}, {passive: true});
     }
 
     initFirebase() {
@@ -50,14 +72,32 @@ class ToolTrackingApp {
                 appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
             };
 
-            // Initialize Firebase
-            firebase.initializeApp(config);
-            
-            // Initialize services
-            this.auth = firebase.auth();
-            this.db = firebase.firestore();
-            
-            console.log('Firebase initialized successfully');
+            // Initialize Firebase with timeout for mobile
+            const initPromise = new Promise((resolve, reject) => {
+                try {
+                    firebase.initializeApp(config);
+                    resolve();
+                } catch (error) {
+                    reject(error);
+                }
+            });
+
+            // Add timeout for mobile devices
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Firebase initialization timeout')), 10000);
+            });
+
+            Promise.race([initPromise, timeoutPromise])
+                .then(() => {
+                    // Initialize services
+                    this.auth = firebase.auth();
+                    this.db = firebase.firestore();
+                    console.log('Firebase initialized successfully');
+                })
+                .catch(error => {
+                    throw error;
+                });
+
         } catch (error) {
             console.error('Firebase initialization error:', error);
             throw new Error('Failed to initialize Firebase: ' + error.message);
@@ -406,6 +446,22 @@ class ToolTrackingApp {
                 });
             }
 
+            // Register Tools screen specific buttons
+            const refreshRegisterBtn = document.getElementById('refreshRegisterBtn');
+            if (refreshRegisterBtn) {
+                refreshRegisterBtn.addEventListener('click', () => {
+                    this.loadTodayToolMovements();
+                    this.showAlert('Tool movements refreshed!', 'success');
+                });
+            }
+
+            const logoutRegisterBtn = document.getElementById('logoutRegisterBtn');
+            if (logoutRegisterBtn) {
+                logoutRegisterBtn.addEventListener('click', () => {
+                    this.handleLogout();
+                });
+            }
+
             console.log('Event listeners setup completed');
         } catch (error) {
             console.error('Error setting up event listeners:', error);
@@ -651,37 +707,37 @@ class ToolTrackingApp {
             const tomorrow = new Date(today);
             tomorrow.setDate(tomorrow.getDate() + 1);
 
-            // Query tools collection for today's movements by this technician
-            const snapshot = await this.db.collection('tools')
-                .where('technician', '==', technicianName)
-                .where('timestamp', '>=', firebase.firestore.Timestamp.fromDate(today))
-                .where('timestamp', '<', firebase.firestore.Timestamp.fromDate(tomorrow))
-                .orderBy('timestamp', 'desc')
-                .get();
-
             const scannedToolsList = document.getElementById('scannedToolsList');
             if (!scannedToolsList) return;
 
             // Clear existing content
             scannedToolsList.innerHTML = '';
 
-            if (snapshot.empty) {
+            // Get today's tool movements from logtoolmovements collection
+            const logSnapshot = await this.db.collection('logtoolmovements')
+                .where('technician', '==', technicianName)
+                .where('timestamp', '>=', firebase.firestore.Timestamp.fromDate(today))
+                .where('timestamp', '<', firebase.firestore.Timestamp.fromDate(tomorrow))
+                .orderBy('timestamp', 'desc')
+                .get();
+
+            if (logSnapshot.empty) {
                 scannedToolsList.innerHTML = '<div class="text-center text-muted mt-3"><p>No tool movements today</p></div>';
                 return;
             }
 
             // Display each tool movement
-            snapshot.docs.forEach(doc => {
-                const toolData = doc.data();
-                const timestamp = toolData.timestamp ? toolData.timestamp.toDate() : new Date();
+            logSnapshot.docs.forEach(doc => {
+                const logData = doc.data();
+                const timestamp = logData.timestamp ? logData.timestamp.toDate() : new Date();
                 
                 this.addScannedToolCard({
-                    toolName: toolData.toolName || 'Unknown Tool',
-                    partNumber: toolData.partNumber || 'N/A',
-                    status: toolData.status || 'UNKNOWN',
-                    id: doc.id,
+                    toolName: logData.toolName || 'Unknown Tool',
+                    partNumber: logData.partNumber || 'N/A',
+                    status: logData.status || 'UNKNOWN',
+                    id: logData.toolId || 'N/A',
                     timestamp: timestamp,
-                    technician: toolData.technician || technicianName
+                    technician: logData.technician || technicianName
                 });
             });
 
@@ -920,16 +976,29 @@ class ToolTrackingApp {
     }
 
     showErrorScreen(message) {
+        // Hide loading screen
         const loadingScreen = document.getElementById('loadingScreen');
         if (loadingScreen) {
-            loadingScreen.innerHTML = `
-                <div class="loading-content">
-                    <div class="text-light mb-3">
-                        <i class="fas fa-exclamation-triangle fa-3x"></i>
+            loadingScreen.style.display = 'none';
+        }
+
+        // Show error screen
+        const errorScreen = document.getElementById('errorScreen');
+        if (errorScreen) {
+            errorScreen.style.display = 'flex';
+            const errorMessage = errorScreen.querySelector('h4');
+            if (errorMessage) {
+                errorMessage.textContent = message;
+            }
+        } else {
+            // Fallback error display
+            document.body.innerHTML = `
+                <div style="display: flex; justify-content: center; align-items: center; height: 100vh; text-align: center; padding: 20px;">
+                    <div>
+                        <h2>Error</h2>
+                        <p>${message}</p>
+                        <button onclick="location.reload()" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px;">Refresh Page</button>
                     </div>
-                    <h4 class="text-light">Error</h4>
-                    <p class="text-light">${message}</p>
-                    <button class="btn btn-light mt-3" onclick="location.reload()">Retry</button>
                 </div>
             `;
         }
@@ -1225,5 +1294,43 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // Initialize app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    window.app = new ToolTrackingApp();
+    try {
+        window.app = new ToolTrackingApp();
+    } catch (error) {
+        console.error('Failed to initialize app:', error);
+        // Show error screen if app fails to initialize
+        const errorScreen = document.getElementById('errorScreen');
+        if (errorScreen) {
+            document.getElementById('loadingScreen').style.display = 'none';
+            errorScreen.style.display = 'flex';
+            const errorMessage = errorScreen.querySelector('h4');
+            if (errorMessage) {
+                errorMessage.textContent = 'Failed to load application';
+            }
+        }
+    }
+});
+
+// Global error handlers for mobile
+window.addEventListener('error', (event) => {
+    console.error('Global error:', event.error);
+    if (window.app && window.app.showErrorScreen) {
+        window.app.showErrorScreen('An unexpected error occurred. Please refresh the page.');
+    }
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+    console.error('Unhandled promise rejection:', event.reason);
+    if (window.app && window.app.showErrorScreen) {
+        window.app.showErrorScreen('Network or connection error. Please check your internet connection.');
+    }
+});
+
+// Handle mobile-specific issues
+window.addEventListener('load', () => {
+    // Ensure the app is visible on mobile
+    if (window.innerWidth <= 768) {
+        document.body.style.visibility = 'visible';
+        document.body.style.opacity = '1';
+    }
 }); 
