@@ -16,37 +16,18 @@ class ToolTrackingApp {
 
     async init() {
         try {
-            console.log('App initialization started');
             this.handleMobileInitialization();
             await this.initFirebase(); // Wait for Firebase to be ready!
-            console.log('Firebase initialized');
-            
-            // Initialize AuthManager
-            if (window.AuthManager) {
-                window.AuthManager.getInstance();
-                console.log('AuthManager initialized');
-            }
-            
             await this.loadCooldownMinutes();
-            this.setupEventListeners();
-            console.log('Event listeners setup complete');
-            
-            // Wait for Firebase Auth state to be determined
-            console.log('Waiting for auth state...');
-            await this.waitForAuthState();
-            console.log('Auth state determined');
-            
-            setTimeout(() => {
-                console.log('Hiding loading screen');
-                this.hideLoadingScreen();
+        this.setupEventListeners();
+        this.checkExistingSession();
+        setTimeout(() => {
+            this.hideLoadingScreen();
                 // Fallback: always show login screen if no user is logged in
                 if (!this.currentUser) {
-                    console.log('No user found, showing login screen');
                     this.showScreen('loginScreen');
-                } else {
-                    console.log('User found, session should be restored');
                 }
-            }, 2000);
+        }, 2000);
         } catch (error) {
             console.error('App initialization error:', error);
             this.showErrorScreen('Failed to initialize application. Please refresh the page.');
@@ -472,110 +453,18 @@ class ToolTrackingApp {
         }
     }
 
-    waitForAuthState() {
-        return new Promise((resolve) => {
-            console.log('Setting up auth state listener');
-            const unsubscribe = this.auth.onAuthStateChanged(async (user) => {
-                console.log('Auth state changed:', user ? 'User signed in' : 'User signed out');
-                unsubscribe(); // Stop listening after first state change
-                
-                if (user) {
-                    // User is signed in
-                    this.currentUser = user;
-                    console.log('User authenticated:', user.email);
-                    
-                    // Sync with AuthManager
-                    if (window.AuthManager) {
-                        const authManager = window.AuthManager.getInstance();
-                        authManager.currentUser = user;
-                        authManager.isAuthenticated = true;
-                        authManager.technicianName = this.technicianName;
-                        authManager.startSessionTimer();
-                    }
-                    
-                    await this.checkExistingSession();
-                } else {
-                    // User is signed out
-                    this.currentUser = null;
-                    console.log('No user authenticated');
-                    
-                    // Sync with AuthManager
-                    if (window.AuthManager) {
-                        const authManager = window.AuthManager.getInstance();
-                        authManager.currentUser = null;
-                        authManager.isAuthenticated = false;
-                        authManager.technicianName = '';
-                        authManager.stopSessionTimer();
-                        authManager.clearSessionData();
-                    }
-                    
-                    this.showScreen('loginScreen');
-                }
-                resolve();
-            });
-        });
-    }
-
-    async checkExistingSession() {
+    checkExistingSession() {
         const keepSignedIn = localStorage.getItem('keepSignedIn') === 'true';
-        const technicianName = localStorage.getItem('technicianName');
-        
-        console.log('Checking existing session:', {
-            keepSignedIn,
-            technicianName,
-            hasUser: !!this.currentUser
-        });
+        const user = this.auth.currentUser;
 
-        if (this.currentUser) {
-            // User is authenticated with Firebase
-            if (keepSignedIn && technicianName) {
-                // Full session restoration
-                console.log('Full session restoration');
-                this.technicianName = technicianName;
-                this.showScreen('toolScannerMenu');
-                this.updateMenuUsername();
-                this.loadPreviousOutCount();
-            } else {
-                // Firebase session exists but no localStorage data
-                // Load technician data from Firestore and restore session
-                console.log('Loading technician data from Firestore');
-                await this.loadTechnicianDataAndRestoreSession();
-            }
+        if (keepSignedIn && user) {
+            this.technicianName = localStorage.getItem('technicianName') || 'Technician';
+            this.currentUser = user;
+            this.showScreen('toolScannerMenu');
+            this.updateMenuUsername();
+            this.loadPreviousOutCount();
         } else {
-            // No Firebase session
-            console.log('No Firebase session, showing login screen');
-            localStorage.removeItem('keepSignedIn');
-            localStorage.removeItem('technicianName');
-            this.showScreen('loginScreen');
-        }
-    }
-
-    async loadTechnicianDataAndRestoreSession() {
-        try {
-            // Get technician name from Firestore
-            const technicianDoc = await this.db.collection('technicians').doc(this.currentUser.uid).get();
-            
-            if (technicianDoc.exists) {
-                this.technicianName = technicianDoc.data().fullName || 'Technician';
-                
-                // Save to localStorage for future sessions
-                localStorage.setItem('technicianName', this.technicianName);
-                
-                // Show main screen
-                this.showScreen('toolScannerMenu');
-                this.updateMenuUsername();
-                this.loadPreviousOutCount();
-            } else {
-                // Technician data not found, clear session
-                this.auth.signOut();
-                localStorage.removeItem('keepSignedIn');
-                localStorage.removeItem('technicianName');
-                this.showScreen('loginScreen');
-            }
-        } catch (error) {
-            console.error('Error loading technician data:', error);
-            // On error, show login screen
-            this.showScreen('loginScreen');
+            this.showScreen('login');
         }
     }
 
@@ -609,15 +498,6 @@ class ToolTrackingApp {
             if (technicianDoc.exists) {
                 this.currentUser = user;
                 this.technicianName = technicianDoc.data().fullName || 'Technician';
-                
-                // Sync with AuthManager
-                if (window.AuthManager) {
-                    const authManager = window.AuthManager.getInstance();
-                    authManager.currentUser = user;
-                    authManager.isAuthenticated = true;
-                    authManager.technicianName = this.technicianName;
-                    authManager.startSessionTimer();
-                }
                 
                 // Save session data
                 if (keepSignedIn) {
@@ -745,17 +625,6 @@ class ToolTrackingApp {
 
     handleLogout() {
         this.auth.signOut();
-        
-        // Sync with AuthManager
-        if (window.AuthManager) {
-            const authManager = window.AuthManager.getInstance();
-            authManager.currentUser = null;
-            authManager.isAuthenticated = false;
-            authManager.technicianName = '';
-            authManager.stopSessionTimer();
-            authManager.clearSessionData();
-        }
-        
         localStorage.removeItem('keepSignedIn');
         localStorage.removeItem('technicianName');
         this.currentUser = null;

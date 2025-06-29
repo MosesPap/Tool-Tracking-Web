@@ -10,10 +10,27 @@ class AuthManager {
     }
 
     init() {
-        // Remove the auth state listener setup to prevent conflicts
-        // this.setupAuthStateListener();
+        this.setupAuthStateListener();
         this.setupSessionManagement();
         this.setupSecurityHeaders();
+    }
+
+    setupAuthStateListener() {
+        // Listen for authentication state changes
+        firebase.auth().onAuthStateChanged((user) => {
+            if (user) {
+                this.currentUser = user;
+                this.isAuthenticated = true;
+                this.loadTechnicianData(user.uid);
+                this.startSessionTimer();
+            } else {
+                this.currentUser = null;
+                this.isAuthenticated = false;
+                this.technicianName = '';
+                this.stopSessionTimer();
+                this.clearSessionData();
+            }
+        });
     }
 
     setupSessionManagement() {
@@ -334,13 +351,6 @@ let authManager = null;
 // Export auth functions for use in main app
 window.AuthManager = {
     init: () => {
-        if (!authManager) {
-            authManager = new AuthManager();
-        }
-        return authManager;
-    },
-    
-    getInstance: () => {
         if (!authManager) {
             authManager = new AuthManager();
         }

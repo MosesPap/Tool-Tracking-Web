@@ -352,7 +352,7 @@ body {
 }
 
 .tool-card.out {
-    border-left-color: var(--danger-color);
+    border-left: 4px solid var(--danger-color);
     background-color: #FFCDD2;
 }
 
