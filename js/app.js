@@ -447,6 +447,29 @@ class ToolTrackingApp {
                 });
             }
 
+            const registerDetailsBtn = document.getElementById('registerDetailsBtn');
+            if (registerDetailsBtn) {
+                registerDetailsBtn.addEventListener('click', async () => {
+                    const toolId = document.getElementById('registerToolCode').value.trim();
+                    if (!toolId) {
+                        this.showAlert('Please enter or scan a TOOL ID', 'error');
+                        return;
+                    }
+                    try {
+                        const toolDoc = await this.db.collection('tools').doc(toolId).get();
+                        if (toolDoc.exists) {
+                            const tool = { id: toolDoc.id, ...toolDoc.data() };
+                            this.showToolDetails(tool);
+                        } else {
+                            this.showAlert('Tool not found', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error getting tool details:', error);
+                        this.showAlert('Error getting tool details', 'error');
+                    }
+                });
+            }
+
             console.log('Event listeners setup completed');
         } catch (error) {
             console.error('Error setting up event listeners:', error);
