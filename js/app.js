@@ -48,10 +48,13 @@ class ToolTrackingApp {
 
     setupEventListeners() {
         // Login form
-        document.getElementById('loginForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.handleLogin();
-        });
+        const loginForm = document.getElementById('loginForm');
+        if (loginForm) {
+            loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.handleLogin();
+            });
+        }
 
         // Password toggle
         document.getElementById('togglePassword').addEventListener('click', () => {
@@ -77,21 +80,10 @@ class ToolTrackingApp {
             this.showScreen('scanner');
         });
 
-        document.getElementById('registerBtn').addEventListener('click', () => {
-            this.showScreen('register');
-        });
-
-        document.getElementById('searchBtn').addEventListener('click', () => {
-            this.showScreen('search');
-        });
-
-        document.getElementById('previousOutBtn').addEventListener('click', () => {
-            this.showScreen('previousOut');
-        });
-
-        document.getElementById('myToolsBtn').addEventListener('click', () => {
-            this.showScreen('myTools');
-        });
+        document.getElementById('registerBtn').onclick = () => this.showScreen('registerScreen');
+        document.getElementById('previousOutBtn').onclick = () => this.showScreen('previousOutScreen');
+        document.getElementById('myToolsBtn').onclick = () => this.showScreen('myToolsScreen');
+        document.getElementById('searchBtn').onclick = () => this.showScreen('searchScreen');
 
         document.getElementById('checkupBtn').addEventListener('click', () => {
             this.showScreen('checkup');
@@ -101,9 +93,7 @@ class ToolTrackingApp {
             this.showScreen('myAccount');
         });
 
-        document.getElementById('logoutBtn').addEventListener('click', () => {
-            this.handleLogout();
-        });
+        document.getElementById('logoutBtn').onclick = () => this.handleLogout();
 
         // Back buttons
         document.getElementById('backToMain').addEventListener('click', () => {
@@ -264,20 +254,13 @@ class ToolTrackingApp {
         this.showAlert('Logged out successfully', 'success');
     }
 
-    showScreen(screenName) {
-        // Hide all screens
-        document.querySelectorAll('.screen').forEach(screen => {
-            screen.classList.remove('active');
-        });
-
-        // Show target screen
-        const targetScreen = document.getElementById(screenName + 'Screen');
-        if (targetScreen) {
-            targetScreen.classList.add('active');
-            this.currentScreen = screenName;
-            
-            // Load screen-specific data
-            this.loadScreenData(screenName);
+    showScreen(screenId) {
+        // Hide all screens/sections
+        document.querySelectorAll('.app-screen').forEach(el => el.style.display = 'none');
+        // Show the requested screen
+        const screen = document.getElementById(screenId);
+        if (screen) {
+            screen.style.display = 'block';
         }
     }
 
@@ -689,7 +672,7 @@ class ToolTrackingApp {
     }
 
     showMenu() {
-        this.showScreen('menu');
+        this.showScreen('toolScannerMenu');
         document.getElementById('menuUsername').textContent = this.technicianName;
         document.getElementById('outToolsCount').textContent = this.outToolsCount;
     }
