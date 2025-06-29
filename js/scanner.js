@@ -52,7 +52,7 @@ class Scanner {
 
             // Start camera
             await this.html5QrcodeScanner.start(
-                { facingMode: { exact: "environment" } },
+                { facingMode: "environment" },
                 config,
                 (decodedText) => {
                     this.onScanSuccess(decodedText);
