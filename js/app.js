@@ -19,17 +19,15 @@ class ToolTrackingApp {
             this.handleMobileInitialization();
             await this.initFirebase(); // Wait for Firebase to be ready!
             await this.loadCooldownMinutes();
-            this.setupEventListeners();
-            
-            // Set up Firebase Auth state listener BEFORE checking session
-            this.setupAuthStateListener();
-            
-            // Wait for Firebase Auth to initialize and check user state
-            await this.waitForAuthInitialization();
-            
-            setTimeout(() => {
-                this.hideLoadingScreen();
-            }, 2000);
+        this.setupEventListeners();
+        this.checkExistingSession();
+        setTimeout(() => {
+            this.hideLoadingScreen();
+                // Fallback: always show login screen if no user is logged in
+                if (!this.currentUser) {
+                    this.showScreen('loginScreen');
+                }
+        }, 2000);
         } catch (error) {
             console.error('App initialization error:', error);
             this.showErrorScreen('Failed to initialize application. Please refresh the page.');
@@ -204,12 +202,6 @@ class ToolTrackingApp {
                 logoutBtn.onclick = () => this.handleLogout();
             }
 
-            // Refresh button
-            const refreshBtn = document.getElementById('refreshBtn');
-            if (refreshBtn) {
-                refreshBtn.onclick = () => this.refreshCurrentScreen();
-            }
-
         // Back buttons
             const backToMain = document.getElementById('backToMain');
             if (backToMain) {
@@ -318,37 +310,9 @@ class ToolTrackingApp {
             }
 
         // Menu buttons
-            const refreshRegisterBtn = document.getElementById('refreshRegisterBtn');
-            if (refreshRegisterBtn) {
-                refreshRegisterBtn.addEventListener('click', () => {
-                    this.loadTodayToolMovements();
-                    this.showAlert('Tool movements refreshed!', 'success');
-                });
-            }
-
-            const logoutRegisterBtn = document.getElementById('logoutRegisterBtn');
-            if (logoutRegisterBtn) {
-                logoutRegisterBtn.addEventListener('click', () => {
-                    this.handleLogout();
-                });
-            }
-
-            // Cooldown dialog buttons
-            const proceedCheckoutBtn = document.getElementById('proceedCheckoutBtn');
-            if (proceedCheckoutBtn) {
-                proceedCheckoutBtn.addEventListener('click', async () => {
-                    if (this.pendingCheckoutToolId) {
-                        const toolId = this.pendingCheckoutToolId;
-                        this.pendingCheckoutToolId = null;
-                        
-                        // Close the warning dialog
-                        const checkoutWarningModal = bootstrap.Modal.getInstance(document.getElementById('checkoutWarningModal'));
-                        checkoutWarningModal.hide();
-                        
-                        // Proceed with checkout
-                        await this.performToolCheckout(toolId);
-                    }
-                });
+            const refreshBtn = document.getElementById('refreshBtn');
+            if (refreshBtn) {
+                refreshBtn.onclick = () => this.refreshMenu();
             }
 
             // Register Tools page
@@ -449,95 +413,58 @@ class ToolTrackingApp {
                 });
             }
 
+            // Register Tools screen specific buttons
+            const refreshRegisterBtn = document.getElementById('refreshRegisterBtn');
+            if (refreshRegisterBtn) {
+                refreshRegisterBtn.addEventListener('click', () => {
+                    this.loadTodayToolMovements();
+                    this.showAlert('Tool movements refreshed!', 'success');
+                });
+            }
+
+            const logoutRegisterBtn = document.getElementById('logoutRegisterBtn');
+            if (logoutRegisterBtn) {
+                logoutRegisterBtn.addEventListener('click', () => {
+                    this.handleLogout();
+                });
+            }
+
+            // Cooldown dialog buttons
+            const proceedCheckoutBtn = document.getElementById('proceedCheckoutBtn');
+            if (proceedCheckoutBtn) {
+                proceedCheckoutBtn.addEventListener('click', async () => {
+                    if (this.pendingCheckoutToolId) {
+                        const toolId = this.pendingCheckoutToolId;
+                        this.pendingCheckoutToolId = null;
+                        
+                        // Close the warning dialog
+                        const checkoutWarningModal = bootstrap.Modal.getInstance(document.getElementById('checkoutWarningModal'));
+                        checkoutWarningModal.hide();
+                        
+                        // Proceed with checkout
+                        await this.performToolCheckout(toolId);
+                    }
+                });
+            }
+
             console.log('Event listeners setup completed');
         } catch (error) {
             console.error('Error setting up event listeners:', error);
         }
     }
 
-    setupAuthStateListener() {
-        // Listen for Firebase Auth state changes
-        this.auth.onAuthStateChanged((user) => {
-            console.log('Auth state changed:', user ? `User logged in (${user.email})` : 'User logged out');
-            
-            if (user) {
-                // User is signed in
-                this.currentUser = user;
-                this.loadTechnicianData(user.uid);
-            } else {
-                // User is signed out
-                this.currentUser = null;
-                this.technicianName = '';
-                localStorage.removeItem('keepSignedIn');
-                localStorage.removeItem('technicianName');
-                
-                // Only redirect to login if we're not already there
-                if (location.pathname !== '/login' && location.pathname !== '/signup') {
-                    console.log('Redirecting to login from:', location.pathname);
-                    this.navigateTo('/login');
-                }
-            }
-        });
-    }
+    checkExistingSession() {
+        const keepSignedIn = localStorage.getItem('keepSignedIn') === 'true';
+        const user = this.auth.currentUser;
 
-    async waitForAuthInitialization() {
-        return new Promise((resolve) => {
-            // Firebase Auth initializes automatically, but we need to wait for it
-            const unsubscribe = this.auth.onAuthStateChanged((user) => {
-                unsubscribe(); // Only listen once
-                
-                if (user) {
-                    // User is authenticated, load their data and route to correct page
-                    this.currentUser = user;
-                    this.loadTechnicianData(user.uid).then(() => {
-                        // Route to the current URL or default to toolscannermenu
-                        const currentPath = location.pathname;
-                        const protectedRoutes = ['/toolscannermenu', '/registertools', '/search', '/mytools', '/previousout', '/scanner'];
-                        
-                        if (currentPath === '/login' || currentPath === '/signup') {
-                            this.navigateTo('/toolscannermenu');
-                        } else if (protectedRoutes.includes(currentPath)) {
-                            // User is on a protected route, stay there and refresh data
-                            this.route(currentPath);
-                        } else {
-                            // Unknown route, go to main menu
-                            this.navigateTo('/toolscannermenu');
-                        }
-                        resolve();
-                    });
-                } else {
-                    // No user authenticated, check if we should show login or signup
-                    const currentPath = location.pathname;
-                    if (currentPath === '/signup') {
-                        this.route('/signup');
-                    } else {
-                        this.route('/login');
-                    }
-                    resolve();
-                }
-            });
-            
-            // Add a timeout in case Firebase Auth takes too long
-            setTimeout(() => {
-                console.log('Auth initialization timeout, proceeding with current state');
-                resolve();
-            }, 5000);
-        });
-    }
-
-    async loadTechnicianData(userId) {
-        try {
-            const technicianDoc = await this.db.collection('technicians').doc(userId).get();
-            if (technicianDoc.exists) {
-                this.technicianName = technicianDoc.data().fullName || 'Technician';
-                localStorage.setItem('technicianName', this.technicianName);
-                this.updateMenuUsername();
-                this.loadPreviousOutCount();
-                console.log('Technician data loaded:', this.technicianName);
-            }
-        } catch (error) {
-            console.error('Error loading technician data:', error);
-            this.technicianName = 'Technician';
+        if (keepSignedIn && user) {
+            this.technicianName = localStorage.getItem('technicianName') || 'Technician';
+            this.currentUser = user;
+            this.showScreen('toolScannerMenu');
+            this.updateMenuUsername();
+            this.loadPreviousOutCount();
+        } else {
+            this.showScreen('login');
         }
     }
 
@@ -578,7 +505,7 @@ class ToolTrackingApp {
                     localStorage.setItem('technicianName', this.technicianName);
                 }
 
-                // The auth state listener will handle navigation
+                // Show ToolScanner menu screen instead of main screen
                 this.navigateTo('/toolscannermenu');
                 this.updateMenuUsername();
                 this.loadPreviousOutCount();
@@ -698,7 +625,11 @@ class ToolTrackingApp {
 
     handleLogout() {
         this.auth.signOut();
-        // The auth state listener will handle the cleanup and navigation
+        localStorage.removeItem('keepSignedIn');
+        localStorage.removeItem('technicianName');
+        this.currentUser = null;
+        this.technicianName = '';
+        this.navigateTo('/login');
         this.showAlert('Logged out successfully', 'success');
     }
 
@@ -723,10 +654,7 @@ class ToolTrackingApp {
         switch (screenName) {
             case 'registerScreen':
                 this.updateRegisterTechnicianName();
-                // Add a small delay to ensure technician data is loaded
-                setTimeout(() => {
-                    this.loadTodayToolMovements();
-                }, 500);
+                this.loadTodayToolMovements();
                 this.loadCooldownMinutes();
                 break;
             case 'toolScannerMenu':
@@ -754,14 +682,8 @@ class ToolTrackingApp {
     async loadTodayToolMovements() {
         try {
             const technicianName = this.technicianName;
-            console.log('Loading today tool movements for technician:', technicianName);
-            
-            if (!technicianName || technicianName === 'Technician') {
-                console.error('No valid technician name available');
-                const scannedToolsList = document.getElementById('scannedToolsList');
-                if (scannedToolsList) {
-                    scannedToolsList.innerHTML = '<div class="text-center text-muted mt-3"><p>Loading technician data...</p></div>';
-                }
+            if (!technicianName) {
+                console.error('No technician name available');
                 return;
             }
 
@@ -777,8 +699,6 @@ class ToolTrackingApp {
             // Clear existing content
             scannedToolsList.innerHTML = '';
 
-            console.log('Querying tools for technician:', technicianName, 'from:', today, 'to:', tomorrow);
-
             // Query tools collection for all tools with a timestamp today and technician is the logged-in user
             const snapshot = await this.db.collection('tools')
                 .where('technician', '==', technicianName)
@@ -786,8 +706,6 @@ class ToolTrackingApp {
                 .where('timestamp', '<', firebase.firestore.Timestamp.fromDate(tomorrow))
                 .orderBy('timestamp', 'desc')
                 .get();
-
-            console.log('Found', snapshot.size, 'tools for today');
 
             if (snapshot.empty) {
                 scannedToolsList.innerHTML = '<div class="text-center text-muted mt-3"><p>No tool movements today</p></div>';
@@ -1274,60 +1192,30 @@ class ToolTrackingApp {
     }
 
     route(path) {
-        console.log('Routing to:', path, 'User authenticated:', !!this.currentUser);
-        
-        // Check if user is authenticated for protected routes
-        const protectedRoutes = ['/toolscannermenu', '/registertools', '/search', '/mytools', '/previousout', '/scanner'];
-        const isProtectedRoute = protectedRoutes.includes(path);
-        
-        if (isProtectedRoute && !this.currentUser) {
-            // User not authenticated, redirect to login
-            console.log('Access denied to protected route:', path);
-            this.navigateTo('/login');
-            return;
-        }
-        
         switch (path) {
             case '/login':
-                if (this.currentUser) {
-                    // User is already logged in, redirect to main menu
-                    console.log('User already logged in, redirecting to main menu');
-                    this.navigateTo('/toolscannermenu');
-                } else {
-                    this.showScreen('loginScreen');
-                }
+                this.showScreen('loginScreen');
                 break;
             case '/toolscannermenu':
                 this.showScreen('toolScannerMenu');
-                this.loadPreviousOutCount(); // Refresh data
                 break;
             case '/registertools':
                 this.showScreen('registerScreen');
-                this.loadTodayToolMovements(); // Refresh data
                 break;
             case '/search':
                 this.showScreen('searchScreen');
                 break;
             case '/mytools':
                 this.showScreen('myToolsScreen');
-                this.loadMyTools(); // Refresh data
                 break;
             case '/previousout':
                 this.showScreen('previousOutScreen');
-                this.loadPreviousOutTools(); // Refresh data
                 break;
             case '/signup':
                 this.showScreen('signupScreen');
                 break;
-            case '/scanner':
-                this.showScreen('scannerScreen');
-                break;
             default:
-                if (this.currentUser) {
-                    this.navigateTo('/toolscannermenu');
-                } else {
-                    this.navigateTo('/login');
-                }
+                this.showScreen('loginScreen');
         }
     }
 
@@ -1511,26 +1399,16 @@ class ToolTrackingApp {
         today.setHours(0, 0, 0, 0);
         return this.cooldownWarningShownDate && this.cooldownWarningShownDate.getTime() === today.getTime();
     }
-
-    refreshCurrentScreen() {
-        console.log('Refreshing current screen:', this.currentScreen);
-        this.loadScreenData(this.currentScreen);
-        this.showAlert('Data refreshed!', 'success');
-    }
 }
 
 // Listen for browser navigation
 window.addEventListener('popstate', () => {
-    // Only route if the app is initialized and we have auth state
-    if (window.app && window.app.auth) {
-        window.app.route(location.pathname);
-    }
+    app.route(location.pathname);
 });
 
 // On page load, route to the correct screen
 window.addEventListener('DOMContentLoaded', () => {
-    // Don't route immediately - let the app initialization handle it
-    // The app will route correctly after Firebase Auth initializes
+    app.route(location.pathname);
 });
 
 // Initialize app when DOM is loaded
