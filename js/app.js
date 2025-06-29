@@ -699,9 +699,8 @@ class ToolTrackingApp {
             // Clear existing content
             scannedToolsList.innerHTML = '';
 
-            // Query tools collection for all tools checked in or out by this technician today
+            // Query tools collection for all tools with a timestamp today
             const snapshot = await this.db.collection('tools')
-                .where('technician', '==', technicianName)
                 .where('timestamp', '>=', firebase.firestore.Timestamp.fromDate(today))
                 .where('timestamp', '<', firebase.firestore.Timestamp.fromDate(tomorrow))
                 .orderBy('timestamp', 'desc')
@@ -722,7 +721,7 @@ class ToolTrackingApp {
                     status: toolData.status || 'UNKNOWN',
                     id: doc.id,
                     timestamp: timestamp,
-                    technician: toolData.technician || technicianName
+                    technician: toolData.technician || ''
                 });
             });
 
