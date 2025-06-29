@@ -110,14 +110,14 @@ class ToolTrackingApp {
             const createAccountBtn = document.getElementById('createAccountBtn');
             if (createAccountBtn) {
                 createAccountBtn.addEventListener('click', () => {
-                    this.showScreen('signup');
+                    this.navigateTo('/signup');
                 });
             }
 
             const backToLogin = document.getElementById('backToLogin');
             if (backToLogin) {
                 backToLogin.addEventListener('click', () => {
-                    this.showScreen('login');
+                    this.navigateTo('/login');
                 });
             }
 
@@ -140,28 +140,28 @@ class ToolTrackingApp {
             const scanBtn = document.getElementById('scanBtn');
             if (scanBtn) {
                 scanBtn.addEventListener('click', () => {
-                    this.showScreen('scanner');
+                    this.navigateTo('/scanner');
                 });
             }
 
             const registerBtn = document.getElementById('registerBtn');
             if (registerBtn) {
-                registerBtn.onclick = () => this.showScreen('registerScreen');
+                registerBtn.onclick = () => this.navigateTo('/register');
             }
 
             const previousOutBtn = document.getElementById('previousOutBtn');
             if (previousOutBtn) {
-                previousOutBtn.onclick = () => this.showScreen('previousOutScreen');
+                previousOutBtn.onclick = () => this.navigateTo('/previousout');
             }
 
             const myToolsBtn = document.getElementById('myToolsBtn');
             if (myToolsBtn) {
-                myToolsBtn.onclick = () => this.showScreen('myToolsScreen');
+                myToolsBtn.onclick = () => this.navigateTo('/mytools');
             }
 
             const searchBtn = document.getElementById('searchBtn');
             if (searchBtn) {
-                searchBtn.onclick = () => this.showScreen('searchScreen');
+                searchBtn.onclick = () => this.navigateTo('/search');
             }
 
             const checkupBtn = document.getElementById('checkupBtn');
@@ -187,42 +187,42 @@ class ToolTrackingApp {
             const backToMain = document.getElementById('backToMain');
             if (backToMain) {
                 backToMain.addEventListener('click', () => {
-                    this.showScreen('toolScannerMenu');
+                    this.navigateTo('/toolscannermenu');
                 });
             }
 
             const backToMainFromRegister = document.getElementById('backToMainFromRegister');
             if (backToMainFromRegister) {
                 backToMainFromRegister.addEventListener('click', () => {
-                    this.showScreen('toolScannerMenu');
+                    this.navigateTo('/toolscannermenu');
                 });
             }
 
             const backToMainFromSearch = document.getElementById('backToMainFromSearch');
             if (backToMainFromSearch) {
                 backToMainFromSearch.addEventListener('click', () => {
-                    this.showScreen('toolScannerMenu');
+                    this.navigateTo('/toolscannermenu');
                 });
             }
 
             const backToMainFromPrevious = document.getElementById('backToMainFromPrevious');
             if (backToMainFromPrevious) {
                 backToMainFromPrevious.addEventListener('click', () => {
-                    this.showScreen('toolScannerMenu');
+                    this.navigateTo('/toolscannermenu');
                 });
             }
 
             const backToMainFromMyTools = document.getElementById('backToMainFromMyTools');
             if (backToMainFromMyTools) {
                 backToMainFromMyTools.addEventListener('click', () => {
-                    this.showScreen('toolScannerMenu');
+                    this.navigateTo('/toolscannermenu');
                 });
             }
 
             const backToMainFromAccount = document.getElementById('backToMainFromAccount');
             if (backToMainFromAccount) {
                 backToMainFromAccount.addEventListener('click', () => {
-                    this.showScreen('toolScannerMenu');
+                    this.navigateTo('/toolscannermenu');
                 });
             }
 
@@ -355,7 +355,7 @@ class ToolTrackingApp {
                 }
 
                 // Show ToolScanner menu screen instead of main screen
-                this.showScreen('toolScannerMenu');
+                this.navigateTo('/toolscannermenu');
                 this.updateMenuUsername();
                 this.loadPreviousOutCount();
                 this.showAlert('Login successful!', 'success');
@@ -427,7 +427,7 @@ class ToolTrackingApp {
             });
 
             this.showAlert('Account created successfully! Please log in.', 'success');
-            this.showScreen('login');
+            this.navigateTo('/login');
             
             // Clear signup form
             document.getElementById('signupForm').reset();
@@ -478,7 +478,7 @@ class ToolTrackingApp {
         localStorage.removeItem('technicianName');
         this.currentUser = null;
         this.technicianName = '';
-        this.showScreen('login');
+        this.navigateTo('/login');
         this.showAlert('Logged out successfully', 'success');
     }
 
