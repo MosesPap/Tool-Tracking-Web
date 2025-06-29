@@ -745,7 +745,8 @@ class ToolTrackingApp {
                     status: toolData.status || 'UNKNOWN',
                     id: doc.id,
                     timestamp: timestamp,
-                    technician: toolData.technician || ''
+                    technician: toolData.technician || '',
+                    collectionCode: toolData.collectionCode || toolData.collection || ''
                 };
             });
 
@@ -1471,10 +1472,9 @@ class ToolTrackingApp {
             let photosHtml = '';
             if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
                 photosHtml = `<div class='row'>` + data.photos.map(url => `
-                    <div class='col-6 col-md-4 mb-3'><img src='${url}' class='img-fluid rounded shadow-sm' alt='Collection Photo'></div>
-                `).join('') + `</div>`;
-            } else {
-                photosHtml = `<div class='text-muted'>No photos available for this collection.</div>`;
+            <div class='col-md-4'>
+                <img src="${url}" class="img-fluid" alt="Collection Photo">
+            </div>`).join('') + `</div>`;
             }
             content.innerHTML = `
                 <div><strong>Name:</strong> ${data.collectionName || collectionCode}</div>
@@ -1488,56 +1488,3 @@ class ToolTrackingApp {
         }
     }
 }
-
-// Listen for browser navigation
-window.addEventListener('popstate', () => {
-    app.route(location.pathname);
-});
-
-// On page load, route to the correct screen
-window.addEventListener('DOMContentLoaded', () => {
-    app.route(location.pathname);
-});
-
-// Initialize app when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    try {
-    window.app = new ToolTrackingApp();
-    } catch (error) {
-        console.error('Failed to initialize app:', error);
-        // Show error screen if app fails to initialize
-        const errorScreen = document.getElementById('errorScreen');
-        if (errorScreen) {
-            document.getElementById('loadingScreen').style.display = 'none';
-            errorScreen.style.display = 'flex';
-            const errorMessage = errorScreen.querySelector('h4');
-            if (errorMessage) {
-                errorMessage.textContent = 'Failed to load application';
-            }
-        }
-    }
-});
-
-// Global error handlers for mobile
-window.addEventListener('error', (event) => {
-    console.error('Global error:', event.error);
-    if (window.app && window.app.showErrorScreen) {
-        window.app.showErrorScreen('An unexpected error occurred. Please refresh the page.');
-    }
-});
-
-window.addEventListener('unhandledrejection', (event) => {
-    console.error('Unhandled promise rejection:', event.reason);
-    if (window.app && window.app.showErrorScreen) {
-        window.app.showErrorScreen('Network or connection error. Please check your internet connection.');
-    }
-});
-
-// Handle mobile-specific issues
-window.addEventListener('load', () => {
-    // Ensure the app is visible on mobile
-    if (window.innerWidth <= 768) {
-        document.body.style.visibility = 'visible';
-        document.body.style.opacity = '1';
-    }
-}); 
