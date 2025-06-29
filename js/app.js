@@ -7,182 +7,299 @@ class ToolTrackingApp {
         this.outToolsCount = 0;
         this.html5QrcodeScanner = null;
         this.isScanning = false;
+        this.isInitialized = false;
         
         this.init();
     }
 
     init() {
-        // Initialize Firebase
-        this.initFirebase();
-        
-        // Set up event listeners
-        this.setupEventListeners();
-        
-        // Check for existing session
-        this.checkExistingSession();
-        
-        // Hide loading screen after initialization
-        setTimeout(() => {
-            this.hideLoadingScreen();
-        }, 2000);
+        try {
+            // Initialize Firebase
+            this.initFirebase();
+            
+            // Set up event listeners
+            this.setupEventListeners();
+            
+            // Check for existing session
+            this.checkExistingSession();
+            
+            // Hide loading screen after initialization
+            setTimeout(() => {
+                this.hideLoadingScreen();
+            }, 2000);
+        } catch (error) {
+            console.error('App initialization error:', error);
+            this.showErrorScreen('Failed to initialize application. Please refresh the page.');
+        }
     }
 
     initFirebase() {
-        // Firebase configuration - using actual project settings
-        const firebaseConfig = {
-            apiKey: "AIzaSyBltucXfxN3xzOxX5s8s7Kv8yCBa5azxzU",
-            authDomain: "tool-tracking-system-15e84.firebaseapp.com",
-            projectId: "tool-tracking-system-15e84",
-            storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
-            messagingSenderId: "813615362050",
-            appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b" // Replace this with your actual web app ID from Firebase Console
-        };
+        try {
+            // Check if Firebase is available
+            if (typeof firebase === 'undefined') {
+                throw new Error('Firebase is not loaded');
+            }
 
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        
-        // Initialize services
-        this.auth = firebase.auth();
-        this.db = firebase.firestore();
+            // Use config from config.js if available, otherwise use default
+            const config = typeof firebaseConfig !== 'undefined' ? firebaseConfig : {
+                apiKey: "AIzaSyBltucXfxN3xzOxX5s8s7Kv8yCBa5azxzU",
+                authDomain: "tool-tracking-system-15e84.firebaseapp.com",
+                projectId: "tool-tracking-system-15e84",
+                storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
+                messagingSenderId: "813615362050",
+                appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
+            };
+
+            // Initialize Firebase
+            firebase.initializeApp(config);
+            
+            // Initialize services
+            this.auth = firebase.auth();
+            this.db = firebase.firestore();
+            
+            console.log('Firebase initialized successfully');
+        } catch (error) {
+            console.error('Firebase initialization error:', error);
+            throw new Error('Failed to initialize Firebase: ' + error.message);
+        }
     }
 
     setupEventListeners() {
-        // Login form
-        const loginForm = document.getElementById('loginForm');
-        if (loginForm) {
-            loginForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.handleLogin();
-            });
-        }
-
-        // Signup form
-        const signupForm = document.getElementById('signupForm');
-        if (signupForm) {
-            signupForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.handleSignup();
-            });
-        }
-
-        // Password toggles
-        document.getElementById('togglePassword').addEventListener('click', () => {
-            this.togglePasswordVisibility('password');
-        });
-
-        document.getElementById('toggleSignupPassword').addEventListener('click', () => {
-            this.togglePasswordVisibility('signupPassword');
-        });
-
-        document.getElementById('toggleSignupConfirmPassword').addEventListener('click', () => {
-            this.togglePasswordVisibility('signupConfirmPassword');
-        });
-
-        // Navigation buttons
-        document.getElementById('createAccountBtn').addEventListener('click', () => {
-            this.showScreen('signup');
-        });
-
-        document.getElementById('backToLogin').addEventListener('click', () => {
-            this.showScreen('login');
-        });
-
-        document.getElementById('adminBtn').addEventListener('click', () => {
-            this.showAdminLogin();
-        });
-
-        document.getElementById('forgotPassword').addEventListener('click', (e) => {
-            e.preventDefault();
-            this.showForgotPassword();
-        });
-
-        // Main navigation
-        document.getElementById('scanBtn').addEventListener('click', () => {
-            this.showScreen('scanner');
-        });
-
-        document.getElementById('registerBtn').onclick = () => this.showScreen('registerScreen');
-        document.getElementById('previousOutBtn').onclick = () => this.showScreen('previousOutScreen');
-        document.getElementById('myToolsBtn').onclick = () => this.showScreen('myToolsScreen');
-        document.getElementById('searchBtn').onclick = () => this.showScreen('searchScreen');
-
-        document.getElementById('checkupBtn').addEventListener('click', () => {
-            this.showScreen('checkup');
-        });
-
-        document.getElementById('myAccountBtn').addEventListener('click', () => {
-            this.showScreen('myAccount');
-        });
-
-        document.getElementById('logoutBtn').onclick = () => this.handleLogout();
-
-        // Back buttons
-        document.getElementById('backToMain').addEventListener('click', () => {
-            this.showScreen('main');
-        });
-
-        document.getElementById('backToMainFromRegister').addEventListener('click', () => {
-            this.showScreen('main');
-        });
-
-        document.getElementById('backToMainFromSearch').addEventListener('click', () => {
-            this.showScreen('main');
-        });
-
-        document.getElementById('backToMainFromPrevious').addEventListener('click', () => {
-            this.showScreen('main');
-        });
-
-        document.getElementById('backToMainFromMyTools').addEventListener('click', () => {
-            this.showScreen('main');
-        });
-
-        document.getElementById('backToMainFromAccount').addEventListener('click', () => {
-            this.showScreen('main');
-        });
-
-        // Scanner functionality
-        document.getElementById('toggleCameraBtn').addEventListener('click', () => {
-            this.toggleCamera();
-        });
-
-        document.getElementById('toolCode').addEventListener('input', (e) => {
-            document.getElementById('toolDetailsBtn').disabled = e.target.value.trim() === '';
-        });
-
-        document.getElementById('toolDetailsBtn').addEventListener('click', () => {
-            this.getToolDetails();
-        });
-
-        // Register functionality
-        document.getElementById('registerToolBtn').addEventListener('click', () => {
-            this.registerTool();
-        });
-
-        // Search functionality
-        document.querySelectorAll('.search-chip').forEach(chip => {
-            chip.addEventListener('click', (e) => {
-                this.setSearchType(e.target.dataset.type);
-            });
-        });
-
-        document.getElementById('searchQuery').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.performSearch();
+        try {
+            // Login form
+            const loginForm = document.getElementById('loginForm');
+            if (loginForm) {
+                loginForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.handleLogin();
+                });
             }
-        });
 
-        // Tool details modal
-        document.getElementById('checkoutBtn').addEventListener('click', () => {
-            this.checkoutTool();
-        });
+            // Signup form
+            const signupForm = document.getElementById('signupForm');
+            if (signupForm) {
+                signupForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.handleSignup();
+                });
+            }
 
-        document.getElementById('checkinBtn').addEventListener('click', () => {
-            this.checkinTool();
-        });
+            // Password toggles
+            const togglePassword = document.getElementById('togglePassword');
+            if (togglePassword) {
+                togglePassword.addEventListener('click', () => {
+                    this.togglePasswordVisibility('password');
+                });
+            }
 
-        // Menu buttons
-        document.getElementById('refreshBtn').onclick = () => this.refreshMenu();
+            const toggleSignupPassword = document.getElementById('toggleSignupPassword');
+            if (toggleSignupPassword) {
+                toggleSignupPassword.addEventListener('click', () => {
+                    this.togglePasswordVisibility('signupPassword');
+                });
+            }
+
+            const toggleSignupConfirmPassword = document.getElementById('toggleSignupConfirmPassword');
+            if (toggleSignupConfirmPassword) {
+                toggleSignupConfirmPassword.addEventListener('click', () => {
+                    this.togglePasswordVisibility('signupConfirmPassword');
+                });
+            }
+
+            // Navigation buttons
+            const createAccountBtn = document.getElementById('createAccountBtn');
+            if (createAccountBtn) {
+                createAccountBtn.addEventListener('click', () => {
+                    this.showScreen('signup');
+                });
+            }
+
+            const backToLogin = document.getElementById('backToLogin');
+            if (backToLogin) {
+                backToLogin.addEventListener('click', () => {
+                    this.showScreen('login');
+                });
+            }
+
+            const adminBtn = document.getElementById('adminBtn');
+            if (adminBtn) {
+                adminBtn.addEventListener('click', () => {
+                    this.showAdminLogin();
+                });
+            }
+
+            const forgotPassword = document.getElementById('forgotPassword');
+            if (forgotPassword) {
+                forgotPassword.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.showForgotPassword();
+                });
+            }
+
+            // Main navigation
+            const scanBtn = document.getElementById('scanBtn');
+            if (scanBtn) {
+                scanBtn.addEventListener('click', () => {
+                    this.showScreen('scanner');
+                });
+            }
+
+            const registerBtn = document.getElementById('registerBtn');
+            if (registerBtn) {
+                registerBtn.onclick = () => this.showScreen('registerScreen');
+            }
+
+            const previousOutBtn = document.getElementById('previousOutBtn');
+            if (previousOutBtn) {
+                previousOutBtn.onclick = () => this.showScreen('previousOutScreen');
+            }
+
+            const myToolsBtn = document.getElementById('myToolsBtn');
+            if (myToolsBtn) {
+                myToolsBtn.onclick = () => this.showScreen('myToolsScreen');
+            }
+
+            const searchBtn = document.getElementById('searchBtn');
+            if (searchBtn) {
+                searchBtn.onclick = () => this.showScreen('searchScreen');
+            }
+
+            const checkupBtn = document.getElementById('checkupBtn');
+            if (checkupBtn) {
+                checkupBtn.addEventListener('click', () => {
+                    this.showScreen('checkup');
+                });
+            }
+
+            const myAccountBtn = document.getElementById('myAccountBtn');
+            if (myAccountBtn) {
+                myAccountBtn.addEventListener('click', () => {
+                    this.showScreen('myAccount');
+                });
+            }
+
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (logoutBtn) {
+                logoutBtn.onclick = () => this.handleLogout();
+            }
+
+            // Back buttons
+            const backToMain = document.getElementById('backToMain');
+            if (backToMain) {
+                backToMain.addEventListener('click', () => {
+                    this.showScreen('main');
+                });
+            }
+
+            const backToMainFromRegister = document.getElementById('backToMainFromRegister');
+            if (backToMainFromRegister) {
+                backToMainFromRegister.addEventListener('click', () => {
+                    this.showScreen('main');
+                });
+            }
+
+            const backToMainFromSearch = document.getElementById('backToMainFromSearch');
+            if (backToMainFromSearch) {
+                backToMainFromSearch.addEventListener('click', () => {
+                    this.showScreen('main');
+                });
+            }
+
+            const backToMainFromPrevious = document.getElementById('backToMainFromPrevious');
+            if (backToMainFromPrevious) {
+                backToMainFromPrevious.addEventListener('click', () => {
+                    this.showScreen('main');
+                });
+            }
+
+            const backToMainFromMyTools = document.getElementById('backToMainFromMyTools');
+            if (backToMainFromMyTools) {
+                backToMainFromMyTools.addEventListener('click', () => {
+                    this.showScreen('main');
+                });
+            }
+
+            const backToMainFromAccount = document.getElementById('backToMainFromAccount');
+            if (backToMainFromAccount) {
+                backToMainFromAccount.addEventListener('click', () => {
+                    this.showScreen('main');
+                });
+            }
+
+            // Scanner functionality
+            const toggleCameraBtn = document.getElementById('toggleCameraBtn');
+            if (toggleCameraBtn) {
+                toggleCameraBtn.addEventListener('click', () => {
+                    this.toggleCamera();
+                });
+            }
+
+            const toolCode = document.getElementById('toolCode');
+            if (toolCode) {
+                toolCode.addEventListener('input', (e) => {
+                    const toolDetailsBtn = document.getElementById('toolDetailsBtn');
+                    if (toolDetailsBtn) {
+                        toolDetailsBtn.disabled = e.target.value.trim() === '';
+                    }
+                });
+            }
+
+            const toolDetailsBtn = document.getElementById('toolDetailsBtn');
+            if (toolDetailsBtn) {
+                toolDetailsBtn.addEventListener('click', () => {
+                    this.getToolDetails();
+                });
+            }
+
+            // Register functionality
+            const registerToolBtn = document.getElementById('registerToolBtn');
+            if (registerToolBtn) {
+                registerToolBtn.addEventListener('click', () => {
+                    this.registerTool();
+                });
+            }
+
+            // Search functionality
+            document.querySelectorAll('.search-chip').forEach(chip => {
+                chip.addEventListener('click', (e) => {
+                    this.setSearchType(e.target.dataset.type);
+                });
+            });
+
+            const searchQuery = document.getElementById('searchQuery');
+            if (searchQuery) {
+                searchQuery.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.performSearch();
+                    }
+                });
+            }
+
+            // Tool details modal
+            const checkoutBtn = document.getElementById('checkoutBtn');
+            if (checkoutBtn) {
+                checkoutBtn.addEventListener('click', () => {
+                    this.checkoutTool();
+                });
+            }
+
+            const checkinBtn = document.getElementById('checkinBtn');
+            if (checkinBtn) {
+                checkinBtn.addEventListener('click', () => {
+                    this.checkinTool();
+                });
+            }
+
+            // Menu buttons
+            const refreshBtn = document.getElementById('refreshBtn');
+            if (refreshBtn) {
+                refreshBtn.onclick = () => this.refreshMenu();
+            }
+
+            console.log('Event listeners setup completed');
+        } catch (error) {
+            console.error('Error setting up event listeners:', error);
+        }
     }
 
     checkExistingSession() {
@@ -619,6 +736,25 @@ class ToolTrackingApp {
         const loadingScreen = document.getElementById('loadingScreen');
         if (loadingScreen) {
             loadingScreen.style.display = 'none';
+        }
+        
+        // Show login screen by default
+        this.showScreen('login');
+    }
+
+    showErrorScreen(message) {
+        const loadingScreen = document.getElementById('loadingScreen');
+        if (loadingScreen) {
+            loadingScreen.innerHTML = `
+                <div class="loading-content">
+                    <div class="text-light mb-3">
+                        <i class="fas fa-exclamation-triangle fa-3x"></i>
+                    </div>
+                    <h4 class="text-light">Error</h4>
+                    <p class="text-light">${message}</p>
+                    <button class="btn btn-light mt-3" onclick="location.reload()">Retry</button>
+                </div>
+            `;
         }
     }
 
