@@ -34,8 +34,7 @@ class ToolTrackingApp {
             projectId: "tool-tracking-system-15e84",
             storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
             messagingSenderId: "813615362050",
-            appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b
-" // Replace this with your actual web app ID from Firebase Console
+            appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b" // Replace this with your actual web app ID from Firebase Console
         };
 
         // Initialize Firebase
