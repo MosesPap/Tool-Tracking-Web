@@ -57,18 +57,12 @@
 
     <!-- ToolScanner Menu Screen -->
     <div id="toolScannerMenu" class="app-screen" style="display:none;">
-        <div class="header-bar d-flex justify-content-between align-items-center">
+        <div class="header-bar">
             <span class="header-title">ToolScanner Menu</span>
-            <div class="d-flex gap-2">
-                <button class="btn btn-outline-warning btn-sm" id="refreshBtn">
-                    <i class="fas fa-sync-alt"></i> Refresh
-                </button>
-                <button class="btn btn-outline-danger btn-sm" id="logoutBtn">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </button>
-            </div>
         </div>
         <div class="menu-username" id="menuUsername">Moses Papakyriakou</div>
+        <button class="menu-btn orange w-100 mb-2" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
+        <button class="menu-btn orange w-100 mb-2" id="refreshBtn"><i class="fas fa-sync-alt"></i> Refresh</button>
         <button class="menu-btn green" id="registerBtn">Register Tools</button>
         <button class="menu-btn red" id="previousOutBtn">View OUT Tools <span class="menu-badge" id="outToolsCount">11</span></button>
         <button class="menu-btn orange" id="myToolsBtn">My Tools</button>
