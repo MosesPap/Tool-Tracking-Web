@@ -326,6 +326,24 @@ class ToolTrackingApp {
                         return;
                     }
                     const toolData = toolDoc.data();
+                    const status = (toolData.status || '').toUpperCase();
+                    const currentTechnician = toolData.technician || '';
+                    const calDueDate = toolData.calDueDate || toolData.calibrationDueDate || '';
+                    // 1. Already checked out by another user
+                    if (status === 'OUT' && currentTechnician !== technicianName) {
+                        this.showAlert(`Tool is already checked out by ${currentTechnician}.`, 'error');
+                        return;
+                    }
+                    // 2. Not allowed statuses
+                    if (["BROKEN", "LOST", "CALIBRATION"].includes(status)) {
+                        this.showAlert(`Tool cannot be checked out (status: ${status}).`, 'error');
+                        return;
+                    }
+                    // 3. Calibration due date expired
+                    if (calDueDate && !this.isCalDueDateValid(calDueDate)) {
+                        this.showAlert('Calibration due date is expired. Tool cannot be checked out.', 'error');
+                        return;
+                    }
                     // Update tool status, technician, and timestamp
                     await this.db.collection('tools').doc(toolId).update({
                         status: 'OUT',
@@ -342,7 +360,7 @@ class ToolTrackingApp {
                         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
                         location: toolData.location || '',
                         owner: toolData.owner || '',
-                        calDueDate: toolData.calDueDate || toolData.calibrationDueDate || ''
+                        calDueDate: calDueDate
                     });
                     // Show tool as a card in scannedToolsList
                     this.addScannedToolCard({
@@ -1060,6 +1078,28 @@ class ToolTrackingApp {
             </div>
         `;
         list.prepend(card);
+    }
+
+    isCalDueDateValid(calDueDate) {
+        // Accepts YYYY-MM-DD or YYYY/MM/DD or DD/MM/YYYY or DD-MM-YYYY
+        if (!calDueDate) return true;
+        let dateStr = calDueDate.replace(/\//g, '-');
+        let parts = dateStr.split('-');
+        let year, month, day;
+        if (parts[0].length === 4) {
+            // YYYY-MM-DD
+            year = parseInt(parts[0]);
+            month = parseInt(parts[1]) - 1;
+            day = parseInt(parts[2]);
+        } else {
+            // DD-MM-YYYY
+            year = parseInt(parts[2]);
+            month = parseInt(parts[1]) - 1;
+            day = parseInt(parts[0]);
+        }
+        const dueDate = new Date(year, month, day, 23, 59, 59);
+        const now = new Date();
+        return dueDate >= now;
     }
 }
 
