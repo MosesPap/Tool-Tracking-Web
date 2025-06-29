@@ -326,22 +326,24 @@ class ToolTrackingApp {
                         return;
                     }
                     const toolData = toolDoc.data();
-                    // Update tool status and technician
+                    // Update tool status, technician, and timestamp
                     await this.db.collection('tools').doc(toolId).update({
                         status: 'OUT',
-                        technician: technicianName
+                        technician: technicianName,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
                     });
-                    // Create log entry
-                    if (window.ToolManager && window.ToolManager.init) {
-                        const tm = window.ToolManager.init();
-                        await tm.createLogEntry(toolId, 'CHECKOUT', technicianName, {
-                            toolName: toolData.toolName,
-                            partNumber: toolData.partNumber,
-                            status: 'OUT',
-                            location: toolData.location,
-                            calibrationDueDate: toolData.calibrationDueDate
-                        });
-                    }
+                    // Create log entry in logtoolmovements
+                    await this.db.collection('logtoolmovements').add({
+                        toolId: toolId,
+                        toolName: toolData.toolName || '',
+                        partNumber: toolData.partNumber || '',
+                        status: 'OUT',
+                        technician: technicianName,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                        location: toolData.location || '',
+                        owner: toolData.owner || '',
+                        calDueDate: toolData.calDueDate || toolData.calibrationDueDate || ''
+                    });
                     // Show tool as a card in scannedToolsList
                     this.addScannedToolCard({
                         toolName: toolData.toolName,
