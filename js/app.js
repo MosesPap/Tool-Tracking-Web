@@ -593,37 +593,104 @@ class ToolTrackingApp {
     }
 
     showScreen(screenId) {
-        document.querySelectorAll('.app-screen, .screen').forEach(el => el.style.display = 'none');
-        const screen = document.getElementById(screenId + 'Screen') || document.getElementById(screenId);
-        if (screen) {
-            screen.style.display = 'block';
-            if (screenId === 'toolScannerMenu') {
-                screen.classList.remove('fade-in');
-                void screen.offsetWidth; // trigger reflow
-                screen.classList.add('fade-in');
-            }
+        // Hide all screens
+        document.querySelectorAll('.app-screen, .screen').forEach(screen => {
+            screen.style.display = 'none';
+        });
+        
+        // Show the requested screen
+        const targetScreen = document.getElementById(screenId);
+        if (targetScreen) {
+            targetScreen.style.display = 'block';
             this.currentScreen = screenId;
+            
+            // Load specific data for certain screens
             this.loadScreenData(screenId);
         }
     }
 
     loadScreenData(screenName) {
         switch (screenName) {
-            case 'main':
-                this.loadPreviousOutCount();
+            case 'registerScreen':
+                this.updateRegisterTechnicianName();
+                this.loadTodayToolMovements();
                 break;
             case 'toolScannerMenu':
                 this.loadPreviousOutCount();
                 break;
-            case 'previousOut':
-                this.loadPreviousOutTools();
-                break;
-            case 'myTools':
+            case 'myToolsScreen':
                 this.loadMyTools();
                 break;
-            case 'myAccount':
+            case 'previousOutScreen':
+                this.loadPreviousOutTools();
+                break;
+            case 'myAccountScreen':
                 this.loadAccountInfo();
                 break;
+        }
+    }
+
+    updateRegisterTechnicianName() {
+        const technicianNameElement = document.getElementById('registerTechnicianName');
+        if (technicianNameElement) {
+            technicianNameElement.textContent = this.technicianName || 'Unknown';
+        }
+    }
+
+    async loadTodayToolMovements() {
+        try {
+            const technicianName = this.technicianName;
+            if (!technicianName) {
+                console.error('No technician name available');
+                return;
+            }
+
+            // Get today's start and end timestamps
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            // Query tools collection for today's movements by this technician
+            const snapshot = await this.db.collection('tools')
+                .where('technician', '==', technicianName)
+                .where('timestamp', '>=', firebase.firestore.Timestamp.fromDate(today))
+                .where('timestamp', '<', firebase.firestore.Timestamp.fromDate(tomorrow))
+                .orderBy('timestamp', 'desc')
+                .get();
+
+            const scannedToolsList = document.getElementById('scannedToolsList');
+            if (!scannedToolsList) return;
+
+            // Clear existing content
+            scannedToolsList.innerHTML = '';
+
+            if (snapshot.empty) {
+                scannedToolsList.innerHTML = '<div class="text-center text-muted mt-3"><p>No tool movements today</p></div>';
+                return;
+            }
+
+            // Display each tool movement
+            snapshot.docs.forEach(doc => {
+                const toolData = doc.data();
+                const timestamp = toolData.timestamp ? toolData.timestamp.toDate() : new Date();
+                
+                this.addScannedToolCard({
+                    toolName: toolData.toolName || 'Unknown Tool',
+                    partNumber: toolData.partNumber || 'N/A',
+                    status: toolData.status || 'UNKNOWN',
+                    id: doc.id,
+                    timestamp: timestamp,
+                    technician: toolData.technician || technicianName
+                });
+            });
+
+        } catch (error) {
+            console.error('Error loading today\'s tool movements:', error);
+            const scannedToolsList = document.getElementById('scannedToolsList');
+            if (scannedToolsList) {
+                scannedToolsList.innerHTML = '<div class="text-center text-danger mt-3"><p>Error loading tool movements</p></div>';
+            }
         }
     }
 
@@ -1058,7 +1125,7 @@ class ToolTrackingApp {
     route(path) {
         switch (path) {
             case '/login':
-                this.showScreen('login');
+                this.showScreen('loginScreen');
                 break;
             case '/toolscannermenu':
                 this.showScreen('toolScannerMenu');
@@ -1076,10 +1143,10 @@ class ToolTrackingApp {
                 this.showScreen('previousOutScreen');
                 break;
             case '/signup':
-                this.showScreen('signup');
+                this.showScreen('signupScreen');
                 break;
             default:
-                this.showScreen('login');
+                this.showScreen('loginScreen');
         }
     }
 
