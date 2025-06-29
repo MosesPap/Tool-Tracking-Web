@@ -9,6 +9,7 @@ class ToolTrackingApp {
         this.isScanning = false;
         this.isInitialized = false;
         this.cooldownMinutes = 0; // Add cooldown minutes state
+        this.cooldownWarningShownDate = null; // Track if cooldown warning was shown today
         
         this.init();
     }
@@ -399,11 +400,10 @@ class ToolTrackingApp {
                         }
                         
                         // 3. Check cooldown warning
-                        if (this.cooldownMinutes > 0) {
-                            // Show warning about cooldown before checkout
+                        if (this.cooldownMinutes > 0 && !this.cooldownWarningShownToday()) {
                             this.showCheckoutWarningDialog(toolId);
+                            this.cooldownWarningShownDate = new Date();
                         } else {
-                            // No cooldown, proceed with checkout
                             await this.performToolCheckout(toolId);
                         }
                     }
@@ -712,19 +712,33 @@ class ToolTrackingApp {
                 return;
             }
 
-            // Display each tool (IN and OUT)
-            snapshot.docs.forEach(doc => {
+            // Collect all tools
+            const tools = snapshot.docs.map(doc => {
                 const toolData = doc.data();
                 const timestamp = toolData.timestamp ? toolData.timestamp.toDate() : new Date();
-                console.log('Rendering tool:', toolData.toolName, 'Status:', toolData.status, 'Technician:', toolData.technician);
-                this.addScannedToolCard({
+                return {
                     toolName: toolData.toolName || 'Unknown Tool',
                     partNumber: toolData.partNumber || 'N/A',
                     status: toolData.status || 'UNKNOWN',
                     id: doc.id,
                     timestamp: timestamp,
                     technician: toolData.technician || ''
-                });
+                };
+            });
+
+            // Sort: OUT first, then IN, both by descending timestamp
+            tools.sort((a, b) => {
+                if (a.status === b.status) {
+                    return b.timestamp - a.timestamp;
+                }
+                if (a.status === 'OUT') return -1;
+                if (b.status === 'OUT') return 1;
+                return b.timestamp - a.timestamp;
+            });
+
+            // Display each tool
+            tools.forEach((tool, index) => {
+                this.addScannedToolCard(tool, index);
             });
 
         } catch (error) {
@@ -827,7 +841,7 @@ class ToolTrackingApp {
     }
 
     createToolCard(tool, index) {
-        const timestamp = tool.timestamp ? new Date(tool.timestamp.toDate()).toLocaleString() : 'Unknown';
+        const timestamp = tool.timestamp ? new Date(tool.timestamp).toLocaleString() : 'Unknown';
         const status = tool.status || 'N/A';
         const statusClass = status.toLowerCase();
         
@@ -861,7 +875,7 @@ class ToolTrackingApp {
         const checkoutBtn = document.getElementById('checkoutBtn');
         const checkinBtn = document.getElementById('checkinBtn');
 
-        const timestamp = tool.timestamp ? new Date(tool.timestamp.toDate()).toLocaleString() : 'Unknown';
+        const timestamp = tool.timestamp ? new Date(tool.timestamp).toLocaleString() : 'Unknown';
         const status = tool.status || 'N/A';
 
         content.innerHTML = `
@@ -1205,7 +1219,7 @@ class ToolTrackingApp {
         }
     }
 
-    addScannedToolCard(tool) {
+    addScannedToolCard(tool, index = null) {
         const list = document.getElementById('scannedToolsList');
         if (!list) return;
         const card = document.createElement('div');
@@ -1215,17 +1229,17 @@ class ToolTrackingApp {
             statusColor = '#81c784'; // Green for IN
             statusText = 'IN';
         }
+        const cardNumber = (typeof tool.cardNumber !== 'undefined') ? tool.cardNumber : (index !== null ? index + 1 : '');
         card.className = 'tool-card mb-3';
         card.style.background = statusColor + '22';
         card.innerHTML = `
             <div class="tool-card-header d-flex justify-content-between align-items-center">
-                <div class="tool-name fw-bold">${tool.toolName || ''}</div>
-                <div class="tool-date small">${tool.timestamp ? new Date(tool.timestamp).toLocaleString() : ''}</div>
+                <div class="tool-name fw-bold">${cardNumber}. ${tool.toolName || ''}</div>
             </div>
             <div class="tool-details d-flex justify-content-between align-items-center mt-2">
-                <div><span class="fw-bold">TID</span><br>${tool.id}</div>
-                <div><span class="fw-bold">P/N</span><br>${tool.partNumber}</div>
-                <div><span class="fw-bold">STS</span><br><span style="color: white; background: ${statusColor}; border-radius: 8px; padding: 2px 12px; font-weight: bold;">${statusText}</span></div>
+                <div><span class="fw-bold" style="text-decoration: underline;">TID</span><br>${tool.id}</div>
+                <div><span class="fw-bold" style="text-decoration: underline;">P/N</span><br>${tool.partNumber}<br><span class="small" style="display:block; margin-top:4px;">${tool.timestamp ? new Date(tool.timestamp).toLocaleString() : ''}</span></div>
+                <div><span class="fw-bold" style="text-decoration: underline;">STS</span><br><span style="color: white; background: ${statusColor}; border-radius: 8px; padding: 2px 12px; font-weight: bold;">${statusText}</span></div>
             </div>
         `;
         list.appendChild(card);
@@ -1367,6 +1381,13 @@ class ToolTrackingApp {
             console.error('Error performing tool checkout:', error);
             this.showAlert('Error performing tool checkout', 'error');
         }
+    }
+
+    // Helper to check if cooldown warning was shown today
+    cooldownWarningShownToday() {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return this.cooldownWarningShownDate && this.cooldownWarningShownDate.getTime() === today.getTime();
     }
 }
 
