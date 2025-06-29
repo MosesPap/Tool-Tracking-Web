@@ -463,6 +463,11 @@ class ToolTrackingApp {
             this.showScreen('toolScannerMenu');
             this.updateMenuUsername();
             this.loadPreviousOutCount();
+            // If user is authenticated, restore last route
+            const lastRoute = localStorage.getItem('lastRoute');
+            if (lastRoute && lastRoute !== '/login' && lastRoute !== '/signup') {
+                this.route(lastRoute);
+            }
         } else {
             this.showScreen('login');
         }
@@ -1187,6 +1192,7 @@ class ToolTrackingApp {
     }
 
     navigateTo(path) {
+        localStorage.setItem('lastRoute', path);
         history.pushState({}, '', path);
         this.route(path);
     }
@@ -1402,8 +1408,10 @@ class ToolTrackingApp {
 }
 
 // Listen for browser navigation
-window.addEventListener('popstate', () => {
-    app.route(location.pathname);
+window.addEventListener('popstate', function() {
+    if (window.app && window.app.route) {
+        window.app.route(location.pathname);
+    }
 });
 
 // On page load, route to the correct screen
