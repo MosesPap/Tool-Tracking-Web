@@ -927,6 +927,9 @@ class ToolTrackingApp {
             if (collectionLink && tool.collectionCode) {
                 collectionLink.addEventListener('click', (e) => {
                     e.preventDefault();
+                    // Close the tool details modal before navigating
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('toolDetailsModal'));
+                    if (modal) modal.hide();
                     this.navigateTo(`/collection/${tool.collectionCode}`);
                 });
             }
@@ -1486,5 +1489,23 @@ class ToolTrackingApp {
         } catch (error) {
             content.innerHTML = `<div class='text-danger'>Error loading collection details.</div>`;
         }
+        // Hide all modals (in case any are open)
+        document.querySelectorAll('.modal.show').forEach(modalEl => {
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+        });
+        // Update back button logic for collection details screen to hide the screen and go back to the previous screen
+        setTimeout(() => {
+            const backBtn = document.getElementById('backToMainFromCollection');
+            if (backBtn) {
+                backBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    // Hide the collection details screen
+                    document.getElementById('collectionDetailsScreen').style.display = 'none';
+                    // Go back to the previous page
+                    history.back();
+                });
+            }
+        }, 0);
     }
 }
