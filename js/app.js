@@ -1252,6 +1252,9 @@ class ToolTrackingApp {
                 </div>
             </div>
         `;
+        card.addEventListener('click', () => {
+            this.showToolDetails(tool);
+        });
         list.appendChild(card);
     }
 
