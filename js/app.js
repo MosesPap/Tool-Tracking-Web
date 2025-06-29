@@ -915,7 +915,7 @@ class ToolTrackingApp {
                     <p><strong>Location:</strong> ${tool.location || 'N/A'}</p>
                     <p><strong>Calibration Due:</strong> ${tool.calibrationDueDate || tool.calDueDate || 'N/A'}</p>
                     <p><strong>Owner:</strong> ${tool.owner || 'N/A'}</p>
-                    <p><strong>Collection:</strong> <a href="#" id="collectionLink">${tool.collection || 'N/A'}</a></p>
+                    <p><strong>Collection:</strong> <a href="#" id="collectionLink">${tool.collectionCode || 'N/A'}</a></p>
                 </div>
             </div>
         `;
@@ -923,10 +923,10 @@ class ToolTrackingApp {
         // Add event listener for collection link
         setTimeout(() => {
             const collectionLink = document.getElementById('collectionLink');
-            if (collectionLink && tool.collection) {
+            if (collectionLink && tool.collectionCode) {
                 collectionLink.addEventListener('click', async (e) => {
                     e.preventDefault();
-                    await this.showCollectionDetails(tool.collection);
+                    await this.showCollectionDetails(tool.collectionCode);
                 });
             }
         }, 0);
@@ -1439,20 +1439,25 @@ class ToolTrackingApp {
         return this.cooldownWarningShownDate && this.cooldownWarningShownDate.getTime() === today.getTime();
     }
 
-    async showCollectionDetails(collectionId) {
+    async showCollectionDetails(collectionCode) {
         const modal = new bootstrap.Modal(document.getElementById('collectionDetailsModal'));
         const content = document.getElementById('collectionDetailsContent');
         const title = document.getElementById('collectionDetailsTitle');
         try {
-            const doc = await this.db.collection('collections').doc(collectionId).get();
-            if (!doc.exists) {
+            // Query collections where collectionName == collectionCode
+            const querySnapshot = await this.db.collection('collections')
+                .where('collectionName', '==', collectionCode)
+                .limit(1)
+                .get();
+            if (querySnapshot.empty) {
                 content.innerHTML = `<div class='text-danger'>Collection not found.</div>`;
                 title.textContent = 'Collection Details';
                 modal.show();
                 return;
             }
+            const doc = querySnapshot.docs[0];
             const data = doc.data();
-            title.textContent = data.name || collectionId;
+            title.textContent = data.collectionName || collectionCode;
             let photosHtml = '';
             if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
                 photosHtml = `<div class='row'>` + data.photos.map(url => `
@@ -1462,7 +1467,7 @@ class ToolTrackingApp {
                 photosHtml = `<div class='text-muted'>No photos available for this collection.</div>`;
             }
             content.innerHTML = `
-                <div><strong>Name:</strong> ${data.name || collectionId}</div>
+                <div><strong>Name:</strong> ${data.collectionName || collectionCode}</div>
                 <div><strong>Description:</strong> ${data.description || 'N/A'}</div>
                 <hr>
                 <h6>Photos:</h6>
