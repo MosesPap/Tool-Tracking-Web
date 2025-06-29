@@ -340,6 +340,13 @@ window.AuthManager = {
         return authManager;
     },
     
+    getInstance: () => {
+        if (!authManager) {
+            authManager = new AuthManager();
+        }
+        return authManager;
+    },
+    
     login: (email, password, keepSignedIn) => {
         if (authManager) {
             return authManager.login(email, password, keepSignedIn);
