@@ -20,14 +20,21 @@ class ToolTrackingApp {
             await this.initFirebase(); // Wait for Firebase to be ready!
             await this.loadCooldownMinutes();
             this.setupEventListeners();
-            this.checkExistingSession();
-            setTimeout(() => {
-                this.hideLoadingScreen();
-                // Fallback: always show login screen if no user is logged in
-                if (!this.currentUser) {
+
+            // Firebase Auth state observer
+            this.auth.onAuthStateChanged((user) => {
+                if (user) {
+                    this.currentUser = user;
+                    this.technicianName = localStorage.getItem('technicianName') || 'Technician';
+                    // Restore last visited page if available
+                    const lastPage = localStorage.getItem('lastPage') || '/toolscannermenu';
+                    this.navigateTo(lastPage);
+                } else {
+                    this.currentUser = null;
                     this.showScreen('loginScreen');
                 }
-            }, 2000);
+                this.hideLoadingScreen();
+            });
         } catch (error) {
             console.error('App initialization error:', error);
             this.showErrorScreen('Failed to initialize application. Please refresh the page.');
@@ -505,7 +512,7 @@ class ToolTrackingApp {
                     localStorage.setItem('technicianName', this.technicianName);
                 }
 
-                // Show ToolScanner menu screen instead of main screen
+                // Go to main menu and save route
                 this.navigateTo('/toolscannermenu');
                 this.updateMenuUsername();
                 this.loadPreviousOutCount();
@@ -1187,6 +1194,7 @@ class ToolTrackingApp {
     }
 
     navigateTo(path) {
+        localStorage.setItem('lastPage', path);
         history.pushState({}, '', path);
         this.route(path);
     }
