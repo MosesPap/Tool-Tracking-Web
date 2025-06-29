@@ -699,31 +699,30 @@ class ToolTrackingApp {
             // Clear existing content
             scannedToolsList.innerHTML = '';
 
-            // Get today's tool movements from logtoolmovements collection
-            const logSnapshot = await this.db.collection('logtoolmovements')
+            // Query tools collection for all tools checked in or out by this technician today
+            const snapshot = await this.db.collection('tools')
                 .where('technician', '==', technicianName)
                 .where('timestamp', '>=', firebase.firestore.Timestamp.fromDate(today))
                 .where('timestamp', '<', firebase.firestore.Timestamp.fromDate(tomorrow))
                 .orderBy('timestamp', 'desc')
                 .get();
 
-            if (logSnapshot.empty) {
+            if (snapshot.empty) {
                 scannedToolsList.innerHTML = '<div class="text-center text-muted mt-3"><p>No tool movements today</p></div>';
                 return;
             }
 
-            // Display each tool movement
-            logSnapshot.docs.forEach(doc => {
-                const logData = doc.data();
-                const timestamp = logData.timestamp ? logData.timestamp.toDate() : new Date();
-                
+            // Display each tool
+            snapshot.docs.forEach(doc => {
+                const toolData = doc.data();
+                const timestamp = toolData.timestamp ? toolData.timestamp.toDate() : new Date();
                 this.addScannedToolCard({
-                    toolName: logData.toolName || 'Unknown Tool',
-                    partNumber: logData.partNumber || 'N/A',
-                    status: logData.status || 'UNKNOWN',
-                    id: logData.toolId || 'N/A',
+                    toolName: toolData.toolName || 'Unknown Tool',
+                    partNumber: toolData.partNumber || 'N/A',
+                    status: toolData.status || 'UNKNOWN',
+                    id: doc.id,
                     timestamp: timestamp,
-                    technician: logData.technician || technicianName
+                    technician: toolData.technician || technicianName
                 });
             });
 
