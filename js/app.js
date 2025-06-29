@@ -187,42 +187,42 @@ class ToolTrackingApp {
             const backToMain = document.getElementById('backToMain');
             if (backToMain) {
                 backToMain.addEventListener('click', () => {
-                    this.showScreen('main');
+                    this.showScreen('toolScannerMenu');
                 });
             }
 
             const backToMainFromRegister = document.getElementById('backToMainFromRegister');
             if (backToMainFromRegister) {
                 backToMainFromRegister.addEventListener('click', () => {
-                    this.showScreen('main');
+                    this.showScreen('toolScannerMenu');
                 });
             }
 
             const backToMainFromSearch = document.getElementById('backToMainFromSearch');
             if (backToMainFromSearch) {
                 backToMainFromSearch.addEventListener('click', () => {
-                    this.showScreen('main');
+                    this.showScreen('toolScannerMenu');
                 });
             }
 
             const backToMainFromPrevious = document.getElementById('backToMainFromPrevious');
             if (backToMainFromPrevious) {
                 backToMainFromPrevious.addEventListener('click', () => {
-                    this.showScreen('main');
+                    this.showScreen('toolScannerMenu');
                 });
             }
 
             const backToMainFromMyTools = document.getElementById('backToMainFromMyTools');
             if (backToMainFromMyTools) {
                 backToMainFromMyTools.addEventListener('click', () => {
-                    this.showScreen('main');
+                    this.showScreen('toolScannerMenu');
                 });
             }
 
             const backToMainFromAccount = document.getElementById('backToMainFromAccount');
             if (backToMainFromAccount) {
                 backToMainFromAccount.addEventListener('click', () => {
-                    this.showScreen('main');
+                    this.showScreen('toolScannerMenu');
                 });
             }
 
@@ -483,16 +483,16 @@ class ToolTrackingApp {
     }
 
     showScreen(screenId) {
-        // Hide all screens/sections
         document.querySelectorAll('.app-screen, .screen').forEach(el => el.style.display = 'none');
-        
-        // Show the requested screen
         const screen = document.getElementById(screenId + 'Screen') || document.getElementById(screenId);
         if (screen) {
             screen.style.display = 'block';
+            if (screenId === 'toolScannerMenu') {
+                screen.classList.remove('fade-in');
+                void screen.offsetWidth; // trigger reflow
+                screen.classList.add('fade-in');
+            }
             this.currentScreen = screenId;
-            
-            // Load data for specific screens
             this.loadScreenData(screenId);
         }
     }
