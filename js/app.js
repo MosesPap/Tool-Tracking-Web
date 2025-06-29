@@ -146,7 +146,7 @@ class ToolTrackingApp {
 
             const registerBtn = document.getElementById('registerBtn');
             if (registerBtn) {
-                registerBtn.onclick = () => this.navigateTo('/register');
+                registerBtn.onclick = () => this.navigateTo('/registertools');
             }
 
             const previousOutBtn = document.getElementById('previousOutBtn');
@@ -294,6 +294,65 @@ class ToolTrackingApp {
             const refreshBtn = document.getElementById('refreshBtn');
             if (refreshBtn) {
                 refreshBtn.onclick = () => this.refreshMenu();
+            }
+
+            // Register Tools page
+            const registerScannerBtn = document.getElementById('registerScannerBtn');
+            if (registerScannerBtn) {
+                registerScannerBtn.addEventListener('click', () => {
+                    // Open scanner and fill TOOL ID field
+                    if (window.ScannerManager && window.ScannerManager.startCameraForInput) {
+                        window.ScannerManager.startCameraForInput('registerToolCode');
+                    } else {
+                        this.showAlert('Scanner not available', 'error');
+                    }
+                });
+            }
+
+            const registerSubmitBtn = document.getElementById('registerSubmitBtn');
+            if (registerSubmitBtn) {
+                registerSubmitBtn.addEventListener('click', async () => {
+                    const toolId = document.getElementById('registerToolCode').value.trim();
+                    if (!toolId) {
+                        this.showAlert('Please enter or scan a TOOL ID', 'error');
+                        return;
+                    }
+                    // Get current user name
+                    const technicianName = this.technicianName || 'Technician';
+                    // Get tool from Firestore
+                    const toolDoc = await this.db.collection('tools').doc(toolId).get();
+                    if (!toolDoc.exists) {
+                        this.showAlert('Tool not found', 'error');
+                        return;
+                    }
+                    const toolData = toolDoc.data();
+                    // Update tool status and technician
+                    await this.db.collection('tools').doc(toolId).update({
+                        status: 'OUT',
+                        technician: technicianName
+                    });
+                    // Create log entry
+                    if (window.ToolManager && window.ToolManager.init) {
+                        const tm = window.ToolManager.init();
+                        await tm.createLogEntry(toolId, 'CHECKOUT', technicianName, {
+                            toolName: toolData.toolName,
+                            partNumber: toolData.partNumber,
+                            status: 'OUT',
+                            location: toolData.location,
+                            calibrationDueDate: toolData.calibrationDueDate
+                        });
+                    }
+                    // Show tool as a card in scannedToolsList
+                    this.addScannedToolCard({
+                        toolName: toolData.toolName,
+                        partNumber: toolData.partNumber,
+                        status: 'OUT',
+                        id: toolId,
+                        timestamp: new Date(),
+                        technician: technicianName
+                    });
+                    this.showAlert('Tool registered and checked out!', 'success');
+                });
             }
 
             console.log('Event listeners setup completed');
@@ -953,7 +1012,7 @@ class ToolTrackingApp {
             case '/toolscannermenu':
                 this.showScreen('toolScannerMenu');
                 break;
-            case '/register':
+            case '/registertools':
                 this.showScreen('registerScreen');
                 break;
             case '/search':
@@ -971,6 +1030,34 @@ class ToolTrackingApp {
             default:
                 this.showScreen('login');
         }
+    }
+
+    addScannedToolCard(tool) {
+        const list = document.getElementById('scannedToolsList');
+        if (!list) return;
+        const card = document.createElement('div');
+        card.className = 'tool-card out mb-3';
+        card.innerHTML = `
+            <div class="tool-card-header">
+                <div class="tool-name">${tool.toolName}</div>
+                <div class="tool-date">${tool.timestamp.toLocaleString()}</div>
+            </div>
+            <div class="tool-details">
+                <div class="tool-detail-item">
+                    <div class="tool-detail-label">TID</div>
+                    <div class="tool-detail-value">${tool.id}</div>
+                </div>
+                <div class="tool-detail-item">
+                    <div class="tool-detail-label">P/N</div>
+                    <div class="tool-detail-value">${tool.partNumber}</div>
+                </div>
+                <div class="tool-detail-item">
+                    <div class="tool-detail-label">STS</div>
+                    <div class="tool-status out">OUT</div>
+                </div>
+            </div>
+        `;
+        list.prepend(card);
     }
 }
 

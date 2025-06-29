@@ -255,19 +255,20 @@
                     <div class="col-md-6 mx-auto">
                         <div class="card">
                             <div class="card-body">
-                                <div class="mb-3">
-                                    <label for="registerToolCode" class="form-label">Tool Code:</label>
-                                    <input type="text" class="form-control" id="registerToolCode" placeholder="Enter tool code">
+                                <div class="mb-3 d-flex align-items-center">
+                                    <label for="registerToolCode" class="form-label flex-shrink-0 mb-0 me-2">Scan or Enter TOOL ID</label>
+                                    <input type="text" class="form-control me-2" id="registerToolCode" placeholder="Scan or Enter TOOL ID" style="flex:1;">
+                                    <button id="registerScannerBtn" class="btn btn-outline-secondary" type="button" title="Scan Barcode/QR">
+                                        <i class="fas fa-qrcode"></i>
+                                    </button>
                                 </div>
-                                
-                                <div class="mb-3">
-                                    <label for="technicianName" class="form-label">Technician Name:</label>
-                                    <input type="text" class="form-control" id="technicianNameInput" placeholder="Enter technician name">
+                                <div class="mb-3 d-flex gap-2">
+                                    <button id="registerSubmitBtn" class="btn btn-success flex-fill">SUBMIT CODE</button>
+                                    <button id="registerDetailsBtn" class="btn btn-warning flex-fill">Tool Details</button>
                                 </div>
-                                
-                                <button id="registerToolBtn" class="btn btn-primary w-100">
-                                    <i class="fas fa-plus"></i> Register Tool
-                                </button>
+                                <hr>
+                                <h5 class="mb-2" style="color:#6c757d;font-weight:600;">Scanned Tools:</h5>
+                                <div id="scannedToolsList"></div>
                             </div>
                         </div>
                     </div>
