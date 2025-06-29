@@ -487,7 +487,7 @@ class ToolTrackingApp {
             this.updateMenuUsername();
             this.loadPreviousOutCount();
         } else {
-            this.showScreen('login');
+            this.showScreen('loginScreen');
         }
     }
 
@@ -1009,7 +1009,7 @@ class ToolTrackingApp {
         }
         
         // Show login screen by default
-        this.showScreen('login');
+        this.showScreen('loginScreen');
     }
 
     showErrorScreen(message) {
