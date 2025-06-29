@@ -1233,7 +1233,7 @@ class ToolTrackingApp {
         card.className = 'tool-card mb-3';
         card.style.background = statusColor + '22';
         card.innerHTML = `
-            <div class="tool-card-header" style="padding-bottom: 0;">
+            <div class="tool-card-header" style="padding-bottom: 0; display: flex; flex-direction: column; align-items: flex-start;">
                 <div class="fw-bold" style="font-size: 1.1em;">${cardNumber}. ${tool.toolName || ''}</div>
                 <div class="small" style="margin-top:2px; color:#555;">${tool.timestamp ? new Date(tool.timestamp).toLocaleString() : ''}</div>
             </div>
