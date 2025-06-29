@@ -467,6 +467,9 @@
     <!-- ToolScanner Menu Section -->
     <div id="toolScannerMenu" style="display:none;">
         <div class="container py-4">
+            <div class="mb-3 text-center">
+                <span id="loggedInTechnician" style="font-weight:bold;color:#1976d2;font-size:1.2em;"></span>
+            </div>
             <h2 class="text-center mb-4">ToolScanner Menu</h2>
             <div class="d-grid gap-3 col-6 mx-auto">
                 <button class="btn btn-success" id="menuRegisterBtn"><i class="fas fa-plus"></i> Register Tools</button>
@@ -607,6 +610,7 @@
                 document.getElementById('loginSection').classList.add('d-none');
                 document.getElementById('appSection').style.display = 'block';
                 document.getElementById('headerBranding').style.display = 'none';
+                updateLoggedInTechnician();
             } catch (error) {
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
@@ -1324,6 +1328,7 @@
                     });
                 // Always show the menu after login or refresh
                 showToolScannerMenu();
+                updateLoggedInTechnician();
             } else {
                 loginSection.style.display = 'block';
                 appSection.style.display = 'none';
@@ -1359,9 +1364,6 @@
             document.getElementById('menuLogoutBtn').onclick = function() {
                 logout();
                 document.getElementById('toolScannerMenu').style.display = 'none';
-            };
-            document.getElementById('menuMyToolsBtn').onclick = function() {
-                showMyTools();
             };
         });
 
@@ -1606,6 +1608,14 @@
                 return data.timestamp && data.timestamp.toDate() < today;
             });
             document.getElementById('previous-tab').innerHTML = `<i class="fas fa-history"></i> Previous Tools (${previousTools.length})`;
+        }
+
+        // After login or on auth state change, update the logged-in technician display
+        function updateLoggedInTechnician() {
+            const user = auth.currentUser;
+            if (!user) return;
+            const fullName = localStorage.getItem('fullName') || user.email;
+            document.getElementById('loggedInTechnician').textContent = `Logged in as: ${fullName} (${user.email})`;
         }
 
         if ('serviceWorker' in navigator) {
