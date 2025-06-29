@@ -329,49 +329,80 @@ class ToolTrackingApp {
                     const status = (toolData.status || '').toUpperCase();
                     const currentTechnician = toolData.technician || '';
                     const calDueDate = toolData.calDueDate || toolData.calibrationDueDate || '';
-                    // 1. Already checked out by another user
-                    if (status === 'OUT' && currentTechnician !== technicianName) {
-                        this.showAlert(`Tool is already checked out by ${currentTechnician}.`, 'error');
-                        return;
+                    
+                    // Handle different scenarios
+                    if (status === 'OUT') {
+                        // Tool is checked out
+                        if (currentTechnician === technicianName) {
+                            // Same user - check in the tool
+                            await this.db.collection('tools').doc(toolId).update({
+                                status: 'IN',
+                                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                            });
+                            // Create log entry for check-in
+                            await this.db.collection('logtoolmovements').add({
+                                toolId: toolId,
+                                toolName: toolData.toolName || '',
+                                partNumber: toolData.partNumber || '',
+                                status: 'IN',
+                                technician: technicianName,
+                                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                                location: toolData.location || '',
+                                owner: toolData.owner || '',
+                                calDueDate: calDueDate
+                            });
+                            // Remove the tool card from scanned tools list (since it's now checked in)
+                            this.removeScannedToolCard(toolId);
+                            this.showAlert('Tool checked in successfully!', 'success');
+                        } else {
+                            // Different user - show error
+                            this.showAlert(`Tool is already checked out by ${currentTechnician}.`, 'error');
+                            return;
+                        }
+                    } else {
+                        // Tool is IN - check it out (with validation)
+                        // 1. Not allowed statuses
+                        if (["BROKEN", "LOST", "CALIBRATION"].includes(status)) {
+                            this.showAlert(`Tool cannot be checked out (status: ${status}).`, 'error');
+                            return;
+                        }
+                        // 2. Calibration due date expired
+                        if (calDueDate && !this.isCalDueDateValid(calDueDate)) {
+                            this.showAlert('Calibration due date is expired. Tool cannot be checked out.', 'error');
+                            return;
+                        }
+                        // Check out the tool
+                        await this.db.collection('tools').doc(toolId).update({
+                            status: 'OUT',
+                            technician: technicianName,
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        // Create log entry for check-out
+                        await this.db.collection('logtoolmovements').add({
+                            toolId: toolId,
+                            toolName: toolData.toolName || '',
+                            partNumber: toolData.partNumber || '',
+                            status: 'OUT',
+                            technician: technicianName,
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                            location: toolData.location || '',
+                            owner: toolData.owner || '',
+                            calDueDate: calDueDate
+                        });
+                        // Show tool as a card in scannedToolsList
+                        this.addScannedToolCard({
+                            toolName: toolData.toolName,
+                            partNumber: toolData.partNumber,
+                            status: 'OUT',
+                            id: toolId,
+                            timestamp: new Date(),
+                            technician: technicianName
+                        });
+                        this.showAlert('Tool checked out successfully!', 'success');
                     }
-                    // 2. Not allowed statuses
-                    if (["BROKEN", "LOST", "CALIBRATION"].includes(status)) {
-                        this.showAlert(`Tool cannot be checked out (status: ${status}).`, 'error');
-                        return;
-                    }
-                    // 3. Calibration due date expired
-                    if (calDueDate && !this.isCalDueDateValid(calDueDate)) {
-                        this.showAlert('Calibration due date is expired. Tool cannot be checked out.', 'error');
-                        return;
-                    }
-                    // Update tool status, technician, and timestamp
-                    await this.db.collection('tools').doc(toolId).update({
-                        status: 'OUT',
-                        technician: technicianName,
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                    // Create log entry in logtoolmovements
-                    await this.db.collection('logtoolmovements').add({
-                        toolId: toolId,
-                        toolName: toolData.toolName || '',
-                        partNumber: toolData.partNumber || '',
-                        status: 'OUT',
-                        technician: technicianName,
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                        location: toolData.location || '',
-                        owner: toolData.owner || '',
-                        calDueDate: calDueDate
-                    });
-                    // Show tool as a card in scannedToolsList
-                    this.addScannedToolCard({
-                        toolName: toolData.toolName,
-                        partNumber: toolData.partNumber,
-                        status: 'OUT',
-                        id: toolId,
-                        timestamp: new Date(),
-                        technician: technicianName
-                    });
-                    this.showAlert('Tool registered and checked out!', 'success');
+                    
+                    // Clear the input field
+                    document.getElementById('registerToolCode').value = '';
                 });
             }
 
@@ -1078,6 +1109,18 @@ class ToolTrackingApp {
             </div>
         `;
         list.prepend(card);
+    }
+
+    removeScannedToolCard(toolId) {
+        const list = document.getElementById('scannedToolsList');
+        if (!list) return;
+        const cards = list.querySelectorAll('.tool-card');
+        cards.forEach(card => {
+            const id = card.querySelector('.tool-detail-value').textContent.trim();
+            if (id === toolId) {
+                card.remove();
+            }
+        });
     }
 
     isCalDueDateValid(calDueDate) {
