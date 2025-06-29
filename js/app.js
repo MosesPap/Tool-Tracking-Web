@@ -204,6 +204,12 @@ class ToolTrackingApp {
                 logoutBtn.onclick = () => this.handleLogout();
             }
 
+            // Refresh button
+            const refreshBtn = document.getElementById('refreshBtn');
+            if (refreshBtn) {
+                refreshBtn.onclick = () => this.refreshCurrentScreen();
+            }
+
         // Back buttons
             const backToMain = document.getElementById('backToMain');
             if (backToMain) {
@@ -312,9 +318,37 @@ class ToolTrackingApp {
             }
 
         // Menu buttons
-            const refreshBtn = document.getElementById('refreshBtn');
-            if (refreshBtn) {
-                refreshBtn.onclick = () => this.refreshMenu();
+            const refreshRegisterBtn = document.getElementById('refreshRegisterBtn');
+            if (refreshRegisterBtn) {
+                refreshRegisterBtn.addEventListener('click', () => {
+                    this.loadTodayToolMovements();
+                    this.showAlert('Tool movements refreshed!', 'success');
+                });
+            }
+
+            const logoutRegisterBtn = document.getElementById('logoutRegisterBtn');
+            if (logoutRegisterBtn) {
+                logoutRegisterBtn.addEventListener('click', () => {
+                    this.handleLogout();
+                });
+            }
+
+            // Cooldown dialog buttons
+            const proceedCheckoutBtn = document.getElementById('proceedCheckoutBtn');
+            if (proceedCheckoutBtn) {
+                proceedCheckoutBtn.addEventListener('click', async () => {
+                    if (this.pendingCheckoutToolId) {
+                        const toolId = this.pendingCheckoutToolId;
+                        this.pendingCheckoutToolId = null;
+                        
+                        // Close the warning dialog
+                        const checkoutWarningModal = bootstrap.Modal.getInstance(document.getElementById('checkoutWarningModal'));
+                        checkoutWarningModal.hide();
+                        
+                        // Proceed with checkout
+                        await this.performToolCheckout(toolId);
+                    }
+                });
             }
 
             // Register Tools page
@@ -415,40 +449,6 @@ class ToolTrackingApp {
                 });
             }
 
-            // Register Tools screen specific buttons
-            const refreshRegisterBtn = document.getElementById('refreshRegisterBtn');
-            if (refreshRegisterBtn) {
-                refreshRegisterBtn.addEventListener('click', () => {
-                    this.loadTodayToolMovements();
-                    this.showAlert('Tool movements refreshed!', 'success');
-                });
-            }
-
-            const logoutRegisterBtn = document.getElementById('logoutRegisterBtn');
-            if (logoutRegisterBtn) {
-                logoutRegisterBtn.addEventListener('click', () => {
-                    this.handleLogout();
-                });
-            }
-
-            // Cooldown dialog buttons
-            const proceedCheckoutBtn = document.getElementById('proceedCheckoutBtn');
-            if (proceedCheckoutBtn) {
-                proceedCheckoutBtn.addEventListener('click', async () => {
-                    if (this.pendingCheckoutToolId) {
-                        const toolId = this.pendingCheckoutToolId;
-                        this.pendingCheckoutToolId = null;
-                        
-                        // Close the warning dialog
-                        const checkoutWarningModal = bootstrap.Modal.getInstance(document.getElementById('checkoutWarningModal'));
-                        checkoutWarningModal.hide();
-                        
-                        // Proceed with checkout
-                        await this.performToolCheckout(toolId);
-                    }
-                });
-            }
-
             console.log('Event listeners setup completed');
         } catch (error) {
             console.error('Error setting up event listeners:', error);
@@ -516,6 +516,12 @@ class ToolTrackingApp {
                     resolve();
                 }
             });
+            
+            // Add a timeout in case Firebase Auth takes too long
+            setTimeout(() => {
+                console.log('Auth initialization timeout, proceeding with current state');
+                resolve();
+            }, 5000);
         });
     }
 
@@ -527,6 +533,7 @@ class ToolTrackingApp {
                 localStorage.setItem('technicianName', this.technicianName);
                 this.updateMenuUsername();
                 this.loadPreviousOutCount();
+                console.log('Technician data loaded:', this.technicianName);
             }
         } catch (error) {
             console.error('Error loading technician data:', error);
@@ -716,7 +723,10 @@ class ToolTrackingApp {
         switch (screenName) {
             case 'registerScreen':
                 this.updateRegisterTechnicianName();
-                this.loadTodayToolMovements();
+                // Add a small delay to ensure technician data is loaded
+                setTimeout(() => {
+                    this.loadTodayToolMovements();
+                }, 500);
                 this.loadCooldownMinutes();
                 break;
             case 'toolScannerMenu':
@@ -744,8 +754,14 @@ class ToolTrackingApp {
     async loadTodayToolMovements() {
         try {
             const technicianName = this.technicianName;
-            if (!technicianName) {
-                console.error('No technician name available');
+            console.log('Loading today tool movements for technician:', technicianName);
+            
+            if (!technicianName || technicianName === 'Technician') {
+                console.error('No valid technician name available');
+                const scannedToolsList = document.getElementById('scannedToolsList');
+                if (scannedToolsList) {
+                    scannedToolsList.innerHTML = '<div class="text-center text-muted mt-3"><p>Loading technician data...</p></div>';
+                }
                 return;
             }
 
@@ -761,6 +777,8 @@ class ToolTrackingApp {
             // Clear existing content
             scannedToolsList.innerHTML = '';
 
+            console.log('Querying tools for technician:', technicianName, 'from:', today, 'to:', tomorrow);
+
             // Query tools collection for all tools with a timestamp today and technician is the logged-in user
             const snapshot = await this.db.collection('tools')
                 .where('technician', '==', technicianName)
@@ -768,6 +786,8 @@ class ToolTrackingApp {
                 .where('timestamp', '<', firebase.firestore.Timestamp.fromDate(tomorrow))
                 .orderBy('timestamp', 'desc')
                 .get();
+
+            console.log('Found', snapshot.size, 'tools for today');
 
             if (snapshot.empty) {
                 scannedToolsList.innerHTML = '<div class="text-center text-muted mt-3"><p>No tool movements today</p></div>';
@@ -1490,6 +1510,12 @@ class ToolTrackingApp {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         return this.cooldownWarningShownDate && this.cooldownWarningShownDate.getTime() === today.getTime();
+    }
+
+    refreshCurrentScreen() {
+        console.log('Refreshing current screen:', this.currentScreen);
+        this.loadScreenData(this.currentScreen);
+        this.showAlert('Data refreshed!', 'success');
     }
 }
 
