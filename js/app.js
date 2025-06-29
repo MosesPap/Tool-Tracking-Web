@@ -19,15 +19,19 @@ class ToolTrackingApp {
             this.handleMobileInitialization();
             await this.initFirebase(); // Wait for Firebase to be ready!
             await this.loadCooldownMinutes();
-        this.setupEventListeners();
-        this.checkExistingSession();
-        setTimeout(() => {
-            this.hideLoadingScreen();
+            this.setupEventListeners();
+            
+            // Wait a bit for Firebase auth state to be established
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            this.checkExistingSession();
+            setTimeout(() => {
+                this.hideLoadingScreen();
                 // Fallback: always show login screen if no user is logged in
                 if (!this.currentUser) {
                     this.showScreen('loginScreen');
                 }
-        }, 2000);
+            }, 2000);
         } catch (error) {
             console.error('App initialization error:', error);
             this.showErrorScreen('Failed to initialize application. Please refresh the page.');
@@ -74,6 +78,21 @@ class ToolTrackingApp {
                 firebase.initializeApp(config);
         this.auth = firebase.auth();
         this.db = firebase.firestore();
+                
+                // Set up auth state listener
+                this.auth.onAuthStateChanged((user) => {
+                    if (user) {
+                        this.currentUser = user;
+                        // Load technician data if not already loaded
+                        if (!this.technicianName || this.technicianName === 'Technician') {
+                            this.loadTechnicianData(user.uid);
+                        }
+                    } else {
+                        this.currentUser = null;
+                        this.technicianName = '';
+                    }
+                });
+                
                 console.log('Firebase initialized successfully');
                 resolve();
             } catch (error) {
@@ -81,6 +100,19 @@ class ToolTrackingApp {
                 reject(error);
             }
         });
+    }
+
+    async loadTechnicianData(uid) {
+        try {
+            const technicianDoc = await this.db.collection('technicians').doc(uid).get();
+            if (technicianDoc.exists) {
+                this.technicianName = technicianDoc.data().fullName || 'Technician';
+                localStorage.setItem('technicianName', this.technicianName);
+                this.updateMenuUsername();
+            }
+        } catch (error) {
+            console.error('Error loading technician data:', error);
+        }
     }
 
     setupEventListeners() {
@@ -458,15 +490,30 @@ class ToolTrackingApp {
         const user = this.auth.currentUser;
 
         if (keepSignedIn && user) {
-            this.technicianName = localStorage.getItem('technicianName') || 'Technician';
             this.currentUser = user;
-            this.showScreen('toolScannerMenu');
-            this.updateMenuUsername();
-            this.loadPreviousOutCount();
-            // If user is authenticated, restore last route
-            const lastRoute = localStorage.getItem('lastRoute');
-            if (lastRoute && lastRoute !== '/login' && lastRoute !== '/signup') {
-                this.route(lastRoute);
+            this.technicianName = localStorage.getItem('technicianName') || 'Technician';
+            
+            // If technician name is not properly loaded, load it from Firestore
+            if (this.technicianName === 'Technician') {
+                this.loadTechnicianData(user.uid).then(() => {
+                    this.showScreen('toolScannerMenu');
+                    this.updateMenuUsername();
+                    this.loadPreviousOutCount();
+                    // If user is authenticated, restore last route
+                    const lastRoute = localStorage.getItem('lastRoute');
+                    if (lastRoute && lastRoute !== '/login' && lastRoute !== '/signup') {
+                        this.route(lastRoute);
+                    }
+                });
+            } else {
+                this.showScreen('toolScannerMenu');
+                this.updateMenuUsername();
+                this.loadPreviousOutCount();
+                // If user is authenticated, restore last route
+                const lastRoute = localStorage.getItem('lastRoute');
+                if (lastRoute && lastRoute !== '/login' && lastRoute !== '/signup') {
+                    this.route(lastRoute);
+                }
             }
         } else {
             this.showScreen('login');
