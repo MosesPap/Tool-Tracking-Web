@@ -291,14 +291,13 @@ class Scanner {
             window.app.showAlert('Input field not found for scanning', 'error');
             return;
         }
+        // Always create a new scanner instance
+        this.html5QrcodeScanner = new Html5Qrcode("reader");
         // Show the scanner UI
         const reader = document.getElementById('reader');
         if (reader) reader.style.display = 'block';
         const stopBtn = document.getElementById('stopScannerBtn');
         if (stopBtn) stopBtn.style.display = 'inline-block';
-        if (!this.html5QrcodeScanner) {
-            this.html5QrcodeScanner = new Html5Qrcode("reader");
-        }
         const config = {
             fps: 10,
             qrbox: { width: 250, height: 250 },
@@ -327,7 +326,11 @@ class Scanner {
                     const inputEvent = new Event('input', { bubbles: true });
                     input.dispatchEvent(inputEvent);
                     window.app.showAlert(`Successfully scanned: ${decodedText}`, 'success');
-                    this.stopCamera();
+                    this.html5QrcodeScanner.stop().then(() => {
+                        this.html5QrcodeScanner.clear();
+                        if (reader) reader.style.display = 'none';
+                        if (stopBtn) stopBtn.style.display = 'none';
+                    });
                 },
                 (errorMessage) => { /* ignore scan errors */ }
             );
@@ -342,34 +345,19 @@ class Scanner {
                         const inputEvent = new Event('input', { bubbles: true });
                         input.dispatchEvent(inputEvent);
                         window.app.showAlert(`Successfully scanned: ${decodedText}`, 'success');
-                        this.stopCamera();
+                        this.html5QrcodeScanner.stop().then(() => {
+                            this.html5QrcodeScanner.clear();
+                            if (reader) reader.style.display = 'none';
+                            if (stopBtn) stopBtn.style.display = 'none';
+                        });
                     },
                     (errorMessage) => { /* ignore scan errors */ }
                 );
             } catch (err2) {
                 window.app.showAlert('Camera error: ' + err2, 'error');
-                this.stopCamera();
-            }
-        }
-    }
-
-    async stopCamera() {
-        if (this.html5QrcodeScanner) {
-            this.html5QrcodeScanner.stop().then(() => {
-                this.html5QrcodeScanner.clear();
-                // Hide the scanner UI
-                const reader = document.getElementById('reader');
                 if (reader) reader.style.display = 'none';
-                const stopBtn = document.getElementById('stopScannerBtn');
                 if (stopBtn) stopBtn.style.display = 'none';
-            });
-            this.html5QrcodeScanner = null;
-        } else {
-            // Hide the scanner UI even if not running
-            const reader = document.getElementById('reader');
-            if (reader) reader.style.display = 'none';
-            const stopBtn = document.getElementById('stopScannerBtn');
-            if (stopBtn) stopBtn.style.display = 'none';
+            }
         }
     }
 }
