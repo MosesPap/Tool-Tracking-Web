@@ -21,10 +21,17 @@ class ToolTrackingApp {
             await this.loadCooldownMinutes();
             this.setupEventListeners();
             
-            // Wait a bit for Firebase auth state to be established
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // Wait for Firebase auth state to be ready
+            await new Promise(resolve => {
+                const unsubscribe = this.auth.onAuthStateChanged((user) => {
+                    unsubscribe(); // Only listen once
+                    resolve();
+                });
+            });
             
             this.checkExistingSession();
+            
+            // Hide loading screen with fallback
             setTimeout(() => {
                 this.hideLoadingScreen();
                 // Fallback: always show login screen if no user is logged in
@@ -32,8 +39,18 @@ class ToolTrackingApp {
                     this.showScreen('loginScreen');
                 }
             }, 2000);
+            
+            // Fallback timeout to ensure loading screen is hidden
+            setTimeout(() => {
+                this.hideLoadingScreen();
+                if (!this.currentUser) {
+                    this.showScreen('loginScreen');
+                }
+            }, 5000);
+            
         } catch (error) {
             console.error('App initialization error:', error);
+            this.hideLoadingScreen();
             this.showErrorScreen('Failed to initialize application. Please refresh the page.');
         }
     }
@@ -83,10 +100,8 @@ class ToolTrackingApp {
                 this.auth.onAuthStateChanged((user) => {
                     if (user) {
                         this.currentUser = user;
-                        // Load technician data if not already loaded
-                        if (!this.technicianName || this.technicianName === 'Technician') {
-                            this.loadTechnicianData(user.uid);
-                        }
+                        // Load technician data if needed
+                        this.loadTechnicianDataIfNeeded(user.uid);
                     } else {
                         this.currentUser = null;
                         this.technicianName = '';
@@ -102,16 +117,19 @@ class ToolTrackingApp {
         });
     }
 
-    async loadTechnicianData(uid) {
-        try {
-            const technicianDoc = await this.db.collection('technicians').doc(uid).get();
-            if (technicianDoc.exists) {
-                this.technicianName = technicianDoc.data().fullName || 'Technician';
-                localStorage.setItem('technicianName', this.technicianName);
-                this.updateMenuUsername();
+    async loadTechnicianDataIfNeeded(uid) {
+        // Only load if technician name is not already set or is default
+        if (!this.technicianName || this.technicianName === 'Technician') {
+            try {
+                const technicianDoc = await this.db.collection('technicians').doc(uid).get();
+                if (technicianDoc.exists) {
+                    this.technicianName = technicianDoc.data().fullName || 'Technician';
+                    localStorage.setItem('technicianName', this.technicianName);
+                    this.updateMenuUsername();
+                }
+            } catch (error) {
+                console.error('Error loading technician data:', error);
             }
-        } catch (error) {
-            console.error('Error loading technician data:', error);
         }
     }
 
@@ -493,28 +511,16 @@ class ToolTrackingApp {
             this.currentUser = user;
             this.technicianName = localStorage.getItem('technicianName') || 'Technician';
             
-            // If technician name is not properly loaded, load it from Firestore
-            if (this.technicianName === 'Technician') {
-                this.loadTechnicianData(user.uid).then(() => {
-                    this.showScreen('toolScannerMenu');
-                    this.updateMenuUsername();
-                    this.loadPreviousOutCount();
-                    // If user is authenticated, restore last route
-                    const lastRoute = localStorage.getItem('lastRoute');
-                    if (lastRoute && lastRoute !== '/login' && lastRoute !== '/signup') {
-                        this.route(lastRoute);
-                    }
-                });
+            // Show the appropriate screen
+            const lastRoute = localStorage.getItem('lastRoute');
+            if (lastRoute && lastRoute !== '/login' && lastRoute !== '/signup') {
+                this.route(lastRoute);
             } else {
                 this.showScreen('toolScannerMenu');
-                this.updateMenuUsername();
-                this.loadPreviousOutCount();
-                // If user is authenticated, restore last route
-                const lastRoute = localStorage.getItem('lastRoute');
-                if (lastRoute && lastRoute !== '/login' && lastRoute !== '/signup') {
-                    this.route(lastRoute);
-                }
             }
+            
+            this.updateMenuUsername();
+            this.loadPreviousOutCount();
         } else {
             this.showScreen('login');
         }
