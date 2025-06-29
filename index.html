@@ -2734,6 +2734,19 @@
         const modal = new bootstrap.Modal(document.getElementById('previousOutPhotoViewerModal'));
         modal.show();
     }
+
+    // Add this after DOMContentLoaded or at the end of the script
+    document.addEventListener('DOMContentLoaded', function() {
+        var collectionCancelBtn = document.querySelector('#collectionSelectModal .btn-secondary[data-bs-dismiss="modal"]');
+        if (collectionCancelBtn) {
+            collectionCancelBtn.onclick = function() {
+                // Let Bootstrap close the modal, then show the menu
+                setTimeout(function() {
+                    showToolScannerMenu();
+                }, 300); // Wait for modal animation
+            };
+        }
+    });
     </script>
 </body>
 </html> 
