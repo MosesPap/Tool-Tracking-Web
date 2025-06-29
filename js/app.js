@@ -1476,8 +1476,9 @@ class ToolTrackingApp {
             const data = doc.data();
             title.textContent = data.collectionName || collectionCode;
             let photosHtml = '';
-            if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
-                photosHtml = `<div class='row'>` + data.photos.map(url => `
+            const photoUrls = data.photoUrls || data.photos || [];
+            if (Array.isArray(photoUrls) && photoUrls.length > 0) {
+                photosHtml = `<div class='row'>` + photoUrls.map(url => `
             <div class='col-md-4'>
                 <img src="${url}" class="img-fluid" alt="Collection Photo">
             </div>`).join('') + `</div>`;
