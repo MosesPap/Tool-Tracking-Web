@@ -681,6 +681,13 @@ class ToolTrackingApp {
 
     async loadTodayToolMovements() {
         try {
+            const technicianName = this.technicianName;
+            if (!technicianName) {
+                console.error('No technician name available');
+                return;
+            }
+
+            // Get today's start and end timestamps
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const tomorrow = new Date(today);
@@ -692,8 +699,9 @@ class ToolTrackingApp {
             // Clear existing content
             scannedToolsList.innerHTML = '';
 
-            // Query tools collection for all tools with a timestamp today
+            // Query tools collection for all tools with a timestamp today and technician is the logged-in user
             const snapshot = await this.db.collection('tools')
+                .where('technician', '==', technicianName)
                 .where('timestamp', '>=', firebase.firestore.Timestamp.fromDate(today))
                 .where('timestamp', '<', firebase.firestore.Timestamp.fromDate(tomorrow))
                 .orderBy('timestamp', 'desc')
@@ -704,7 +712,7 @@ class ToolTrackingApp {
                 return;
             }
 
-            // Display each tool
+            // Display each tool (IN and OUT)
             snapshot.docs.forEach(doc => {
                 const toolData = doc.data();
                 const timestamp = toolData.timestamp ? toolData.timestamp.toDate() : new Date();
