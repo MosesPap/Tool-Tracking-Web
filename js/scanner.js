@@ -307,5 +307,24 @@ window.Scanner = {
             return scanner.validateManualEntry(toolCode);
         }
         return false;
+    },
+    // New: scan into any input field by ID
+    startCameraForInput: (inputId) => {
+        if (!scanner) scanner = new Scanner();
+        const input = document.getElementById(inputId);
+        if (!input) {
+            window.app.showAlert('Input field not found for scanning', 'error');
+            return;
+        }
+        // Patch onScanSuccess to fill the correct input
+        scanner.onScanSuccess = (decodedText) => {
+            input.value = decodedText;
+            const inputEvent = new Event('input', { bubbles: true });
+            input.dispatchEvent(inputEvent);
+            window.app.showAlert(`Successfully scanned: ${decodedText}`, 'success');
+            // Optionally stop camera after scan
+            // scanner.stopCamera();
+        };
+        scanner.toggleCamera();
     }
 }; 
