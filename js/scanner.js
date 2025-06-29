@@ -284,6 +284,70 @@ class Scanner {
             this.stopCamera();
         }
     }
+
+    async startCameraWithFallback(inputId) {
+        const input = document.getElementById(inputId);
+        if (!input) {
+            window.app.showAlert('Input field not found for scanning', 'error');
+            return;
+        }
+        if (!this.html5QrcodeScanner) {
+            this.html5QrcodeScanner = new Html5Qrcode("reader");
+        }
+        const config = {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
+            formatsToSupport: [
+                Html5QrcodeSupportedFormats.QR_CODE,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39,
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.ITF,
+                Html5QrcodeSupportedFormats.AZTEC,
+                Html5QrcodeSupportedFormats.DATA_MATRIX,
+                Html5QrcodeSupportedFormats.CODABAR,
+                Html5QrcodeSupportedFormats.PDF_417
+            ]
+        };
+        // Try environment camera first
+        try {
+            await this.html5QrcodeScanner.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText) => {
+                    input.value = decodedText;
+                    const inputEvent = new Event('input', { bubbles: true });
+                    input.dispatchEvent(inputEvent);
+                    window.app.showAlert(`Successfully scanned: ${decodedText}`, 'success');
+                    this.stopCamera();
+                },
+                (errorMessage) => { /* ignore scan errors */ }
+            );
+        } catch (err) {
+            // If environment camera fails, try user camera
+            try {
+                await this.html5QrcodeScanner.start(
+                    { facingMode: "user" },
+                    config,
+                    (decodedText) => {
+                        input.value = decodedText;
+                        const inputEvent = new Event('input', { bubbles: true });
+                        input.dispatchEvent(inputEvent);
+                        window.app.showAlert(`Successfully scanned: ${decodedText}`, 'success');
+                        this.stopCamera();
+                    },
+                    (errorMessage) => { /* ignore scan errors */ }
+                );
+            } catch (err2) {
+                window.app.showAlert('Camera error: ' + err2, 'error');
+                this.stopCamera();
+            }
+        }
+    }
 }
 
 // Initialize scanner when the module is loaded
@@ -319,20 +383,6 @@ window.Scanner = {
     // New: scan into any input field by ID
     startCameraForInput: (inputId) => {
         if (!scanner) scanner = new Scanner();
-        const input = document.getElementById(inputId);
-        if (!input) {
-            window.app.showAlert('Input field not found for scanning', 'error');
-            return;
-        }
-        // Patch onScanSuccess to fill the correct input
-        scanner.onScanSuccess = (decodedText) => {
-            input.value = decodedText;
-            const inputEvent = new Event('input', { bubbles: true });
-            input.dispatchEvent(inputEvent);
-            window.app.showAlert(`Successfully scanned: ${decodedText}`, 'success');
-            // Optionally stop camera after scan
-            // scanner.stopCamera();
-        };
-        scanner.toggleCamera();
+        scanner.startCameraWithFallback(inputId);
     }
 }; 
