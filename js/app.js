@@ -17,12 +17,22 @@ class ToolTrackingApp {
     async init() {
         try {
             this.handleMobileInitialization();
-            await this.initFirebase();
+            await this.initFirebase(); // Wait for Firebase to be ready!
+            
+            // Initialize AuthManager
+            if (window.AuthManager) {
+                window.AuthManager.getInstance();
+            }
+            
             await this.loadCooldownMinutes();
             this.setupEventListeners();
-            this.checkExistingSession();
+            
+            // Wait for Firebase Auth state to be determined
+            await this.waitForAuthState();
+            
             setTimeout(() => {
                 this.hideLoadingScreen();
+                // Fallback: always show login screen if no user is logged in
                 if (!this.currentUser) {
                     this.showScreen('loginScreen');
                 }
@@ -73,7 +83,6 @@ class ToolTrackingApp {
                 firebase.initializeApp(config);
         this.auth = firebase.auth();
         this.db = firebase.firestore();
-                
                 console.log('Firebase initialized successfully');
                 resolve();
             } catch (error) {
@@ -453,18 +462,60 @@ class ToolTrackingApp {
         }
     }
 
+    waitForAuthState() {
+        return new Promise((resolve) => {
+            const unsubscribe = this.auth.onAuthStateChanged(async (user) => {
+                unsubscribe(); // Stop listening after first state change
+                
+                if (user) {
+                    // User is signed in
+                    this.currentUser = user;
+                    
+                    // Sync with AuthManager
+                    if (window.AuthManager) {
+                        const authManager = window.AuthManager.getInstance();
+                        authManager.currentUser = user;
+                        authManager.isAuthenticated = true;
+                        authManager.technicianName = this.technicianName;
+                        authManager.startSessionTimer();
+                    }
+                    
+                    this.checkExistingSession();
+                } else {
+                    // User is signed out
+                    this.currentUser = null;
+                    
+                    // Sync with AuthManager
+                    if (window.AuthManager) {
+                        const authManager = window.AuthManager.getInstance();
+                        authManager.currentUser = null;
+                        authManager.isAuthenticated = false;
+                        authManager.technicianName = '';
+                        authManager.stopSessionTimer();
+                        authManager.clearSessionData();
+                    }
+                    
+                    this.showScreen('loginScreen');
+                }
+                resolve();
+            });
+        });
+    }
+
     checkExistingSession() {
         const keepSignedIn = localStorage.getItem('keepSignedIn') === 'true';
-        const user = this.auth.currentUser;
+        const technicianName = localStorage.getItem('technicianName');
 
-        if (keepSignedIn && user) {
-            this.currentUser = user;
-            this.technicianName = localStorage.getItem('technicianName') || 'Technician';
+        if (keepSignedIn && this.currentUser && technicianName) {
+            this.technicianName = technicianName;
             this.showScreen('toolScannerMenu');
             this.updateMenuUsername();
             this.loadPreviousOutCount();
         } else {
-            this.showScreen('login');
+            // Clear any invalid session data
+            localStorage.removeItem('keepSignedIn');
+            localStorage.removeItem('technicianName');
+            this.showScreen('loginScreen');
         }
     }
 
@@ -498,6 +549,15 @@ class ToolTrackingApp {
             if (technicianDoc.exists) {
                 this.currentUser = user;
                 this.technicianName = technicianDoc.data().fullName || 'Technician';
+                
+                // Sync with AuthManager
+                if (window.AuthManager) {
+                    const authManager = window.AuthManager.getInstance();
+                    authManager.currentUser = user;
+                    authManager.isAuthenticated = true;
+                    authManager.technicianName = this.technicianName;
+                    authManager.startSessionTimer();
+                }
                 
                 // Save session data
                 if (keepSignedIn) {
@@ -625,6 +685,17 @@ class ToolTrackingApp {
 
     handleLogout() {
         this.auth.signOut();
+        
+        // Sync with AuthManager
+        if (window.AuthManager) {
+            const authManager = window.AuthManager.getInstance();
+            authManager.currentUser = null;
+            authManager.isAuthenticated = false;
+            authManager.technicianName = '';
+            authManager.stopSessionTimer();
+            authManager.clearSessionData();
+        }
+        
         localStorage.removeItem('keepSignedIn');
         localStorage.removeItem('technicianName');
         this.currentUser = null;
@@ -1187,7 +1258,6 @@ class ToolTrackingApp {
     }
 
     navigateTo(path) {
-        localStorage.setItem('lastRoute', path);
         history.pushState({}, '', path);
         this.route(path);
     }
@@ -1403,10 +1473,8 @@ class ToolTrackingApp {
 }
 
 // Listen for browser navigation
-window.addEventListener('popstate', function() {
-    if (window.app && window.app.route) {
-        window.app.route(location.pathname);
-    }
+window.addEventListener('popstate', () => {
+    app.route(location.pathname);
 });
 
 // On page load, route to the correct screen
