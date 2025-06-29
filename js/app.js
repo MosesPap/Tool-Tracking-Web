@@ -8,6 +8,7 @@ class ToolTrackingApp {
         this.html5QrcodeScanner = null;
         this.isScanning = false;
         this.isInitialized = false;
+        this.cooldownMinutes = 0; // Add cooldown minutes state
         
         this.init();
     }
@@ -19,6 +20,9 @@ class ToolTrackingApp {
             
             // Initialize Firebase
             this.initFirebase();
+            
+            // Load cooldown minutes
+            this.loadCooldownMinutes();
             
             // Set up event listeners
             this.setupEventListeners();
@@ -64,11 +68,11 @@ class ToolTrackingApp {
 
             // Use config from config.js if available, otherwise use default
             const config = typeof firebaseConfig !== 'undefined' ? firebaseConfig : {
-                apiKey: "AIzaSyBltucXfxN3xzOxX5s8s7Kv8yCBa5azxzU",
-                authDomain: "tool-tracking-system-15e84.firebaseapp.com",
-                projectId: "tool-tracking-system-15e84",
-                storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
-                messagingSenderId: "813615362050",
+            apiKey: "AIzaSyBltucXfxN3xzOxX5s8s7Kv8yCBa5azxzU",
+            authDomain: "tool-tracking-system-15e84.firebaseapp.com",
+            projectId: "tool-tracking-system-15e84",
+            storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
+            messagingSenderId: "813615362050",
                 appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
             };
 
@@ -89,9 +93,9 @@ class ToolTrackingApp {
 
             Promise.race([initPromise, timeoutPromise])
                 .then(() => {
-                    // Initialize services
-                    this.auth = firebase.auth();
-                    this.db = firebase.firestore();
+        // Initialize services
+        this.auth = firebase.auth();
+        this.db = firebase.firestore();
                     console.log('Firebase initialized successfully');
                 })
                 .catch(error => {
@@ -106,14 +110,14 @@ class ToolTrackingApp {
 
     setupEventListeners() {
         try {
-            // Login form
-            const loginForm = document.getElementById('loginForm');
-            if (loginForm) {
-                loginForm.addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    this.handleLogin();
-                });
-            }
+        // Login form
+        const loginForm = document.getElementById('loginForm');
+        if (loginForm) {
+            loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.handleLogin();
+            });
+        }
 
             // Signup form
             const signupForm = document.getElementById('signupForm');
@@ -146,7 +150,7 @@ class ToolTrackingApp {
                 });
             }
 
-            // Navigation buttons
+        // Navigation buttons
             const createAccountBtn = document.getElementById('createAccountBtn');
             if (createAccountBtn) {
                 createAccountBtn.addEventListener('click', () => {
@@ -164,19 +168,19 @@ class ToolTrackingApp {
             const adminBtn = document.getElementById('adminBtn');
             if (adminBtn) {
                 adminBtn.addEventListener('click', () => {
-                    this.showAdminLogin();
-                });
+            this.showAdminLogin();
+        });
             }
 
             const forgotPassword = document.getElementById('forgotPassword');
             if (forgotPassword) {
                 forgotPassword.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    this.showForgotPassword();
-                });
+            e.preventDefault();
+            this.showForgotPassword();
+        });
             }
 
-            // Main navigation
+        // Main navigation
             const scanBtn = document.getElementById('scanBtn');
             if (scanBtn) {
                 scanBtn.addEventListener('click', () => {
@@ -207,15 +211,15 @@ class ToolTrackingApp {
             const checkupBtn = document.getElementById('checkupBtn');
             if (checkupBtn) {
                 checkupBtn.addEventListener('click', () => {
-                    this.showScreen('checkup');
-                });
+            this.showScreen('checkup');
+        });
             }
 
             const myAccountBtn = document.getElementById('myAccountBtn');
             if (myAccountBtn) {
                 myAccountBtn.addEventListener('click', () => {
-                    this.showScreen('myAccount');
-                });
+            this.showScreen('myAccount');
+        });
             }
 
             const logoutBtn = document.getElementById('logoutBtn');
@@ -223,7 +227,7 @@ class ToolTrackingApp {
                 logoutBtn.onclick = () => this.handleLogout();
             }
 
-            // Back buttons
+        // Back buttons
             const backToMain = document.getElementById('backToMain');
             if (backToMain) {
                 backToMain.addEventListener('click', () => {
@@ -266,12 +270,12 @@ class ToolTrackingApp {
                 });
             }
 
-            // Scanner functionality
+        // Scanner functionality
             const toggleCameraBtn = document.getElementById('toggleCameraBtn');
             if (toggleCameraBtn) {
                 toggleCameraBtn.addEventListener('click', () => {
-                    this.toggleCamera();
-                });
+            this.toggleCamera();
+        });
             }
 
             const toolCode = document.getElementById('toolCode');
@@ -287,50 +291,50 @@ class ToolTrackingApp {
             const toolDetailsBtn = document.getElementById('toolDetailsBtn');
             if (toolDetailsBtn) {
                 toolDetailsBtn.addEventListener('click', () => {
-                    this.getToolDetails();
-                });
+            this.getToolDetails();
+        });
             }
 
-            // Register functionality
+        // Register functionality
             const registerToolBtn = document.getElementById('registerToolBtn');
             if (registerToolBtn) {
                 registerToolBtn.addEventListener('click', () => {
-                    this.registerTool();
-                });
+            this.registerTool();
+        });
             }
 
-            // Search functionality
-            document.querySelectorAll('.search-chip').forEach(chip => {
-                chip.addEventListener('click', (e) => {
-                    this.setSearchType(e.target.dataset.type);
-                });
+        // Search functionality
+        document.querySelectorAll('.search-chip').forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                this.setSearchType(e.target.dataset.type);
             });
+        });
 
             const searchQuery = document.getElementById('searchQuery');
             if (searchQuery) {
                 searchQuery.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') {
-                        this.performSearch();
-                    }
-                });
+            if (e.key === 'Enter') {
+                this.performSearch();
+            }
+        });
             }
 
-            // Tool details modal
+        // Tool details modal
             const checkoutBtn = document.getElementById('checkoutBtn');
             if (checkoutBtn) {
                 checkoutBtn.addEventListener('click', () => {
-                    this.checkoutTool();
-                });
+            this.checkoutTool();
+        });
             }
 
             const checkinBtn = document.getElementById('checkinBtn');
             if (checkinBtn) {
                 checkinBtn.addEventListener('click', () => {
-                    this.checkinTool();
-                });
+            this.checkinTool();
+        });
             }
 
-            // Menu buttons
+        // Menu buttons
             const refreshBtn = document.getElementById('refreshBtn');
             if (refreshBtn) {
                 refreshBtn.onclick = () => this.refreshMenu();
@@ -369,12 +373,20 @@ class ToolTrackingApp {
                     const status = (toolData.status || '').toUpperCase();
                     const currentTechnician = toolData.technician || '';
                     const calDueDate = toolData.calDueDate || toolData.calibrationDueDate || '';
+                    const timestamp = toolData.timestamp;
                     
                     // Handle different scenarios
                     if (status === 'OUT') {
                         // Tool is checked out
                         if (currentTechnician === technicianName) {
-                            // Same user - check in the tool
+                            // Same user - check if cooldown period has passed
+                            if (!this.isCooldownPeriodPassed(timestamp)) {
+                                // Show cooldown dialog
+                                this.showCooldownDialog(timestamp);
+                                return;
+                            }
+                            
+                            // Cooldown passed - check in the tool
                             await this.db.collection('tools').doc(toolId).update({
                                 status: 'IN',
                                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
@@ -411,34 +423,15 @@ class ToolTrackingApp {
                             this.showAlert('Calibration due date is expired. Tool cannot be checked out.', 'error');
                             return;
                         }
-                        // Check out the tool
-                        await this.db.collection('tools').doc(toolId).update({
-                            status: 'OUT',
-                            technician: technicianName,
-                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                        // Create log entry for check-out
-                        await this.db.collection('logtoolmovements').add({
-                            toolId: toolId,
-                            toolName: toolData.toolName || '',
-                            partNumber: toolData.partNumber || '',
-                            status: 'OUT',
-                            technician: technicianName,
-                            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                            location: toolData.location || '',
-                            owner: toolData.owner || '',
-                            calDueDate: calDueDate
-                        });
-                        // Show tool as a card in scannedToolsList
-                        this.addScannedToolCard({
-                            toolName: toolData.toolName,
-                            partNumber: toolData.partNumber,
-                            status: 'OUT',
-                            id: toolId,
-                            timestamp: new Date(),
-                            technician: technicianName
-                        });
-                        this.showAlert('Tool checked out successfully!', 'success');
+                        
+                        // 3. Check cooldown warning
+                        if (this.cooldownMinutes > 0) {
+                            // Show warning about cooldown before checkout
+                            this.showCheckoutWarningDialog(toolId);
+                        } else {
+                            // No cooldown, proceed with checkout
+                            await this.performToolCheckout(toolId);
+                        }
                     }
                     
                     // Clear the input field
@@ -459,6 +452,24 @@ class ToolTrackingApp {
             if (logoutRegisterBtn) {
                 logoutRegisterBtn.addEventListener('click', () => {
                     this.handleLogout();
+                });
+            }
+
+            // Cooldown dialog buttons
+            const proceedCheckoutBtn = document.getElementById('proceedCheckoutBtn');
+            if (proceedCheckoutBtn) {
+                proceedCheckoutBtn.addEventListener('click', async () => {
+                    if (this.pendingCheckoutToolId) {
+                        const toolId = this.pendingCheckoutToolId;
+                        this.pendingCheckoutToolId = null;
+                        
+                        // Close the warning dialog
+                        const checkoutWarningModal = bootstrap.Modal.getInstance(document.getElementById('checkoutWarningModal'));
+                        checkoutWarningModal.hide();
+                        
+                        // Proceed with checkout
+                        await this.performToolCheckout(toolId);
+                    }
                 });
             }
 
@@ -670,6 +681,7 @@ class ToolTrackingApp {
             case 'registerScreen':
                 this.updateRegisterTechnicianName();
                 this.loadTodayToolMovements();
+                this.loadCooldownMinutes();
                 break;
             case 'toolScannerMenu':
                 this.loadPreviousOutCount();
@@ -1280,6 +1292,117 @@ class ToolTrackingApp {
         const now = new Date();
         return dueDate >= now;
     }
+
+    isCooldownPeriodPassed(timestamp) {
+        if (this.cooldownMinutes <= 0) return true; // No cooldown
+        
+        const currentTime = Date.now();
+        const lastCheckoutTime = timestamp ? timestamp.toMillis() : 0;
+        const timeDiff = currentTime - lastCheckoutTime;
+        const cooldownPeriod = this.cooldownMinutes * 60 * 1000; // Convert to milliseconds
+        
+        return timeDiff >= cooldownPeriod;
+    }
+
+    getRemainingCooldownTime(timestamp) {
+        const currentTime = Date.now();
+        const lastCheckoutTime = timestamp ? timestamp.toMillis() : 0;
+        const timeDiff = currentTime - lastCheckoutTime;
+        const cooldownPeriod = this.cooldownMinutes * 60 * 1000;
+        const remainingTime = cooldownPeriod - timeDiff;
+        
+        if (remainingTime <= 0) return { minutes: 0, seconds: 0 };
+        
+        const minutes = Math.floor(remainingTime / 60000);
+        const seconds = Math.floor((remainingTime % 60000) / 1000);
+        
+        return { minutes, seconds };
+    }
+
+    showCooldownDialog(timestamp) {
+        const remaining = this.getRemainingCooldownTime(timestamp);
+        document.getElementById('cooldownMinutes').textContent = remaining.minutes;
+        document.getElementById('cooldownSeconds').textContent = remaining.seconds;
+        
+        const cooldownModal = new bootstrap.Modal(document.getElementById('cooldownModal'));
+        cooldownModal.show();
+    }
+
+    showCheckoutWarningDialog(toolId) {
+        document.getElementById('checkoutWarningMinutes').textContent = this.cooldownMinutes;
+        
+        const checkoutWarningModal = new bootstrap.Modal(document.getElementById('checkoutWarningModal'));
+        checkoutWarningModal.show();
+        
+        // Store the tool ID for when user proceeds
+        this.pendingCheckoutToolId = toolId;
+    }
+
+    async loadCooldownMinutes() {
+        try {
+            const settingsDoc = await this.db.collection('settings').doc('admin').get();
+            if (settingsDoc.exists) {
+                const data = settingsDoc.data();
+                this.cooldownMinutes = data.CheckINCooldownMinutes || 0;
+            } else {
+                this.cooldownMinutes = 0;
+            }
+            console.log('Cooldown minutes loaded:', this.cooldownMinutes);
+        } catch (error) {
+            console.error('Error loading cooldown minutes:', error);
+            this.cooldownMinutes = 0;
+        }
+    }
+
+    async performToolCheckout(toolId) {
+        try {
+            const toolDoc = await this.db.collection('tools').doc(toolId).get();
+            if (!toolDoc.exists) {
+                this.showAlert('Tool not found', 'error');
+                return;
+            }
+            
+            const toolData = toolDoc.data();
+            const technicianName = this.technicianName || 'Technician';
+            const calDueDate = toolData.calDueDate || toolData.calibrationDueDate || '';
+            
+            // Check out the tool
+            await this.db.collection('tools').doc(toolId).update({
+                status: 'OUT',
+                technician: technicianName,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            
+            // Create log entry for check-out
+            await this.db.collection('logtoolmovements').add({
+                toolId: toolId,
+                toolName: toolData.toolName || '',
+                partNumber: toolData.partNumber || '',
+                status: 'OUT',
+                technician: technicianName,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                location: toolData.location || '',
+                owner: toolData.owner || '',
+                calDueDate: calDueDate
+            });
+            
+            // Show tool as a card in scannedToolsList
+            this.addScannedToolCard({
+                toolName: toolData.toolName,
+                partNumber: toolData.partNumber,
+                status: 'OUT',
+                id: toolId,
+                timestamp: new Date(),
+                technician: technicianName
+            });
+            
+            this.showAlert('Tool checked out successfully!', 'success');
+            
+        } catch (error) {
+            console.error('Error performing tool checkout:', error);
+            this.showAlert('Error performing tool checkout', 'error');
+        }
+    }
 }
 
 // Listen for browser navigation
@@ -1295,7 +1418,7 @@ window.addEventListener('DOMContentLoaded', () => {
 // Initialize app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     try {
-        window.app = new ToolTrackingApp();
+    window.app = new ToolTrackingApp();
     } catch (error) {
         console.error('Failed to initialize app:', error);
         // Show error screen if app fails to initialize
