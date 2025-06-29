@@ -20,21 +20,16 @@ class ToolTrackingApp {
             await this.initFirebase(); // Wait for Firebase to be ready!
             await this.loadCooldownMinutes();
             this.setupEventListeners();
-
-            // Firebase Auth state observer
-            this.auth.onAuthStateChanged((user) => {
-                if (user) {
-                    this.currentUser = user;
-                    this.technicianName = localStorage.getItem('technicianName') || 'Technician';
-                    // Restore last visited page if available
-                    const lastPage = localStorage.getItem('lastPage') || '/toolscannermenu';
-                    this.navigateTo(lastPage);
-                } else {
-                    this.currentUser = null;
-                    this.showScreen('loginScreen');
-                }
+            
+            // Set up Firebase Auth state listener BEFORE checking session
+            this.setupAuthStateListener();
+            
+            // Wait for Firebase Auth to initialize and check user state
+            await this.waitForAuthInitialization();
+            
+            setTimeout(() => {
                 this.hideLoadingScreen();
-            });
+            }, 2000);
         } catch (error) {
             console.error('App initialization error:', error);
             this.showErrorScreen('Failed to initialize application. Please refresh the page.');
@@ -70,17 +65,17 @@ class ToolTrackingApp {
 
                 // Use config from config.js if available, otherwise use default
                 const config = typeof firebaseConfig !== 'undefined' ? firebaseConfig : {
-                    apiKey: "AIzaSyBltucXfxN3xzOxX5s8s7Kv8yCBa5azxzU",
-                    authDomain: "tool-tracking-system-15e84.firebaseapp.com",
-                    projectId: "tool-tracking-system-15e84",
-                    storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
-                    messagingSenderId: "813615362050",
+            apiKey: "AIzaSyBltucXfxN3xzOxX5s8s7Kv8yCBa5azxzU",
+            authDomain: "tool-tracking-system-15e84.firebaseapp.com",
+            projectId: "tool-tracking-system-15e84",
+            storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
+            messagingSenderId: "813615362050",
                     appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
-                };
+        };
 
                 firebase.initializeApp(config);
-                this.auth = firebase.auth();
-                this.db = firebase.firestore();
+        this.auth = firebase.auth();
+        this.db = firebase.firestore();
                 console.log('Firebase initialized successfully');
                 resolve();
             } catch (error) {
@@ -460,18 +455,82 @@ class ToolTrackingApp {
         }
     }
 
-    checkExistingSession() {
-        const keepSignedIn = localStorage.getItem('keepSignedIn') === 'true';
-        const user = this.auth.currentUser;
+    setupAuthStateListener() {
+        // Listen for Firebase Auth state changes
+        this.auth.onAuthStateChanged((user) => {
+            console.log('Auth state changed:', user ? `User logged in (${user.email})` : 'User logged out');
+            
+            if (user) {
+                // User is signed in
+                this.currentUser = user;
+                this.loadTechnicianData(user.uid);
+            } else {
+                // User is signed out
+                this.currentUser = null;
+                this.technicianName = '';
+                localStorage.removeItem('keepSignedIn');
+                localStorage.removeItem('technicianName');
+                
+                // Only redirect to login if we're not already there
+                if (location.pathname !== '/login' && location.pathname !== '/signup') {
+                    console.log('Redirecting to login from:', location.pathname);
+                    this.navigateTo('/login');
+                }
+            }
+        });
+    }
 
-        if (keepSignedIn && user) {
-            this.technicianName = localStorage.getItem('technicianName') || 'Technician';
-            this.currentUser = user;
-            this.showScreen('toolScannerMenu');
-            this.updateMenuUsername();
-            this.loadPreviousOutCount();
-        } else {
-            this.showScreen('login');
+    async waitForAuthInitialization() {
+        return new Promise((resolve) => {
+            // Firebase Auth initializes automatically, but we need to wait for it
+            const unsubscribe = this.auth.onAuthStateChanged((user) => {
+                unsubscribe(); // Only listen once
+                
+                if (user) {
+                    // User is authenticated, load their data and route to correct page
+                    this.currentUser = user;
+                    this.loadTechnicianData(user.uid).then(() => {
+                        // Route to the current URL or default to toolscannermenu
+                        const currentPath = location.pathname;
+                        const protectedRoutes = ['/toolscannermenu', '/registertools', '/search', '/mytools', '/previousout', '/scanner'];
+                        
+                        if (currentPath === '/login' || currentPath === '/signup') {
+                            this.navigateTo('/toolscannermenu');
+                        } else if (protectedRoutes.includes(currentPath)) {
+                            // User is on a protected route, stay there and refresh data
+                            this.route(currentPath);
+                        } else {
+                            // Unknown route, go to main menu
+                            this.navigateTo('/toolscannermenu');
+                        }
+                        resolve();
+                    });
+                } else {
+                    // No user authenticated, check if we should show login or signup
+                    const currentPath = location.pathname;
+                    if (currentPath === '/signup') {
+                        this.route('/signup');
+                    } else {
+                        this.route('/login');
+                    }
+                    resolve();
+                }
+            });
+        });
+    }
+
+    async loadTechnicianData(userId) {
+        try {
+            const technicianDoc = await this.db.collection('technicians').doc(userId).get();
+            if (technicianDoc.exists) {
+                this.technicianName = technicianDoc.data().fullName || 'Technician';
+                localStorage.setItem('technicianName', this.technicianName);
+                this.updateMenuUsername();
+                this.loadPreviousOutCount();
+            }
+        } catch (error) {
+            console.error('Error loading technician data:', error);
+            this.technicianName = 'Technician';
         }
     }
 
@@ -512,7 +571,7 @@ class ToolTrackingApp {
                     localStorage.setItem('technicianName', this.technicianName);
                 }
 
-                // Go to main menu and save route
+                // The auth state listener will handle navigation
                 this.navigateTo('/toolscannermenu');
                 this.updateMenuUsername();
                 this.loadPreviousOutCount();
@@ -632,11 +691,7 @@ class ToolTrackingApp {
 
     handleLogout() {
         this.auth.signOut();
-        localStorage.removeItem('keepSignedIn');
-        localStorage.removeItem('technicianName');
-        this.currentUser = null;
-        this.technicianName = '';
-        this.navigateTo('/login');
+        // The auth state listener will handle the cleanup and navigation
         this.showAlert('Logged out successfully', 'success');
     }
 
@@ -1194,36 +1249,65 @@ class ToolTrackingApp {
     }
 
     navigateTo(path) {
-        localStorage.setItem('lastPage', path);
         history.pushState({}, '', path);
         this.route(path);
     }
 
     route(path) {
+        console.log('Routing to:', path, 'User authenticated:', !!this.currentUser);
+        
+        // Check if user is authenticated for protected routes
+        const protectedRoutes = ['/toolscannermenu', '/registertools', '/search', '/mytools', '/previousout', '/scanner'];
+        const isProtectedRoute = protectedRoutes.includes(path);
+        
+        if (isProtectedRoute && !this.currentUser) {
+            // User not authenticated, redirect to login
+            console.log('Access denied to protected route:', path);
+            this.navigateTo('/login');
+            return;
+        }
+        
         switch (path) {
             case '/login':
-                this.showScreen('loginScreen');
+                if (this.currentUser) {
+                    // User is already logged in, redirect to main menu
+                    console.log('User already logged in, redirecting to main menu');
+                    this.navigateTo('/toolscannermenu');
+                } else {
+                    this.showScreen('loginScreen');
+                }
                 break;
             case '/toolscannermenu':
                 this.showScreen('toolScannerMenu');
+                this.loadPreviousOutCount(); // Refresh data
                 break;
             case '/registertools':
                 this.showScreen('registerScreen');
+                this.loadTodayToolMovements(); // Refresh data
                 break;
             case '/search':
                 this.showScreen('searchScreen');
                 break;
             case '/mytools':
                 this.showScreen('myToolsScreen');
+                this.loadMyTools(); // Refresh data
                 break;
             case '/previousout':
                 this.showScreen('previousOutScreen');
+                this.loadPreviousOutTools(); // Refresh data
                 break;
             case '/signup':
                 this.showScreen('signupScreen');
                 break;
+            case '/scanner':
+                this.showScreen('scannerScreen');
+                break;
             default:
-                this.showScreen('loginScreen');
+                if (this.currentUser) {
+                    this.navigateTo('/toolscannermenu');
+                } else {
+                    this.navigateTo('/login');
+                }
         }
     }
 
@@ -1411,12 +1495,16 @@ class ToolTrackingApp {
 
 // Listen for browser navigation
 window.addEventListener('popstate', () => {
-    app.route(location.pathname);
+    // Only route if the app is initialized and we have auth state
+    if (window.app && window.app.auth) {
+        window.app.route(location.pathname);
+    }
 });
 
 // On page load, route to the correct screen
 window.addEventListener('DOMContentLoaded', () => {
-    app.route(location.pathname);
+    // Don't route immediately - let the app initialization handle it
+    // The app will route correctly after Firebase Auth initializes
 });
 
 // Initialize app when DOM is loaded
