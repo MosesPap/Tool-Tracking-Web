@@ -4,6 +4,7 @@ class ToolTrackingApp {
         this.currentScreen = 'loading';
         this.currentUser = null;
         this.technicianName = '';
+        this.outToolsCount = 0;
         this.html5QrcodeScanner = null;
         this.isScanning = false;
         
@@ -168,6 +169,9 @@ class ToolTrackingApp {
         document.getElementById('checkinBtn').addEventListener('click', () => {
             this.checkinTool();
         });
+
+        // Menu buttons
+        document.getElementById('refreshBtn').onclick = () => this.refreshMenu();
     }
 
     checkExistingSession() {
@@ -676,6 +680,18 @@ class ToolTrackingApp {
             console.error('Error getting tool details:', error);
             this.showAlert('Error getting tool details', 'error');
         }
+    }
+
+    refreshMenu() {
+        // Simulate refresh (fetch new data in real app)
+        this.outToolsCount = Math.floor(Math.random() * 20) + 1;
+        this.showMenu();
+    }
+
+    showMenu() {
+        this.showScreen('menu');
+        document.getElementById('menuUsername').textContent = this.technicianName;
+        document.getElementById('outToolsCount').textContent = this.outToolsCount;
     }
 }
 
