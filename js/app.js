@@ -913,10 +913,23 @@ class ToolTrackingApp {
                     <p><strong>Last Updated:</strong> ${timestamp}</p>
                     <p><strong>Technician:</strong> ${tool.technician || 'N/A'}</p>
                     <p><strong>Location:</strong> ${tool.location || 'N/A'}</p>
-                    <p><strong>Calibration Due:</strong> ${tool.calibrationDueDate || 'N/A'}</p>
+                    <p><strong>Calibration Due:</strong> ${tool.calibrationDueDate || tool.calDueDate || 'N/A'}</p>
+                    <p><strong>Owner:</strong> ${tool.owner || 'N/A'}</p>
+                    <p><strong>Collection:</strong> <a href="#" id="collectionLink">${tool.collection || 'N/A'}</a></p>
                 </div>
             </div>
         `;
+
+        // Add event listener for collection link
+        setTimeout(() => {
+            const collectionLink = document.getElementById('collectionLink');
+            if (collectionLink && tool.collection) {
+                collectionLink.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    await this.showCollectionDetails(tool.collection);
+                });
+            }
+        }, 0);
 
         // Show/hide buttons based on status
         if (status === 'IN') {
@@ -1424,6 +1437,41 @@ class ToolTrackingApp {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         return this.cooldownWarningShownDate && this.cooldownWarningShownDate.getTime() === today.getTime();
+    }
+
+    async showCollectionDetails(collectionId) {
+        const modal = new bootstrap.Modal(document.getElementById('collectionDetailsModal'));
+        const content = document.getElementById('collectionDetailsContent');
+        const title = document.getElementById('collectionDetailsTitle');
+        try {
+            const doc = await this.db.collection('collections').doc(collectionId).get();
+            if (!doc.exists) {
+                content.innerHTML = `<div class='text-danger'>Collection not found.</div>`;
+                title.textContent = 'Collection Details';
+                modal.show();
+                return;
+            }
+            const data = doc.data();
+            title.textContent = data.name || collectionId;
+            let photosHtml = '';
+            if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
+                photosHtml = `<div class='row'>` + data.photos.map(url => `
+                    <div class='col-6 col-md-4 mb-3'><img src='${url}' class='img-fluid rounded shadow-sm' alt='Collection Photo'></div>
+                `).join('') + `</div>`;
+            } else {
+                photosHtml = `<div class='text-muted'>No photos available for this collection.</div>`;
+            }
+            content.innerHTML = `
+                <div><strong>Name:</strong> ${data.name || collectionId}</div>
+                <div><strong>Description:</strong> ${data.description || 'N/A'}</div>
+                <hr>
+                <h6>Photos:</h6>
+                ${photosHtml}
+            `;
+        } catch (error) {
+            content.innerHTML = `<div class='text-danger'>Error loading collection details.</div>`;
+        }
+        modal.show();
     }
 }
 
