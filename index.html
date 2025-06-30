@@ -617,6 +617,18 @@
             font-weight: 600;
             color: #333;
         }
+        
+        /* Ensure strong tags remain bold on mobile devices */
+        @media (max-width: 600px) {
+            .modal-body strong {
+                font-weight: 600 !important;
+                color: #333 !important;
+            }
+            
+            .modal-body div strong {
+                font-weight: 600 !important;
+            }
+        }
     </style>
 </head>
 <body>
