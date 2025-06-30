@@ -585,6 +585,37 @@
                 font-size: 1.2em;
                 padding: 18px 0 !important;
             }
+            
+            /* Mobile-specific modal styling */
+            .modal-dialog {
+                margin: 10px;
+                max-width: calc(100% - 20px);
+            }
+            
+            .modal-body {
+                font-size: 1.1em;
+                line-height: 1.5;
+            }
+            
+            .modal-title {
+                font-size: 1.3em;
+            }
+            
+            .modal-footer .btn {
+                font-size: 1.1em;
+                padding: 10px 20px;
+            }
+        }
+        
+        /* Ensure consistent font sizes across all devices */
+        .modal-body div[style*="font-size: 1.1em"] {
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+        
+        .modal-body strong {
+            font-weight: 600;
+            color: #333;
         }
     </style>
 </head>
@@ -1842,23 +1873,23 @@
             const body = document.getElementById('toolDetailsBody');
             let photoLinkHtml = '';
             if (tool.photoUrls && Array.isArray(tool.photoUrls) && tool.photoUrls.length > 0) {
-                photoLinkHtml = `<strong style="color: #1976d2; text-decoration: underline; cursor: pointer; font-size: 1.25em; display: inline-block; margin-top: 10px;" onclick="showToolPhotoGallery(this)" data-photo-urls='${JSON.stringify(tool.photoUrls)}'>Photo (${tool.photoUrls.length})</strong>`;
+                photoLinkHtml = `<strong style="color: #1976d2; text-decoration: underline; cursor: pointer; font-size: 1.1em; display: inline-block; margin-top: 10px;" onclick="showToolPhotoGallery(this)" data-photo-urls='${JSON.stringify(tool.photoUrls)}'>Photo (${tool.photoUrls.length})</strong>`;
             } else {
-                photoLinkHtml = `<span style="color: #888; text-decoration: none; cursor: not-allowed; font-size: 1.25em; display: inline-block; margin-top: 10px;">Photo</span>`;
+                photoLinkHtml = `<span style="color: #888; text-decoration: none; cursor: not-allowed; font-size: 1.1em; display: inline-block; margin-top: 10px;">Photo</span>`;
             }
             body.innerHTML = `
-                <div class="mb-2"><strong>Tool ID:</strong> ${tool.toolId}</div>
-                <div class="mb-2"><strong>Tool Name:</strong> ${tool.toolName}</div>
-                <div class="mb-2"><strong>Part Number:</strong> ${tool.partNumber}</div>
-                <div class="mb-2"><strong>Owner:</strong> ${tool.owner}</div>
-                <div class="mb-2"><strong>Collection:</strong> <a href="#" onclick="showCollectionDetails('${tool.collectionCode}')" style="font-size: 1.15em; color: #1976d2; text-decoration: underline;">${tool.collectionCode}</a></div>
-                <div class="mb-2"><strong>Location:</strong> ${tool.location}</div>
+                <div class="mb-2" style="font-size: 1.1em;"><strong>Tool ID:</strong> ${tool.toolId}</div>
+                <div class="mb-2" style="font-size: 1.1em;"><strong>Tool Name:</strong> ${tool.toolName}</div>
+                <div class="mb-2" style="font-size: 1.1em;"><strong>Part Number:</strong> ${tool.partNumber}</div>
+                <div class="mb-2" style="font-size: 1.1em;"><strong>Owner:</strong> ${tool.owner}</div>
+                <div class="mb-2" style="font-size: 1.1em;"><strong>Collection:</strong> <a href="#" onclick="showCollectionDetails('${tool.collectionCode || ''}')" style="font-size: 1.1em; color: #1976d2; text-decoration: underline;">${tool.collectionCode}</a></div>
+                <div class="mb-2" style="font-size: 1.1em;"><strong>Location:</strong> ${tool.location}</div>
                 ${tool.status === 'OUT' ? `
-                    <div class="mb-2"><strong>Status:</strong> ${tool.status}</div>
-                    <div class="mb-2"><strong>Technician:</strong> ${tool.technician}</div>
-                    <div class="mb-2"><strong>Last Updated:</strong> ${tool.timestamp}</div>
+                    <div class="mb-2" style="font-size: 1.1em;"><strong>Status:</strong> ${tool.status}</div>
+                    <div class="mb-2" style="font-size: 1.1em;"><strong>Technician:</strong> ${tool.technician}</div>
+                    <div class="mb-2" style="font-size: 1.1em;"><strong>Last Updated:</strong> ${tool.timestamp}</div>
                 ` : ''}
-                ${tool.calDueDate !== 'N/A' ? `<div class="mb-2"><strong>Calibration Due:</strong> ${tool.calDueDate}</div>` : ''}
+                ${tool.calDueDate !== 'N/A' ? `<div class="mb-2" style="font-size: 1.1em;"><strong>Calibration Due:</strong> ${tool.calDueDate}</div>` : ''}
                 <div class="mb-2">${photoLinkHtml}</div>
             `;
             const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
