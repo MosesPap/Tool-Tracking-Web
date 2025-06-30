@@ -1890,18 +1890,18 @@
                 photoLinkHtml = `<span style="color: #888; text-decoration: none; cursor: not-allowed; font-size: 1.1em; display: inline-block; margin-top: 10px;">Photo</span>`;
             }
             body.innerHTML = `
-                <div class="mb-2" style="font-size: 1.1em;"><strong>Tool ID:</strong> ${tool.toolId}</div>
-                <div class="mb-2" style="font-size: 1.1em;"><strong>Tool Name:</strong> ${tool.toolName}</div>
-                <div class="mb-2" style="font-size: 1.1em;"><strong>Part Number:</strong> ${tool.partNumber}</div>
-                <div class="mb-2" style="font-size: 1.1em;"><strong>Owner:</strong> ${tool.owner}</div>
-                <div class="mb-2" style="font-size: 1.1em;"><strong>Collection:</strong> <a href="#" onclick="showCollectionDetails('${tool.collectionCode || ''}')" style="font-size: 1.1em; color: #1976d2; text-decoration: underline;">${tool.collectionCode}</a></div>
-                <div class="mb-2" style="font-size: 1.1em;"><strong>Location:</strong> ${tool.location}</div>
+                <div class="mb-2" style="font-size: 1.1em;"><span style="font-weight: 600; color: #333;">Tool ID:</span> ${tool.toolId}</div>
+                <div class="mb-2" style="font-size: 1.1em;"><span style="font-weight: 600; color: #333;">Tool Name:</span> ${tool.toolName}</div>
+                <div class="mb-2" style="font-size: 1.1em;"><span style="font-weight: 600; color: #333;">Part Number:</span> ${tool.partNumber}</div>
+                <div class="mb-2" style="font-size: 1.1em;"><span style="font-weight: 600; color: #333;">Owner:</span> ${tool.owner}</div>
+                <div class="mb-2" style="font-size: 1.1em;"><span style="font-weight: 600; color: #333;">Collection:</span> <a href="#" onclick="showCollectionDetails('${tool.collectionCode || ''}')" style="font-size: 1.1em; color: #1976d2; text-decoration: underline;">${tool.collectionCode}</a></div>
+                <div class="mb-2" style="font-size: 1.1em;"><span style="font-weight: 600; color: #333;">Location:</span> ${tool.location}</div>
                 ${tool.status === 'OUT' ? `
-                    <div class="mb-2" style="font-size: 1.1em;"><strong>Status:</strong> ${tool.status}</div>
-                    <div class="mb-2" style="font-size: 1.1em;"><strong>Technician:</strong> ${tool.technician}</div>
-                    <div class="mb-2" style="font-size: 1.1em;"><strong>Last Updated:</strong> ${tool.timestamp}</div>
+                    <div class="mb-2" style="font-size: 1.1em;"><span style="font-weight: 600; color: #333;">Status:</span> ${tool.status}</div>
+                    <div class="mb-2" style="font-size: 1.1em;"><span style="font-weight: 600; color: #333;">Technician:</span> ${tool.technician}</div>
+                    <div class="mb-2" style="font-size: 1.1em;"><span style="font-weight: 600; color: #333;">Last Updated:</span> ${tool.timestamp}</div>
                 ` : ''}
-                ${tool.calDueDate !== 'N/A' ? `<div class="mb-2" style="font-size: 1.1em;"><strong>Calibration Due:</strong> ${tool.calDueDate}</div>` : ''}
+                ${tool.calDueDate !== 'N/A' ? `<div class="mb-2" style="font-size: 1.1em;"><span style="font-weight: 600; color: #333;">Calibration Due:</span> ${tool.calDueDate}</div>` : ''}
                 <div class="mb-2">${photoLinkHtml}</div>
             `;
             const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
