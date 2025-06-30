@@ -13,6 +13,154 @@
         .tool-out { color: red; font-weight: bold; }
         .tool-in { color: green; }
         .hidden { display: none; }
+        
+        /* Orange Button Styles with Shadow Floating Effect */
+        .btn-primary {
+            background-color: #FF9800 !important;
+            border-color: #FF9800 !important;
+            color: white !important;
+            font-weight: bold;
+            border-radius: 24px !important;
+            padding: 12px 24px !important;
+            box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
+            transition: all 0.3s ease;
+            border: none;
+        }
+        
+        .btn-primary:hover {
+            background-color: #F57C00 !important;
+            border-color: #F57C00 !important;
+            color: white !important;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(255, 152, 0, 0.4);
+        }
+        
+        .btn-primary:active {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(255, 152, 0, 0.4);
+        }
+        
+        .btn-warning {
+            background-color: #FF9800 !important;
+            border-color: #FF9800 !important;
+            color: white !important;
+            font-weight: bold;
+            border-radius: 24px !important;
+            padding: 12px 24px !important;
+            box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
+            transition: all 0.3s ease;
+            border: none;
+        }
+        
+        .btn-warning:hover {
+            background-color: #F57C00 !important;
+            border-color: #F57C00 !important;
+            color: white !important;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(255, 152, 0, 0.4);
+        }
+        
+        .btn-warning:active {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(255, 152, 0, 0.4);
+        }
+        
+        /* Form label styles */
+        .form-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+        
+        /* Forgot password link styles */
+        #forgotPasswordLink {
+            color: #FF9800;
+            font-weight: 500;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        #forgotPasswordLink:hover {
+            color: #F57C00;
+            text-decoration: underline;
+        }
+        
+        /* ToolScanner Menu Button Styles with Shadow Floating Effect */
+        .btn-success {
+            background-color: #4CAF50 !important;
+            border-color: #4CAF50 !important;
+            color: white !important;
+            font-weight: bold;
+            border-radius: 24px !important;
+            padding: 12px 24px !important;
+            box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+            transition: all 0.3s ease;
+            border: none;
+        }
+        
+        .btn-success:hover {
+            background-color: #45a049 !important;
+            border-color: #45a049 !important;
+            color: white !important;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(76, 175, 80, 0.4);
+        }
+        
+        .btn-success:active {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(76, 175, 80, 0.4);
+        }
+        
+        .btn-danger {
+            background-color: #f44336 !important;
+            border-color: #f44336 !important;
+            color: white !important;
+            font-weight: bold;
+            border-radius: 24px !important;
+            padding: 12px 24px !important;
+            box-shadow: 0 4px 8px rgba(244, 67, 54, 0.3);
+            transition: all 0.3s ease;
+            border: none;
+        }
+        
+        .btn-danger:hover {
+            background-color: #da190b !important;
+            border-color: #da190b !important;
+            color: white !important;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(244, 67, 54, 0.4);
+        }
+        
+        .btn-danger:active {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(244, 67, 54, 0.4);
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d !important;
+            border-color: #6c757d !important;
+            color: white !important;
+            font-weight: bold;
+            border-radius: 24px !important;
+            padding: 12px 24px !important;
+            box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
+            transition: all 0.3s ease;
+            border: none;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #5a6268 !important;
+            border-color: #5a6268 !important;
+            color: white !important;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(108, 117, 125, 0.4);
+        }
+        
+        .btn-secondary:active {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(108, 117, 125, 0.4);
+        }
+        
         .camera-view {
             width: 100%;
             max-width: 320px;
@@ -332,15 +480,17 @@
         .register-tool-card.in { background: #E8F5E9; }
         .register-tool-title {
             font-weight: bold;
-            font-size: 16px;
+            font-size: 18px;
             color: #000;
             margin-bottom: 4px;
+            text-align: left;
         }
         .register-tool-date {
-            font-size: 12px;
+            font-size: 14px;
             color: #666;
             font-weight: bold;
             margin-bottom: 8px;
+            text-align: left;
         }
         .register-tool-row {
             display: flex;
@@ -363,7 +513,7 @@
         .register-tool-value {
             color: #666;
             font-weight: bold;
-            font-size: 12px;
+            font-size: 14px;
         }
         .register-tool-status {
             color: #fff;
@@ -436,22 +586,35 @@
         <div id="loginSection" class="auth-container">
             <div class="card auth-card">
                 <div class="card-body">
-                    <h3 class="card-title text-center mb-3">Sign In</h3>
                     <div id="loginAlert" class="alert alert-danger d-none" role="alert"></div>
                     <div class="mb-3">
-                        <input type="email" id="loginEmail" class="form-control" placeholder="Email">
+                        <label for="loginEmail" class="form-label">Email</label>
+                        <input type="email" id="loginEmail" class="form-control" required autocomplete="username">
                     </div>
-                    <div class="mb-3 input-group">
-                        <input type="password" id="loginPassword" class="form-control" placeholder="Password">
-                        <button class="btn btn-outline-secondary" type="button" id="toggleLoginPassword">
-                            <i class="fas fa-eye"></i>
-                        </button>
+                    <div class="mb-1">
+                        <label for="loginPassword" class="form-label">Password</label>
+                        <div class="input-group">
+                            <input type="password" id="loginPassword" class="form-control" required autocomplete="current-password">
+                            <button class="btn btn-outline-secondary" type="button" id="toggleLoginPassword" tabindex="-1">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
                     </div>
-                    <div class="d-flex justify-content-end align-items-center mb-2">
+                    <div class="d-flex justify-content-end mb-2">
                         <a href="#" id="forgotPasswordLink">Forgot my password?</a>
                     </div>
-                    <button onclick="login()" class="btn btn-primary w-100 mb-2" id="loginBtn">Sign In</button>
-                    <button onclick="showSignUp()" class="btn btn-link w-100">Don't have an account? Sign Up</button>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="keepSignedIn">
+                        <label class="form-check-label" for="keepSignedIn">Keep me signed in</label>
+                    </div>
+                    <button onclick="login()" class="btn btn-primary w-100 mb-3" id="loginBtn">
+                        <span class="btn-text">Login</span>
+                        <span class="btn-loading d-none">
+                            <span class="spinner-border spinner-border-sm me-2"></span>Loading...
+                        </span>
+                    </button>
+                    <button onclick="showSignUp()" class="btn btn-primary w-100 mb-3">CREATE ACCOUNT</button>
+                    <button onclick="showAdminLogin()" class="btn btn-warning w-100">Tool Admin</button>
                 </div>
             </div>
         </div>
@@ -460,28 +623,51 @@
         <div id="signUpSection" class="auth-container d-none">
             <div class="card auth-card">
                 <div class="card-body">
-                    <h3 class="card-title text-center mb-3">Sign Up</h3>
+                    <!-- Back button -->
+                    <div class="text-center mb-3">
+                        <button onclick="showLogin()" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left"></i> Back to Login
+                        </button>
+                    </div>
+                    
                     <div id="signUpAlert" class="alert alert-danger d-none" role="alert"></div>
+                    
                     <div class="mb-3">
-                        <input type="text" id="signUpFullName" class="form-control" placeholder="Full Name">
+                        <label for="signUpFullName" class="form-label">Full Name</label>
+                        <input type="text" id="signUpFullName" class="form-control" required autocomplete="name">
                     </div>
+                    
                     <div class="mb-3">
-                        <input type="email" id="signUpEmail" class="form-control" placeholder="Email">
+                        <label for="signUpEmail" class="form-label">Email</label>
+                        <input type="email" id="signUpEmail" class="form-control" required autocomplete="username">
                     </div>
-                    <div class="mb-3 input-group">
-                        <input type="password" id="signUpPassword" class="form-control" placeholder="Password">
-                        <button class="btn btn-outline-secondary" type="button" id="toggleSignUpPassword">
-                            <i class="fas fa-eye"></i>
-                        </button>
+                    
+                    <div class="mb-3">
+                        <label for="signUpPassword" class="form-label">Password</label>
+                        <div class="input-group">
+                            <input type="password" id="signUpPassword" class="form-control" required autocomplete="new-password">
+                            <button class="btn btn-outline-secondary" type="button" id="toggleSignUpPassword" tabindex="-1">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
                     </div>
-                    <div class="mb-3 input-group">
-                        <input type="password" id="signUpConfirmPassword" class="form-control" placeholder="Confirm Password">
-                        <button class="btn btn-outline-secondary" type="button" id="toggleSignUpConfirmPassword">
-                            <i class="fas fa-eye"></i>
-                        </button>
+                    
+                    <div class="mb-3">
+                        <label for="signUpConfirmPassword" class="form-label">Confirm Password</label>
+                        <div class="input-group">
+                            <input type="password" id="signUpConfirmPassword" class="form-control" required autocomplete="new-password">
+                            <button class="btn btn-outline-secondary" type="button" id="toggleSignUpConfirmPassword" tabindex="-1">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
                     </div>
-                    <button onclick="signUp()" class="btn btn-success w-100 mb-2" id="signUpBtn">Sign Up</button>
-                    <button onclick="showLogin()" class="btn btn-link w-100">Already have an account? Sign In</button>
+                    
+                    <button onclick="signUp()" class="btn btn-primary w-100 mb-3" id="signUpBtn">
+                        <span class="btn-text">CREATE ACCOUNT</span>
+                        <span class="btn-loading d-none">
+                            <span class="spinner-border spinner-border-sm me-2"></span>Loading...
+                        </span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -885,6 +1071,61 @@
             <button type="button" class="btn btn-secondary" id="previousOutPhotoNextBtn">Next</button>
             <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tool Details Modal for Register Tools -->
+    <div class="modal fade" id="toolDetailsModal" tabindex="-1" aria-labelledby="toolDetailsModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="toolDetailsModalLabel">Tool Details</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="toolDetailsBody">
+            <!-- Tool details will be populated here -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collection Details Modal -->
+    <div class="modal fade" id="collectionDetailsModal" tabindex="-1" aria-labelledby="collectionDetailsModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="collectionDetailsModalLabel">Collection Details</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="collectionDetailsBody">
+            <!-- Collection details and photos will be populated here -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collection Details Screen -->
+    <div id="collectionDetailsScreen" style="display:none;">
+      <div class="container py-4">
+        <button id="backToToolDetailsBtn" class="btn btn-outline-secondary mb-3">
+          <i class="fas fa-arrow-left"></i> Back to Tool Details
+        </button>
+        
+        <!-- Header -->
+        <div class="text-center mb-4">
+          <h2 style="color: #FF9800; font-weight: bold; font-size: 2rem;">Collection Details</h2>
+        </div>
+        
+        <!-- Collection Details Content -->
+        <div id="collectionDetailsContent" class="mb-4">
+          <!-- Collection details will be populated here -->
         </div>
       </div>
     </div>
@@ -1557,7 +1798,7 @@
                 <div class="mb-2"><strong>Tool Name:</strong> ${tool.toolName}</div>
                 <div class="mb-2"><strong>Part Number:</strong> ${tool.partNumber}</div>
                 <div class="mb-2"><strong>Owner:</strong> ${tool.owner}</div>
-                <div class="mb-2"><strong>Collection:</strong> ${tool.collectionCode}</div>
+                <div class="mb-2"><strong>Collection:</strong> <a href="#" onclick="showCollectionDetails('${tool.collectionCode}')">${tool.collectionCode}</a></div>
                 <div class="mb-2"><strong>Location:</strong> ${tool.location}</div>
                 ${tool.status === 'OUT' ? `
                     <div class="mb-2"><strong>Status:</strong> ${tool.status}</div>
@@ -2747,6 +2988,59 @@
             };
         }
     });
+
+    async function showCollectionDetails(collectionCode) {
+        if (!collectionCode) return;
+        const content = document.getElementById('collectionDetailsContent');
+        content.innerHTML = '<div class="text-center">Loading collection details...</div>';
+        
+        // Hide tool details modal and show collection details screen
+        const toolDetailsModal = bootstrap.Modal.getInstance(document.getElementById('toolDetailsModal'));
+        if (toolDetailsModal) {
+            toolDetailsModal.hide();
+        }
+        document.getElementById('collectionDetailsScreen').style.display = 'block';
+        
+        try {
+            // Query collections collection where collectionName matches the collectionCode from tools
+            const querySnapshot = await db.collection('collections').where('collectionName', '==', collectionCode).get();
+            if (querySnapshot.empty) {
+                content.innerHTML = `<div class="text-center text-danger">Collection not found.</div>`;
+            } else {
+                const doc = querySnapshot.docs[0]; // Get the first matching document
+                const data = doc.data();
+                let html = `<div class="card mb-4">
+                    <div class="card-body">
+                        <h4 class="card-title mb-3">${data.collectionName || collectionCode}</h4>`;
+                if (data.description) html += `<p class="card-text"><strong>Description:</strong> ${data.description}</p>`;
+                if (data.owner) html += `<p class="card-text"><strong>Owner:</strong> ${data.owner}</p>`;
+                html += `</div></div>`;
+                
+                if (data.photoUrls && Array.isArray(data.photoUrls) && data.photoUrls.length > 0) {
+                    html += `<h5 class="mb-3">Photos</h5><div class="row">`;
+                    data.photoUrls.forEach(url => {
+                        html += `<div class="col-6 col-md-4 col-lg-3 mb-3">
+                            <img src="${url}" alt="Collection Photo" class="img-fluid rounded shadow" style="width: 100%; height: 200px; object-fit: cover;">
+                        </div>`;
+                    });
+                    html += `</div>`;
+                } else {
+                    html += `<div class="text-center text-muted"><em>No photos available for this collection.</em></div>`;
+                }
+                content.innerHTML = html;
+            }
+        } catch (error) {
+            content.innerHTML = `<div class="text-center text-danger">Error loading collection details: ${error.message}</div>`;
+        }
+    }
+
+    // Back button for Collection Details screen
+    document.getElementById('backToToolDetailsBtn').onclick = function() {
+        document.getElementById('collectionDetailsScreen').style.display = 'none';
+        // Re-show the tool details modal
+        const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
+        modal.show();
+    };
     </script>
 </body>
 </html> 
