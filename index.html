@@ -573,6 +573,19 @@
             right: 20px;
             z-index: 10000;
         }
+
+        @media (max-width: 600px) {
+            .d-grid.gap-3.col-6.mx-auto > button {
+                width: 100% !important;
+                font-size: 1.25rem !important;
+                padding: 18px 0 !important;
+                margin-bottom: 10px !important;
+            }
+            .d-grid.gap-3.col-6.mx-auto {
+                max-width: 100vw !important;
+                grid-template-columns: 1fr !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -596,9 +609,9 @@
                         <div class="input-group">
                             <input type="password" id="loginPassword" class="form-control" required autocomplete="current-password">
                             <button class="btn btn-outline-secondary" type="button" id="toggleLoginPassword" tabindex="-1">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
                     </div>
                     <div class="d-flex justify-content-end mb-2">
                         <a href="#" id="forgotPasswordLink">Forgot my password?</a>
@@ -647,9 +660,9 @@
                         <div class="input-group">
                             <input type="password" id="signUpPassword" class="form-control" required autocomplete="new-password">
                             <button class="btn btn-outline-secondary" type="button" id="toggleSignUpPassword" tabindex="-1">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
                     </div>
                     
                     <div class="mb-3">
@@ -657,9 +670,9 @@
                         <div class="input-group">
                             <input type="password" id="signUpConfirmPassword" class="form-control" required autocomplete="new-password">
                             <button class="btn btn-outline-secondary" type="button" id="toggleSignUpConfirmPassword" tabindex="-1">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
                     </div>
                     
                     <button onclick="signUp()" class="btn btn-primary w-100 mb-3" id="signUpBtn">
@@ -733,21 +746,21 @@
                     <div class="row">
                         <div class="col-md-6 mx-auto">
                             <div class="scanner-container" id="scannerContainer">
-                                <div class="card mb-4">
-                                    <div class="card-body">
-                                        <h4>Scan Tool</h4>
-                                        <button onclick="startScanner()" class="btn btn-primary btn-scan mb-3">
-                                            <i class="fas fa-camera"></i> Start Scanner
+                            <div class="card mb-4">
+                                <div class="card-body">
+                                    <h4>Scan Tool</h4>
+                                    <button onclick="startScanner()" class="btn btn-primary btn-scan mb-3">
+                                        <i class="fas fa-camera"></i> Start Scanner
+                                    </button>
+                                    <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-3" style="display:none;">Stop Scanner</button>
+                                    <div id="reader" style="display:none;"></div>
+                                    <div class="input-group mb-3">
+                                        <input type="text" id="toolCode" class="form-control" placeholder="Enter Tool Code">
+                                        <button onclick="submitCode()" class="btn btn-primary">
+                                            <i class="fas fa-check"></i> Submit
                                         </button>
-                                        <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-3" style="display:none;">Stop Scanner</button>
-                                        <div id="reader" style="display:none;"></div>
-                                        <div class="input-group mb-3">
-                                            <input type="text" id="toolCode" class="form-control" placeholder="Enter Tool Code">
-                                            <button onclick="submitCode()" class="btn btn-primary">
-                                                <i class="fas fa-check"></i> Submit
-                                            </button>
-                                        </div>
-                                        <button id="toolDetailsBtn" class="btn btn-info w-100 mb-2" disabled onclick="showLastScannedToolDetails()">Tool Details</button>
+                                    </div>
+                                    <button id="toolDetailsBtn" class="btn btn-info w-100 mb-2" disabled onclick="showLastScannedToolDetails()">Tool Details</button>
                                     </div>
                                 </div>
                                 <!-- Overlay for expanded scanner -->
@@ -1114,16 +1127,28 @@
     <!-- Collection Details Screen -->
     <div id="collectionDetailsScreen" style="display:none;">
       <div class="container py-4">
-        <button id="backToToolDetailsBtn" class="btn btn-outline-secondary mb-3">
-          <i class="fas fa-arrow-left"></i> Back to Tool Details
-        </button>
-        
+        <button id="backToRegisterToolsBtn" class="btn btn-outline-secondary mb-3">
+            <i class="fas fa-arrow-left"></i> Back to Register Tools List
+          </button>
         <!-- Header -->
         <div class="text-center mb-4">
           <h2 style="color: #FF9800; font-weight: bold; font-size: 2rem;">Collection Details</h2>
         </div>
         
         <!-- Collection Details Content -->
+        <div id="collectionDetailsContent" class="mb-4">
+          <!-- Collection details will be populated here -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Collection Details Screen (Full Page) -->
+    <div id="collectionDetailsScreen" style="display:none;">
+      <div class="container py-4">
+        
+        <div class="text-center mb-4">
+          <h2 style="color: #FF9800; font-weight: bold; font-size: 2rem;">Collection Details</h2>
+        </div>
         <div id="collectionDetailsContent" class="mb-4">
           <!-- Collection details will be populated here -->
         </div>
@@ -1543,11 +1568,11 @@
                             <div class="register-tool-col">
                                 <div class="register-tool-label">TID</div>
                                 <div class="register-tool-value">${doc.id}</div>
-                            </div>
+                        </div>
                             <div class="register-tool-col">
                                 <div class="register-tool-label">P/N</div>
                                 <div class="register-tool-value">${data.partNumber || doc.id}</div>
-                            </div>
+                        </div>
                             <div class="register-tool-col">
                                 <div class="register-tool-label">STS</div>
                                 <div class="register-tool-status ${statusClass}">${status}</div>
@@ -1792,7 +1817,12 @@
         // Add this function to show tool details in the modal
         function showToolDetails(tool) {
             const body = document.getElementById('toolDetailsBody');
-            // Show status, technician, and timestamp only if status is OUT
+            let photoLinkHtml = '';
+            if (tool.photoUrls && Array.isArray(tool.photoUrls) && tool.photoUrls.length > 0) {
+                photoLinkHtml = `<strong style="color: #1976d2; text-decoration: underline; cursor: pointer;" onclick="showToolPhotos('${tool.toolId}')">Photo (${tool.photoUrls.length})</strong>`;
+            } else {
+                photoLinkHtml = `<span style="color: #888; text-decoration: none; cursor: not-allowed;">Photo (0)</span>`;
+            }
             body.innerHTML = `
                 <div class="mb-2"><strong>Tool ID:</strong> ${tool.toolId}</div>
                 <div class="mb-2"><strong>Tool Name:</strong> ${tool.toolName}</div>
@@ -1800,6 +1830,7 @@
                 <div class="mb-2"><strong>Owner:</strong> ${tool.owner}</div>
                 <div class="mb-2"><strong>Collection:</strong> <a href="#" onclick="showCollectionDetails('${tool.collectionCode}')">${tool.collectionCode}</a></div>
                 <div class="mb-2"><strong>Location:</strong> ${tool.location}</div>
+                <div class="mb-2">${photoLinkHtml}</div>
                 ${tool.status === 'OUT' ? `
                     <div class="mb-2"><strong>Status:</strong> ${tool.status}</div>
                     <div class="mb-2"><strong>Technician:</strong> ${tool.technician}</div>
@@ -1807,8 +1838,8 @@
                 ` : ''}
                 ${tool.calDueDate !== 'N/A' ? `<div class="mb-2"><strong>Calibration Due:</strong> ${tool.calDueDate}</div>` : ''}
             `;
-            const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
-            modal.show();
+            // Store photoUrls for this tool globally for the viewer
+            window._currentToolPhotoUrls = tool.photoUrls || [];
         }
 
         // Enable/disable Tool Details button based on input
@@ -2382,7 +2413,7 @@
                 if (collectionCodes.length <= 10) {
                   const colSnap = await db.collection('collections').where('collectionName', 'in', collectionCodes).get();
                   collections = colSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                } else {
+                        } else {
                   // Firestore 'in' query limit is 10, so batch if needed
                   for (let i = 0; i < collectionCodes.length; i += 10) {
                     const batch = collectionCodes.slice(i, i + 10);
@@ -2991,15 +3022,28 @@
 
     async function showCollectionDetails(collectionCode) {
         if (!collectionCode) return;
+        // Hide all main screens
+        document.getElementById('toolScannerMenu').style.display = 'none';
+        document.getElementById('appSection').style.display = 'none';
+        document.getElementById('collectionDetailsScreen').style.display = 'block';
+        
+        // Force-hide the tool details modal and remove any modal backdrop
+        const toolDetailsModalEl = document.getElementById('toolDetailsModal');
+        if (toolDetailsModalEl) {
+            toolDetailsModalEl.classList.remove('show');
+            toolDetailsModalEl.style.display = 'none';
+            toolDetailsModalEl.setAttribute('aria-hidden', 'true');
+            toolDetailsModalEl.removeAttribute('aria-modal');
+            toolDetailsModalEl.removeAttribute('role');
+        }
+        // Remove any modal-backdrop
+        document.querySelectorAll('.modal-backdrop').forEach(el => el.parentNode.removeChild(el));
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+
         const content = document.getElementById('collectionDetailsContent');
         content.innerHTML = '<div class="text-center">Loading collection details...</div>';
-        
-        // Hide tool details modal and show collection details screen
-        const toolDetailsModal = bootstrap.Modal.getInstance(document.getElementById('toolDetailsModal'));
-        if (toolDetailsModal) {
-            toolDetailsModal.hide();
-        }
-        document.getElementById('collectionDetailsScreen').style.display = 'block';
         
         try {
             // Query collections collection where collectionName matches the collectionCode from tools
@@ -3035,12 +3079,133 @@
     }
 
     // Back button for Collection Details screen
-    document.getElementById('backToToolDetailsBtn').onclick = function() {
+    document.getElementById('backToRegisterToolsBtn').onclick = function() {
         document.getElementById('collectionDetailsScreen').style.display = 'none';
         // Re-show the tool details modal
         const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
         modal.show();
     };
+
+    // Function to show tool list and hide collection details
+    function showToolList() {
+        const toolList = document.getElementById('toolList');
+        const collectionDetailsContainer = document.getElementById('collectionDetailsContainer');
+        
+        if (collectionDetailsContainer) {
+            collectionDetailsContainer.style.display = 'none';
+        }
+        toolList.style.display = 'block';
+    }
+
+    // Back button for Collection Details full page screen
+    document.getElementById('backToRegisterToolsBtn').onclick = function() {
+        // Hide collection details screen
+        document.getElementById('collectionDetailsScreen').style.display = 'none';
+        // Force-hide the tool details modal and remove any modal backdrop
+        const toolDetailsModalEl = document.getElementById('toolDetailsModal');
+        if (toolDetailsModalEl) {
+            toolDetailsModalEl.classList.remove('show');
+            toolDetailsModalEl.style.display = 'none';
+            toolDetailsModalEl.setAttribute('aria-hidden', 'true');
+            toolDetailsModalEl.removeAttribute('aria-modal');
+            toolDetailsModalEl.removeAttribute('role');
+        }
+        document.querySelectorAll('.modal-backdrop').forEach(el => el.parentNode.removeChild(el));
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+        // Show Register Tools screen and reload tool list
+        showRegisterTools();
+    };
+
+    // 1. Add the fullscreen photo viewer modal after the toolDetailsModal
+    // ... existing code ...
+    <div class="modal fade" id="toolPhotoViewerModal" tabindex="-1" aria-labelledby="toolPhotoViewerModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content bg-dark text-white">
+          <div class="modal-header border-0">
+            <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body d-flex flex-column align-items-center justify-content-center" id="toolPhotoViewerContent">
+            <!-- Photo will be shown here -->
+          </div>
+          <div class="modal-footer justify-content-between border-0 bg-dark">
+            <button type="button" class="btn btn-light" id="toolPhotoPrevBtn">Previous</button>
+            <span id="toolPhotoCounter"></span>
+            <button type="button" class="btn btn-light" id="toolPhotoNextBtn">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    // ... existing code ...
+
+    // 2. Update showToolDetails to show Photo link or disabled text
+    function showToolDetails(tool) {
+        const body = document.getElementById('toolDetailsBody');
+        let photoLinkHtml = '';
+        if (tool.photoUrls && Array.isArray(tool.photoUrls) && tool.photoUrls.length > 0) {
+            photoLinkHtml = `<strong style="color: #1976d2; text-decoration: underline; cursor: pointer;" onclick="showToolPhotos('${tool.toolId}')">Photo (${tool.photoUrls.length})</strong>`;
+        } else {
+            photoLinkHtml = `<span style="color: #888; text-decoration: none; cursor: not-allowed;">Photo (0)</span>`;
+        }
+        body.innerHTML = `
+            <div class="mb-2"><strong>Tool ID:</strong> ${tool.toolId}</div>
+            <div class="mb-2"><strong>Tool Name:</strong> ${tool.toolName}</div>
+            <div class="mb-2"><strong>Part Number:</strong> ${tool.partNumber}</div>
+            <div class="mb-2"><strong>Owner:</strong> ${tool.owner}</div>
+            <div class="mb-2"><strong>Collection:</strong> <a href="#" onclick="showCollectionDetails('${tool.collectionCode}')">${tool.collectionCode}</a></div>
+            <div class="mb-2"><strong>Location:</strong> ${tool.location}</div>
+            <div class="mb-2">${photoLinkHtml}</div>
+            ${tool.status === 'OUT' ? `
+                <div class="mb-2"><strong>Status:</strong> ${tool.status}</div>
+                <div class="mb-2"><strong>Technician:</strong> ${tool.technician}</div>
+                <div class="mb-2"><strong>Last Updated:</strong> ${tool.timestamp}</div>
+            ` : ''}
+            ${tool.calDueDate !== 'N/A' ? `<div class="mb-2"><strong>Calibration Due:</strong> ${tool.calDueDate}</div>` : ''}
+        `;
+        // Store photoUrls for this tool globally for the viewer
+        window._currentToolPhotoUrls = tool.photoUrls || [];
+    }
+
+    // 3. Add showToolPhotos function for fullscreen gallery
+    async function showToolPhotos(toolId) {
+        // Fetch the tool document to get the latest photoUrls
+        const doc = await db.collection('tools').doc(toolId).get();
+        let photoUrls = [];
+        if (doc.exists) {
+            const data = doc.data();
+            if (data.photoUrls && Array.isArray(data.photoUrls)) {
+                photoUrls = data.photoUrls;
+            }
+        }
+        if (!photoUrls.length) return;
+        let currentPhotoIndex = 0;
+        const modal = new bootstrap.Modal(document.getElementById('toolPhotoViewerModal'));
+        const content = document.getElementById('toolPhotoViewerContent');
+        const counter = document.getElementById('toolPhotoCounter');
+        const prevBtn = document.getElementById('toolPhotoPrevBtn');
+        const nextBtn = document.getElementById('toolPhotoNextBtn');
+        function updatePhoto() {
+            content.innerHTML = `<img src="${photoUrls[currentPhotoIndex]}" class="img-fluid rounded shadow" style="max-height:80vh;max-width:100vw;object-fit:contain;">`;
+            counter.textContent = `${currentPhotoIndex + 1} / ${photoUrls.length}`;
+            prevBtn.disabled = currentPhotoIndex === 0;
+            nextBtn.disabled = currentPhotoIndex === photoUrls.length - 1;
+        }
+        prevBtn.onclick = function() {
+            if (currentPhotoIndex > 0) {
+                currentPhotoIndex--;
+                updatePhoto();
+            }
+        };
+        nextBtn.onclick = function() {
+            if (currentPhotoIndex < photoUrls.length - 1) {
+                currentPhotoIndex++;
+                updatePhoto();
+            }
+        };
+        updatePhoto();
+        modal.show();
+    }
     </script>
 </body>
 </html> 
