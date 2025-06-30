@@ -1578,7 +1578,8 @@
                             status: data.status || status,
                             owner: data.owner || 'N/A',
                             technician: data.technician || 'N/A',
-                            timestamp: time
+                            timestamp: time,
+                            photoUrls: data.photoUrls || []
                         });
                     };
                     card.innerHTML = `
@@ -1675,7 +1676,8 @@
                             technician: data.technician || 'N/A',
                             timestamp: data.timestamp ? data.timestamp.toDate().toLocaleString('en-GB', {
                                 day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-                            }) : 'N/A'
+                            }) : 'N/A',
+                            photoUrls: data.photoUrls || []
                         });
                     };
                     const date = data.timestamp.toDate();
@@ -1820,7 +1822,8 @@
                         timestamp: data.timestamp && data.timestamp.toDate ? data.timestamp.toDate().toLocaleString('en-GB', {
                             day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
                         }) : 'N/A',
-                        calDueDate: data.calDueDate && data.calDueDate.toDate ? data.calDueDate.toDate().toLocaleDateString('en-GB') : 'N/A'
+                        calDueDate: data.calDueDate && data.calDueDate.toDate ? data.calDueDate.toDate().toLocaleDateString('en-GB') : 'N/A',
+                        photoUrls: data.photoUrls || []
                     };
                     
                     // Show the modal with the tool details
@@ -1839,24 +1842,24 @@
             const body = document.getElementById('toolDetailsBody');
             let photoLinkHtml = '';
             if (tool.photoUrls && Array.isArray(tool.photoUrls) && tool.photoUrls.length > 0) {
-                photoLinkHtml = `<strong style="color: #1976d2; text-decoration: underline; cursor: pointer;" onclick="showToolPhotoGallery(this)" data-photo-urls='${JSON.stringify(tool.photoUrls)}'>Photo (${tool.photoUrls.length})</strong>`;
+                photoLinkHtml = `<strong style="color: #1976d2; text-decoration: underline; cursor: pointer; font-size: 1.25em; display: inline-block; margin-top: 10px;" onclick="showToolPhotoGallery(this)" data-photo-urls='${JSON.stringify(tool.photoUrls)}'>Photo (${tool.photoUrls.length})</strong>`;
             } else {
-                photoLinkHtml = `<span style="color: #888; text-decoration: none; cursor: not-allowed;">Photo</span>`;
+                photoLinkHtml = `<span style="color: #888; text-decoration: none; cursor: not-allowed; font-size: 1.25em; display: inline-block; margin-top: 10px;">Photo</span>`;
             }
             body.innerHTML = `
                 <div class="mb-2"><strong>Tool ID:</strong> ${tool.toolId}</div>
                 <div class="mb-2"><strong>Tool Name:</strong> ${tool.toolName}</div>
                 <div class="mb-2"><strong>Part Number:</strong> ${tool.partNumber}</div>
                 <div class="mb-2"><strong>Owner:</strong> ${tool.owner}</div>
-                <div class="mb-2"><strong>Collection:</strong> <a href="#" onclick="showCollectionDetails('${tool.collectionCode}')">${tool.collectionCode}</a></div>
+                <div class="mb-2"><strong>Collection:</strong> <a href="#" onclick="showCollectionDetails('${tool.collectionCode}')" style="font-size: 1.15em; color: #1976d2; text-decoration: underline;">${tool.collectionCode}</a></div>
                 <div class="mb-2"><strong>Location:</strong> ${tool.location}</div>
-                <div class="mb-2">${photoLinkHtml}</div>
                 ${tool.status === 'OUT' ? `
                     <div class="mb-2"><strong>Status:</strong> ${tool.status}</div>
                     <div class="mb-2"><strong>Technician:</strong> ${tool.technician}</div>
                     <div class="mb-2"><strong>Last Updated:</strong> ${tool.timestamp}</div>
                 ` : ''}
                 ${tool.calDueDate !== 'N/A' ? `<div class="mb-2"><strong>Calibration Due:</strong> ${tool.calDueDate}</div>` : ''}
+                <div class="mb-2">${photoLinkHtml}</div>
             `;
             const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
             modal.show();
