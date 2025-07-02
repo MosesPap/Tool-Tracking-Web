@@ -2371,13 +2371,17 @@
 
         // Show notifications in sequence, not simultaneously
         async function showNotificationsInSequence() {
+            console.log('showNotificationsInSequence called');
             let outstandingNeeded = false;
             let overdueNeeded = false;
             let outstandingMsg = '';
             let overdueMsg = '';
 
             const user = auth.currentUser;
-            if (user && await isAfterNotificationTime()) {
+            console.log('Current user:', user);
+            const afterNotif = await isAfterNotificationTime();
+            console.log('After notification time:', afterNotif);
+            if (user && afterNotif) {
                 const fullName = localStorage.getItem('fullName') || user.email;
                 const now = new Date();
                 const today = new Date();
@@ -2387,6 +2391,7 @@
                     .where('owner', '==', fullName)
                     .where('status', '==', 'OUT')
                     .get();
+                console.log('Tools where user is owner and OUT:', snapshot.docs.length);
                 let ownerToday = 0;
                 let ownerPrev = 0;
                 let techToolIds = new Set();
@@ -2407,6 +2412,7 @@
                         techToolIds.add(doc.id);
                     }
                 });
+                console.log('ownerToday:', ownerToday, 'ownerPrev:', ownerPrev);
                 if (ownerToday > 0 || ownerPrev > 0) {
                     outstandingNeeded = true;
                     outstandingMsg = '<b>ACTION REQUIRED:</b> THE FOLLOWING TOOLS YOU OWN ARE STILL CHECKED OUT BY OTHERS.';
@@ -2417,10 +2423,12 @@
                 // Now check as technician, count all tools where user is technician (regardless of owner)
                 const technicianDoc = await db.collection('technicians').doc(user.uid).get();
                 const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'UNKNOWN TECHNICIAN';
+                console.log('Technician name:', technicianName);
                 const techSnapshot = await db.collection('tools')
                     .where('technician', '==', technicianName)
                     .where('status', '==', 'OUT')
                     .get();
+                console.log('Tools where user is technician and OUT:', techSnapshot.docs.length);
                 let techToday = 0;
                 let techPrev = 0;
                 techSnapshot.docs.forEach(doc => {
@@ -2434,6 +2442,7 @@
                         }
                     }
                 });
+                console.log('techToday:', techToday, 'techPrev:', techPrev);
                 if (techToday > 0 || techPrev > 0) {
                     overdueNeeded = true;
                     overdueMsg = '<b>REMINDER:</b> YOU HAVE TOOLS CHECKED OUT THAT NEED TO BE RETURNED.';
@@ -2441,8 +2450,11 @@
                     if (techPrev > 0) overdueMsg += `<br>- <b>${techPrev}</b> TOOL${techPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES.`;
                     overdueMsg += '<br>PLEASE RETURN THESE TOOLS AS SOON AS POSSIBLE.';
                 }
+            } else {
+                console.log('User not logged in or before notification time');
             }
             // Show modals in sequence
+            console.log('outstandingNeeded:', outstandingNeeded, 'overdueNeeded:', overdueNeeded);
             if (outstandingNeeded) {
                 document.getElementById('outstandingToolsBody').innerHTML = outstandingMsg;
                 const outstandingModal = new bootstrap.Modal(document.getElementById('outstandingToolsModal'));
@@ -2456,11 +2468,15 @@
                         }, 300);
                     }
                 };
+                console.log('Showing outstandingToolsModal');
                 outstandingModal.show();
             } else if (overdueNeeded) {
                 document.getElementById('outToolsNotifBody').innerHTML = overdueMsg;
                 const notifModal = new bootstrap.Modal(document.getElementById('outToolsNotifModal'));
+                console.log('Showing outToolsNotifModal');
                 notifModal.show();
+            } else {
+                console.log('No outstanding or overdue tools to show');
             }
         }
 
