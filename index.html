@@ -750,6 +750,7 @@
 
         <!-- Main App Section -->
         <div id="appSection" style="display: none;">
+            <div id="loggedInTechnician" class="mb-2" style="font-size:1.1em;color:#1976d2;font-weight:bold;"></div>
             <button id="backToMenuBtn" class="btn btn-outline-secondary mb-3">
                 <i class="fas fa-arrow-left"></i> Back to Menu
             </button>
@@ -763,9 +764,6 @@
                 <div class="col-6 d-flex justify-content-end align-items-center">
                     <button onclick="toggleAdmin()" id="adminButton" class="btn btn-info me-2" style="display: none;">
                         <i class="fas fa-cog"></i> Admin
-                    </button>
-                    <button onclick="logout()" class="btn btn-secondary">
-                        <i class="fas fa-sign-out-alt"></i> Logout
                     </button>
                 </div>
             </div>
@@ -902,7 +900,7 @@
             <!-- Notification content will be set by JS -->
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+            <button type="button" class="btn btn-primary" id="outstandingToolsOkBtn" data-bs-dismiss="modal">OK</button>
           </div>
         </div>
       </div>
@@ -920,7 +918,7 @@
             <!-- Content will be set by JS -->
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+            <button type="button" class="btn btn-primary" id="outToolsNotifOkBtn" data-bs-dismiss="modal">OK</button>
           </div>
         </div>
       </div>
@@ -929,8 +927,11 @@
     <!-- ToolScanner Menu Section -->
     <div id="toolScannerMenu" style="display:none;">
         <div class="container py-4">
-            <div class="mb-2">
+            <div class="mb-2 d-flex justify-content-between align-items-center">
                 <h2 class="mb-0">Welcome, <span id="fullName" class="technician-name"></span></h2>
+                <button id="settingsBtn" class="btn btn-link p-0" style="font-size: 1.8rem; color: #FF9800;" title="Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
             </div>
             <h2 class="text-center mb-4">ToolScanner Menu</h2>
             <div class="d-grid gap-3 col-6 mx-auto">
@@ -941,6 +942,52 @@
                 <button class="btn btn-secondary" id="menuLogoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
             </div>
         </div>
+    </div>
+
+    <!-- Admin Code Modal -->
+    <div class="modal fade" id="adminCodeModal" tabindex="-1" aria-labelledby="adminCodeModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="adminCodeModalLabel">Admin Verification</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <input type="password" id="adminCodeInput" class="form-control mb-2" placeholder="Enter admin code">
+            <div id="adminCodeError" class="text-danger mb-2" style="display:none;"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="verifyAdminCodeBtn">Verify</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- My Account Modal -->
+    <div class="modal fade" id="myAccountModal" tabindex="-1" aria-labelledby="myAccountModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="myAccountModalLabel">My Account</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <label for="accountNameInput" class="form-label">Name</label>
+            <input type="text" id="accountNameInput" class="form-control mb-2">
+            <div id="myAccountLoading" class="text-center mb-2" style="display:none;">
+                <div class="spinner-border text-primary" role="status"></div>
+                <div>Please wait...</div>
+            </div>
+            <div id="myAccountError" class="text-danger mb-2" style="display:none;"></div>
+            <div id="myAccountSuccess" class="text-success mb-2" style="display:none;"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="saveAccountNameBtn">Save</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Collection Selection Modal -->
@@ -1082,6 +1129,9 @@
         <!-- Header -->
         <div class="text-center mb-4">
           <h2 style="color: #FF9800; font-weight: bold; font-size: 2rem;">Previous Dates OUT Tools</h2>
+          <div id="previousOutToolsSummary" class="text-muted mt-2">
+            <!-- Summary will be populated here -->
+          </div>
         </div>
         
         <!-- Tools List -->
@@ -1388,6 +1438,15 @@
             }
             localStorage.removeItem('fullName'); // Clear stored name on logout
             document.getElementById('headerBranding').style.display = 'block';
+            // Hide all app sections
+            document.getElementById('toolScannerMenu').style.display = 'none';
+            document.getElementById('appSection').style.display = 'none';
+            document.getElementById('myToolsScreen').style.display = 'none';
+            document.getElementById('myToolsByCollectionScreen').style.display = 'none';
+            document.getElementById('collectionCheckupScreen').style.display = 'none';
+            document.getElementById('previousOutToolsScreen').style.display = 'none';
+            // Show login section
+            document.getElementById('loginSection').classList.remove('d-none');
         }
 
         // Toggle Admin Section
@@ -2008,6 +2067,8 @@
         document.getElementById('myToolsBackBtn').onclick = function() {
             document.getElementById('myToolsScreen').style.display = 'none';
             document.getElementById('toolScannerMenu').style.display = 'block';
+            // Refresh the OUT tools count when returning to menu
+            updatePreviousOutToolsCount();
         };
 
         // Helper to get status CSS class
@@ -2080,6 +2141,10 @@
         function showToolScannerMenu() {
             document.getElementById('toolScannerMenu').style.display = 'block';
             document.getElementById('appSection').style.display = 'none';
+            // Refresh the OUT tools count when showing the menu
+            updatePreviousOutToolsCount();
+            // Show outstanding and overdue dialogs
+            showNotificationsInSequence();
         }
         function showRegisterTools() {
             document.getElementById('toolScannerMenu').style.display = 'none';
@@ -2109,6 +2174,8 @@
         document.getElementById('backToMenuBtn').onclick = function() {
             document.getElementById('appSection').style.display = 'none';
             document.getElementById('toolScannerMenu').style.display = 'block';
+            // Refresh the OUT tools count when returning to menu
+            updatePreviousOutToolsCount();
         };
 
         // My Tools menu button handler: show collection selection dialog
@@ -2297,6 +2364,8 @@
             backToCollectionSelectBtn.onclick = function() {
                 document.getElementById('myToolsByCollectionScreen').style.display = 'none';
                 document.getElementById('toolScannerMenu').style.display = 'block';
+                // Refresh the OUT tools count when returning to menu
+                updatePreviousOutToolsCount();
             };
         }
 
@@ -2377,7 +2446,7 @@
             if (outstandingNeeded) {
                 document.getElementById('outstandingToolsBody').innerHTML = outstandingMsg;
                 const outstandingModal = new bootstrap.Modal(document.getElementById('outstandingToolsModal'));
-                document.querySelector('#outstandingToolsModal .btn-primary').onclick = function() {
+                document.getElementById('outstandingToolsOkBtn').onclick = function() {
                     outstandingModal.hide();
                     if (overdueNeeded) {
                         setTimeout(() => {
@@ -2429,7 +2498,12 @@
                 const data = doc.data();
                 return data.timestamp && data.timestamp.toDate() < today;
             });
-            document.getElementById('previous-tab').innerHTML = `<i class="fas fa-history"></i> Previous Tools (${previousTools.length})`;
+            const elem = document.getElementById('previous-tab');
+            if (elem) {
+                elem.innerHTML = `<i class="fas fa-history"></i> Previous Tools (${previousTools.length})`;
+            } else {
+                console.warn('previous-tab element not found');
+            }
         }
 
         // After login or on auth state change, update the logged-in technician display
@@ -2437,12 +2511,18 @@
             const user = auth.currentUser;
             if (!user) return;
             const fullName = localStorage.getItem('fullName') || user.email;
-            document.getElementById('loggedInTechnician').textContent = `Logged in as: ${fullName} (${user.email})`;
+            const elem = document.getElementById('loggedInTechnician');
+            if (elem) {
+                elem.textContent = `Logged in as: ${fullName} (${user.email})`;
+            } else {
+                console.warn('loggedInTechnician element not found');
+            }
             // Update previous OUT tools count
             updatePreviousOutToolsCount();
         }
 
-        if ('serviceWorker' in navigator) {
+        // Service Worker registration with protocol check
+        if ((window.location.protocol === 'https:' || window.location.hostname === 'localhost') && 'serviceWorker' in navigator) {
           navigator.serviceWorker.register('service-worker.js')
             .then(function(reg) {
               // Registration successful
@@ -2859,14 +2939,21 @@
 
     // Previous OUT Tools functionality
     document.getElementById('menuOutBtn').onclick = function() {
-        showPreviousOutTools();
+        // Auto-refresh: Update count first, then show the screen
+        updatePreviousOutToolsCount().then(() => {
+            showPreviousOutTools();
+        });
     };
 
     // Back button for Previous OUT Tools
     document.getElementById('backToMenuFromOutToolsBtn').onclick = function() {
         document.getElementById('previousOutToolsScreen').style.display = 'none';
         document.getElementById('toolScannerMenu').style.display = 'block';
+        // Update the count when returning to menu to ensure it's current
+        updatePreviousOutToolsCount();
     };
+
+
 
     // Variables for previous OUT tools
     let previousOutToolsCount = 0;
@@ -2941,57 +3028,145 @@
         
         const previousOutToolsList = document.getElementById('previousOutToolsList');
         
-        if (previousOutToolsData.length === 0) {
-            previousOutToolsList.innerHTML = '<div class="text-center text-muted">No previous OUT tools found.</div>';
-            return;
-        }
+        // Show loading state
+        previousOutToolsList.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><div class="mt-2">Refreshing previous OUT tools...</div></div>';
+        document.getElementById('previousOutToolsSummary').innerHTML = '<strong>Refreshing...</strong>';
         
-        // Sort tools by timestamp (newest first)
-        const sortedTools = previousOutToolsData.sort((a, b) => {
-            const timestampA = a.timestamp ? a.timestamp.toDate() : new Date(0);
-            const timestampB = b.timestamp ? b.timestamp.toDate() : new Date(0);
-            return timestampB - timestampA;
-        });
-        
-        let html = '';
-        sortedTools.forEach((tool, index) => {
-            const status = (tool.status || '').toUpperCase();
-            const statusClass = status.toLowerCase();
+        try {
+            // Fetch fresh data
+            const fullName = localStorage.getItem('fullName') || user.email;
+            const snapshot = await db.collection('tools')
+                .where('technician', '==', fullName)
+                .where('status', '==', 'OUT')
+                .get();
             
-            // Format timestamp
-            const formattedDate = tool.timestamp ? tool.timestamp.toDate().toLocaleString('en-GB', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric',
+            if (snapshot.empty) {
+                previousOutToolsList.innerHTML = '<div class="text-center text-muted">No previous OUT tools found.</div>';
+                const now = new Date();
+                const timeString = now.toLocaleString('en-GB', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+                document.getElementById('previousOutToolsSummary').innerHTML = `
+                    <strong>Total: 0 tools</strong>
+                    <br><small class="text-muted">Last updated: ${timeString}</small>
+                `;
+                return;
+            }
+            
+            // Get today's start time
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Filter tools from previous days
+            const previousTools = snapshot.docs.filter(doc => {
+                const timestamp = doc.data().timestamp;
+                if (timestamp && timestamp.toDate) {
+                    const toolDate = timestamp.toDate();
+                    return toolDate < today;
+                }
+                return false;
+            });
+            
+            if (previousTools.length === 0) {
+                previousOutToolsList.innerHTML = '<div class="text-center text-muted">No previous OUT tools found.</div>';
+                const now = new Date();
+                const timeString = now.toLocaleString('en-GB', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+                document.getElementById('previousOutToolsSummary').innerHTML = `
+                    <strong>Total: 0 tools</strong>
+                    <br><small class="text-muted">Last updated: ${timeString}</small>
+                `;
+                return;
+            }
+            
+            // Update the global data
+            previousOutToolsData = previousTools.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            
+            // Update summary with timestamp
+            const now = new Date();
+            const timeString = now.toLocaleString('en-GB', {
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
                 hour12: false
-            }) : 'Unknown';
+            });
+            document.getElementById('previousOutToolsSummary').innerHTML = `
+                <strong>Total: ${previousTools.length} tool${previousTools.length !== 1 ? 's' : ''}</strong>
+                <br><small class="text-muted">Last updated: ${timeString}</small>
+            `;
             
-            html += `
-                <div class="previous-out-tool-card ${statusClass}" onclick="showPreviousOutToolDetails('${tool.id}')">
-                    <div class="previous-out-tool-name">${index + 1}. ${tool.toolName || 'Unknown Tool'}</div>
-                    <div class="previous-out-tool-date">${formattedDate}</div>
-                    <div class="previous-out-tool-row">
-                        <div class="previous-out-tool-column">
-                            <div class="previous-out-tool-label">TID</div>
-                            <div class="previous-out-tool-value">${tool.id}</div>
-                        </div>
-                        <div class="previous-out-tool-column">
-                            <div class="previous-out-tool-label">P/N</div>
-                            <div class="previous-out-tool-value">${tool.partNumber || 'N/A'}</div>
-                        </div>
-                        <div class="previous-out-tool-column">
-                            <div class="previous-out-tool-label">STS</div>
-                            <div class="previous-out-tool-status">${status}</div>
+            // Sort tools by timestamp (newest first)
+            const sortedTools = previousOutToolsData.sort((a, b) => {
+                const timestampA = a.timestamp ? a.timestamp.toDate() : new Date(0);
+                const timestampB = b.timestamp ? b.timestamp.toDate() : new Date(0);
+                return timestampB - timestampA;
+            });
+            
+            let html = '';
+            sortedTools.forEach((tool, index) => {
+                const status = (tool.status || '').toUpperCase();
+                const statusClass = status.toLowerCase();
+                
+                // Format timestamp
+                const formattedDate = tool.timestamp ? tool.timestamp.toDate().toLocaleString('en-GB', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                }) : 'Unknown';
+                
+                html += `
+                    <div class="previous-out-tool-card ${statusClass}" onclick="showPreviousOutToolDetails('${tool.id}')">
+                        <div class="previous-out-tool-name">${index + 1}. ${tool.toolName || 'Unknown Tool'}</div>
+                        <div class="previous-out-tool-date">${formattedDate}</div>
+                        <div class="previous-out-tool-row">
+                            <div class="previous-out-tool-column">
+                                <div class="previous-out-tool-label">TID</div>
+                                <div class="previous-out-tool-value">${tool.id}</div>
+                            </div>
+                            <div class="previous-out-tool-column">
+                                <div class="previous-out-tool-label">P/N</div>
+                                <div class="previous-out-tool-value">${tool.partNumber || 'N/A'}</div>
+                            </div>
+                            <div class="previous-out-tool-column">
+                                <div class="previous-out-tool-label">STS</div>
+                                <div class="previous-out-tool-status">${status}</div>
+                            </div>
                         </div>
                     </div>
-                </div>
+                `;
+            });
+            
+            previousOutToolsList.innerHTML = html;
+            
+        } catch (error) {
+            console.error('Error loading previous OUT tools:', error);
+            previousOutToolsList.innerHTML = '<div class="text-center text-danger">Error loading previous OUT tools. Please try again.</div>';
+            const now = new Date();
+            const timeString = now.toLocaleString('en-GB', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+            document.getElementById('previousOutToolsSummary').innerHTML = `
+                <strong class="text-danger">Error loading data</strong>
+                <br><small class="text-muted">Last attempt: ${timeString}</small>
             `;
-        });
-        
-        previousOutToolsList.innerHTML = html;
+        }
     }
 
     async function showPreviousOutToolDetails(toolId) {
@@ -3232,6 +3407,119 @@
         updatePhoto();
         const modal = new bootstrap.Modal(document.getElementById('toolPhotoGalleryModal'));
         modal.show();
+    }
+
+    // Settings button logic
+    const settingsBtn = document.getElementById('settingsBtn');
+    if (settingsBtn) {
+        settingsBtn.onclick = function() {
+            document.getElementById('adminCodeInput').value = '';
+            document.getElementById('adminCodeError').style.display = 'none';
+            const modal = new bootstrap.Modal(document.getElementById('adminCodeModal'));
+            modal.show();
+        };
+    }
+
+    // Verify admin code logic
+    const verifyAdminCodeBtn = document.getElementById('verifyAdminCodeBtn');
+    if (verifyAdminCodeBtn) {
+        verifyAdminCodeBtn.onclick = async function() {
+            const inputCode = document.getElementById('adminCodeInput').value.trim();
+            const errorDiv = document.getElementById('adminCodeError');
+            errorDiv.style.display = 'none';
+            try {
+                const settingsDoc = await db.collection('settings').doc('admin').get();
+                const adminCode = settingsDoc.exists ? settingsDoc.data().adminCode : null;
+                if (inputCode === adminCode) {
+                    // Hide admin code modal
+                    bootstrap.Modal.getInstance(document.getElementById('adminCodeModal')).hide();
+                    // Show My Account modal
+                    const user = auth.currentUser;
+                    if (!user) return;
+                    const fullName = localStorage.getItem('fullName') || user.email;
+                    document.getElementById('accountNameInput').value = fullName;
+                    window.originalNameForUpdate = fullName;
+                    console.log('originalNameForUpdate set to:', window.originalNameForUpdate);
+                    document.getElementById('myAccountError').style.display = 'none';
+                    document.getElementById('myAccountSuccess').style.display = 'none';
+                    const modal = new bootstrap.Modal(document.getElementById('myAccountModal'));
+                    modal.show();
+                } else {
+                    errorDiv.textContent = 'Incorrect admin code.';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (e) {
+                errorDiv.textContent = 'Error verifying admin code.';
+                errorDiv.style.display = 'block';
+            }
+        };
+    }
+
+    // Save account name logic (no email change)
+    const saveAccountNameBtn = document.getElementById('saveAccountNameBtn');
+    if (saveAccountNameBtn) {
+        saveAccountNameBtn.onclick = async function() {
+            const newName = document.getElementById('accountNameInput').value.trim();
+            const errorDiv = document.getElementById('myAccountError');
+            const successDiv = document.getElementById('myAccountSuccess');
+            const loadingDiv = document.getElementById('myAccountLoading');
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+            loadingDiv.style.display = 'block';
+            if (!newName) {
+                loadingDiv.style.display = 'none';
+                errorDiv.textContent = 'Name cannot be empty.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            try {
+                const user = auth.currentUser;
+                if (!user) throw new Error('No user logged in');
+                const oldName = window.originalNameForUpdate;
+                console.log('oldName used for update:', oldName);
+                // Update technicians collection (name only)
+                const techSnap = await db.collection('technicians').where('fullName', '==', oldName).get();
+                if (!techSnap.empty) {
+                    await Promise.all(techSnap.docs.map(doc => doc.ref.update({ fullName: newName })));
+                }
+                // Update tools collection (owner and technician fields)
+                const toolsOwnerSnap = await db.collection('tools').where('owner', '==', oldName).get();
+                await Promise.all(toolsOwnerSnap.docs.map(doc => doc.ref.update({ owner: newName })));
+                const toolsTechSnap = await db.collection('tools').where('technician', '==', oldName).get();
+                await Promise.all(toolsTechSnap.docs.map(doc => doc.ref.update({ technician: newName })));
+                // Update logtoolmovements collection (owner and technician fields)
+                const logsOwnerSnap = await db.collection('logtoolmovements').where('owner', '==', oldName).get();
+                await Promise.all(logsOwnerSnap.docs.map(doc => doc.ref.update({ owner: newName })));
+                const logsTechSnap = await db.collection('logtoolmovements').where('technician', '==', oldName).get();
+                await Promise.all(logsTechSnap.docs.map(doc => doc.ref.update({ technician: newName })));
+                // Update checkupResults collection (technicianName field) with debug
+                const checkupSnap = await db.collection('checkupResults').where('technicianName', '==', oldName).get();
+                console.log('Docs found for update:', checkupSnap.docs.length);
+                if (checkupSnap.docs.length > 0) {
+                    console.log('First doc:', checkupSnap.docs[0].id, checkupSnap.docs[0].data());
+                }
+                await Promise.all(checkupSnap.docs.map(doc => doc.ref.update({ technicianName: newName })));
+                // Update localStorage and UI
+                localStorage.setItem('fullName', newName);
+                document.getElementById('fullName').textContent = newName;
+                loadingDiv.style.display = 'none';
+                successDiv.textContent = 'Name updated successfully.';
+                successDiv.style.display = 'block';
+                // Change Cancel button to Exit, red with white bold letters
+                const cancelBtn = document.querySelector('#myAccountModal .btn-secondary');
+                if (cancelBtn) {
+                    cancelBtn.textContent = 'Exit';
+                    cancelBtn.classList.remove('btn-secondary');
+                    cancelBtn.classList.add('btn-danger');
+                    cancelBtn.style.color = 'white';
+                    cancelBtn.style.fontWeight = 'bold';
+                }
+            } catch (e) {
+                loadingDiv.style.display = 'none';
+                errorDiv.textContent = 'Error updating name: ' + (e.message || e);
+                errorDiv.style.display = 'block';
+            }
+        };
     }
     </script>
 </body>
