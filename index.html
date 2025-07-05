@@ -655,16 +655,6 @@
                 font-weight: 600 !important;
             }
         }
-        strong, .bold, b {
-            font-weight: bold !important;
-        }
-        /* Force bold and font for dialog content on all platforms */
-        #outstandingToolsBody strong, #outstandingToolsBody b,
-        #outToolsNotifBody strong, #outToolsNotifBody b {
-            font-weight: bold !important;
-            font-family: Arial, Helvetica, system-ui, sans-serif !important;
-            color: #222;
-        }
     </style>
 </head>
 <body>
@@ -1339,6 +1329,23 @@
       </div>
     </div>
 
+    <!-- Photo Upload Loading Modal -->
+    <div class="modal fade" id="photoUploadLoadingModal" tabindex="-1" aria-labelledby="photoUploadLoadingModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+      <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="photoUploadLoadingModalLabel">Uploading Photo</h5>
+          </div>
+          <div class="modal-body text-center">
+            <div class="spinner-border text-primary mb-3" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <div id="photoUploadProgress">Processing image...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="checkupHistoryScreen" style="display:none;">
         <div class="container py-4">
           <button id="checkupHistoryBackBtn" class="btn" style="background:#FF9800;color:white;font-weight:bold;font-size:1.2em;border-radius:24px;padding:8px 32px 8px 32px;margin-bottom:1rem;">
@@ -1387,6 +1394,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
     <!-- QR Code Scanner -->
     <script src="https://unpkg.com/html5-qrcode"></script>
     <!-- Bootstrap JS -->
@@ -1407,6 +1415,7 @@
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.firestore();
+        const storage = firebase.storage();
 
         // Ensure user stays logged in across refreshes and browser restarts
         auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
@@ -2287,6 +2296,7 @@
                             toolsAtLocation.forEach((tool, idx) => {
                                 const bgClass = idx % 2 === 0 ? 'mytools-tool-bg1' : 'mytools-tool-bg2';
                                 html += `<div class=\"mytools-tool-item ${bgClass}\">`
+                                    + `<div style=\"cursor:pointer;\" onclick=\"showToolDetailsFromMyTools(${JSON.stringify(tool).replace(/"/g, '&quot;')})\">`
                                     + `<span class=\"mytools-tool-name\">${idx + 1}. ${tool.toolName || 'Unknown Tool'}</span> - <span class=\"mytools-tool-tid\">TID: ${tool.id}</span><br>`
                                     + `<span class=\"mytools-tool-part\">Part #: ${tool.partNumber || ''}</span><br>`
                                     + `<span class=\"mytools-status-${getStatusClass(tool.status)}\">Status: ${tool.status || ''}</span>`;
@@ -2304,6 +2314,13 @@
                                     html += `<div class=\"mytools-tool-cal\">Cal Due: <span style=\"font-weight: bold;\">${calDue}</span></div>`;
                                 }
                                 html += `</div>`;
+                                html += `<div style=\"margin-top:8px;display:flex;gap:8px;justify-content:flex-end;\">`;
+                                html += `<button onclick=\"event.stopPropagation(); createPhotoUploadInput('${tool.id}', '${tool.partNumber || tool.id}')\" style=\"background:#FF9800;color:white;border:none;border-radius:16px;padding:6px 12px;font-size:0.9rem;font-weight:bold;cursor:pointer;\"><i class=\"fas fa-camera\"></i> Add Photo</button>`;
+                                if (tool.photoUrls && tool.photoUrls.length > 0) {
+                                    html += `<button onclick=\"event.stopPropagation(); showToolPhotoGallery(this)\" data-photo-urls='${JSON.stringify(tool.photoUrls)}' style=\"background:#1976d2;color:white;border:none;border-radius:16px;padding:6px 12px;font-size:0.9rem;font-weight:bold;cursor:pointer;\"><i class=\"fas fa-images\"></i> Photos (${tool.photoUrls.length})</button>`;
+                                }
+                                html += `</div>`;
+                                html += `</div>`;
                             });
                         });
                     });
@@ -2317,7 +2334,7 @@
         // Back button for My Tools screen
         document.getElementById('myToolsBackBtn').onclick = function() {
             document.getElementById('myToolsScreen').style.display = 'none';
-            showToolScannerMenu();
+            document.getElementById('toolScannerMenu').style.display = 'block';
             // Refresh the OUT tools count when returning to menu
             updatePreviousOutToolsCount();
         };
@@ -2390,7 +2407,7 @@
         });
 
         // Navigation logic for ToolScanner Menu
-        function showToolScannerMenu() {
+        function toolScannerMenu() {
             document.getElementById('toolScannerMenu').style.display = 'block';
             document.getElementById('appSection').style.display = 'none';
             // Refresh the OUT tools count when showing the menu
@@ -2410,7 +2427,7 @@
             window.login = async function() {
                 await originalLogin();
                 document.getElementById('loginSection').style.display = 'none';
-                showToolScannerMenu();
+                toolScannerMenu();
             };
             // Menu button handlers
             document.getElementById('menuRegisterBtn').onclick = async function() {
@@ -2424,7 +2441,7 @@
 
         document.getElementById('backToMenuBtn').onclick = function() {
             document.getElementById('appSection').style.display = 'none';
-            showToolScannerMenu();
+            document.getElementById('toolScannerMenu').style.display = 'block';
             // Refresh the OUT tools count when returning to menu
             updatePreviousOutToolsCount();
         };
@@ -2585,11 +2602,26 @@
                             else if (status === 'LOST') { bg = '#FFE0B2'; statusColor = '#ff8f00'; }
                             else if (status === 'CALIBRATION') { bg = '#E3F2FD'; statusColor = '#1976d2'; }
                             
-                            html += `<div style="background:${bg};border-radius:0 0 6px 6px;margin-bottom:8px;padding:12px 12px 8px 12px;cursor:pointer;" onclick="showToolDetailsFromMyTools(${JSON.stringify(tool).replace(/"/g, '&quot;')})">
-                                <span style="font-weight:bold;font-size:1.13rem;color:#1976d2;">${idx + 1}. ${tool.toolName || 'Unknown Tool'}</span> - <span style="font-weight:bold;">TID: ${tool.id}</span><br>
-                                <span style="font-size:1.01rem;color:#444;">Part #: ${tool.partNumber || ''}</span><br>
-                                <span style="font-weight:bold;color:${statusColor};">Status: ${tool.status || ''}</span><br>
-                                <span style="font-size:1.01rem;color:#222;">Location: ${tool.location || ''}</span>
+                            html += `<div style="background:${bg};border-radius:0 0 6px 6px;margin-bottom:8px;padding:12px 12px 8px 12px;">
+                                <div style="cursor:pointer;" onclick="showToolDetailsFromMyTools(${JSON.stringify(tool).replace(/"/g, '&quot;')})">
+                                    <span style="font-weight:bold;font-size:1.13rem;color:#1976d2;">${idx + 1}. ${tool.toolName || 'Unknown Tool'}</span> - <span style="font-weight:bold;">TID: ${tool.id}</span><br>
+                                    <span style="font-size:1.01rem;color:#444;">Part #: ${tool.partNumber || ''}</span><br>
+                                    <span style="font-weight:bold;color:${statusColor};">Status: ${tool.status || ''}</span><br>
+                                    <span style="font-size:1.01rem;color:#222;">Location: ${tool.location || ''}</span>
+                                </div>
+                                <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;">
+                                    <button onclick="event.stopPropagation(); createPhotoUploadInput('${tool.id}', '${tool.partNumber || tool.id}')" 
+                                            style="background:#FF9800;color:white;border:none;border-radius:16px;padding:6px 12px;font-size:0.9rem;font-weight:bold;cursor:pointer;">
+                                        <i class="fas fa-camera"></i> Add Photo
+                                    </button>
+                                    ${tool.photoUrls && tool.photoUrls.length > 0 ? 
+                                        `<button onclick="event.stopPropagation(); showToolPhotoGallery(this)" 
+                                                data-photo-urls='${JSON.stringify(tool.photoUrls)}'
+                                                style="background:#1976d2;color:white;border:none;border-radius:16px;padding:6px 12px;font-size:0.9rem;font-weight:bold;cursor:pointer;">
+                                            <i class="fas fa-images"></i> Photos (${tool.photoUrls.length})
+                                        </button>` : ''
+                                    }
+                                </div>
                             </div>`;
                         });
                     });
@@ -2785,8 +2817,8 @@
                 if (ownerToday > 0 || ownerPrev > 0) {
                     outstandingNeeded = true;
                     outstandingMsg = '<b>ACTION REQUIRED:</b> THE FOLLOWING TOOLS YOU OWN ARE STILL CHECKED OUT BY OTHERS.';
-                    if (ownerToday > 0) outstandingMsg += `<br>- <strong>${ownerToday} TOOL${ownerToday > 1 ? 'S' : ''} CHECKED OUT TODAY</strong>.`;
-                    if (ownerPrev > 0) outstandingMsg += `<br>- <strong>${ownerPrev} TOOL${ownerPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES</strong>.`;
+                    if (ownerToday > 0) outstandingMsg += `<br>- <b>${ownerToday} TOOL${ownerToday > 1 ? 'S' : ''} CHECKED OUT TODAY</b>.`;
+                    if (ownerPrev > 0) outstandingMsg += `<br>- <b>${ownerPrev} TOOL${ownerPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES</b>.`;
                     outstandingMsg += `<br><span style="display: flex; align-items: center; margin-top: 8px;"><i class='fas fa-bell' style='color: #1976D2; margin-right: 4px;'></i>PLEASE FOLLOW UP TO ENSURE THESE TOOLS ARE RETURNED.</span>`;
                 }
                 // Now check as technician, count all tools where user is technician (regardless of owner)
@@ -2815,8 +2847,8 @@
                 if (techToday > 0 || techPrev > 0) {
                     overdueNeeded = true;
                     overdueMsg = '<b>REMINDER:</b> YOU HAVE TOOLS CHECKED OUT THAT NEED TO BE RETURNED.';
-                    if (techToday > 0) overdueMsg += `<br>- <strong>${techToday} TOOL${techToday > 1 ? 'S' : ''} CHECKED OUT TODAY</strong>.`;
-                    if (techPrev > 0) overdueMsg += `<br>- <strong>${techPrev} TOOL${techPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES</strong>.`;
+                    if (techToday > 0) overdueMsg += `<br>- <b>${techToday} TOOL${techToday > 1 ? 'S' : ''} CHECKED OUT TODAY</b>.`;
+                    if (techPrev > 0) overdueMsg += `<br>- <b>${techPrev} TOOL${techPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES</b>.`;
                     overdueMsg += `<br><span style="display: flex; align-items: center; margin-top: 8px;"><i class='fas fa-undo' style='color: #1976D2; margin-right: 4px;'></i>PLEASE RETURN THESE TOOLS AS SOON AS POSSIBLE.</span>`;
                 }
             } else {
@@ -3655,7 +3687,7 @@
             collectionCancelBtn.onclick = function() {
                 // Let Bootstrap close the modal, then show the menu
                 setTimeout(function() {
-                    showToolScannerMenu();
+                    toolScannerMenu();
                 }, 300); // Wait for modal animation
             };
         }
@@ -3856,24 +3888,290 @@
     // At the end of showCollectionDetails, replace updateCollectionDetailsBackButton() with:
     safeUpdateCollectionDetailsBackButton();
 
-    // Helper to build a tool details object with all fields formatted consistently
-    function buildToolDetailsObject(doc, data) {
-        return {
-            toolName: data.toolName || 'Unknown Tool',
-            toolId: doc.id,
-            partNumber: data.partNumber || doc.id,
-            collectionCode: data.collectionCode || '',
-            location: data.location || 'N/A',
-            status: data.status || 'N/A',
-            owner: data.owner || 'N/A',
-            technician: data.technician || 'N/A',
-            timestamp: data.timestamp && data.timestamp.toDate ? data.timestamp.toDate().toLocaleString('en-GB', {
-                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-            }) : 'N/A',
-            calDueDate: data.calDueDate && data.calDueDate.toDate ? data.calDueDate.toDate().toLocaleDateString('en-GB') : 'N/A',
-            photoUrls: data.photoUrls || []
-        };
-    }
+            // Helper to build a tool details object with all fields formatted consistently
+        function buildToolDetailsObject(doc, data) {
+            return {
+                toolName: data.toolName || 'Unknown Tool',
+                toolId: doc.id,
+                partNumber: data.partNumber || doc.id,
+                collectionCode: data.collectionCode || '',
+                location: data.location || 'N/A',
+                status: data.status || 'N/A',
+                owner: data.owner || 'N/A',
+                technician: data.technician || 'N/A',
+                timestamp: data.timestamp && data.timestamp.toDate ? data.timestamp.toDate().toLocaleString('en-GB', {
+                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                }) : 'N/A',
+                calDueDate: data.calDueDate && data.calDueDate.toDate ? data.calDueDate.toDate().toLocaleDateString('en-GB') : 'N/A',
+                photoUrls: data.photoUrls || []
+            };
+        }
+
+        // Photo upload functionality for My Tools
+        async function uploadToolPhoto(toolId, partNumber, file) {
+            try {
+                console.log('=== PHOTO UPLOAD STARTED ===');
+                console.log('Tool ID:', toolId);
+                console.log('Part Number:', partNumber);
+                console.log('File:', file.name, file.size, 'bytes');
+                
+                // Show loading modal
+                const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                loadingModal.show();
+                document.getElementById('photoUploadProgress').textContent = 'Processing image...';
+                
+                // Compress the image
+                const compressedBlob = await compressImage(file);
+                if (!compressedBlob) {
+                    loadingModal.hide();
+                    alert('Failed to compress image');
+                    return;
+                }
+                
+                console.log('Compressed size:', compressedBlob.size, 'bytes');
+                document.getElementById('photoUploadProgress').textContent = 'Uploading to storage...';
+                
+                // Get current photo count for this tool
+                const toolDoc = await db.collection('tools').doc(toolId).get();
+                const currentPhotoUrls = toolDoc.exists ? (toolDoc.data().photoUrls || []) : [];
+                const photoNumber = currentPhotoUrls.length + 1;
+                
+                // Create filename: partNumber_photo#.jpg
+                const fileName = `${partNumber}_photo${photoNumber}.jpg`;
+                console.log('Generated filename:', fileName);
+                
+                // Upload to Tool_Photos folder
+                const photoRef = storage.ref('Tool_Photos/' + fileName);
+                const uploadTask = photoRef.put(compressedBlob);
+                
+                uploadTask.on('state_changed',
+                    (snapshot) => {
+                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                        console.log('Upload progress:', progress + '%');
+                        document.getElementById('photoUploadProgress').textContent = `Uploading... ${Math.round(progress)}%`;
+                    },
+                    (error) => {
+                        console.error('Upload error:', error);
+                        loadingModal.hide();
+                        alert('Upload failed: ' + error.message);
+                    },
+                    async () => {
+                        try {
+                            document.getElementById('photoUploadProgress').textContent = 'Updating database...';
+                            
+                            // Get download URL
+                            const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                            console.log('Download URL:', downloadURL);
+                            
+                            // Update the tool's photoUrls array
+                            const newPhotoUrls = [...currentPhotoUrls, downloadURL];
+                            await db.collection('tools').doc(toolId).update({
+                                photoUrls: newPhotoUrls
+                            });
+                            
+                            // Find all tools with the same part number and add the same photo
+                            const toolsWithSamePart = await db.collection('tools')
+                                .where('partNumber', '==', partNumber)
+                                .get();
+                            
+                            const updatePromises = toolsWithSamePart.docs.map(async (doc) => {
+                                if (doc.id !== toolId) { // Don't update the original tool again
+                                    const existingPhotoUrls = doc.data().photoUrls || [];
+                                    const updatedPhotoUrls = [...existingPhotoUrls, downloadURL];
+                                    await doc.ref.update({
+                                        photoUrls: updatedPhotoUrls
+                                    });
+                                    console.log('Updated tool', doc.id, 'with same photo');
+                                }
+                            });
+                            
+                            await Promise.all(updatePromises);
+                            
+                            console.log('=== PHOTO UPLOAD COMPLETED ===');
+                            loadingModal.hide();
+                            alert('Photo uploaded successfully! Added to ' + (toolsWithSamePart.docs.length) + ' tools with the same part number.');
+                            
+                            // Refresh the current view
+                            if (lastViewedCollectionName) {
+                                showMyToolsByCollection(lastViewedCollectionName);
+                            } else {
+                                // Refresh other views
+                                loadTools(); // Refresh register tools
+                                updatePreviousOutToolsCount(); // Refresh previous out tools count
+                            }
+                            
+                        } catch (error) {
+                            console.error('Error updating tool:', error);
+                            loadingModal.hide();
+                            alert('Error updating tool: ' + error.message);
+                        }
+                    }
+                );
+                
+            } catch (error) {
+                console.error('=== PHOTO UPLOAD FAILED ===', error);
+                const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
+                if (loadingModal) loadingModal.hide();
+                alert('Upload failed: ' + error.message);
+            }
+        }
+
+        // Image compression function
+        function compressImage(file) {
+            return new Promise((resolve) => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                img.onload = function() {
+                    console.log('Original image size:', img.width, 'x', img.height);
+                    
+                    // Calculate new dimensions (max 1200px width/height)
+                    let newWidth = img.width;
+                    let newHeight = img.height;
+                    const maxSize = 1200;
+                    
+                    if (newWidth > maxSize || newHeight > maxSize) {
+                        if (newWidth > newHeight) {
+                            newHeight = (newHeight * maxSize) / newWidth;
+                            newWidth = maxSize;
+                        } else {
+                            newWidth = (newWidth * maxSize) / newHeight;
+                            newHeight = maxSize;
+                        }
+                    }
+                    
+                    console.log('Resized to:', newWidth, 'x', newHeight);
+                    
+                    // Set canvas size
+                    canvas.width = newWidth;
+                    canvas.height = newHeight;
+                    
+                    // Draw and compress
+                    ctx.drawImage(img, 0, 0, newWidth, newHeight);
+                    
+                    // Try different quality levels to get under 800KB
+                    let quality = 0.95;
+                    
+                    function tryCompression() {
+                        canvas.toBlob((result) => {
+                            console.log('Compressed size:', result.size, 'bytes, Quality:', quality);
+                            
+                            if (result.size <= 800 * 1024 || quality <= 0.1) {
+                                console.log('Final compressed size:', result.size, 'bytes, Quality:', quality);
+                                resolve(result);
+                            } else {
+                                quality -= 0.05;
+                                tryCompression();
+                            }
+                        }, 'image/jpeg', quality);
+                    }
+                    
+                    tryCompression();
+                };
+                
+                img.onerror = function() {
+                    console.error('Failed to load image');
+                    resolve(null);
+                };
+                
+                img.src = URL.createObjectURL(file);
+            });
+        }
+
+        // Create photo upload options (camera or gallery)
+        function createPhotoUploadInput(toolId, partNumber) {
+            // Create modal for photo source selection
+            const modalHtml = `
+                <div class="modal fade" id="photoSourceModal" tabindex="-1" aria-labelledby="photoSourceModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-sm">
+                        <div class="modal-content">
+                            <div class="modal-header bg-primary text-white">
+                                <h5 class="modal-title" id="photoSourceModalLabel">Add Photo</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <div class="d-grid gap-3">
+                                    <button type="button" class="btn btn-primary btn-lg" onclick="takePhotoWithCamera('${toolId}', '${partNumber}')">
+                                        <i class="fas fa-camera"></i> Take Photo
+                                    </button>
+                                    <button type="button" class="btn btn-secondary btn-lg" onclick="selectPhotoFromGallery('${toolId}', '${partNumber}')">
+                                        <i class="fas fa-images"></i> Choose from Gallery
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Remove existing modal if any
+            const existingModal = document.getElementById('photoSourceModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            // Add modal to body
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('photoSourceModal'));
+            modal.show();
+            
+            // Clean up modal after it's hidden
+            document.getElementById('photoSourceModal').addEventListener('hidden.bs.modal', function() {
+                this.remove();
+            });
+        }
+
+        // Take photo with camera
+        function takePhotoWithCamera(toolId, partNumber) {
+            // Hide the source selection modal
+            const sourceModal = bootstrap.Modal.getInstance(document.getElementById('photoSourceModal'));
+            if (sourceModal) sourceModal.hide();
+            
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.capture = 'environment'; // Use back camera on mobile
+            input.style.display = 'none';
+            
+            input.onchange = function(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    uploadToolPhoto(toolId, partNumber, file);
+                }
+                // Remove the input element
+                document.body.removeChild(input);
+            };
+            
+            document.body.appendChild(input);
+            input.click();
+        }
+
+        // Select photo from gallery
+        function selectPhotoFromGallery(toolId, partNumber) {
+            // Hide the source selection modal
+            const sourceModal = bootstrap.Modal.getInstance(document.getElementById('photoSourceModal'));
+            if (sourceModal) sourceModal.hide();
+            
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.style.display = 'none';
+            
+            input.onchange = function(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    uploadToolPhoto(toolId, partNumber, file);
+                }
+                // Remove the input element
+                document.body.removeChild(input);
+            };
+            
+            document.body.appendChild(input);
+            input.click();
+        }
 
       
 
@@ -4154,49 +4452,6 @@
         document.getElementById('checkupDetailsContent').innerHTML = html;
       })();
     }
-
-    // --- History API Back Button Trap ---
-    function pushAppState(screen) {
-        history.pushState({ screen }, '', window.location.pathname);
-    }
-
-    // On app load, push initial state
-    window.addEventListener('DOMContentLoaded', function() {
-        pushAppState('login'); // Assume login is the initial screen
-    });
-
-    // Listen for back/forward navigation
-    window.addEventListener('popstate', function(event) {
-        const loginSection = document.getElementById('loginSection');
-        const appSection = document.getElementById('appSection');
-        const toolScannerMenu = document.getElementById('toolScannerMenu');
-        // If on login, stay on login
-        if (loginSection && loginSection.style.display !== 'none') {
-            pushAppState('login');
-        } else if (appSection && appSection.style.display !== 'none') {
-            // If on register tool, go to main menu instead of login
-            appSection.style.display = 'none';
-            showToolScannerMenu();
-            pushAppState('mainMenu');
-        } else if (toolScannerMenu && toolScannerMenu.style.display !== 'none') {
-            // If already on main menu, stay there
-            pushAppState('mainMenu');
-        } else {
-            // Default: stay in app
-            pushAppState('login');
-        }
-    });
-
-    // After every navigation or screen change, call pushAppState with the current screen
-    // Example: after login
-    // pushAppState('mainMenu');
-    // Example: after showing register tool
-    // pushAppState('registerTool');
-    // Example: after logout
-    // pushAppState('login');
-
-    // Update navigation logic to push state after screen changes
-    // (Add these calls in your navigation functions as needed)
     </script>
 </body>
 </html> 
