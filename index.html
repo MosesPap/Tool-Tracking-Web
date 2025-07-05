@@ -1488,7 +1488,6 @@
                 document.getElementById('toolScannerMenu').style.display = 'block';
                 document.getElementById('headerBranding').style.display = 'none';
                 updateLoggedInTechnician();
-                history.pushState({ screen: SCREENS.TOOL_SCANNER_MENU }, '', '');
             } catch (error) {
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
@@ -1569,7 +1568,6 @@
                 document.getElementById('toolScannerMenu').style.display = 'block';
                 document.getElementById('headerBranding').style.display = 'none';
                 updateLoggedInTechnician();
-                history.pushState({ screen: SCREENS.TOOL_SCANNER_MENU }, '', '');
             } catch (error) {
                 console.error('Google Sign-In Error:', error);
                 alertBox.textContent = error.message;
@@ -4147,98 +4145,48 @@
       })();
     }
 
-    // Navigation stack for main screens
-    const SCREENS = {
-        TOOL_SCANNER_MENU: 'toolScannerMenu',
-        REGISTER_TOOLS: 'appSection',
-        MY_TOOLS: 'myToolsScreen',
-        MY_TOOLS_BY_COLLECTION: 'myToolsByCollectionScreen',
-        COLLECTION_CHECKUP: 'collectionCheckupScreen',
-        PREVIOUS_OUT_TOOLS: 'previousOutToolsScreen',
-        // Add more screens as needed
-    };
-
-    function showScreen(screen) {
-        hideAllMainScreens();
-        document.getElementById(screen).style.display = 'block';
+    // --- History API Back Button Trap ---
+    function pushAppState(screen) {
+        history.pushState({ screen }, '', window.location.pathname);
     }
 
-    function navigateTo(screen, push = true) {
-        showScreen(screen);
-        if (push) {
-            history.pushState({ screen }, '', '');
-        }
-    }
-
-    // Handle browser/phone back button
-    window.addEventListener('popstate', function(event) {
-        const state = event.state;
-        if (state && state.screen) {
-            if (state.screen === SCREENS.TOOL_SCANNER_MENU) {
-                // If back to main menu, show login screen instead
-                hideAllMainScreens();
-                document.getElementById('loginSection').classList.remove('d-none');
-                history.replaceState({ screen: 'loginSection' }, '', '');
-            } else if (state.screen === 'loginSection') {
-                // Already on login, allow default (may exit app)
-                hideAllMainScreens();
-                document.getElementById('loginSection').classList.remove('d-none');
-            } else {
-                showScreen(state.screen);
-            }
-        } else {
-            // If no state, default to login screen
-            hideAllMainScreens();
-            document.getElementById('loginSection').classList.remove('d-none');
-            history.replaceState({ screen: 'loginSection' }, '', '');
-        }
-    });
-
-    // Update navigation actions to use navigateTo
-    // Main menu button
-    document.getElementById('backToMenuBtn').onclick = function() {
-        navigateTo(SCREENS.TOOL_SCANNER_MENU);
-        updatePreviousOutToolsCount();
-    };
-    // Register Tools button
-    document.getElementById('menuRegisterBtn').onclick = function() {
-        navigateTo(SCREENS.REGISTER_TOOLS);
-        loadTools();
-    };
-    // My Tools button
-    const myToolsBtn = document.getElementById('menuMyToolsBtn');
-    if (myToolsBtn) {
-        myToolsBtn.onclick = function() {
-            navigateTo(SCREENS.MY_TOOLS);
-            showMyTools();
-        };
-    }
-    // Previous Out Tools button
-    document.getElementById('menuPreviousOutBtn').onclick = function() {
-        navigateTo(SCREENS.PREVIOUS_OUT_TOOLS);
-        showPreviousOutTools();
-    };
-    // Search Tools button
-    document.getElementById('menuSearchBtn').onclick = function() {
-        navigateTo(SCREENS.COLLECTION_CHECKUP);
-        showCollectionCheckup();
-    };
-    // When app loads, push main menu state
+    // On app load, push initial state
     window.addEventListener('DOMContentLoaded', function() {
-        history.replaceState({ screen: SCREENS.TOOL_SCANNER_MENU }, '', '');
+        pushAppState('login'); // Assume login is the initial screen
     });
-    // When logging out, reset to main menu state
-    function logout() {
-        auth.signOut();
-        if (html5QrCode) {
-            html5QrCode.clear();
+
+    // Listen for back/forward navigation
+    window.addEventListener('popstate', function(event) {
+        const loginSection = document.getElementById('loginSection');
+        const appSection = document.getElementById('appSection');
+        const toolScannerMenu = document.getElementById('toolScannerMenu');
+        // If on login, stay on login
+        if (loginSection && loginSection.style.display !== 'none') {
+            pushAppState('login');
+        } else if (appSection && appSection.style.display !== 'none') {
+            // If on register tool, go to main menu instead of login
+            appSection.style.display = 'none';
+            toolScannerMenu.style.display = 'block';
+            pushAppState('mainMenu');
+        } else if (toolScannerMenu && toolScannerMenu.style.display !== 'none') {
+            // If already on main menu, stay there
+            pushAppState('mainMenu');
+        } else {
+            // Default: stay in app
+            pushAppState('login');
         }
-        localStorage.removeItem('fullName');
-        document.getElementById('headerBranding').style.display = 'block';
-        hideAllMainScreens();
-        document.getElementById('loginSection').classList.remove('d-none');
-        history.replaceState({ screen: SCREENS.TOOL_SCANNER_MENU }, '', '');
-    }
+    });
+
+    // After every navigation or screen change, call pushAppState with the current screen
+    // Example: after login
+    // pushAppState('mainMenu');
+    // Example: after showing register tool
+    // pushAppState('registerTool');
+    // Example: after logout
+    // pushAppState('login');
+
+    // Update navigation logic to push state after screen changes
+    // (Add these calls in your navigation functions as needed)
     </script>
 </body>
 </html> 
