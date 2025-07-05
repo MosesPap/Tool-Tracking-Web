@@ -1456,6 +1456,17 @@
             modal.show();
         };
 
+        // Hide all main screens
+        function hideAllMainScreens() {
+            document.getElementById('appSection').style.display = 'none';
+            document.getElementById('toolScannerMenu').style.display = 'none';
+            document.getElementById('myToolsScreen').style.display = 'none';
+            document.getElementById('myToolsByCollectionScreen').style.display = 'none';
+            document.getElementById('collectionCheckupScreen').style.display = 'none';
+            document.getElementById('previousOutToolsScreen').style.display = 'none';
+            // Add any other sections you may have
+        }
+
         // Login logic
         async function login() {
             const email = document.getElementById('loginEmail').value.trim();
@@ -1469,13 +1480,12 @@
             }
             try {
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
-                
                 // Save/update technician data to Firestore
                 await saveTechnicianToFirestore(userCredential.user);
-                
-                // Success: hide login, show app
+                // Success: hide login, show only main menu
                 document.getElementById('loginSection').classList.add('d-none');
-                document.getElementById('appSection').style.display = 'block';
+                hideAllMainScreens();
+                document.getElementById('toolScannerMenu').style.display = 'block';
                 document.getElementById('headerBranding').style.display = 'none';
                 updateLoggedInTechnician();
             } catch (error) {
@@ -1544,24 +1554,20 @@
         async function signInWithGoogle() {
             const alertBox = document.getElementById('loginAlert');
             alertBox.classList.add('d-none');
-            
             try {
                 // Create Google Auth Provider
                 const provider = new firebase.auth.GoogleAuthProvider();
-                
                 // Sign in with Google
                 const result = await auth.signInWithPopup(provider);
                 const user = result.user;
-                
                 // Save user data to technicians collection
                 await saveTechnicianToFirestore(user);
-                
-                // Success: hide login, show app
+                // Success: hide login, show only main menu
                 document.getElementById('loginSection').classList.add('d-none');
-                document.getElementById('appSection').style.display = 'block';
+                hideAllMainScreens();
+                document.getElementById('toolScannerMenu').style.display = 'block';
                 document.getElementById('headerBranding').style.display = 'none';
                 updateLoggedInTechnician();
-                
             } catch (error) {
                 console.error('Google Sign-In Error:', error);
                 alertBox.textContent = error.message;
