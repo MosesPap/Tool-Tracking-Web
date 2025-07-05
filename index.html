@@ -658,6 +658,13 @@
         strong, .bold, b {
             font-weight: bold !important;
         }
+        /* Force bold and font for dialog content on all platforms */
+        #outstandingToolsBody strong, #outstandingToolsBody b,
+        #outToolsNotifBody strong, #outToolsNotifBody b {
+            font-weight: bold !important;
+            font-family: Arial, Helvetica, system-ui, sans-serif !important;
+            color: #222;
+        }
     </style>
 </head>
 <body>
@@ -2310,7 +2317,7 @@
         // Back button for My Tools screen
         document.getElementById('myToolsBackBtn').onclick = function() {
             document.getElementById('myToolsScreen').style.display = 'none';
-            document.getElementById('toolScannerMenu').style.display = 'block';
+            showToolScannerMenu();
             // Refresh the OUT tools count when returning to menu
             updatePreviousOutToolsCount();
         };
@@ -2417,7 +2424,7 @@
 
         document.getElementById('backToMenuBtn').onclick = function() {
             document.getElementById('appSection').style.display = 'none';
-            document.getElementById('toolScannerMenu').style.display = 'block';
+            showToolScannerMenu();
             // Refresh the OUT tools count when returning to menu
             updatePreviousOutToolsCount();
         };
