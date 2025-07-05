@@ -655,6 +655,9 @@
                 font-weight: 600 !important;
             }
         }
+        strong, .bold, b {
+            font-weight: bold !important;
+        }
     </style>
 </head>
 <body>
@@ -2775,8 +2778,8 @@
                 if (ownerToday > 0 || ownerPrev > 0) {
                     outstandingNeeded = true;
                     outstandingMsg = '<b>ACTION REQUIRED:</b> THE FOLLOWING TOOLS YOU OWN ARE STILL CHECKED OUT BY OTHERS.';
-                    if (ownerToday > 0) outstandingMsg += `<br>- <b>${ownerToday} TOOL${ownerToday > 1 ? 'S' : ''} CHECKED OUT TODAY</b>.`;
-                    if (ownerPrev > 0) outstandingMsg += `<br>- <b>${ownerPrev} TOOL${ownerPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES</b>.`;
+                    if (ownerToday > 0) outstandingMsg += `<br>- <strong>${ownerToday} TOOL${ownerToday > 1 ? 'S' : ''} CHECKED OUT TODAY</strong>.`;
+                    if (ownerPrev > 0) outstandingMsg += `<br>- <strong>${ownerPrev} TOOL${ownerPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES</strong>.`;
                     outstandingMsg += `<br><span style="display: flex; align-items: center; margin-top: 8px;"><i class='fas fa-bell' style='color: #1976D2; margin-right: 4px;'></i>PLEASE FOLLOW UP TO ENSURE THESE TOOLS ARE RETURNED.</span>`;
                 }
                 // Now check as technician, count all tools where user is technician (regardless of owner)
@@ -2805,8 +2808,8 @@
                 if (techToday > 0 || techPrev > 0) {
                     overdueNeeded = true;
                     overdueMsg = '<b>REMINDER:</b> YOU HAVE TOOLS CHECKED OUT THAT NEED TO BE RETURNED.';
-                    if (techToday > 0) overdueMsg += `<br>- <b>${techToday} TOOL${techToday > 1 ? 'S' : ''} CHECKED OUT TODAY</b>.`;
-                    if (techPrev > 0) overdueMsg += `<br>- <b>${techPrev} TOOL${techPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES</b>.`;
+                    if (techToday > 0) overdueMsg += `<br>- <strong>${techToday} TOOL${techToday > 1 ? 'S' : ''} CHECKED OUT TODAY</strong>.`;
+                    if (techPrev > 0) overdueMsg += `<br>- <strong>${techPrev} TOOL${techPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES</strong>.`;
                     overdueMsg += `<br><span style="display: flex; align-items: center; margin-top: 8px;"><i class='fas fa-undo' style='color: #1976D2; margin-right: 4px;'></i>PLEASE RETURN THESE TOOLS AS SOON AS POSSIBLE.</span>`;
                 }
             } else {
@@ -4166,7 +4169,7 @@
         } else if (appSection && appSection.style.display !== 'none') {
             // If on register tool, go to main menu instead of login
             appSection.style.display = 'none';
-            toolScannerMenu.style.display = 'block';
+            showToolScannerMenu();
             pushAppState('mainMenu');
         } else if (toolScannerMenu && toolScannerMenu.style.display !== 'none') {
             // If already on main menu, stay there
