@@ -1488,6 +1488,7 @@
                 document.getElementById('toolScannerMenu').style.display = 'block';
                 document.getElementById('headerBranding').style.display = 'none';
                 updateLoggedInTechnician();
+                history.pushState({ screen: SCREENS.TOOL_SCANNER_MENU }, '', '');
             } catch (error) {
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
@@ -1568,6 +1569,7 @@
                 document.getElementById('toolScannerMenu').style.display = 'block';
                 document.getElementById('headerBranding').style.display = 'none';
                 updateLoggedInTechnician();
+                history.pushState({ screen: SCREENS.TOOL_SCANNER_MENU }, '', '');
             } catch (error) {
                 console.error('Google Sign-In Error:', error);
                 alertBox.textContent = error.message;
@@ -4172,10 +4174,23 @@
     window.addEventListener('popstate', function(event) {
         const state = event.state;
         if (state && state.screen) {
-            showScreen(state.screen);
+            if (state.screen === SCREENS.TOOL_SCANNER_MENU) {
+                // If back to main menu, show login screen instead
+                hideAllMainScreens();
+                document.getElementById('loginSection').classList.remove('d-none');
+                history.replaceState({ screen: 'loginSection' }, '', '');
+            } else if (state.screen === 'loginSection') {
+                // Already on login, allow default (may exit app)
+                hideAllMainScreens();
+                document.getElementById('loginSection').classList.remove('d-none');
+            } else {
+                showScreen(state.screen);
+            }
         } else {
-            // If no state, default to main menu
-            showScreen(SCREENS.TOOL_SCANNER_MENU);
+            // If no state, default to login screen
+            hideAllMainScreens();
+            document.getElementById('loginSection').classList.remove('d-none');
+            history.replaceState({ screen: 'loginSection' }, '', '');
         }
     });
 
