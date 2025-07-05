@@ -1324,6 +1324,9 @@
             <button type="button" class="btn btn-light" id="toolPhotoPrevBtn">Previous</button>
             <span id="toolPhotoCounter"></span>
             <button type="button" class="btn btn-light" id="toolPhotoNextBtn">Next</button>
+            <button type="button" class="btn btn-danger" id="toolPhotoDeleteBtn">
+              <i class="fas fa-trash"></i> Delete
+            </button>
           </div>
         </div>
       </div>
@@ -2237,7 +2240,7 @@
             html += checkoutInfo;
             
             html += `<div class="mb-2">${tool.photoUrls && tool.photoUrls.length > 0
-                    ? `<strong style=\"color: #FF9800; text-decoration: underline; cursor: pointer; font-size: 1.1em; font-weight: 600; display: inline-block; margin-top: 10px;\" onclick=\"showToolPhotoGallery(this)\" data-photo-urls='${JSON.stringify(tool.photoUrls)}'>Photo (${tool.photoUrls.length})</strong>`
+                    ? `<strong style=\"color: #FF9800; text-decoration: underline; cursor: pointer; font-size: 1.1em; font-weight: 600; display: inline-block; margin-top: 10px;\" onclick=\"showToolPhotoGallery(this)\" data-photo-urls='${JSON.stringify(tool.photoUrls)}' data-tool-id='${tool.toolId || tool.documentId}' data-part-number='${tool.partNumber}'>Photo (${tool.photoUrls.length})</strong>`
                     : `<span style=\"color: #888; text-decoration: none; cursor: not-allowed; font-size: 1.1em; font-weight: 600; display: inline-block; margin-top: 10px;\">Photo</span>`}
             </div>`;
             body.innerHTML = html;
@@ -2317,7 +2320,7 @@
                                 html += `<div style=\"margin-top:8px;display:flex;gap:8px;justify-content:flex-end;\">`;
                                 html += `<button onclick=\"event.stopPropagation(); createPhotoUploadInput('${tool.id}', '${tool.partNumber || tool.id}')\" style=\"background:#FF9800;color:white;border:none;border-radius:16px;padding:6px 12px;font-size:0.9rem;font-weight:bold;cursor:pointer;\"><i class=\"fas fa-camera\"></i> Add Photo</button>`;
                                 if (tool.photoUrls && tool.photoUrls.length > 0) {
-                                    html += `<button onclick=\"event.stopPropagation(); showToolPhotoGallery(this)\" data-photo-urls='${JSON.stringify(tool.photoUrls)}' style=\"background:#1976d2;color:white;border:none;border-radius:16px;padding:6px 12px;font-size:0.9rem;font-weight:bold;cursor:pointer;\"><i class=\"fas fa-images\"></i> Photos (${tool.photoUrls.length})</button>`;
+                                    html += `<button onclick=\"event.stopPropagation(); showToolPhotoGallery(this)\" data-photo-urls='${JSON.stringify(tool.photoUrls)}' data-tool-id='${tool.id}' data-part-number='${tool.partNumber || tool.id}' style=\"background:#1976d2;color:white;border:none;border-radius:16px;padding:6px 12px;font-size:0.9rem;font-weight:bold;cursor:pointer;\"><i class=\"fas fa-images\"></i> Photos (${tool.photoUrls.length})</button>`;
                                 }
                                 html += `</div>`;
                                 html += `</div>`;
@@ -2617,6 +2620,8 @@
                                     ${tool.photoUrls && tool.photoUrls.length > 0 ? 
                                         `<button onclick="event.stopPropagation(); showToolPhotoGallery(this)" 
                                                 data-photo-urls='${JSON.stringify(tool.photoUrls)}'
+                                                data-tool-id='${tool.id}'
+                                                data-part-number='${tool.partNumber || tool.id}'
                                                 style="background:#1976d2;color:white;border:none;border-radius:16px;padding:6px 12px;font-size:0.9rem;font-weight:bold;cursor:pointer;">
                                             <i class="fas fa-images"></i> Photos (${tool.photoUrls.length})
                                         </button>` : ''
@@ -3710,37 +3715,131 @@
 
 
 
-    // Add the showToolPhotoGallery function
-    function showToolPhotoGallery(el) {
-        const photoUrls = JSON.parse(el.getAttribute('data-photo-urls'));
-        if (!photoUrls || photoUrls.length === 0) return;
-        let currentPhotoIndex = 0;
-        const galleryContent = document.getElementById('toolPhotoGalleryContent');
-        const counter = document.getElementById('toolPhotoCounter');
-        const prevBtn = document.getElementById('toolPhotoPrevBtn');
-        const nextBtn = document.getElementById('toolPhotoNextBtn');
-        function updatePhoto() {
-            galleryContent.innerHTML = `<img src="${photoUrls[currentPhotoIndex]}" class="img-fluid rounded shadow" style="max-height:80vh;max-width:100vw;object-fit:contain;">`;
-            counter.textContent = `${currentPhotoIndex + 1} / ${photoUrls.length}`;
-            prevBtn.disabled = currentPhotoIndex === 0;
-            nextBtn.disabled = currentPhotoIndex === photoUrls.length - 1;
+            // Add the showToolPhotoGallery function
+        function showToolPhotoGallery(el) {
+            const photoUrls = JSON.parse(el.getAttribute('data-photo-urls'));
+            const toolId = el.getAttribute('data-tool-id');
+            const partNumber = el.getAttribute('data-part-number');
+            if (!photoUrls || photoUrls.length === 0) return;
+            let currentPhotoIndex = 0;
+            const galleryContent = document.getElementById('toolPhotoGalleryContent');
+            const counter = document.getElementById('toolPhotoCounter');
+            const prevBtn = document.getElementById('toolPhotoPrevBtn');
+            const nextBtn = document.getElementById('toolPhotoNextBtn');
+            
+            function updatePhoto() {
+                galleryContent.innerHTML = `<img src="${photoUrls[currentPhotoIndex]}" class="img-fluid rounded shadow" style="max-height:80vh;max-width:100vw;object-fit:contain;">`;
+                counter.textContent = `${currentPhotoIndex + 1} / ${photoUrls.length}`;
+                prevBtn.disabled = currentPhotoIndex === 0;
+                nextBtn.disabled = currentPhotoIndex === photoUrls.length - 1;
+                
+                // Update delete button
+                const deleteBtn = document.getElementById('toolPhotoDeleteBtn');
+                if (deleteBtn) {
+                    deleteBtn.onclick = function() {
+                        deletePhoto(toolId, partNumber, currentPhotoIndex, photoUrls[currentPhotoIndex]);
+                    };
+                }
+            }
+            prevBtn.onclick = function() {
+                if (currentPhotoIndex > 0) {
+                    currentPhotoIndex--;
+                    updatePhoto();
+                }
+            };
+            nextBtn.onclick = function() {
+                if (currentPhotoIndex < photoUrls.length - 1) {
+                    currentPhotoIndex++;
+                    updatePhoto();
+                }
+            };
+            updatePhoto();
+            const modal = new bootstrap.Modal(document.getElementById('toolPhotoGalleryModal'));
+            modal.show();
         }
-        prevBtn.onclick = function() {
-            if (currentPhotoIndex > 0) {
-                currentPhotoIndex--;
-                updatePhoto();
+
+        // Delete photo function
+        async function deletePhoto(toolId, partNumber, photoIndex, photoUrl) {
+            if (!confirm('Are you sure you want to delete this photo? This action cannot be undone.')) {
+                return;
             }
-        };
-        nextBtn.onclick = function() {
-            if (currentPhotoIndex < photoUrls.length - 1) {
-                currentPhotoIndex++;
-                updatePhoto();
+
+            try {
+                console.log('=== PHOTO DELETE STARTED ===');
+                console.log('Tool ID:', toolId);
+                console.log('Part Number:', partNumber);
+                console.log('Photo Index:', photoIndex);
+                console.log('Photo URL:', photoUrl);
+
+                // Show loading modal
+                const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                loadingModal.show();
+                document.getElementById('photoUploadProgress').textContent = 'Deleting photo...';
+
+                // Get current photo URLs for this tool
+                const toolDoc = await db.collection('tools').doc(toolId).get();
+                const currentPhotoUrls = toolDoc.exists ? (toolDoc.data().photoUrls || []) : [];
+                
+                // Remove the photo from the array
+                const updatedPhotoUrls = currentPhotoUrls.filter((url, index) => index !== photoIndex);
+                
+                // Update the tool's photoUrls array
+                await db.collection('tools').doc(toolId).update({
+                    photoUrls: updatedPhotoUrls
+                });
+
+                // Find all tools with the same part number and remove the same photo
+                const toolsWithSamePart = await db.collection('tools')
+                    .where('partNumber', '==', partNumber)
+                    .get();
+
+                const updatePromises = toolsWithSamePart.docs.map(async (doc) => {
+                    if (doc.id !== toolId) { // Don't update the original tool again
+                        const existingPhotoUrls = doc.data().photoUrls || [];
+                        const updatedUrls = existingPhotoUrls.filter(url => url !== photoUrl);
+                        await doc.ref.update({
+                            photoUrls: updatedUrls
+                        });
+                        console.log('Updated tool', doc.id, 'removed same photo');
+                    }
+                });
+
+                await Promise.all(updatePromises);
+
+                // Try to delete from Firebase Storage (optional - may fail if file doesn't exist)
+                try {
+                    const fileName = photoUrl.split('/').pop().split('?')[0]; // Extract filename from URL
+                    const photoRef = storage.ref('Tool_Photos/' + fileName);
+                    await photoRef.delete();
+                    console.log('Photo deleted from storage:', fileName);
+                } catch (storageError) {
+                    console.warn('Could not delete from storage (file may not exist):', storageError);
+                }
+
+                console.log('=== PHOTO DELETE COMPLETED ===');
+                loadingModal.hide();
+                alert('Photo deleted successfully! Removed from ' + (toolsWithSamePart.docs.length) + ' tools with the same part number.');
+
+                // Close the photo gallery modal
+                const galleryModal = bootstrap.Modal.getInstance(document.getElementById('toolPhotoGalleryModal'));
+                if (galleryModal) galleryModal.hide();
+
+                // Refresh the current view
+                if (lastViewedCollectionName) {
+                    showMyToolsByCollection(lastViewedCollectionName);
+                } else {
+                    // Refresh other views
+                    loadTools(); // Refresh register tools
+                    updatePreviousOutToolsCount(); // Refresh previous out tools count
+                }
+
+            } catch (error) {
+                console.error('=== PHOTO DELETE FAILED ===', error);
+                const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
+                if (loadingModal) loadingModal.hide();
+                alert('Delete failed: ' + error.message);
             }
-        };
-        updatePhoto();
-        const modal = new bootstrap.Modal(document.getElementById('toolPhotoGalleryModal'));
-        modal.show();
-    }
+        }
 
     // Settings button logic
     const settingsBtn = document.getElementById('settingsBtn');
