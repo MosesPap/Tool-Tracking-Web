@@ -1598,7 +1598,6 @@
                     technicianData = {
                         fullName: user.displayName || user.email,
                         email: user.email,
-                        photoURL: user.photoURL || null,
                         lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
                         createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     };
@@ -2366,8 +2365,9 @@
                         document.getElementById('fullName').textContent = user.email;
                         updatePreviousToolsTabCount();
                     });
-                // Always show the menu after login or refresh
-                showToolScannerMenu();
+                // Always show only the main menu after login or refresh
+                hideAllMainScreens();
+                document.getElementById('toolScannerMenu').style.display = 'block';
                 updateLoggedInTechnician();
             } else {
                 loginSection.style.display = 'block';
