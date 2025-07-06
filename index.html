@@ -759,37 +759,15 @@
           opacity: 0;
           pointer-events: none;
         }
-
-        #splashContentOverlay {
-          position: fixed;
-          top: 0; left: 0; right: 0; bottom: 0;
-          width: 100vw; height: 100vh;
-          background: #6e8cff; /* Use the blue color from your screenshot */
-          z-index: 10001;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          align-items: center;
-          transition: opacity 0.3s;
-        }
-        #splashContentOverlay.hidden {
-          opacity: 0;
-          pointer-events: none;
-        }
     </style>
 </head>
 <body>
-    <div id="splashContentOverlay">
-        <img id="splashLogo" src="ams_logo.png" alt="Tool Tracking Logo">
-        <h1 id="splashTitle">Tool Tracking</h1>
-        <p id="splashSubtitle">Professional Tool Management System</p>
-        <div id="splashLoading"></div>
-    </div>
+    <div id="orangeOverlay"></div>
     <div id="splashScreen">
         <video id="splashVideo" autoplay muted>
             <source src="src/main/res/raw/helicopter_animation.mp4" type="video/mp4">
         </video>
-        <!-- Remove splashContent from here, it is now in the overlay above -->
+        
     </div>
     <!-- Removed old static splash/logo section -->
 
@@ -4963,17 +4941,6 @@
       const orangeOverlay = document.getElementById('orangeOverlay');
       setTimeout(() => {
         orangeOverlay.classList.add('hidden');
-      }, 500); // 0.5 seconds
-    });
-    </script>
-
-    <script>
-    // --- Splash Content Overlay Logic ---
-    document.addEventListener('DOMContentLoaded', function() {
-      // Splash content overlay logic
-      const splashContentOverlay = document.getElementById('splashContentOverlay');
-      setTimeout(() => {
-        splashContentOverlay.classList.add('hidden');
       }, 500); // 0.5 seconds
     });
     </script>
