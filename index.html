@@ -733,16 +733,34 @@
                 font-weight: 600 !important;
             }
         }
+
+        /* Add CSS for orange overlay */
+        #orangeOverlay {
+          position: fixed;
+          top: 0; left: 0; right: 0; bottom: 0;
+          width: 100vw; height: 100vh;
+          background: #FF9800;
+          z-index: 10000;
+          transition: opacity 0.3s;
+        }
+        #orangeOverlay.hidden {
+          opacity: 0;
+          pointer-events: none;
+        }
     </style>
 </head>
 <body>
-    <!-- Splash Screen -->
+    <div id="orangeOverlay"></div>
     <div id="splashScreen">
         <video id="splashVideo" autoplay muted loop>
-            <source src="src/main/res/raw/helicopter_animation.mp4" type="video/mp4">
-            <source src="src/main/res/raw/helicopter_animation.webm" type="video/webm">
+            <source src="videos/helicopter_animation.mp4" type="video/mp4">
         </video>
-        
+        <div id="splashContent">
+            <img id="splashLogo" src="ams_logo.png" alt="Tool Tracking Logo">
+            <h1 id="splashTitle">Tool Tracking</h1>
+            <p id="splashSubtitle">Professional Tool Management System</p>
+            <div id="splashLoading"></div>
+        </div>
     </div>
     <!-- Removed old static splash/logo section -->
 
@@ -4911,6 +4929,17 @@
         }
       }
     })();
+    </script>
+
+    <script>
+    // --- Orange Overlay Logic ---
+    document.addEventListener('DOMContentLoaded', function() {
+      // Orange overlay logic
+      const orangeOverlay = document.getElementById('orangeOverlay');
+      setTimeout(() => {
+        orangeOverlay.classList.add('hidden');
+      }, 500); // 0.5 seconds
+    });
     </script>
 </body>
 </html> 
