@@ -10,6 +10,84 @@
     <meta name="theme-color" content="#FF9800">
     <link rel="apple-touch-icon" href="icons/icon-192x192.png">
     <style>
+        /* Splash Screen Styles */
+        #splashScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #FF9800, #F57C00);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.5s ease-out;
+        }
+        
+        #splashVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        #splashContent {
+            position: relative;
+            z-index: 2;
+            text-align: center;
+            color: white;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2rem;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        #splashLogo {
+            width: 120px;
+            height: 120px;
+            margin-bottom: 1rem;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        #splashTitle {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        #splashSubtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 1rem;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+        
+        #splashLoading {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .splash-hidden {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+        
         .tool-out { color: red; font-weight: bold; }
         .tool-in { color: green; }
         .hidden { display: none; }
@@ -658,6 +736,21 @@
     </style>
 </head>
 <body>
+    <!-- Splash Screen -->
+    <div id="splashScreen">
+        <video id="splashVideo" autoplay muted loop>
+            <source src="src/main/res/raw/helicopter_animation.mp4" type="video/mp4">
+            <source src="src/main/res/raw/helicopter_animation.webm" type="video/webm">
+        </video>
+        <div id="splashContent">
+            <img id="splashLogo" src="ams_logo.png" alt="Tool Tracking Logo">
+            <h1 id="splashTitle">Tool Tracking</h1>
+            <p id="splashSubtitle">Professional Tool Management System</p>
+            <div id="splashLoading"></div>
+        </div>
+    </div>
+    <!-- Removed old static splash/logo section -->
+
     <div id="headerBranding">
         <h1 class="ams-title">AMS SQUADRON</h1>
         <div class="ams-subtitle">Tool Tracking</div>
@@ -1393,6 +1486,24 @@
       </div>
     </div>
   </div>
+  <!--Search Tools Screen -->
+    <div id="searchToolsScreen" style="display:none;">
+      <div class="container py-4">
+        <button id="searchToolsBackBtn" class="btn btn-outline-secondary mb-3"><i class="fas fa-arrow-left"></i> Back to Menu</button>
+        <h2 class="text-center mb-3" style="color: orange; font-weight: bold;">Search Tools</h2>
+        <div class="d-flex mb-3" style="gap:8px;">
+          <button id="searchTypePartNumber" class="btn btn-success flex-fill">Part Number</button>
+          <button id="searchTypePartName" class="btn btn-outline-secondary flex-fill">Part Name</button>
+        </div>
+        <div class="input-group mb-3">
+          <span class="input-group-text"><i class="fas fa-search"></i></span>
+          <input type="text" id="searchToolsInput" class="form-control" placeholder="Search by Part Number">
+          <button class="btn btn-outline-secondary" id="searchToolsClearBtn" type="button"><i class="fas fa-times"></i></button>
+        </div>
+        <div id="searchToolsSuggestions" class="mb-2"></div>
+        <div id="searchToolsResults"></div>
+      </div>
+    </div>
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -2425,6 +2536,29 @@
             loadTools();
         }
         document.addEventListener('DOMContentLoaded', function() {
+            // Splash Screen Logic
+            const splashScreen = document.getElementById('splashScreen');
+            const splashVideo = document.getElementById('splashVideo');
+            
+            function hideSplashScreen() {
+                splashScreen.classList.add('splash-hidden');
+                setTimeout(() => {
+                    splashScreen.style.display = 'none';
+                }, 500);
+            }
+            
+            if (splashVideo) {
+                splashVideo.addEventListener('loadeddata', function() {
+                    setTimeout(hideSplashScreen, 6000); // 6 seconds
+                });
+                splashVideo.addEventListener('error', function() {
+                    setTimeout(hideSplashScreen, 6000); // 6 seconds fallback
+                });
+                setTimeout(hideSplashScreen, 7000); // 7 seconds max fallback
+            } else {
+                setTimeout(hideSplashScreen, 6000); // 6 seconds fallback
+            }
+            
             // After login, show ToolScanner Menu instead of appSection
             const originalLogin = window.login;
             window.login = async function() {
@@ -3808,12 +3942,24 @@
 
                 // Try to delete from Firebase Storage (optional - may fail if file doesn't exist)
                 try {
-                    const fileName = photoUrl.split('/').pop().split('?')[0]; // Extract filename from URL
-                    const photoRef = storage.ref('Tool_Photos/' + fileName);
+                    console.log('Original photo URL:', photoUrl);
+                    
+                    // Extract the full path from the Firebase Storage URL
+                    // URL format: https://firebasestorage.googleapis.com/v0/b/project-id/o/Tool_Photos%2Ffilename.jpg?alt=media&token=...
+                    const urlParts = photoUrl.split('/');
+                    const encodedPath = urlParts[urlParts.length - 1].split('?')[0]; // Get the encoded path
+                    const decodedPath = decodeURIComponent(encodedPath); // Decode the URL encoding
+                    console.log('Attempting to delete from storage path:', decodedPath);
+                    
+                    const photoRef = storage.ref().child(decodedPath);
+                    console.log('Storage reference:', photoRef.toString());
+                    
                     await photoRef.delete();
-                    console.log('Photo deleted from storage:', fileName);
+                    console.log('Photo deleted from storage successfully:', decodedPath);
                 } catch (storageError) {
                     console.warn('Could not delete from storage (file may not exist):', storageError);
+                    console.warn('Storage error details:', storageError.message);
+                    console.warn('Storage error code:', storageError.code);
                 }
 
                 console.log('=== PHOTO DELETE COMPLETED ===');
@@ -4551,6 +4697,225 @@
         document.getElementById('checkupDetailsContent').innerHTML = html;
       })();
     }
+
+    
+
+    // Add Search Tools button to main menu
+    
+      document.addEventListener('DOMContentLoaded', function() {
+        // Add Search Tools button if not present
+        if (!document.getElementById('menuSearchBtn')) {
+          const menu = document.querySelector('#toolScannerMenu .d-grid');
+          if (menu) {
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-primary';
+            btn.id = 'menuSearchBtn';
+            btn.innerHTML = '<i class="fas fa-search"></i> Search for Tools';
+            menu.appendChild(btn);
+          }
+        }
+      });
+    </script>
+    </script>
+
+    <script>
+    // --- Search Tools Screen Logic ---
+    (function() {
+      // Navigation
+      const searchScreen = document.getElementById('searchToolsScreen');
+      const menuBtn = document.getElementById('menuSearchBtn');
+      const backBtn = document.getElementById('searchToolsBackBtn');
+      const input = document.getElementById('searchToolsInput');
+      const clearBtn = document.getElementById('searchToolsClearBtn');
+      const partNumberBtn = document.getElementById('searchTypePartNumber');
+      const partNameBtn = document.getElementById('searchTypePartName');
+      const resultsDiv = document.getElementById('searchToolsResults');
+      const suggestionsDiv = document.getElementById('searchToolsSuggestions');
+
+      let searchType = 'partNumber'; // 'partNumber' or 'partName'
+      let searchTimeout = null;
+      let lastQuery = '';
+      let suggestionsTimeout = null;
+
+      // Show Search Tools screen
+      if (menuBtn) {
+        menuBtn.onclick = function() {
+          hideAllMainScreens();
+          searchScreen.style.display = 'block';
+          input.value = '';
+          resultsDiv.innerHTML = '';
+          suggestionsDiv.innerHTML = '';
+          setSearchType('partNumber');
+          input.placeholder = 'Search by Part Number';
+          input.focus();
+        };
+      }
+      // Back to menu
+      if (backBtn) {
+        backBtn.onclick = function() {
+          searchScreen.style.display = 'none';
+          document.getElementById('toolScannerMenu').style.display = 'block';
+        };
+      }
+      // Clear input
+      if (clearBtn) {
+        clearBtn.onclick = function() {
+          input.value = '';
+          resultsDiv.innerHTML = '';
+          suggestionsDiv.innerHTML = '';
+          input.focus();
+        };
+      }
+      // Search type toggle
+      function setSearchType(type) {
+        searchType = type;
+        if (type === 'partNumber') {
+          partNumberBtn.classList.add('btn-success');
+          partNumberBtn.classList.remove('btn-outline-secondary');
+          partNameBtn.classList.remove('btn-success');
+          partNameBtn.classList.add('btn-outline-secondary');
+          input.placeholder = 'Search by Part Number';
+        } else {
+          partNameBtn.classList.add('btn-success');
+          partNameBtn.classList.remove('btn-outline-secondary');
+          partNumberBtn.classList.remove('btn-success');
+          partNumberBtn.classList.add('btn-outline-secondary');
+          input.placeholder = 'Search by Part Name';
+        }
+        input.value = '';
+        resultsDiv.innerHTML = '';
+        suggestionsDiv.innerHTML = '';
+        input.focus();
+      }
+      if (partNumberBtn) partNumberBtn.onclick = () => setSearchType('partNumber');
+      if (partNameBtn) partNameBtn.onclick = () => setSearchType('partName');
+
+      // Debounced search and suggestions
+      if (input) {
+        input.oninput = function() {
+          if (searchTimeout) clearTimeout(searchTimeout);
+          if (suggestionsTimeout) clearTimeout(suggestionsTimeout);
+          const query = input.value.trim();
+          if (!query) {
+            resultsDiv.innerHTML = '';
+            suggestionsDiv.innerHTML = '';
+            return;
+          }
+          // Show suggestions after short delay
+          suggestionsTimeout = setTimeout(() => {
+            showSuggestions(query);
+          }, 150);
+          // Debounced search
+          searchTimeout = setTimeout(() => {
+            performSearch(query);
+          }, 300);
+        };
+        input.onkeydown = function(e) {
+          if (e.key === 'Enter') {
+            if (searchTimeout) clearTimeout(searchTimeout);
+            if (suggestionsTimeout) clearTimeout(suggestionsTimeout);
+            performSearch(input.value.trim());
+            suggestionsDiv.innerHTML = '';
+          }
+        };
+      }
+
+      // Show live suggestions
+      async function showSuggestions(query) {
+        if (!query) {
+          suggestionsDiv.innerHTML = '';
+          return;
+        }
+        try {
+          let snapshot;
+          if (searchType === 'partNumber') {
+            snapshot = await db.collection('tools')
+              .where('partNumber', '>=', query)
+              .where('partNumber', '<=', query + '\uf8ff')
+              .orderBy('partNumber')
+              .limit(10)
+              .get();
+          } else {
+            snapshot = await db.collection('tools')
+              .where('toolName', '>=', query)
+              .where('toolName', '<=', query + '\uf8ff')
+              .orderBy('toolName')
+              .limit(10)
+              .get();
+          }
+          if (snapshot.empty) {
+            suggestionsDiv.innerHTML = '';
+            return;
+          }
+          let html = '<div class="list-group">';
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            const value = searchType === 'partNumber' ? (data.partNumber || doc.id) : (data.toolName || 'Unknown Tool');
+            html += `<button type="button" class="list-group-item list-group-item-action" style="font-weight:bold;" onclick="window.selectSearchSuggestion && window.selectSearchSuggestion('${value.replace(/'/g, "&#39;")}')">${value}</button>`;
+          });
+          html += '</div>';
+          suggestionsDiv.innerHTML = html;
+        } catch (e) {
+          suggestionsDiv.innerHTML = '';
+        }
+      }
+      // Global function for suggestion click
+      window.selectSearchSuggestion = function(value) {
+        input.value = value;
+        suggestionsDiv.innerHTML = '';
+        performSearch(value);
+        input.focus();
+      };
+
+      // Firestore search logic
+      async function performSearch(query) {
+        if (!query) return;
+        resultsDiv.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div></div>';
+        suggestionsDiv.innerHTML = '';
+        lastQuery = query;
+        try {
+          let snapshot;
+          if (searchType === 'partNumber') {
+            snapshot = await db.collection('tools')
+              .where('partNumber', '>=', query)
+              .where('partNumber', '<=', query + '\uf8ff')
+              .get();
+          } else {
+            snapshot = await db.collection('tools')
+              .where('toolName', '>=', query)
+              .where('toolName', '<=', query + '\uf8ff')
+              .get();
+          }
+          if (input.value.trim() !== lastQuery) return; // Ignore if input changed
+          if (snapshot.empty) {
+            resultsDiv.innerHTML = '<div class="text-center text-muted">No tools found.</div>';
+            return;
+          }
+          // Render results
+          let html = `<div class="mb-2">Found ${snapshot.size} tool(s)</div>`;
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            const status = (data.status || '').toUpperCase();
+            let statusColor = '#388E3C';
+            if (status === 'OUT') statusColor = '#d32f2f';
+            else if (status === 'BROKEN') statusColor = '#ff6f00';
+            else if (status === 'LOST') statusColor = '#ff8f00';
+            else if (status === 'CALIBRATION') statusColor = '#1976d2';
+            html += `<div class="card mb-3" style="border-radius:12px;box-shadow:0 2px 4px rgba(0,0,0,0.07);">
+              <div class="card-body">
+                <div style="font-weight:bold;font-size:1.2em;">${data.toolName || 'Unknown Tool'}</div>
+                <div style="color:#888;font-size:1.05em;">Part #: <span style="color:#333;font-weight:bold;">${data.partNumber || doc.id}</span></div>
+                <div style="color:#888;font-size:1.05em;">TID: <span style="color:#333;font-weight:bold;">${doc.id}</span></div>
+                <div style="font-weight:bold;font-size:1.1em;margin-top:4px;">Status: <span style="color:${statusColor};">${status}</span></div>
+              </div>
+            </div>`;
+          });
+          resultsDiv.innerHTML = html;
+        } catch (e) {
+          resultsDiv.innerHTML = `<div class="text-danger text-center">Error: ${e.message}</div>`;
+        }
+      }
+    })();
     </script>
 </body>
 </html> 
