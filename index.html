@@ -2352,7 +2352,7 @@
                         <span style="font-weight: 600; color: #222; font-size: 1.2em;">Last ChkOut:</span> 
                         <span style="font-size: 1.0em; color: #1976d2;">${lastCheckoutDate}</span>
                 </div>
-                `;
+            `;
             }
             
             // Always show all fields in a consistent order
@@ -2563,6 +2563,8 @@
             document.getElementById('appSection').style.display = 'block';
             // Load today's tools when entering Register Tools screen
             loadTools();
+            // Show notifications here
+            showNotificationsInSequence();
         }
         document.addEventListener('DOMContentLoaded', function() {
             // Orange overlay logic
@@ -2848,10 +2850,10 @@
                             
                             html += `<div style="background:${bg};border-radius:0 0 6px 6px;margin-bottom:8px;padding:12px 12px 8px 12px;">
                                 <div style="cursor:pointer;" onclick="showToolDetailsFromMyTools(${JSON.stringify(tool).replace(/"/g, '&quot;')})">
-                                    <span style="font-weight:bold;font-size:1.13rem;color:#1976d2;">${idx + 1}. ${tool.toolName || 'Unknown Tool'}</span> - <span style="font-weight:bold;">TID: ${tool.id}</span><br>
-                                    <span style="font-size:1.01rem;color:#444;">Part #: ${tool.partNumber || ''}</span><br>
-                                    <span style="font-weight:bold;color:${statusColor};">Status: ${tool.status || ''}</span><br>
-                                    <span style="font-size:1.01rem;color:#222;">Location: ${tool.location || ''}</span>
+                                <span style="font-weight:bold;font-size:1.13rem;color:#1976d2;">${idx + 1}. ${tool.toolName || 'Unknown Tool'}</span> - <span style="font-weight:bold;">TID: ${tool.id}</span><br>
+                                <span style="font-size:1.01rem;color:#444;">Part #: ${tool.partNumber || ''}</span><br>
+                                <span style="font-weight:bold;color:${statusColor};">Status: ${tool.status || ''}</span><br>
+                                <span style="font-size:1.01rem;color:#222;">Location: ${tool.location || ''}</span>
                                 </div>
                                 <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;">
                                     <button onclick="event.stopPropagation(); createPhotoUploadInput('${tool.id}', '${tool.partNumber || tool.id}')" 
@@ -3956,23 +3958,23 @@
 
 
 
-            // Add the showToolPhotoGallery function
-        function showToolPhotoGallery(el) {
-            const photoUrls = JSON.parse(el.getAttribute('data-photo-urls'));
+    // Add the showToolPhotoGallery function
+    function showToolPhotoGallery(el) {
+        const photoUrls = JSON.parse(el.getAttribute('data-photo-urls'));
             const toolId = el.getAttribute('data-tool-id');
             const partNumber = el.getAttribute('data-part-number');
-            if (!photoUrls || photoUrls.length === 0) return;
-            let currentPhotoIndex = 0;
-            const galleryContent = document.getElementById('toolPhotoGalleryContent');
-            const counter = document.getElementById('toolPhotoCounter');
-            const prevBtn = document.getElementById('toolPhotoPrevBtn');
-            const nextBtn = document.getElementById('toolPhotoNextBtn');
+        if (!photoUrls || photoUrls.length === 0) return;
+        let currentPhotoIndex = 0;
+        const galleryContent = document.getElementById('toolPhotoGalleryContent');
+        const counter = document.getElementById('toolPhotoCounter');
+        const prevBtn = document.getElementById('toolPhotoPrevBtn');
+        const nextBtn = document.getElementById('toolPhotoNextBtn');
             
-            function updatePhoto() {
-                galleryContent.innerHTML = `<img src="${photoUrls[currentPhotoIndex]}" class="img-fluid rounded shadow" style="max-height:80vh;max-width:100vw;object-fit:contain;">`;
-                counter.textContent = `${currentPhotoIndex + 1} / ${photoUrls.length}`;
-                prevBtn.disabled = currentPhotoIndex === 0;
-                nextBtn.disabled = currentPhotoIndex === photoUrls.length - 1;
+        function updatePhoto() {
+            galleryContent.innerHTML = `<img src="${photoUrls[currentPhotoIndex]}" class="img-fluid rounded shadow" style="max-height:80vh;max-width:100vw;object-fit:contain;">`;
+            counter.textContent = `${currentPhotoIndex + 1} / ${photoUrls.length}`;
+            prevBtn.disabled = currentPhotoIndex === 0;
+            nextBtn.disabled = currentPhotoIndex === photoUrls.length - 1;
                 
                 // Update delete button
                 const deleteBtn = document.getElementById('toolPhotoDeleteBtn');
@@ -3981,23 +3983,23 @@
                         deletePhoto(toolId, partNumber, currentPhotoIndex, photoUrls[currentPhotoIndex]);
                     };
                 }
-            }
-            prevBtn.onclick = function() {
-                if (currentPhotoIndex > 0) {
-                    currentPhotoIndex--;
-                    updatePhoto();
-                }
-            };
-            nextBtn.onclick = function() {
-                if (currentPhotoIndex < photoUrls.length - 1) {
-                    currentPhotoIndex++;
-                    updatePhoto();
-                }
-            };
-            updatePhoto();
-            const modal = new bootstrap.Modal(document.getElementById('toolPhotoGalleryModal'));
-            modal.show();
         }
+        prevBtn.onclick = function() {
+            if (currentPhotoIndex > 0) {
+                currentPhotoIndex--;
+                updatePhoto();
+            }
+        };
+        nextBtn.onclick = function() {
+            if (currentPhotoIndex < photoUrls.length - 1) {
+                currentPhotoIndex++;
+                updatePhoto();
+            }
+        };
+        updatePhoto();
+        const modal = new bootstrap.Modal(document.getElementById('toolPhotoGalleryModal'));
+        modal.show();
+    }
 
         // Delete photo function
         async function deletePhoto(toolId, partNumber, photoIndex, photoUrl) {
