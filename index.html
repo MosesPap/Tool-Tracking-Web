@@ -5039,5 +5039,30 @@
       }, 500); // 0.5 seconds
     });
     </script>
+
+    <script>
+    // --- Add event listeners for Register Tools and Logout buttons ---
+    document.addEventListener('DOMContentLoaded', function() {
+        // Orange overlay logic
+        const orangeOverlay = document.getElementById('orangeOverlay');
+        const splashScreen = document.getElementById('splashScreen');
+        const splashVideo = document.getElementById('splashVideo');
+        
+        // --- Add event listeners for Register Tools and Logout buttons ---
+        const registerBtn = document.getElementById('menuRegisterBtn');
+        if (registerBtn) {
+            registerBtn.onclick = function() {
+                showRegisterTools();
+            };
+        }
+        const logoutBtn = document.getElementById('menuLogoutBtn');
+        if (logoutBtn) {
+            logoutBtn.onclick = function() {
+                logout();
+                document.getElementById('toolScannerMenu').style.display = 'none';
+            };
+        }
+    });
+    </script>
 </body>
 </html> 
