@@ -1098,17 +1098,17 @@
 
     <!-- ToolScanner Menu Section -->
     <div id="toolScannerMenu" style="display:none;">
+        <!-- Orange Top Bar with Title and Settings (now outside container) -->
+        <div style="background: #FF9800; color: white; width: 100vw; min-width: 100vw; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
+            <h2 style="margin: 0 0 0 20px; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px;">ToolScanner Menu</h2>
+            <button id="settingsBtn" class="btn btn-link p-0" style="position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-size: 2rem; color: white; z-index: 2;" title="Settings">
+                <i class="fas fa-cog" style="color: white;"></i>
+            </button>
+        </div>
         <div class="container py-4">
-            <!-- Orange Top Bar with Title and Settings -->
-            <div style="background: #FF9800; color: white; border-radius: 18px 18px 0 0; padding: 18px 20px 14px 20px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem;">
-                <h2 style="margin: 0; font-size: 2rem; font-weight: bold; letter-spacing: 1px;">ToolScanner Menu</h2>
-                <button id="settingsBtn" class="btn btn-link p-0" style="font-size: 2rem; color: white;" title="Settings">
-                    <i class="fas fa-cog"></i>
-                </button>
-            </div>
             <!-- Welcome Message (no background) -->
-            <div style="margin: 18px 0 18px 0; text-align: left;">
-                <span style="font-size: 1.25rem; color: #333; font-weight: 500;">Welcome, <span id="fullName" class="technician-name"></span></span>
+            <div style="margin: 8px 0 10px 0; text-align: left;">
+                <span style="font-size: 1.1rem; color: #333; font-weight: 500;">Welcome, <span id="fullName" class="technician-name"></span></span>
             </div>
             <div class="d-grid gap-3 col-6 mx-auto">
                 <button class="btn btn-success" id="menuRegisterBtn"><i class="fas fa-plus"></i> Register Tools</button>
