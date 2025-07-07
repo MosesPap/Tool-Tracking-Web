@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
     <title>Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -764,10 +767,18 @@
 <body>
     <div id="orangeOverlay"></div>
     <div id="splashScreen">
-        <video id="splashVideo" autoplay muted>
+        <video id="splashVideo" autoplay muted playsinline webkit-playsinline preload="auto" loop>
             <source src="src/main/res/raw/helicopter_animation.mp4" type="video/mp4">
+            <source src="src/helicopter_animation.mp4" type="video/mp4">
         </video>
         
+        <!-- iOS Fallback: Static splash content (hidden by default) -->
+        <div id="splashContent" style="display: none;">
+            <img id="splashLogo" src="ams_logo.png" alt="AMS Squadron Logo">
+            <div id="splashTitle">AMS SQUADRON</div>
+            <div id="splashSubtitle">Tool Tracking System</div>
+            <div id="splashLoading"></div>
+        </div>
     </div>
     <!-- Removed old static splash/logo section -->
 
@@ -1785,7 +1796,9 @@
             document.getElementById('collectionCheckupScreen').style.display = 'none';
             document.getElementById('previousOutToolsScreen').style.display = 'none';
             // Show login section
-            document.getElementById('loginSection').classList.remove('d-none');
+            const loginSection = document.getElementById('loginSection');
+            loginSection.classList.remove('d-none');
+            loginSection.style.display = 'block'; // Ensure login is visible
         }
 
         // Toggle Admin Section
@@ -2560,13 +2573,59 @@
             const orangeOverlay = document.getElementById('orangeOverlay');
             const splashScreen = document.getElementById('splashScreen');
             const splashVideo = document.getElementById('splashVideo');
-            // Show orange overlay for 0.5s, then play video splash
+            
+            // iOS Safari autoplay workaround
+            function attemptVideoPlay() {
+                if (splashVideo) {
+                    console.log('Attempting to play video...');
+                    console.log('Video readyState:', splashVideo.readyState);
+                    console.log('Video networkState:', splashVideo.networkState);
+                    console.log('Video src:', splashVideo.currentSrc);
+                    
+                    splashVideo.currentTime = 0;
+                    const playPromise = splashVideo.play();
+                    
+                    if (playPromise !== undefined) {
+                        playPromise.then(() => {
+                            console.log('Video started playing successfully');
+                        }).catch(error => {
+                            console.log('Video autoplay failed:', error);
+                            console.log('Error name:', error.name);
+                            console.log('Error message:', error.message);
+                            // On iOS, we might need to show a play button or skip video
+                            showFallbackSplash();
+                        });
+                    }
+                } else {
+                    console.log('No video element found');
+                    showFallbackSplash();
+                }
+            }
+            
+            function showFallbackSplash() {
+                // Hide video and show static splash content
+                if (splashVideo) {
+                    splashVideo.style.display = 'none';
+                }
+                const splashContent = document.getElementById('splashContent');
+                if (splashContent) {
+                    splashContent.style.display = 'block';
+                }
+                
+                // Hide splash after 3 seconds
+                setTimeout(() => {
+                    splashScreen.classList.add('splash-hidden');
+                    setTimeout(() => {
+                        splashScreen.style.display = 'none';
+                    }, 500);
+                }, 3000);
+            }
+            
+            // Show orange overlay for 0.5s, then attempt video splash
             setTimeout(() => {
                 orangeOverlay.classList.add('hidden');
-                // Play video splash for 5 seconds or until video ends
+                
                 if (splashVideo) {
-                    splashVideo.currentTime = 0;
-                    splashVideo.play();
                     let splashHidden = false;
                     function hideSplashScreen() {
                         if (!splashHidden) {
@@ -2577,19 +2636,55 @@
                             splashHidden = true;
                         }
                     }
+                    
+                    // Try to play video
+                    attemptVideoPlay();
+                    
+                    // Listen for video events
                     splashVideo.addEventListener('ended', hideSplashScreen);
+                    splashVideo.addEventListener('canplaythrough', () => {
+                        console.log('Video can play through');
+                    });
+                    splashVideo.addEventListener('canplay', () => {
+                        console.log('Video can play');
+                    });
+                    splashVideo.addEventListener('loadeddata', () => {
+                        console.log('Video loaded data');
+                    });
+                    splashVideo.addEventListener('loadstart', () => {
+                        console.log('Video load started');
+                    });
+                    splashVideo.addEventListener('error', (e) => {
+                        console.log('Video error:', e);
+                        console.log('Video error details:', splashVideo.error);
+                        showFallbackSplash();
+                    });
+                    
                     // Fallback: hide after 5 seconds if video doesn't end
                     setTimeout(hideSplashScreen, 5000);
                 } else {
-                    // No video element, fallback to hide splash after 2s
-                    setTimeout(() => {
-                        splashScreen.classList.add('splash-hidden');
-                        setTimeout(() => {
-                            splashScreen.style.display = 'none';
-                        }, 500);
-                    }, 2000);
+                    showFallbackSplash();
                 }
             }, 500); // 0.5 seconds orange overlay
+            
+            // iOS Safari: Add user interaction handler to trigger video playback
+            let userInteracted = false;
+            function handleUserInteraction() {
+                if (!userInteracted && splashVideo && splashVideo.paused) {
+                    userInteracted = true;
+                    console.log('User interaction detected, attempting to play video');
+                    splashVideo.play().then(() => {
+                        console.log('Video started playing after user interaction');
+                    }).catch(error => {
+                        console.log('Video play failed even after user interaction:', error);
+                    });
+                }
+            }
+            
+            // Listen for various user interactions
+            document.addEventListener('touchstart', handleUserInteraction, { once: true });
+            document.addEventListener('click', handleUserInteraction, { once: true });
+            document.addEventListener('keydown', handleUserInteraction, { once: true });
         });
 
         document.getElementById('backToMenuBtn').onclick = function() {
