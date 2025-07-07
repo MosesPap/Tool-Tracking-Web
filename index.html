@@ -5067,6 +5067,7 @@
             const myToolsScreen = document.getElementById('myToolsScreen');
             const myToolsByCollectionScreen = document.getElementById('myToolsByCollectionScreen');
             const collectionCheckupScreen = document.getElementById('collectionCheckupScreen');
+            const checkupHistoryScreen = document.getElementById('checkupHistoryScreen');
             const previousOutToolsScreen = document.getElementById('previousOutToolsScreen');
             const searchToolsScreen = document.getElementById('searchToolsScreen');
             const loginSection = document.getElementById('loginSection');
@@ -5077,6 +5078,7 @@
             console.log('myToolsScreen display:', myToolsScreen ? myToolsScreen.style.display : 'element not found');
             console.log('myToolsScreen visibility:', myToolsScreen ? myToolsScreen.offsetParent !== null : 'element not found');
             console.log('myToolsScreen computed style:', myToolsScreen ? window.getComputedStyle(myToolsScreen).display : 'element not found');
+            console.log('checkupHistoryScreen display:', checkupHistoryScreen ? checkupHistoryScreen.style.display : 'element not found');
             
             // If we're on any screen other than the main menu, go back to menu
             if (appSection && appSection.style.display !== 'none') {
@@ -5101,6 +5103,11 @@
                 console.log('Handling back from Collection Checkup screen');
                 document.getElementById('collectionCheckupScreen').style.display = 'none';
                 document.getElementById('myToolsByCollectionScreen').style.display = 'block';
+                return true;
+            } else if (checkupHistoryScreen && checkupHistoryScreen.style.display !== 'none') {
+                console.log('Handling back from Checkup History screen');
+                document.getElementById('checkupHistoryScreen').style.display = 'none';
+                document.getElementById('collectionCheckupScreen').style.display = 'block';
                 return true;
             } else if (previousOutToolsScreen && previousOutToolsScreen.style.display !== 'none') {
                 console.log('Handling back from Previous OUT Tools screen');
