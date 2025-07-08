@@ -1232,6 +1232,10 @@
             <button id="selectDifferentCollectionBtn" class="btn btn-primary w-100"><i class="fas fa-exchange-alt"></i> Select Collection</button>
           </div>
         </div>
+        <!-- Location Photo Button -->
+        <div class="mb-3">
+          <button id="locationPhotoBtn" class="btn btn-info w-100"><i class="fas fa-camera"></i> Location Photo</button>
+        </div>
         <div id="myToolsByCollectionList"></div>
       </div>
     </div>
@@ -2912,8 +2916,8 @@
                         showFallbackSplash();
                     });
                     
-                    // Fallback: hide after 5 seconds if video doesn't end
-                    setTimeout(hideSplashScreen, 5000);
+                    // Fallback: hide after 6 seconds if video doesn't end
+                    setTimeout(hideSplashScreen, 6000);
                 } else {
                     showFallbackSplash();
                 }
@@ -3140,6 +3144,7 @@
                     });
                 }
                 renderToolsByLocation(selectedLocation);
+                setupLocationPhotoBtn(collectionName, () => selectedLocation);
             } catch (e) {
                 title.textContent = collectionName;
                 list.innerHTML = '<div class="text-center text-danger">Error loading tools.</div>';
@@ -5851,5 +5856,121 @@
         </div>
       </div>
     </div>
+
+    <script>
+    // ... existing code ...
+    function showLocationPhotoDialog(collectionName, location) {
+      // Create or show a modal for location photos
+      let modal = document.getElementById('locationPhotoModal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.id = 'locationPhotoModal';
+        modal.tabIndex = -1;
+        modal.innerHTML = `
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Location Photo: <span id="locationPhotoModalTitle"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                <div id="locationPhotoModalBody" class="mb-3"></div>
+                <input type="file" id="locationPhotoInput" accept="image/*" class="form-control mb-2" style="display:none;">
+                <button id="uploadLocationPhotoBtn" class="btn btn-success mb-2"><i class="fas fa-upload"></i> Add Photo</button>
+                <button id="viewLocationPhotosBtn" class="btn btn-info mb-2"><i class="fas fa-images"></i> View Photos</button>
+                <div id="locationPhotoUploadStatus" class="mt-2"></div>
+              </div>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+      }
+      document.getElementById('locationPhotoModalTitle').textContent = `${collectionName} / ${location}`;
+      document.getElementById('locationPhotoModalBody').innerHTML = '';
+      document.getElementById('locationPhotoUploadStatus').innerHTML = '';
+      // Show modal
+      const bsModal = new bootstrap.Modal(modal);
+      bsModal.show();
+      // Set up upload button
+      document.getElementById('uploadLocationPhotoBtn').onclick = function() {
+        document.getElementById('locationPhotoInput').click();
+      };
+      document.getElementById('locationPhotoInput').onchange = function(e) {
+        if (e.target.files && e.target.files[0]) {
+          uploadLocationPhoto(collectionName, location, e.target.files[0]);
+        }
+      };
+      document.getElementById('viewLocationPhotosBtn').onclick = function() {
+        viewLocationPhotos(collectionName, location);
+      };
+    }
+    // ... existing code ...
+    </script>
+
+    <script>
+    // ... existing code ...
+    // Attach click handler for Location Photo button after rendering My Tools by Collection screen
+    function setupLocationPhotoBtn(collectionName, getSelectedLocation) {
+      const btn = document.getElementById('locationPhotoBtn');
+      if (btn) {
+        btn.onclick = function() {
+          const loc = getSelectedLocation();
+          if (!loc || loc === 'All') {
+            // Show choose location dialog
+            showChooseLocationDialog(collectionName);
+            return;
+          }
+          showLocationPhotoDialog(collectionName, loc);
+        };
+      }
+    }
+
+    function showChooseLocationDialog(collectionName) {
+      // Find the locations for the current collection from lastViewedCollectionTools
+      const tools = window.lastViewedCollectionTools || [];
+      const locations = [...new Set(tools.map(t => t.location || 'No Location'))];
+      if (locations.length === 0) {
+        alert('No locations found for this collection.');
+        return;
+      }
+      // Create modal if not exists
+      let modal = document.getElementById('chooseLocationModal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.id = 'chooseLocationModal';
+        modal.tabIndex = -1;
+        modal.innerHTML = `
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Choose Location</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body" id="chooseLocationModalBody"></div>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+      }
+      // Populate locations
+      const body = modal.querySelector('#chooseLocationModalBody');
+      body.innerHTML = locations.map(loc => `<button class='btn btn-outline-primary w-100 mb-2' data-location="${loc}">${loc}</button>`).join('');
+      // Add click handlers
+      body.querySelectorAll('button[data-location]').forEach(btn => {
+        btn.onclick = function() {
+          const chosenLoc = this.getAttribute('data-location');
+          const bsModal = bootstrap.Modal.getInstance(modal);
+          if (bsModal) bsModal.hide();
+          showLocationPhotoDialog(collectionName, chosenLoc);
+        };
+      });
+      // Show modal
+      const bsModal = new bootstrap.Modal(modal);
+      bsModal.show();
+    }
+    // ... existing code ...
+    </script>
 </body>
 </html> 
