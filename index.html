@@ -597,6 +597,23 @@
         .register-tool-card.lost { background: #FFE0B2; }
         .register-tool-card.calibration { background: #E3F2FD; }
         .register-tool-card.in { background: #E8F5E9; }
+        
+        /* Search Tools Card Styles - matching My Tools alternating colors and floating effect */
+        .search-tool-bg1 { background: #fff; }
+        .search-tool-bg2 { background: #fff7e6; }
+        
+        .search-tool-card {
+            transition: box-shadow 0.3s ease, transform 0.3s ease;
+        }
+        
+        .search-tool-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+        }
+        
+        /* Search Tools Status-based Background Colors */
+        .search-tool-card.out { background: #FFCDD2; }
+        .search-tool-card.in { background: #E8F5E9; }
         .register-tool-title {
             font-weight: bold;
             font-size: 18px;
@@ -1013,7 +1030,13 @@
     <div id="myToolsScreen" style="display:none;">
       <div class="container py-4">
         <button id="myToolsBackBtn" class="mytools-back"><i class="fas fa-arrow-left"></i> Back to Menu</button>
-        <h2 class="text-center mytools-title">MY TOOLS</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <h2 class="mytools-title" style="margin:0;">MY TOOLS</h2>
+          <div style="display:flex;gap:8px;">
+            <button id="myToolsAddCollectionPhotoBtn" style="background:#4CAF50;color:white;border:none;border-radius:16px;padding:8px 16px;font-size:0.9rem;font-weight:bold;cursor:pointer;"><i class="fas fa-camera"></i> Add Collection Photo</button>
+            <button id="myToolsCollectionPhotosBtn" style="background:#9C27B0;color:white;border:none;border-radius:16px;padding:8px 16px;font-size:0.9rem;font-weight:bold;cursor:pointer;"><i class="fas fa-images"></i> Collection Photos</button>
+          </div>
+        </div>
         <div id="myToolsScreenBody"></div>
       </div>
     </div>
@@ -1103,8 +1126,8 @@
             <h2 style="margin: 0 0 0 20px; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px;">ToolScanner Menu</h2>
             <button id="settingsBtn" class="btn btn-link p-0" style="position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-size: 2rem; color: white; z-index: 2;" title="Settings">
                 <i class="fas fa-cog" style="color: white;"></i>
-            </button>
-        </div>
+                </button>
+            </div>
         <div class="container py-4">
             <!-- Welcome Message (no background) -->
             <div style="margin: 8px 0 10px 0; text-align: left;">
@@ -1186,9 +1209,21 @@
 
     <!-- My Tools by Collection Screen -->
     <div id="myToolsByCollectionScreen" style="display:none;">
+      <!-- Orange Title Bar -->
+      <div style="background: #FF9800; color: white; padding: 1rem 0; width: 100%; position: relative;">
+        <div class="container">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h2 style="color: white; font-weight: bold; font-size: 2rem; margin: 0;" id="myToolsCollectionTitle"></h2>
+            <div style="display:flex;gap:8px;">
+              <button id="myToolsByCollectionAddPhotoBtn" style="background:#4CAF50;color:white;border:none;border-radius:16px;padding:8px 16px;font-size:0.9rem;font-weight:bold;cursor:pointer;"><i class="fas fa-camera"></i> Add Collection Photo</button>
+              <button id="myToolsByCollectionPhotosBtn" style="background:#9C27B0;color:white;border:none;border-radius:16px;padding:8px 16px;font-size:0.9rem;font-weight:bold;cursor:pointer;"><i class="fas fa-images"></i> Collection Photos</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
       <div class="container py-4">
         <button id="backToCollectionSelectBtn" class="btn btn-outline-secondary mb-3"><i class="fas fa-arrow-left"></i> Back to Menu</button>
-        <h3 id="myToolsCollectionTitle" class="mb-3" style="color: orange; font-weight: bold;"></h3>
         <div class="row mb-3">
           <div class="col-6">
             <button id="collectionCheckupBtn" class="btn btn-success w-100"><i class="fas fa-clipboard-check"></i> Collection Checkup</button>
@@ -1203,15 +1238,17 @@
 
     <!-- Collection Checkup Screen -->
     <div id="collectionCheckupScreen" style="display:none;">
+      <!-- Orange Title Bar -->
+      <div style="background: #FF9800; color: white; padding: 1rem 0; width: 100%; position: relative;">
+        <div class="container">
+          <h2 style="color: white; font-weight: bold; font-size: 2rem; margin: 0; text-align: center;">Collection Checkup</h2>
+        </div>
+      </div>
+      
       <div class="container py-4">
         <button id="backToMyToolsByCollectionBtn" class="btn btn-outline-secondary mb-3">
           <i class="fas fa-arrow-left"></i> Back to Collection
         </button>
-        
-        <!-- Header -->
-        <div class="text-center mb-4">
-          <h2 style="color: #FF9800; font-weight: bold; font-size: 2rem;">Collection Checkup</h2>
-        </div>
         
         <!-- Show Results and History buttons -->
         <div class="row mb-3" id="checkupActionButtons" style="display:none;">
@@ -1297,17 +1334,21 @@
 
     <!-- Previous OUT Tools Screen -->
     <div id="previousOutToolsScreen" style="display:none;">
+      <!-- Orange Title Bar -->
+      <div style="background: #FF9800; color: white; padding: 1rem 0; width: 100%; position: relative;">
+        <div class="container">
+          <h2 style="color: white; font-weight: bold; font-size: 2rem; margin: 0; text-align: center;">Previous Dates OUT Tools</h2>
+        </div>
+      </div>
+      
       <div class="container py-4">
         <button id="backToMenuFromOutToolsBtn" class="btn btn-outline-secondary mb-3">
           <i class="fas fa-arrow-left"></i> Back to Menu
         </button>
         
-        <!-- Header -->
-        <div class="text-center mb-4">
-          <h2 style="color: #FF9800; font-weight: bold; font-size: 2rem;">Previous Dates OUT Tools</h2>
-          <div id="previousOutToolsSummary" class="text-muted mt-2">
+        <!-- Summary -->
+        <div id="previousOutToolsSummary" class="text-muted mb-3">
             <!-- Summary will be populated here -->
-          </div>
         </div>
         
         <!-- Tools List -->
@@ -1410,14 +1451,17 @@
 
     <!-- Collection Details Screen -->
     <div id="collectionDetailsScreen" style="display:none;">
+      <!-- Orange Title Bar -->
+      <div style="background: #FF9800; color: white; padding: 1rem 0; width: 100%; position: relative;">
+        <div class="container">
+          <h2 style="color: white; font-weight: bold; font-size: 2rem; margin: 0; text-align: center;">Collection Details</h2>
+        </div>
+      </div>
+      
       <div class="container py-4">
         <button id="backToRegisterToolsBtn" class="btn btn-outline-secondary mb-3">
             <i class="fas fa-arrow-left"></i> Back to Register Tools List
           </button>
-        <!-- Header -->
-        <div class="text-center mb-4">
-          <h2 style="color: #FF9800; font-weight: bold; font-size: 2rem;">Collection Details</h2>
-        </div>
         
         <!-- Collection Details Content -->
         <div id="collectionDetailsContent" class="mb-4">
@@ -1426,18 +1470,7 @@
       </div>
     </div>
 
-    <!-- Collection Details Screen (Full Page) -->
-    <div id="collectionDetailsScreen" style="display:none;">
-      <div class="container py-4">
-        
-        <div class="text-center mb-4">
-          <h2 style="color: #FF9800; font-weight: bold; font-size: 2rem;">Collection Details</h2>
-        </div>
-        <div id="collectionDetailsContent" class="mb-4">
-          <!-- Collection details will be populated here -->
-        </div>
-      </div>
-    </div>
+
 
     <!-- Tool Photo Gallery Modal -->
     <div class="modal fade" id="toolPhotoGalleryModal" tabindex="-1" aria-labelledby="toolPhotoGalleryModalLabel" aria-hidden="true">
@@ -1480,13 +1513,17 @@
     </div>
 
     <div id="checkupHistoryScreen" style="display:none;">
-        <div class="container py-4">
-          <button id="checkupHistoryBackBtn" class="btn" style="background:#FF9800;color:white;font-weight:bold;font-size:1.2em;border-radius:24px;padding:8px 32px 8px 32px;margin-bottom:1rem;">
-            Back
-          </button>
-          <h2 class="text-center mb-3" style="color:#FF9800;font-weight:bold;font-size:2rem;letter-spacing:1px;">
-            Checkup History - <span id="checkupHistoryTechName"></span>
-          </h2>
+      <!-- Orange Title Bar -->
+      <div style="background: #FF9800; color: white; padding: 1rem 0; width: 100%; position: relative;">
+        <div class="container">
+          <h2 style="color: white; font-weight: bold; font-size: 2rem; margin: 0; text-align: center;">Checkup History - <span id="checkupHistoryTechName"></span></h2>
+        </div>
+      </div>
+      
+      <div class="container py-4">
+        <button id="checkupHistoryBackBtn" class="btn" style="background:#FF9800;color:white;font-weight:bold;font-size:1.2em;border-radius:24px;padding:8px 32px 8px 32px;margin-bottom:1rem;">
+          Back
+        </button>
           <div class="row mb-3">
             <div class="col-8 col-md-6 mb-2">
               <input id="checkupHistorySearch" class="form-control" placeholder="Search by date or collection..." />
@@ -1525,9 +1562,15 @@
   </div>
   <!--Search Tools Screen -->
     <div id="searchToolsScreen" style="display:none;">
+      <!-- Orange Title Bar -->
+      <div style="background: #FF9800; color: white; padding: 1rem 0; width: 100%; position: relative;">
+        <div class="container">
+          <h2 style="color: white; font-weight: bold; font-size: 2rem; margin: 0; text-align: center;">Search Tools</h2>
+        </div>
+      </div>
+      
       <div class="container py-4">
         <button id="searchToolsBackBtn" class="btn btn-outline-secondary mb-3"><i class="fas fa-arrow-left"></i> Back to Menu</button>
-        <h2 class="text-center mb-3" style="color: orange; font-weight: bold;">Search Tools</h2>
         <div class="d-flex mb-3" style="gap:8px;">
           <button id="searchTypePartNumber" class="btn btn-success flex-fill">Part Number</button>
           <button id="searchTypePartName" class="btn btn-outline-secondary flex-fill">Part Name</button>
@@ -1685,10 +1728,12 @@
             try {
                 const userCredential = await auth.createUserWithEmailAndPassword(email, password);
                 
-                // Create technician document with just name and email
+                // Create technician document with all required fields
                 await db.collection('technicians').doc(userCredential.user.uid).set({
                     fullName: fullName,
-                    email: email
+                    email: email,
+                    isAdmin: false,
+                    lastSignIn: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
                 alertBox.classList.add('d-none');
@@ -1768,8 +1813,8 @@
                     technicianData = {
                         fullName: user.displayName || user.email,
                         email: user.email,
-                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        isAdmin: false,
+                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp()
                     };
                 }
                 
@@ -1874,7 +1919,20 @@
 
                     // Only show warning if tool is OUT and checked out by a different technician
                     if (data.status === 'OUT' && data.technician !== technicianName) {
-                        alert(`This tool is currently checked out by ${data.technician}`);
+                        // Format date
+                        let checkedOutDate = 'Unknown';
+                        if (data.timestamp && data.timestamp.toDate) {
+                            checkedOutDate = data.timestamp.toDate().toLocaleString('en-GB', {
+                                day: '2-digit', month: '2-digit', year: 'numeric',
+                                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                            });
+                        }
+                        // Set modal message
+                        document.getElementById('toolAlreadyCheckedOutModalBody').innerHTML =
+                          `This tool was checked out by <b>${data.technician || 'Unknown Technician'}</b> on ${checkedOutDate}<br>You cannot Check Out the tool.`;
+                        // Show modal
+                        const modal = new bootstrap.Modal(document.getElementById('toolAlreadyCheckedOutModal'));
+                        modal.show();
                         return;
                     }
                     // Prevent returning previous OUT tools (checked out before today)
@@ -1883,7 +1941,9 @@
                         const today = new Date();
                         today.setHours(0, 0, 0, 0);
                         if (toolDate < today) {
-                            alert('This tool was checked out on a previous day and cannot be returned. Please contact an administrator if you believe this is an error.');
+                            // Show modal dialog instead of alert
+                            const modal = new bootstrap.Modal(document.getElementById('toolPreviousDateModal'));
+                            modal.show();
                             document.getElementById('toolCode').value = '';
                             lastScannedToolData = null;
                             document.getElementById('toolDetailsBtn').disabled = true;
@@ -2350,7 +2410,7 @@
                 </div>
                 `;
             } else if (status === 'IN') {
-                // Tool is currently in - fetch from tools collection
+                // Tool iimage.pngs currently in - fetch from tools collection
                 const lastTechnician = tool.technician || 'N/A';
                 const lastCheckoutDate = formatTimestamp(tool.timestamp);
                 checkoutInfo = `
@@ -2380,7 +2440,7 @@
             let html = '';
             fields.forEach(f => {
                 if (f.isCollection) {
-                    html += `<div class="mb-2" style="font-size: 1.1em;"><span style="font-weight: 600; color: #222; font-size: 1.2em;">${f.label}:</span> <a href="#" onclick="showCollectionDetails('${f.value !== 'N/A' ? f.value : ''}', '${sourceScreen}')" style="font-size: 1.0em; color: #FF9800; text-decoration: underline;">${f.value}</a></div>`;
+                    html += `<div class="mb-2" style="font-size: 1.22em;"><span style="font-weight: 600; color: #222; font-size: 1.2em;">${f.label}:</span> <a href="#" onclick="showCollectionDetails('${f.value !== 'N/A' ? f.value : ''}', '${sourceScreen}')" style="font-size: 1.18em; color: #FF9800; text-decoration: underline; font-weight: bold;">${f.value}</a></div>`;
                 } else {
                     html += `<div class="mb-2" style="font-size: 1.1em;"><span style="font-weight: 600; color: #222; font-size: 1.2em;">${f.label}:</span> <span style="font-size: 1.0em; color: #1976d2;">${f.value}</span></div>`;
                 }
@@ -2389,10 +2449,17 @@
             // Add checkout information after the standard fields
             html += checkoutInfo;
             
-            html += `<div class="mb-2">${tool.photoUrls && tool.photoUrls.length > 0
-                    ? `<strong style=\"color: #FF9800; text-decoration: underline; cursor: pointer; font-size: 1.1em; font-weight: 600; display: inline-block; margin-top: 10px;\" onclick=\"showToolPhotoGallery(this)\" data-photo-urls='${JSON.stringify(tool.photoUrls)}' data-tool-id='${tool.toolId || tool.documentId}' data-part-number='${tool.partNumber}'>Photo (${tool.photoUrls.length})</strong>`
-                    : `<span style=\"color: #888; text-decoration: none; cursor: not-allowed; font-size: 1.1em; font-weight: 600; display: inline-block; margin-top: 10px;\">Photo</span>`}
-            </div>`;
+            html += `<div class="mb-2">
+  ${tool.photoUrls && tool.photoUrls.length > 0
+    ? `<a style="color: #1976d2; text-decoration: underline; cursor: pointer; font-size: 1.18em; font-weight: bold; display: inline-block; margin-top: 10px;"
+         onclick="if(this.hasAttribute('data-photo-urls')) showToolPhotoGallery(this)"
+         data-photo-urls='${JSON.stringify(tool.photoUrls)}'
+         data-tool-id='${tool.toolId || tool.documentId}'
+         data-part-number='${tool.partNumber}'>
+        Photo (${tool.photoUrls.length})
+      </a>`
+    : `<span style="color: #888; text-decoration: none; cursor: not-allowed; font-size: 1.18em; font-weight: bold; display: inline-block; margin-top: 10px;">Photo (0)</span>`}
+</div>`;
             body.innerHTML = html;
             const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
             modal.show();
@@ -2416,6 +2483,9 @@
             document.getElementById('toolScannerMenu').style.display = 'none';
             document.getElementById('appSection').style.display = 'none';
             document.getElementById('myToolsScreen').style.display = 'block';
+
+            // Update collection photo button counts
+            await updateCollectionPhotoButtonCounts();
 
             try {
                 // Query all tools where owner matches the logged-in user
@@ -2491,6 +2561,180 @@
             // Refresh the OUT tools count when returning to menu
             updatePreviousOutToolsCount();
         };
+
+        // Collection photo buttons for My Tools screen
+        document.getElementById('myToolsAddCollectionPhotoBtn').onclick = function() {
+            // Show collection selection modal first
+            showCollectionSelectionForPhotos();
+        };
+
+        document.getElementById('myToolsCollectionPhotosBtn').onclick = function() {
+            // Show collection selection modal first
+            showCollectionSelectionForPhotos();
+        };
+
+        // Update collection photo button counts
+        async function updateCollectionPhotoButtonCounts() {
+            try {
+                // Update My Tools screen buttons
+                const myToolsBtn = document.getElementById('myToolsCollectionPhotosBtn');
+                if (myToolsBtn) {
+                    const user = auth.currentUser;
+                    if (user) {
+                        const fullName = localStorage.getItem('fullName') || user.email;
+                        const snapshot = await db.collection('tools')
+                            .where('owner', '==', fullName)
+                            .get();
+                        
+                        if (!snapshot.empty) {
+                            const collections = [...new Set(snapshot.docs.map(doc => doc.data().collectionCode).filter(Boolean))];
+                            let totalPhotos = 0;
+                            
+                            for (const collectionName of collections) {
+                                const collectionQuery = await db.collection('collections').where('collectionName', '==', collectionName).get();
+                                if (!collectionQuery.empty) {
+                                    const collectionDoc = collectionQuery.docs[0];
+                                    totalPhotos += (collectionDoc.data().photoUrls || []).length;
+                                }
+                            }
+                            
+                            myToolsBtn.innerHTML = `<i class="fas fa-images"></i> Collection Photos (${totalPhotos})`;
+                        }
+                    }
+                }
+
+                // Update My Tools by Collection screen buttons
+                const myToolsByCollectionBtn = document.getElementById('myToolsByCollectionPhotosBtn');
+                if (myToolsByCollectionBtn && lastViewedCollectionName) {
+                    const collectionQuery = await db.collection('collections').where('collectionName', '==', lastViewedCollectionName).get();
+                    let photoCount = 0;
+                    if (!collectionQuery.empty) {
+                        const collectionDoc = collectionQuery.docs[0];
+                        photoCount = (collectionDoc.data().photoUrls || []).length;
+                    }
+                    myToolsByCollectionBtn.innerHTML = `<i class="fas fa-images"></i> Collection Photos (${photoCount})`;
+                }
+            } catch (error) {
+                console.error('Error updating collection photo button counts:', error);
+            }
+        }
+
+        // Collection photo buttons for My Tools by Collection screen
+        document.getElementById('myToolsByCollectionAddPhotoBtn').onclick = function() {
+            if (lastViewedCollectionName) {
+                createCollectionPhotoUploadInput(lastViewedCollectionName);
+            }
+        };
+
+        document.getElementById('myToolsByCollectionPhotosBtn').onclick = function() {
+            if (lastViewedCollectionName) {
+                // Create a temporary element to pass to showCollectionPhotoGallery
+                const tempElement = document.createElement('div');
+                tempElement.setAttribute('data-collection-name', lastViewedCollectionName);
+                showCollectionPhotoGallery(tempElement);
+            }
+        };
+
+        // Show collection selection modal for photos
+        async function showCollectionSelectionForPhotos() {
+            const user = auth.currentUser;
+            if (!user) return;
+            const fullName = localStorage.getItem('fullName') || user.email;
+            
+            try {
+                // Get collections where user has tools
+                const snapshot = await db.collection('tools')
+                    .where('owner', '==', fullName)
+                    .get();
+                
+                if (snapshot.empty) {
+                    alert('No collections found.');
+                    return;
+                }
+                
+                const collections = [...new Set(snapshot.docs.map(doc => doc.data().collectionCode).filter(Boolean))];
+                collections.sort();
+                
+                if (collections.length === 0) {
+                    alert('No collections found.');
+                    return;
+                }
+                
+                // Get photo counts for each collection
+                const collectionsWithPhotos = [];
+                for (const collectionName of collections) {
+                    const collectionQuery = await db.collection('collections').where('collectionName', '==', collectionName).get();
+                    let photoCount = 0;
+                    if (!collectionQuery.empty) {
+                        const collectionDoc = collectionQuery.docs[0];
+                        photoCount = (collectionDoc.data().photoUrls || []).length;
+                    }
+                    collectionsWithPhotos.push({ name: collectionName, photoCount });
+                }
+                
+                // Create modal for collection selection
+                const modalHtml = `
+                    <div class="modal fade" id="collectionPhotoSelectionModal" tabindex="-1" aria-labelledby="collectionPhotoSelectionModalLabel" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header bg-primary text-white">
+                                    <h5 class="modal-title" id="collectionPhotoSelectionModalLabel">Select Collection</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="d-grid gap-2">
+                                        ${collectionsWithPhotos.map(collection => `
+                                            <button type="button" class="btn btn-outline-primary" onclick="selectCollectionForPhotos('${collection.name}')">
+                                                ${collection.name} <span class="badge bg-secondary ms-2">${collection.photoCount} photos</span>
+                                            </button>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Remove existing modal if any
+                const existingModal = document.getElementById('collectionPhotoSelectionModal');
+                if (existingModal) {
+                    existingModal.remove();
+                }
+                
+                // Add modal to body
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                
+                // Show modal
+                const modal = new bootstrap.Modal(document.getElementById('collectionPhotoSelectionModal'));
+                modal.show();
+                
+                // Clean up modal after it's hidden
+                document.getElementById('collectionPhotoSelectionModal').addEventListener('hidden.bs.modal', function() {
+                    this.remove();
+                });
+                
+            } catch (error) {
+                console.error('Error loading collections:', error);
+                alert('Error loading collections: ' + error.message);
+            }
+        }
+
+        // Select collection for photos
+        function selectCollectionForPhotos(collectionName) {
+            // Hide the selection modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('collectionPhotoSelectionModal'));
+            if (modal) modal.hide();
+            
+            // Determine which button was clicked and call appropriate function
+            const activeElement = document.activeElement;
+            if (activeElement && activeElement.id === 'myToolsAddCollectionPhotoBtn') {
+                createCollectionPhotoUploadInput(collectionName);
+            } else {
+                const tempElement = document.createElement('div');
+                tempElement.setAttribute('data-collection-name', collectionName);
+                showCollectionPhotoGallery(tempElement);
+            }
+        }
 
         // Helper to get status CSS class
         function getStatusClass(status) {
@@ -2794,6 +3038,9 @@
             const list = document.getElementById('myToolsByCollectionList');
             title.textContent = collectionName;
             list.innerHTML = '<div class="text-center">Loading...</div>';
+            
+            // Update collection photo button counts
+            await updateCollectionPhotoButtonCounts();
             try {
                 // Get tools in this collection owned by user
                 const user = auth.currentUser;
@@ -3889,6 +4136,35 @@
         document.body.style.overflow = '';
         document.body.style.paddingRight = '';
 
+        // Update the title to show "Collection (value)"
+        const titleElement = document.querySelector('#collectionDetailsScreen h2');
+        if (titleElement) {
+            titleElement.textContent = `Collection (${collectionCode})`;
+        }
+
+        // Get owner from tools collection
+        let ownerFromTools = 'N/A';
+        try {
+            const toolsSnapshot = await db.collection('tools')
+                .where('collectionCode', '==', collectionCode)
+                .limit(1)
+                .get();
+            if (!toolsSnapshot.empty) {
+                const toolData = toolsSnapshot.docs[0].data();
+                ownerFromTools = toolData.owner || 'N/A';
+            }
+        } catch (error) {
+            console.log('Error getting owner from tools:', error);
+        }
+
+        // Add owner information below back button
+        const backButton = document.getElementById('backToRegisterToolsBtn');
+        if (backButton) {
+            const ownerDiv = document.createElement('div');
+            ownerDiv.innerHTML = `<div style="color: #1976d2; font-weight: bold; font-size: 1.1em; margin-bottom: 1rem;">Owner: ${ownerFromTools}</div>`;
+            backButton.parentNode.insertBefore(ownerDiv, backButton.nextSibling);
+        }
+
         const content = document.getElementById('collectionDetailsContent');
         content.innerHTML = '<div class="text-center">Loading collection details...</div>';
         
@@ -3901,10 +4177,8 @@
                 const doc = querySnapshot.docs[0]; // Get the first matching document
                 const data = doc.data();
                 let html = `<div class="card mb-4">
-                    <div class="card-body">
-                        <h4 class="card-title mb-3">${data.collectionName || collectionCode}</h4>`;
+                    <div class="card-body">`;
                 if (data.description) html += `<p class="card-text"><strong>Description:</strong> ${data.description}</p>`;
-                if (data.owner) html += `<p class="card-text"><strong>Owner:</strong> ${data.owner}</p>`;
                 html += `</div></div>`;
                 
                 if (data.photoUrls && Array.isArray(data.photoUrls) && data.photoUrls.length > 0) {
@@ -4537,6 +4811,358 @@
             input.click();
         }
 
+        // Collection photo upload functionality
+        async function uploadCollectionPhoto(collectionName, file) {
+            try {
+                console.log('=== COLLECTION PHOTO UPLOAD STARTED ===');
+                console.log('Collection Name:', collectionName);
+                console.log('File:', file.name, file.size, 'bytes');
+                
+                // Show loading modal
+                const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                loadingModal.show();
+                document.getElementById('photoUploadProgress').textContent = 'Processing image...';
+                
+                // Compress the image
+                const compressedBlob = await compressImage(file);
+                if (!compressedBlob) {
+                    loadingModal.hide();
+                    alert('Failed to compress image');
+                    return;
+                }
+                
+                console.log('Compressed size:', compressedBlob.size, 'bytes');
+                document.getElementById('photoUploadProgress').textContent = 'Uploading to storage...';
+                
+                // Get current photo count for this collection
+                const collectionQuery = await db.collection('collections').where('collectionName', '==', collectionName).get();
+                let currentPhotoUrls = [];
+                let collectionDocId = null;
+                
+                if (!collectionQuery.empty) {
+                    const collectionDoc = collectionQuery.docs[0];
+                    collectionDocId = collectionDoc.id;
+                    currentPhotoUrls = collectionDoc.data().photoUrls || [];
+                }
+                
+                const photoNumber = currentPhotoUrls.length + 1;
+                
+                // Create filename: collectionname_photo#.jpg
+                const fileName = `${collectionName}_photo${photoNumber}.jpg`;
+                console.log('Generated filename:', fileName);
+                
+                // Upload to Collection%20Photo folder
+                const photoRef = storage.ref('Collection%20Photo/' + fileName);
+                const uploadTask = photoRef.put(compressedBlob);
+                
+                uploadTask.on('state_changed',
+                    (snapshot) => {
+                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                        console.log('Upload progress:', progress + '%');
+                        document.getElementById('photoUploadProgress').textContent = `Uploading... ${Math.round(progress)}%`;
+                    },
+                    (error) => {
+                        console.error('Upload error:', error);
+                        loadingModal.hide();
+                        alert('Upload failed: ' + error.message);
+                    },
+                    async () => {
+                        try {
+                            document.getElementById('photoUploadProgress').textContent = 'Updating database...';
+                            
+                            // Get download URL
+                            const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                            console.log('Download URL:', downloadURL);
+                            
+                            // Update the collection's photoUrls array
+                            const newPhotoUrls = [...currentPhotoUrls, downloadURL];
+                            
+                            if (collectionDocId) {
+                                // Update existing collection
+                                await db.collection('collections').doc(collectionDocId).update({
+                                    photoUrls: newPhotoUrls
+                                });
+                            } else {
+                                // Create new collection document
+                                await db.collection('collections').add({
+                                    collectionName: collectionName,
+                                    photoUrls: newPhotoUrls,
+                                    createdAt: new Date()
+                                });
+                            }
+                            
+                            console.log('=== COLLECTION PHOTO UPLOAD COMPLETED ===');
+                            loadingModal.hide();
+                            alert('Collection photo uploaded successfully!');
+                            
+                            // Refresh the current view
+                            if (lastViewedCollectionName) {
+                                showMyToolsByCollection(lastViewedCollectionName);
+                            } else {
+                                showMyTools();
+                            }
+                            
+                            // Update button counts
+                            await updateCollectionPhotoButtonCounts();
+                            
+                        } catch (error) {
+                            console.error('Error updating collection:', error);
+                            loadingModal.hide();
+                            alert('Error updating collection: ' + error.message);
+                        }
+                    }
+                );
+                
+            } catch (error) {
+                console.error('=== COLLECTION PHOTO UPLOAD FAILED ===', error);
+                const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
+                if (loadingModal) loadingModal.hide();
+                alert('Upload failed: ' + error.message);
+            }
+        }
+
+        // Create collection photo upload options (camera or gallery)
+        function createCollectionPhotoUploadInput(collectionName) {
+            // Create modal for photo source selection
+            const modalHtml = `
+                <div class="modal fade" id="collectionPhotoSourceModal" tabindex="-1" aria-labelledby="collectionPhotoSourceModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-sm">
+                        <div class="modal-content">
+                            <div class="modal-header bg-primary text-white">
+                                <h5 class="modal-title" id="collectionPhotoSourceModalLabel">Add Collection Photo</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <div class="d-grid gap-3">
+                                    <button type="button" class="btn btn-primary btn-lg" onclick="takeCollectionPhotoWithCamera('${collectionName}')">
+                                        <i class="fas fa-camera"></i> Take Photo
+                                    </button>
+                                    <button type="button" class="btn btn-secondary btn-lg" onclick="selectCollectionPhotoFromGallery('${collectionName}')">
+                                        <i class="fas fa-images"></i> Choose from Gallery
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Remove existing modal if any
+            const existingModal = document.getElementById('collectionPhotoSourceModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            // Add modal to body
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('collectionPhotoSourceModal'));
+            modal.show();
+            
+            // Clean up modal after it's hidden
+            document.getElementById('collectionPhotoSourceModal').addEventListener('hidden.bs.modal', function() {
+                this.remove();
+            });
+        }
+
+        // Take collection photo with camera
+        function takeCollectionPhotoWithCamera(collectionName) {
+            // Hide the source selection modal
+            const sourceModal = bootstrap.Modal.getInstance(document.getElementById('collectionPhotoSourceModal'));
+            if (sourceModal) sourceModal.hide();
+            
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.capture = 'environment'; // Use back camera on mobile
+            input.style.display = 'none';
+            
+            input.onchange = function(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    uploadCollectionPhoto(collectionName, file);
+                }
+                // Remove the input element
+                document.body.removeChild(input);
+            };
+            
+            document.body.appendChild(input);
+            input.click();
+        }
+
+        // Select collection photo from gallery
+        function selectCollectionPhotoFromGallery(collectionName) {
+            // Hide the source selection modal
+            const sourceModal = bootstrap.Modal.getInstance(document.getElementById('collectionPhotoSourceModal'));
+            if (sourceModal) sourceModal.hide();
+            
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.style.display = 'none';
+            
+            input.onchange = function(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    uploadCollectionPhoto(collectionName, file);
+                }
+                // Remove the input element
+                document.body.removeChild(input);
+            };
+            
+            document.body.appendChild(input);
+            input.click();
+        }
+
+        // Show collection photo gallery
+        async function showCollectionPhotoGallery(element) {
+            const collectionName = element.getAttribute('data-collection-name');
+            
+            try {
+                // Get collection photos from database
+                const collectionQuery = await db.collection('collections').where('collectionName', '==', collectionName).get();
+                let photoUrls = [];
+                
+                if (!collectionQuery.empty) {
+                    const collectionDoc = collectionQuery.docs[0];
+                    photoUrls = collectionDoc.data().photoUrls || [];
+                }
+                
+                if (photoUrls.length === 0) {
+                    alert('No photos found for this collection.');
+                    return;
+                }
+                
+                // Create gallery modal with tool card style preview
+                const modalHtml = `
+                    <div class="modal fade" id="collectionPhotoGalleryModal" tabindex="-1" aria-labelledby="collectionPhotoGalleryModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-xl">
+                            <div class="modal-content">
+                                <div class="modal-header bg-primary text-white">
+                                    <h5 class="modal-title" id="collectionPhotoGalleryModalLabel">Collection Photos - ${collectionName}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="row" id="collectionGalleryContent">
+                                        ${photoUrls.map((url, index) => `
+                                            <div class="col-md-4 col-lg-3 mb-3">
+                                                <div class="card h-100" style="cursor: pointer;" onclick="showCollectionPhotoFullscreen('${url}', ${index}, ${JSON.stringify(photoUrls).replace(/"/g, '&quot;')})">
+                                                    <img src="${url}" class="card-img-top" alt="Collection Photo" style="height: 200px; object-fit: cover;">
+                                                    <div class="card-body">
+                                                        <p class="card-text text-center">Photo ${index + 1}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Remove existing modal if any
+                const existingModal = document.getElementById('collectionPhotoGalleryModal');
+                if (existingModal) {
+                    existingModal.remove();
+                }
+                
+                // Add modal to body
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                
+                // Show modal
+                const modal = new bootstrap.Modal(document.getElementById('collectionPhotoGalleryModal'));
+                modal.show();
+                
+                // Clean up modal after it's hidden
+                document.getElementById('collectionPhotoGalleryModal').addEventListener('hidden.bs.modal', function() {
+                    this.remove();
+                });
+                
+            } catch (error) {
+                console.error('Error loading collection photos:', error);
+                alert('Error loading collection photos: ' + error.message);
+            }
+        }
+
+        // Show collection photo in fullscreen
+        function showCollectionPhotoFullscreen(photoUrl, photoIndex, allPhotoUrls) {
+            const photoUrls = JSON.parse(allPhotoUrls);
+            
+            // Create fullscreen modal
+            const modalHtml = `
+                <div class="modal fade" id="collectionPhotoFullscreenModal" tabindex="-1" aria-labelledby="collectionPhotoFullscreenModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header bg-primary text-white">
+                                <h5 class="modal-title" id="collectionPhotoFullscreenModalLabel">Collection Photo ${photoIndex + 1}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <div id="collectionFullscreenContent"></div>
+                                <div class="mt-3">
+                                    <span id="collectionFullscreenCounter" class="badge bg-secondary"></span>
+                                </div>
+                                <div class="mt-3">
+                                    <button type="button" class="btn btn-secondary" id="collectionFullscreenPrevBtn">Previous</button>
+                                    <button type="button" class="btn btn-secondary" id="collectionFullscreenNextBtn">Next</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Remove existing modal if any
+            const existingModal = document.getElementById('collectionPhotoFullscreenModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            // Add modal to body
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('collectionPhotoFullscreenModal'));
+            modal.show();
+            
+            // Initialize fullscreen gallery
+            let currentPhotoIndex = photoIndex;
+            const fullscreenContent = document.getElementById('collectionFullscreenContent');
+            const counter = document.getElementById('collectionFullscreenCounter');
+            const prevBtn = document.getElementById('collectionFullscreenPrevBtn');
+            const nextBtn = document.getElementById('collectionFullscreenNextBtn');
+            
+            function updateFullscreenGallery() {
+                fullscreenContent.innerHTML = `<img src="${photoUrls[currentPhotoIndex]}" class="img-fluid rounded shadow" style="max-height:80vh;max-width:100vw;object-fit:contain;">`;
+                counter.textContent = `${currentPhotoIndex + 1} / ${photoUrls.length}`;
+                prevBtn.disabled = currentPhotoIndex === 0;
+                nextBtn.disabled = currentPhotoIndex === photoUrls.length - 1;
+            }
+            
+            updateFullscreenGallery();
+            
+            prevBtn.onclick = function() {
+                if (currentPhotoIndex > 0) {
+                    currentPhotoIndex--;
+                    updateFullscreenGallery();
+                }
+            };
+            
+            nextBtn.onclick = function() {
+                if (currentPhotoIndex < photoUrls.length - 1) {
+                    currentPhotoIndex++;
+                    updateFullscreenGallery();
+                }
+            };
+            
+            // Clean up modal after it's hidden
+            document.getElementById('collectionPhotoFullscreenModal').addEventListener('hidden.bs.modal', function() {
+                this.remove();
+            });
+        }
+
       
 
     // In script section, after document.getElementById('checkupHistoryBtn').onclick ...
@@ -5012,15 +5638,28 @@
           }
           // Render results
           let html = `<div class="mb-2">Found ${snapshot.size} tool(s)</div>`;
-          snapshot.forEach(doc => {
+          snapshot.forEach((doc, index) => {
             const data = doc.data();
             const status = (data.status || '').toUpperCase();
+            
+            // Status-based background colors (overrides alternating colors)
+            let cardClass = 'search-tool-card';
+            if (status === 'OUT') cardClass += ' out';
+            else if (status === 'IN') cardClass += ' in';
+            else {
+                // Apply alternating background colors for other statuses
+                const bgClass = index % 2 === 0 ? 'search-tool-bg1' : 'search-tool-bg2';
+                cardClass += ' ' + bgClass;
+            }
+            
+            // Status color logic
             let statusColor = '#388E3C';
             if (status === 'OUT') statusColor = '#d32f2f';
             else if (status === 'BROKEN') statusColor = '#ff6f00';
             else if (status === 'LOST') statusColor = '#ff8f00';
             else if (status === 'CALIBRATION') statusColor = '#1976d2';
-            html += `<div class="card mb-3" style="border-radius:12px;box-shadow:0 2px 4px rgba(0,0,0,0.07);">
+            
+            html += `<div class="card mb-3 ${cardClass}" style="border-radius:12px;box-shadow:0 2px 4px rgba(0,0,0,0.08);transition:box-shadow 0.3s ease;">
               <div class="card-body">
                 <div style="font-weight:bold;font-size:1.2em;">${data.toolName || 'Unknown Tool'}</div>
                 <div style="color:#888;font-size:1.05em;">Part #: <span style="color:#333;font-weight:bold;">${data.partNumber || doc.id}</span></div>
@@ -5177,5 +5816,40 @@
         });
     });
     </script>
+
+    <!-- Add this modal after other modals, before </body> -->
+    <div class="modal fade" id="toolAlreadyCheckedOutModal" tabindex="-1" aria-labelledby="toolAlreadyCheckedOutModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="toolAlreadyCheckedOutModalLabel">TOOL ALREADY CHECKED OUT</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="toolAlreadyCheckedOutModalBody">
+            <!-- Message will be set by JS -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Add this modal after other modals, before </body> -->
+    <div class="modal fade" id="toolPreviousDateModal" tabindex="-1" aria-labelledby="toolPreviousDateModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="toolPreviousDateModalLabel">Tool from Previous Date</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            This tool was checked out on a previous date. Please contact an administrator to check it IN.
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
 </body>
 </html> 
