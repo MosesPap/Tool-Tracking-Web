@@ -1272,8 +1272,7 @@
         <div id="checkupCollectionHeader" class="mb-3" style="background: #FF9800; color: white; padding: 12px; border-radius: 8px;">
           <div class="row align-items-center">
             <div class="col-6">
-              <div><strong>Collection:</strong></div>
-              <div id="checkupCollectionTitle" style="font-size: 1.2rem; font-weight: bold;"></div>
+              <div id="checkupLocationTitle" style="font-size: 1.2rem; font-weight: bold;">All Locations</div>
             </div>
             <div class="col-3 text-center">
               <button id="selectAllBtn" class="btn btn-success btn-sm">
@@ -4385,10 +4384,22 @@
             
             // Reset checkup state
             checkupCheckedTools = new Set();
-            checkupSelectedLocation = 'All';
+            // Set initial location to first available location instead of 'All'
+            const tools = lastViewedCollectionTools;
+            const locations = [...new Set(tools.map(t => t.location || 'No Location'))].sort();
+            checkupSelectedLocation = locations.length > 0 ? locations[0] : 'No Location';
             
-            const title = document.getElementById('checkupCollectionTitle');
-            title.textContent = lastViewedCollectionName;
+            // Update the main title bar
+            const mainTitle = document.querySelector('#collectionCheckupScreen h2');
+            if (mainTitle && lastViewedCollectionName) {
+                mainTitle.textContent = `${lastViewedCollectionName} Collection Checkup`;
+            }
+            
+            // Set initial location title
+            const locationTitle = document.getElementById('checkupLocationTitle');
+            if (locationTitle) {
+                locationTitle.textContent = checkupSelectedLocation;
+            }
             
             if (!lastViewedCollectionTools.length) {
                 document.getElementById('checkupToolsList').innerHTML = '<div class="text-center text-danger">No tools found for checkup.</div>';
@@ -4410,9 +4421,7 @@
             const tools = lastViewedCollectionTools;
             
             // Filter tools by selected location
-            const filteredTools = checkupSelectedLocation === 'All' 
-                ? tools 
-                : tools.filter(t => (t.location || 'No Location') === checkupSelectedLocation);
+            const filteredTools = tools.filter(t => (t.location || 'No Location') === checkupSelectedLocation);
             
             if (filteredTools.length === 0) {
                 list.innerHTML = '<div class="text-center text-muted">No tools in selected location.</div>';
@@ -4472,7 +4481,7 @@
 
         function renderCheckupLocationFilter() {
             const tools = lastViewedCollectionTools;
-            const locations = ['All', ...new Set(tools.map(t => t.location || 'No Location'))].sort();
+            const locations = [...new Set(tools.map(t => t.location || 'No Location'))].sort();
             
             let html = '';
             locations.forEach(loc => {
@@ -4491,6 +4500,13 @@
 
         function selectCheckupLocation(location) {
             checkupSelectedLocation = location;
+            
+            // Update the location title
+            const locationTitle = document.getElementById('checkupLocationTitle');
+            if (locationTitle) {
+                locationTitle.textContent = location;
+            }
+            
             renderCheckupTools();
             renderCheckupLocationFilter();
             updateCheckupProgress();
@@ -4513,9 +4529,7 @@
 
         // Select All functionality
         document.getElementById('selectAllBtn').onclick = function() {
-            const tools = checkupSelectedLocation === 'All' 
-                ? lastViewedCollectionTools 
-                : lastViewedCollectionTools.filter(t => (t.location || 'No Location') === checkupSelectedLocation);
+            const tools = lastViewedCollectionTools.filter(t => (t.location || 'No Location') === checkupSelectedLocation);
             
             tools.forEach(tool => {
                 checkupCheckedTools.add(tool.id);
@@ -6594,7 +6608,7 @@
             else if (status === 'LOST') statusColor = '#ff8f00';
             else if (status === 'CALIBRATION') statusColor = '#1976d2';
             
-            html += `<div class="card mb-3 ${cardClass}" style="border-radius:12px;box-shadow:0 2px 4px rgba(0,0,0,0.08);transition:box-shadow 0.3s ease;">
+            html += `<div class="card mb-3 ${cardClass}" style="border-radius:12px;box-shadow:0 2px 4px rgba(0,0,0,0.08);transition:box-shadow 0.3s ease;cursor:pointer;" onclick="showToolDetailsFromSearch(${JSON.stringify({documentId: doc.id, ...data}).replace(/"/g, '&quot;')})">
               <div class="card-body">
                 <div style="font-weight:bold;font-size:1.2em;">${data.toolName || 'Unknown Tool'}</div>
                 <div style="color:#888;font-size:1.05em;">Part #: <span style="color:#333;font-weight:bold;">${data.partNumber || doc.id}</span></div>
@@ -6608,6 +6622,11 @@
           resultsDiv.innerHTML = `<div class="text-danger text-center">Error: ${e.message}</div>`;
         }
       }
+
+      // Function to show tool details from search results
+      window.showToolDetailsFromSearch = function(tool) {
+        showToolDetails(tool, 'searchTools');
+      };
     })();
     </script>
 
