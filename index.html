@@ -614,6 +614,28 @@
         /* Search Tools Status-based Background Colors */
         .search-tool-card.out { background: #FFCDD2; }
         .search-tool-card.in { background: #E8F5E9; }
+        
+        /* Location Selection Modal Styles */
+        .location-option {
+            font-size: 16px;
+            font-weight: 500;
+            padding: 12px 16px;
+            border: 1px solid #dee2e6;
+            transition: all 0.3s ease;
+        }
+        
+        .location-option:hover {
+            background-color: #f8f9fa;
+            border-color: #007bff;
+            transform: translateY(-1px);
+        }
+        
+        .location-option.active {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        
         .register-tool-title {
             font-weight: bold;
             font-size: 18px;
@@ -1098,7 +1120,7 @@
       </div>
     </div>
 
-    <!-- Overdue OUT Tools Notification Modal -->
+    <!-- Out Tools Notification Modal -->
     <div class="modal fade" id="outToolsNotifModal" tabindex="-1" aria-labelledby="outToolsNotifModalLabel" aria-hidden="true">
       <div class="modal-dialog">
         <div class="modal-content">
@@ -1913,6 +1935,12 @@
             const code = document.getElementById('toolCode').value.trim();
             if (!code) return;
 
+            // Show location selection modal first
+            showLocationSelectionModalForToolSubmission(code);
+        }
+
+        // Function to handle tool submission after location selection
+        async function processToolSubmission(code) {
             try {
                 const user = auth.currentUser;
                 const toolRef = db.collection('tools').doc(code);
@@ -2025,15 +2053,24 @@
                         }
                     }
 
-                    // Update tool status
-                    await toolRef.update({
+                    // Update tool status with WorkOn field
+                    const updateData = {
                         status: status,
                         technician: technicianName,
                         timestamp: timestamp
-                    });
+                    };
+                    
+                    // Add WorkOn field if a location was selected
+                    console.log('Selected work location:', selectedWorkLocation);
+                    if (selectedWorkLocation) {
+                        updateData.WorkOn = selectedWorkLocation;
+                        console.log('Added WorkOn field to updateData:', updateData);
+                    }
+                    
+                    await toolRef.update(updateData);
 
-                    // Add log entry
-                    await db.collection('logtoolmovements').add({
+                    // Add log entry with WorkOn field
+                    const logData = {
                         toolId: code,
                         toolName: data.toolName || 'Unknown',
                         partNumber: data.partNumber || code,
@@ -2041,7 +2078,15 @@
                         status: status,
                         technician: technicianName,
                         timestamp: timestamp
-                    });
+                    };
+                    
+                    // Add WorkOn field if a location was selected
+                    if (selectedWorkLocation) {
+                        logData.WorkOn = selectedWorkLocation;
+                        console.log('Added WorkOn field to logData:', logData);
+                    }
+                    
+                    await db.collection('logtoolmovements').add(logData);
 
                     // Show success message
                     const successMessage = status === 'OUT' ? 'Tool Checked Out Successfully!' : 'Tool Checked In Successfully!';
@@ -2068,6 +2113,9 @@
                     loadTools();
                     // Update previous OUT tools count after tool status change
                     updatePreviousOutToolsCount();
+                    
+                    // Clear selected work location after successful tool registration
+                    selectedWorkLocation = null;
 
                     // Store last scanned tool data for modal
                     lastScannedToolData = {
@@ -2820,6 +2868,87 @@
             // Show outstanding and overdue dialogs
             showNotificationsInSequence();
         }
+        // Global variable to store selected work location
+        let selectedWorkLocation = null;
+
+        function showLocationSelectionModal() {
+            const modal = new bootstrap.Modal(document.getElementById('locationSelectionModal'));
+            
+            // Clear previous selection
+            selectedWorkLocation = null;
+            document.querySelectorAll('.location-option').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Add click handlers for location options
+            document.querySelectorAll('.location-option').forEach(btn => {
+                btn.onclick = function() {
+                    // Remove active class from all buttons
+                    document.querySelectorAll('.location-option').forEach(b => b.classList.remove('active'));
+                    // Add active class to clicked button
+                    this.classList.add('active');
+                    selectedWorkLocation = this.getAttribute('data-location');
+                };
+            });
+            
+            // Show the modal
+            modal.show();
+            
+            // Handle modal hidden event
+            const modalElement = document.getElementById('locationSelectionModal');
+            const handleModalHidden = function() {
+                if (selectedWorkLocation) {
+                    // If a location was selected, proceed to register tools screen
+                    showRegisterTools();
+                }
+                // Remove this event listener to prevent conflicts
+                modalElement.removeEventListener('hidden.bs.modal', handleModalHidden);
+            };
+            modalElement.addEventListener('hidden.bs.modal', handleModalHidden);
+        }
+
+        function showLocationSelectionModalForToolSubmission(toolCode) {
+            console.log('Showing location selection modal for tool code:', toolCode);
+            const modal = new bootstrap.Modal(document.getElementById('locationSelectionModal'));
+            
+            // Clear previous selection
+            selectedWorkLocation = null;
+            document.querySelectorAll('.location-option').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Add click handlers for location options
+            document.querySelectorAll('.location-option').forEach(btn => {
+                btn.onclick = function() {
+                    // Remove active class from all buttons
+                    document.querySelectorAll('.location-option').forEach(b => b.classList.remove('active'));
+                    // Add active class to clicked button
+                    this.classList.add('active');
+                    selectedWorkLocation = this.getAttribute('data-location');
+                    console.log('Location selected:', selectedWorkLocation);
+                    
+                    // Close modal and process tool submission
+                    modal.hide();
+                    processToolSubmission(toolCode);
+                };
+            });
+            
+            // Show the modal
+            modal.show();
+            
+            // Handle modal hidden event (if user cancels)
+            const modalElement = document.getElementById('locationSelectionModal');
+            const handleModalHidden = function() {
+                // Clear the tool code input if user cancels
+                if (!selectedWorkLocation) {
+                    document.getElementById('toolCode').value = '';
+                }
+                // Remove this event listener to prevent conflicts
+                modalElement.removeEventListener('hidden.bs.modal', handleModalHidden);
+            };
+            modalElement.addEventListener('hidden.bs.modal', handleModalHidden);
+        }
+
         function showRegisterTools() {
             document.getElementById('toolScannerMenu').style.display = 'none';
             document.getElementById('appSection').style.display = 'block';
@@ -6342,7 +6471,7 @@
               <div class="location-summary-card" onclick="toggleMissingToolsSection('${sectionId}', '${arrowId}')" style="background:#e3f2fd;border-radius:14px;padding:10px 12px 8px 12px;margin-bottom:8px;">
                 <span id="${arrowId}" class="expand-arrow">&#9654;</span>
                 <span style="font-weight:bold;color:#1976d2;font-size:1.1em;">${loc}</span>
-                <div style="color:#333;font-size:1em;">Total: ${total} &nbsp; Checked: ${checkedCount} &nbsp; Unchecked: ${uncheckedCount}</div>
+                <div style="color:#333;font-size:1.0em;">Total: ${total} &nbsp; Checked: ${checkedCount} &nbsp; Unchecked: ${uncheckedCount}</div>
               </div>
             `;
             // Always show the section, but only fill it if there are missing tools
@@ -6770,6 +6899,49 @@
         });
     });
     </script>
+
+    <!-- Add this modal after other modals, before </body> -->
+    <div class="modal fade" id="locationSelectionModal" tabindex="-1" aria-labelledby="locationSelectionModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="locationSelectionModalLabel">Select Work Location</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="mb-3">Please select where the tool will be used:</p>
+            <div class="row">
+              <div class="col-md-6">
+                <div class="list-group">
+                  <button class="list-group-item list-group-item-action location-option" data-location="701">701</button>
+                  <button class="list-group-item list-group-item-action location-option" data-location="702">702</button>
+                  <button class="list-group-item list-group-item-action location-option" data-location="703">703</button>
+                  <button class="list-group-item list-group-item-action location-option" data-location="110">110</button>
+                  <button class="list-group-item list-group-item-action location-option" data-location="111">111</button>
+                  <button class="list-group-item list-group-item-action location-option" data-location="352">352</button>
+                  <button class="list-group-item list-group-item-action location-option" data-location="353">353</button>
+                  <button class="list-group-item list-group-item-action location-option" data-location="354">354</button>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="list-group">
+                  <button class="list-group-item list-group-item-action location-option" data-location="355">355</button>
+                  <button class="list-group-item list-group-item-action location-option" data-location="1955">1955</button>
+                  <button class="list-group-item list-group-item-action location-option" data-location="1956">1956</button>
+                  <button class="list-group-item list-group-item-action location-option" data-location="1957">1957</button>
+                  <button class="list-group-item list-group-item-action location-option" data-location="1958">1958</button>
+                  <button class="list-group-item list-group-item-action location-option" data-location="1959">1959</button>
+                  <button class="list-group-item list-group-item-action location-option" data-location="1960">1960</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Add this modal after other modals, before </body> -->
     <div class="modal fade" id="toolAlreadyCheckedOutModal" tabindex="-1" aria-labelledby="toolAlreadyCheckedOutModalLabel" aria-hidden="true">
