@@ -1686,15 +1686,6 @@
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.firestore();
-        db.enablePersistence().catch(function(err) {
-  if (err.code == 'failed-precondition') {
-    console.warn('Persistence can only be enabled in one tab at a time.');
-  } else if (err.code == 'unimplemented') {
-    console.warn('Persistence is not available in this browser.');
-  } else {
-    console.error('Error enabling Firestore persistence:', err);
-  }
-});
         const storage = firebase.storage();
 
         // Ensure user stays logged in across refreshes and browser restarts
@@ -3061,6 +3052,13 @@
         }
 
         function showWorkLocationSelectionModal(helicopterModel) {
+            // Special handling for "Other" helicopter model
+            if (helicopterModel === 'Other') {
+                selectedWorkLocation = 'Other';
+                updateWorkLocationLabel();
+                return;
+            }
+            
             const modal = new bootstrap.Modal(document.getElementById('workLocationSelectionModal'));
             const modalBody = document.getElementById('workLocationSelectionModalBody');
             
@@ -3107,7 +3105,8 @@
                 'AW139': ['701', '702', '703'],
                 'SA342L': ['352', '353', '354', '355'],
                 'B206L': ['110', '111'],
-                'H145M': ['1955', '1956', '1957', '1958', '1959', '1960']
+                'H145M': ['1955', '1956', '1957', '1958', '1959', '1960'],
+                'Other': ['Other']
             };
             return locationMap[model] || [];
         }
@@ -7083,17 +7082,21 @@
                     <strong>SA342L</strong>
                     <br><small class="text-muted">Work Locations: 352, 353, 354, 355</small>
                   </button>
-                </div>
-              </div>
-              <div class="col-md-6">
-                <div class="list-group">
                   <button class="list-group-item list-group-item-action helicopter-model-option" data-model="B206L">
                     <strong>B206L</strong>
                     <br><small class="text-muted">Work Locations: 110, 111</small>
                   </button>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="list-group">
                   <button class="list-group-item list-group-item-action helicopter-model-option" data-model="H145M">
                     <strong>H145M</strong>
                     <br><small class="text-muted">Work Locations: 1955, 1956, 1957, 1958, 1959, 1960</small>
+                  </button>
+                  <button class="list-group-item list-group-item-action helicopter-model-option" data-model="Other">
+                    <strong>Other</strong>
+                    <br><small class="text-muted">Work Location: Other</small>
                   </button>
                 </div>
               </div>
