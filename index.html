@@ -1089,6 +1089,7 @@
                         <input type="text" id="adminLocation" class="form-control" placeholder="Location">
                     </div>
                     <button onclick="saveToolAdmin()" class="btn btn-success">Save Tool</button>
+                    <button onclick="runCleanup()" class="btn btn-warning">Cleanup Unverified Accounts</button>
                     <button onclick="toggleAdmin()" class="btn btn-secondary">Close Admin</button>
                 </div>
             </div>
@@ -1918,6 +1919,25 @@
                 console.error('Google Sign-In Error:', error);
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
+            }
+        }
+
+        // Run cleanup with user feedback
+        async function runCleanup() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = 'Cleaning...';
+            button.disabled = true;
+            
+            try {
+                await cleanupUnverifiedAccounts();
+                alert('Cleanup completed successfully!');
+            } catch (error) {
+                console.error('Cleanup error:', error);
+                alert('Error during cleanup: ' + error.message);
+            } finally {
+                button.textContent = originalText;
+                button.disabled = false;
             }
         }
 
@@ -3202,6 +3222,17 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+            // Set up automatic cleanup every 24 hours
+            setInterval(cleanupUnverifiedAccounts, 24 * 60 * 60 * 1000); // Every 24 hours
+            
+            // Also run cleanup on page load (once per day)
+            const lastCleanup = localStorage.getItem('lastCleanupDate');
+            const today = new Date().toDateString();
+            if (lastCleanup !== today) {
+                cleanupUnverifiedAccounts();
+                localStorage.setItem('lastCleanupDate', today);
+            }
+            
             // Orange overlay logic
             const orangeOverlay = document.getElementById('orangeOverlay');
             const splashScreen = document.getElementById('splashScreen');
