@@ -931,7 +931,10 @@
                     
                     <div class="mb-2">
                         <label for="signUpFullName" class="form-label">Full Name</label>
-                        <input type="text" id="signUpFullName" class="form-control" required autocomplete="name">
+                        <input type="text" id="signUpFullName" class="form-control" required autocomplete="name" 
+                               oninput="validateFullName(this)" onblur="formatFullName(this)" 
+                               placeholder="Enter your full name (English letters only)">
+                        <div id="fullNameValidation" class="form-text text-muted"></div>
                     </div>
                     
                     <div class="mb-2">
@@ -1243,7 +1246,10 @@
           </div>
           <div class="modal-body">
             <label for="accountNameInput" class="form-label">Name</label>
-            <input type="text" id="accountNameInput" class="form-control mb-2">
+            <input type="text" id="accountNameInput" class="form-control mb-2" 
+                   oninput="validateFullName(this)" onblur="formatFullName(this)" 
+                   placeholder="Enter your full name (English letters only)">
+            <div id="accountNameValidation" class="form-text text-muted"></div>
             <div id="myAccountLoading" class="text-center mb-2" style="display:none;">
                 <div class="spinner-border text-primary" role="status"></div>
                 <div>Please wait...</div>
@@ -1867,6 +1873,76 @@ if (!userCredential.user.emailVerified) {
             }
         }
 
+        // Full name validation and formatting functions
+        function validateFullName(input) {
+            const value = input.value;
+            const validationDiv = input.id === 'signUpFullName' ? 
+                document.getElementById('fullNameValidation') : 
+                document.getElementById('accountNameValidation');
+            
+            // Remove any non-English letters and spaces immediately
+            const cleanedValue = value.replace(/[^A-Za-z ]/g, '');
+            if (cleanedValue !== value) {
+                input.value = cleanedValue;
+            }
+            
+            // Check if empty
+            if (!cleanedValue.trim()) {
+                validationDiv.textContent = '';
+                validationDiv.className = 'form-text text-muted';
+                return;
+            }
+            
+            // Check if contains only valid characters
+            if (!/^[A-Za-z ]+$/.test(cleanedValue)) {
+                validationDiv.textContent = 'Only English letters and spaces are allowed';
+                validationDiv.className = 'form-text text-danger';
+                return;
+            }
+            
+            // Check if has at least 2 characters
+            if (cleanedValue.trim().length < 2) {
+                validationDiv.textContent = 'Name must be at least 2 characters long';
+                validationDiv.className = 'form-text text-warning';
+                return;
+            }
+            
+            // Check if has at least one space (first and last name)
+            const words = cleanedValue.trim().split(' ').filter(word => word.length > 0);
+            if (words.length < 2) {
+                validationDiv.textContent = 'Please enter both first and last name';
+                validationDiv.className = 'form-text text-warning';
+                return;
+            }
+            
+            // All validations passed
+            validationDiv.textContent = '✓ Valid name format';
+            validationDiv.className = 'form-text text-success';
+        }
+        
+        function formatFullName(input) {
+            const value = input.value.trim();
+            if (!value) return;
+            
+            // Split into words, capitalize first letter of each word, lowercase the rest
+            const formattedName = value
+                .split(' ')
+                .filter(word => word.length > 0)
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join(' ');
+            
+            input.value = formattedName;
+            
+            // Update validation message
+            const validationDiv = input.id === 'signUpFullName' ? 
+                document.getElementById('fullNameValidation') : 
+                document.getElementById('accountNameValidation');
+            if (formattedName && /^([A-Z][a-z]+)( [A-Z][a-z]+)+$/.test(formattedName)) {
+                validationDiv.textContent = '✓ Name formatted correctly';
+                validationDiv.className = 'form-text text-success';
+            }
+        }
+
         // Sign up logic
         async function signUp() {
             let fullName = document.getElementById('signUpFullName').value.trim();
@@ -1876,14 +1952,9 @@ if (!userCredential.user.emailVerified) {
             const alertBox = document.getElementById('signUpAlert');
             alertBox.classList.add('d-none');
 
-            // Only allow English letters and spaces, and auto-capitalize each word
-            fullName = fullName.replace(/[^A-Za-z ]/g, '');
-            fullName = fullName.split(' ').filter(Boolean).map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
-            document.getElementById('signUpFullName').value = fullName;
-
-            // Validate capitalization: each word must start with a capital letter, rest lowercase
-            if (!/^([A-Z][a-z]+)( [A-Z][a-z]+)*$/.test(fullName)) {
-                alertBox.textContent = 'Full name must contain only English letters, and each word must start with a capital letter followed by lowercase letters.';
+            // Final validation for full name format
+            if (!fullName || !/^([A-Z][a-z]+)( [A-Z][a-z]+)+$/.test(fullName)) {
+                alertBox.textContent = 'Please enter a valid full name with both first and last name (English letters only).';
                 alertBox.classList.remove('d-none');
                 return;
             }
@@ -5871,9 +5942,11 @@ if (!userCredential.user.emailVerified) {
             errorDiv.style.display = 'none';
             successDiv.style.display = 'none';
             loadingDiv.style.display = 'block';
-            if (!newName) {
+            
+            // Validate name format
+            if (!newName || !/^([A-Z][a-z]+)( [A-Z][a-z]+)+$/.test(newName)) {
                 loadingDiv.style.display = 'none';
-                errorDiv.textContent = 'Name cannot be empty.';
+                errorDiv.textContent = 'Please enter a valid full name with both first and last name (English letters only).';
                 errorDiv.style.display = 'block';
                 return;
             }
