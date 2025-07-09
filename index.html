@@ -1780,10 +1780,24 @@
                 alertBox.classList.remove('d-none');
                 return;
             }
+            
+            // Show loading state
+            const loginBtn = document.getElementById('loginBtn');
+            const originalText = loginBtn.textContent;
+            loginBtn.textContent = 'Signing in...';
+            loginBtn.disabled = true;
+            
             try {
+                // First, check if this email exists in pending registrations (unverified)
+                const pendingRegistrationDoc = await db.collection('pendingRegistrations').doc(email).get();
+                if (pendingRegistrationDoc.exists) {
+                    throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
+                }
+                
+                // Now attempt to sign in
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
                 
-                // Immediately sign out if email is not verified
+                // Double-check verification status
                 if (!userCredential.user.emailVerified) {
                     await auth.signOut();
                     throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
@@ -1821,6 +1835,10 @@
             } catch (error) {
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
+            } finally {
+                // Reset button state
+                loginBtn.textContent = originalText;
+                loginBtn.disabled = false;
             }
         }
 
@@ -1916,11 +1934,30 @@
                 
                 // Verify that the user has a valid email
                 if (!user.email || !user.emailVerified) {
+                    await auth.signOut();
                     throw new Error('Please use a verified Google account with a valid email address');
                 }
                 
-                // Save user data to technicians collection
-                await saveTechnicianToFirestore(user);
+                // Check if this is the first time login for this Google account
+                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                
+                if (!technicianDoc.exists) {
+                    // First time login - create technician document
+                    await db.collection('technicians').doc(user.uid).set({
+                        fullName: user.displayName || user.email,
+                        email: user.email,
+                        isAdmin: false,
+                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    // Store full name in localStorage
+                    localStorage.setItem('fullName', user.displayName || user.email);
+                } else {
+                    // Regular login - update technician data
+                    await saveTechnicianToFirestore(user);
+                }
+                
                 // Success: hide login, show only main menu
                 document.getElementById('loginSection').classList.add('d-none');
                 hideAllMainScreens();
