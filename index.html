@@ -1796,12 +1796,12 @@
                 
                 // Now attempt to sign in
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
-                
-                // Double-check verification status
-                if (!userCredential.user.emailVerified) {
-                    await auth.signOut();
-                    throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
-                }
+// Reload user to get latest verification status
+await userCredential.user.reload();
+if (!userCredential.user.emailVerified) {
+    await auth.signOut();
+    throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
+}
                 
                 // Check if this is the first verified login
                 const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
