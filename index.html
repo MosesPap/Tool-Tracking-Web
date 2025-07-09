@@ -1789,10 +1789,35 @@
             
             try {
                 // First, check if this email exists in pending registrations (unverified)
-                const pendingRegistrationDoc = await db.collection('pendingRegistrations').doc(email).get();
-                if (pendingRegistrationDoc.exists) {
-                    throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
-                }
+const pendingRegistrationDoc = await db.collection('pendingRegistrations').doc(email).get();
+if (pendingRegistrationDoc.exists) {
+    // Try to sign in and reload user
+    const userCredential = await auth.signInWithEmailAndPassword(email, password);
+    await userCredential.user.reload();
+    if (!userCredential.user.emailVerified) {
+        await auth.signOut();
+        throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
+    } else {
+        // User is verified but still in pendingRegistrations, clean up
+        const pendingData = pendingRegistrationDoc.data();
+        await db.collection('technicians').doc(userCredential.user.uid).set({
+            fullName: pendingData.fullName,
+            email: email,
+            isAdmin: false,
+            lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        await db.collection('pendingRegistrations').doc(email).delete();
+        localStorage.setItem('fullName', pendingData.fullName);
+        // Continue to main menu...
+        document.getElementById('loginSection').classList.add('d-none');
+        hideAllMainScreens();
+        document.getElementById('toolScannerMenu').style.display = 'block';
+        document.getElementById('headerBranding').style.display = 'none';
+        updateLoggedInTechnician();
+        return;
+    }
+}
                 
                 // Now attempt to sign in
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
