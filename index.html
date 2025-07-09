@@ -1869,12 +1869,25 @@ if (!userCredential.user.emailVerified) {
 
         // Sign up logic
         async function signUp() {
-            const fullName = document.getElementById('signUpFullName').value.trim();
+            let fullName = document.getElementById('signUpFullName').value.trim();
             const email = document.getElementById('signUpEmail').value.trim();
             const password = document.getElementById('signUpPassword').value.trim();
             const confirmPassword = document.getElementById('signUpConfirmPassword').value.trim();
             const alertBox = document.getElementById('signUpAlert');
             alertBox.classList.add('d-none');
+
+            // Only allow English letters and spaces, and auto-capitalize each word
+            fullName = fullName.replace(/[^A-Za-z ]/g, '');
+            fullName = fullName.split(' ').filter(Boolean).map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+            document.getElementById('signUpFullName').value = fullName;
+
+            // Validate capitalization: each word must start with a capital letter, rest lowercase
+            if (!/^([A-Z][a-z]+)( [A-Z][a-z]+)*$/.test(fullName)) {
+                alertBox.textContent = 'Full name must contain only English letters, and each word must start with a capital letter followed by lowercase letters.';
+                alertBox.classList.remove('d-none');
+                return;
+            }
+
             if (!fullName || !email || !password || !confirmPassword) {
                 alertBox.textContent = 'Please fill in all fields.';
                 alertBox.classList.remove('d-none');
