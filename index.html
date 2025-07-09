@@ -962,6 +962,12 @@
             <button id="backToMenuBtn" class="btn btn-outline-secondary mb-2">
                 <i class="fas fa-arrow-left"></i> Back to Menu
             </button>
+            <div id="registerToolsHeader" style="display: flex; align-items: center; justify-content: flex-start; gap: 16px; margin-bottom: 12px;">
+              <span id="workLocationLabel" style="font-weight: bold; color: #1976d2; font-size: 1.1rem;">Work Location: (not selected)</span>
+              <button id="changeWorkLocationBtn" class="btn btn-outline-primary btn-sm" type="button">
+                <i class="fas fa-map-marker-alt"></i> Change Work Location
+              </button>
+            </div>
             <div class="row align-items-center mb-2">
                 <div class="col-6 d-flex align-items-center">
                     <!-- Remove the My Tools button from appSection -->
@@ -1933,25 +1939,50 @@
         // Submit tool code
         async function submitCode() {
             const code = document.getElementById('toolCode').value.trim();
-            if (!code) return;
+    console.log('Submit button pressed. Tool code:', code);
+    console.log('Selected work location:', selectedWorkLocation);
+    
+    if (!code) {
+        console.log('No tool code entered');
+        return;
+    }
 
-            // Show location selection modal first
-            showLocationSelectionModalForToolSubmission(code);
-        }
+    // Only show location selection modal if not already set
+    if (!selectedWorkLocation) {
+        console.log('No work location selected, showing modal');
+        showLocationSelectionModalForToolSubmission(code);
+    } else {
+        console.log('Work location already selected, processing tool submission');
+        processToolSubmission(code);
+    }
+}
 
         // Function to handle tool submission after location selection
         async function processToolSubmission(code) {
+            console.log('processToolSubmission called with code:', code);
             try {
+                console.log('Getting current user...');
                 const user = auth.currentUser;
+                console.log('User:', user);
+                
+                console.log('Getting tool reference...');
                 const toolRef = db.collection('tools').doc(code);
+                console.log('Tool reference:', toolRef);
+                
+                console.log('Fetching tool document...');
                 const doc = await toolRef.get({ source: 'server' });
+                console.log('Tool document exists:', doc.exists);
 
                 if (doc.exists) {
+                    console.log('Tool document exists, getting data...');
                     const data = doc.data();
+                    console.log('Tool data:', data);
                     
                     // Get current technician name
+                    console.log('Getting technician document...');
                     const technicianDoc = await db.collection('technicians').doc(user.uid).get();
                     const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+                    console.log('Technician name:', technicianName);
 
                     // Only show warning if tool is OUT and checked out by a different technician
                     if (data.status === 'OUT' && data.technician !== technicianName) {
@@ -2062,7 +2093,7 @@
                     
                     // Add WorkOn field if a location was selected
                     console.log('Selected work location:', selectedWorkLocation);
-                    if (selectedWorkLocation) {
+                    if (status === 'OUT' && selectedWorkLocation) {
                         updateData.WorkOn = selectedWorkLocation;
                         console.log('Added WorkOn field to updateData:', updateData);
                     }
@@ -2081,7 +2112,7 @@
                     };
                     
                     // Add WorkOn field if a location was selected
-                    if (selectedWorkLocation) {
+                    if (status === 'OUT' && selectedWorkLocation) {
                         logData.WorkOn = selectedWorkLocation;
                         console.log('Added WorkOn field to logData:', logData);
                     }
@@ -2114,8 +2145,8 @@
                     // Update previous OUT tools count after tool status change
                     updatePreviousOutToolsCount();
                     
-                    // Clear selected work location after successful tool registration
-                    selectedWorkLocation = null;
+                    // Don't clear selected work location - keep it for subsequent submissions
+                    // selectedWorkLocation = null;
 
                     // Store last scanned tool data for modal
                     lastScannedToolData = {
@@ -2134,10 +2165,9 @@
                     document.getElementById('toolDetailsBtn').disabled = true;
                 }
             } catch (error) {
-                console.error('Error:', error);
-                alert('Error: ' + error.message);
-                lastScannedToolData = null;
-                document.getElementById('toolDetailsBtn').disabled = true;
+                console.error('Error processing tool submission:', error);
+                alert('Error processing tool submission. Please try again.');
+                document.getElementById('toolCode').value = '';
             }
         }
 
@@ -2205,7 +2235,10 @@
                     };
                     card.innerHTML = `
                         <div class="register-tool-title">${index + 1}. ${data.toolName || 'Unknown Tool'}</div>
-                        <div class="register-tool-date">${time}</div>
+                        <div class="register-tool-date">
+                            ${time}
+                            ${status === 'OUT' && data.WorkOn ? `<div class='register-tool-workon'>Work Location: <span style='color:#1976d2;font-weight:bold;'>${data.WorkOn}</span></div>` : ''}
+                            </div>
                         <div class="register-tool-row">
                             <div class="register-tool-col">
                                 <div class="register-tool-label">TID</div>
@@ -2220,6 +2253,7 @@
                                 <div class="register-tool-status ${statusClass}">${status}</div>
                             </div>
                         </div>
+                        
                     `;
                     toolList.appendChild(card);
                 });
@@ -2871,42 +2905,6 @@
         // Global variable to store selected work location
         let selectedWorkLocation = null;
 
-        function showLocationSelectionModal() {
-            const modal = new bootstrap.Modal(document.getElementById('locationSelectionModal'));
-            
-            // Clear previous selection
-            selectedWorkLocation = null;
-            document.querySelectorAll('.location-option').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            
-            // Add click handlers for location options
-            document.querySelectorAll('.location-option').forEach(btn => {
-                btn.onclick = function() {
-                    // Remove active class from all buttons
-                    document.querySelectorAll('.location-option').forEach(b => b.classList.remove('active'));
-                    // Add active class to clicked button
-                    this.classList.add('active');
-                    selectedWorkLocation = this.getAttribute('data-location');
-                };
-            });
-            
-            // Show the modal
-            modal.show();
-            
-            // Handle modal hidden event
-            const modalElement = document.getElementById('locationSelectionModal');
-            const handleModalHidden = function() {
-                if (selectedWorkLocation) {
-                    // If a location was selected, proceed to register tools screen
-                    showRegisterTools();
-                }
-                // Remove this event listener to prevent conflicts
-                modalElement.removeEventListener('hidden.bs.modal', handleModalHidden);
-            };
-            modalElement.addEventListener('hidden.bs.modal', handleModalHidden);
-        }
-
         function showLocationSelectionModalForToolSubmission(toolCode) {
             console.log('Showing location selection modal for tool code:', toolCode);
             const modal = new bootstrap.Modal(document.getElementById('locationSelectionModal'));
@@ -2949,14 +2947,47 @@
             modalElement.addEventListener('hidden.bs.modal', handleModalHidden);
         }
 
+
+
+        function updateWorkLocationLabel() {
+            const label = document.getElementById('workLocationLabel');
+            if (label) {
+                label.textContent = selectedWorkLocation
+                    ? `Work Location: ${selectedWorkLocation}`
+                    : 'Work Location: (not selected)';
+            }
+        }
+
+        document.getElementById('changeWorkLocationBtn').onclick = function() {
+            showLocationSelectionModalForRegisterTools();
+        };
+
         function showRegisterTools() {
             document.getElementById('toolScannerMenu').style.display = 'none';
             document.getElementById('appSection').style.display = 'block';
-            // Load today's tools when entering Register Tools screen
+            updateWorkLocationLabel();
+            if (!selectedWorkLocation) {
+                showLocationSelectionModalForRegisterTools();
+            }
             loadTools();
-            // Show notifications here
             showNotificationsInSequence();
         }
+
+        function showLocationSelectionModalForRegisterTools() {
+            const modal = new bootstrap.Modal(document.getElementById('locationSelectionModal'));
+            document.querySelectorAll('.location-option').forEach(btn => {
+                btn.classList.remove('active');
+                btn.onclick = function() {
+                    document.querySelectorAll('.location-option').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    selectedWorkLocation = this.getAttribute('data-location');
+                    modal.hide();
+                    updateWorkLocationLabel();
+                };
+            });
+            modal.show();
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             // Orange overlay logic
             const orangeOverlay = document.getElementById('orangeOverlay');
@@ -5035,10 +5066,16 @@
                     hour12: false
                 }) : 'Unknown';
                 
+                // Get WorkOn value or N/A
+                const workOnValue = (typeof tool.WorkOn === 'string' && tool.WorkOn.trim() !== '') ? tool.WorkOn : 'N/A';
+                
                 html += `
                     <div class="previous-out-tool-card ${statusClass}" onclick="showPreviousOutToolDetails('${tool.id}')">
                         <div class="previous-out-tool-name">${index + 1}. ${tool.toolName || 'Unknown Tool'}</div>
-                        <div class="previous-out-tool-date">${formattedDate}</div>
+                        <div class="previous-out-tool-date" style="display:flex;justify-content:space-between;align-items:center;font-size:1.05em;">
+                            <span>${formattedDate}</span>
+                            <span><span style="font-weight:bold;color:#111;">WorkOn: </span><span style="font-weight:bold;color:#666;">${workOnValue}</span></span>
+                        </div>
                         <div class="previous-out-tool-row">
                             <div class="previous-out-tool-column">
                                 <div class="previous-out-tool-label">TID</div>
