@@ -1776,8 +1776,29 @@
                     throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
                 }
                 
-                // Save/update technician data to Firestore
-                await saveTechnicianToFirestore(userCredential.user);
+                // Check if this is the first verified login
+                const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
+                if (pendingDoc.exists) {
+                    const pendingData = pendingDoc.data();
+                    // This is the first verified login, create technician document
+                    await db.collection('technicians').doc(userCredential.user.uid).set({
+                        fullName: pendingData.fullName,
+                        email: email,
+                        isAdmin: false,
+                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    // Remove from pending registrations
+                    await db.collection('pendingRegistrations').doc(email).delete();
+                    
+                    // Store full name in localStorage
+                    localStorage.setItem('fullName', pendingData.fullName);
+                } else {
+                    // Regular login, update technician data
+                    await saveTechnicianToFirestore(userCredential.user);
+                }
+                
                 // Success: hide login, show only main menu
                 document.getElementById('loginSection').classList.add('d-none');
                 hideAllMainScreens();
@@ -1808,11 +1829,34 @@
                 alertBox.classList.remove('d-none');
                 return;
             }
+            
+            // Check if email already exists in pending registrations
             try {
+                const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
+                if (pendingDoc.exists) {
+                    alertBox.textContent = 'An account with this email is already pending verification. Please check your email or try again later.';
+                    alertBox.classList.remove('d-none');
+                    return;
+                }
+            } catch (error) {
+                console.error('Error checking pending registrations:', error);
+            }
+            
+            try {
+                // Create Firebase Auth account
                 const userCredential = await auth.createUserWithEmailAndPassword(email, password);
                 
                 // Send email verification
                 await userCredential.user.sendEmailVerification();
+                
+                // Store pending registration data
+                await db.collection('pendingRegistrations').doc(email).set({
+                    fullName: fullName,
+                    email: email,
+                    uid: userCredential.user.uid,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    verified: false
+                });
                 
                 // Sign out the user immediately to prevent access
                 await auth.signOut();
@@ -1874,6 +1918,40 @@
                 console.error('Google Sign-In Error:', error);
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
+            }
+        }
+
+        // Cleanup unverified accounts (run periodically)
+        async function cleanupUnverifiedAccounts() {
+            try {
+                const cutoffTime = new Date();
+                cutoffTime.setHours(cutoffTime.getHours() - 24); // 24 hours ago
+                
+                const pendingDocs = await db.collection('pendingRegistrations')
+                    .where('createdAt', '<', cutoffTime)
+                    .get();
+                
+                const batch = db.batch();
+                
+                // Delete unverified Firebase Auth accounts
+                for (const doc of pendingDocs.docs) {
+                    const data = doc.data();
+                    try {
+                        // Delete the Firebase Auth account
+                        await auth.deleteUser(data.uid);
+                        console.log(`Deleted unverified Firebase Auth account: ${data.email}`);
+                    } catch (authError) {
+                        console.error(`Failed to delete Firebase Auth account for ${data.email}:`, authError);
+                    }
+                    
+                    // Delete the pending registration document
+                    batch.delete(doc.ref);
+                }
+                
+                await batch.commit();
+                console.log(`Cleaned up ${pendingDocs.docs.length} unverified accounts`);
+            } catch (error) {
+                console.error('Error cleaning up unverified accounts:', error);
             }
         }
 
