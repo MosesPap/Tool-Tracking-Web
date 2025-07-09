@@ -1770,6 +1770,12 @@
             }
             try {
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                
+                // Check if email is verified
+                if (!userCredential.user.emailVerified) {
+                    throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
+                }
+                
                 // Save/update technician data to Firestore
                 await saveTechnicianToFirestore(userCredential.user);
                 // Success: hide login, show only main menu
@@ -1805,6 +1811,9 @@
             try {
                 const userCredential = await auth.createUserWithEmailAndPassword(email, password);
                 
+                // Send email verification
+                await userCredential.user.sendEmailVerification();
+                
                 // Create technician document with all required fields
                 await db.collection('technicians').doc(userCredential.user.uid).set({
                     fullName: fullName,
@@ -1815,7 +1824,7 @@
 
                 alertBox.classList.add('d-none');
                 showLogin();
-                alert('Account created! You can now sign in.');
+                alert('Account created! Please check your email and verify your account before signing in.');
             } catch (error) {
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
