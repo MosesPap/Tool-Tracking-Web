@@ -1689,6 +1689,17 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
+        // Configure Firebase Auth to require email verification
+        auth.useDeviceLanguage();
+        
+        // Set custom error messages for unverified emails
+        auth.onAuthStateChanged(function(user) {
+            if (user && !user.emailVerified) {
+                // Force sign out if user is not verified
+                auth.signOut();
+            }
+        });
+
         // Ensure user stays logged in across refreshes and browser restarts
         auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
@@ -1772,8 +1783,9 @@
             try {
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
                 
-                // Check if email is verified
+                // Immediately sign out if email is not verified
                 if (!userCredential.user.emailVerified) {
+                    await auth.signOut();
                     throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
                 }
                 
