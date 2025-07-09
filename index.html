@@ -1007,6 +1007,7 @@
               <button id="changeWorkLocationBtn" class="btn btn-outline-primary btn-sm" type="button">
                 <i class="fas fa-map-marker-alt"></i> Change Work Location
               </button>
+              <span id="onlineStatus" style="font-weight: bold; font-size: 1rem;">🟢 Online</span>
             </div>
             <div class="row align-items-center mb-2">
                 <div class="col-6 d-flex align-items-center">
@@ -1685,6 +1686,15 @@
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.firestore();
+        db.enablePersistence().catch(function(err) {
+  if (err.code == 'failed-precondition') {
+    console.warn('Persistence can only be enabled in one tab at a time.');
+  } else if (err.code == 'unimplemented') {
+    console.warn('Persistence is not available in this browser.');
+  } else {
+    console.error('Error enabling Firestore persistence:', err);
+  }
+});
         const storage = firebase.storage();
 
         // Ensure user stays logged in across refreshes and browser restarts
@@ -2005,6 +2015,14 @@
                 const user = auth.currentUser;
                 console.log('User:', user);
                 
+                // Check if we're online
+                if (!isOnline) {
+                    console.log('Offline mode - saving tool to offline storage');
+                    await handleOfflineToolSubmission(code, user);
+                    return;
+                }
+                
+                console.log('Online mode - processing normally');
                 console.log('Getting tool reference...');
                 const toolRef = db.collection('tools').doc(code);
                 console.log('Tool reference:', toolRef);
@@ -2275,7 +2293,7 @@
                     };
                     card.innerHTML = `
                         <div class="register-tool-title">${index + 1}. ${data.toolName || 'Unknown Tool'}</div>
-                        <div class="register-tool-date">
+                        <div class="register-tool-date" style="display: flex; align-items: center; justify-content: space-between;">
                             <span>${time}</span>
                             ${status === 'OUT' && data.WorkOn ? `<span style="font-size:1em;font-weight:bold;color:#222;">WorkOn: <span style="color:#888;font-weight:bold;">${data.WorkOn}</span></span>` : ''}
                         </div>
@@ -7233,6 +7251,298 @@
       };
     }
     // ... existing code ...
+    </script>
+
+    <!-- Offline Functionality Script -->
+    <script>
+    // Offline functionality variables
+    let isOnline = navigator.onLine;
+    let offlineTools = [];
+    let offlineDB = null;
+    
+    // Initialize IndexedDB for offline storage
+    function initIndexedDB() {
+        return new Promise((resolve, reject) => {
+            const request = window.indexedDB.open('ToolTrackingDB', 1);
+            
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => {
+                offlineDB = request.result;
+                resolve(offlineDB);
+            };
+            
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains('offlineTools')) {
+                    db.createObjectStore('offlineTools', { keyPath: 'id' });
+                }
+            };
+        });
+    }
+    
+    // Save tool to offline storage
+    async function saveToolOffline(toolData) {
+        if (!offlineDB) {
+            await initIndexedDB();
+        }
+        
+        return new Promise((resolve, reject) => {
+            const transaction = offlineDB.transaction(['offlineTools'], 'readwrite');
+            const store = transaction.objectStore('offlineTools');
+            const request = store.add(toolData);
+            
+            request.onsuccess = () => {
+                console.log('Tool saved offline:', toolData.id);
+                resolve();
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+    
+    // Get all offline tools
+    async function getOfflineTools() {
+        if (!offlineDB) {
+            await initIndexedDB();
+        }
+        
+        return new Promise((resolve, reject) => {
+            const transaction = offlineDB.transaction(['offlineTools'], 'readonly');
+            const store = transaction.objectStore('offlineTools');
+            const request = store.getAll();
+            
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+    
+    // Remove tool from offline storage
+    async function removeOfflineTool(toolId) {
+        if (!offlineDB) {
+            await initIndexedDB();
+        }
+        
+        return new Promise((resolve, reject) => {
+            const transaction = offlineDB.transaction(['offlineTools'], 'readwrite');
+            const store = transaction.objectStore('offlineTools');
+            const request = store.delete(toolId);
+            
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+    
+    // Sync offline tools when back online
+    async function syncOfflineTools() {
+        try {
+            const offlineTools = await getOfflineTools();
+            
+            if (offlineTools.length === 0) {
+                console.log('No offline tools to sync');
+                return;
+            }
+            
+            console.log(`Syncing ${offlineTools.length} offline tools`);
+            
+            for (const tool of offlineTools) {
+                try {
+                    // Add tool to Firestore
+                    await db.collection('tools').doc(tool.id).set(tool.data);
+                    
+                    // Remove from offline storage
+                    await removeOfflineTool(tool.id);
+                    
+                    console.log(`Successfully synced tool: ${tool.id}`);
+                } catch (error) {
+                    console.error(`Failed to sync tool ${tool.id}:`, error);
+                }
+            }
+            
+            // Refresh the tool list
+            loadTools();
+            
+            // Show success message
+            showNotification(`Successfully synced ${offlineTools.length} offline tools`, 'success');
+            
+        } catch (error) {
+            console.error('Error syncing offline tools:', error);
+            showNotification('Error syncing offline tools', 'error');
+        }
+    }
+    
+    // Check online status and update UI
+    function updateOnlineStatus() {
+        isOnline = navigator.onLine;
+        const statusElement = document.getElementById('onlineStatus');
+        
+        if (statusElement) {
+            if (isOnline) {
+                statusElement.textContent = '🟢 Online';
+                statusElement.className = 'text-success';
+                // Trigger sync when back online
+                syncOfflineTools();
+            } else {
+                statusElement.textContent = '🔴 Offline';
+                statusElement.className = 'text-danger';
+            }
+        }
+    }
+    
+    // Enhanced notification function
+    function showNotification(message, type = 'info') {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'info'} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        // Insert at the top of the app section
+        const appSection = document.getElementById('appSection');
+        if (appSection) {
+            appSection.insertBefore(alertDiv, appSection.firstChild);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.remove();
+                }
+            }, 5000);
+        }
+    }
+    
+            // Handle offline tool submission
+        async function handleOfflineToolSubmission(code, user) {
+            try {
+                // Get technician name
+                const technicianName = localStorage.getItem('fullName') || user.email || 'Unknown Technician';
+                
+                // Create tool data for offline storage
+                const toolData = {
+                    id: code,
+                    data: {
+                        toolName: `Tool ${code}`,
+                        partNumber: code,
+                        technician: technicianName,
+                        owner: technicianName,
+                        status: 'OUT',
+                        timestamp: new Date(),
+                        WorkOn: selectedWorkLocation || 'Unknown',
+                        collectionCode: 'DEFAULT',
+                        collectionName: 'Default Collection',
+                        isOfflineSubmission: true
+                    }
+                };
+                
+                // Save to offline storage
+                await saveToolOffline(toolData);
+                
+                // Show success message
+                const alertDiv = document.createElement('div');
+                alertDiv.className = `alert alert-warning alert-dismissible fade show`;
+                alertDiv.innerHTML = `
+                    <i class="fas fa-wifi-slash me-2"></i>
+                    Tool saved offline. Will sync when connection is restored.
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                `;
+                
+                const scannerView = document.getElementById('scannerView');
+                scannerView.insertBefore(alertDiv, scannerView.firstChild);
+                
+                setTimeout(() => {
+                    if (alertDiv.parentNode) {
+                        alertDiv.remove();
+                    }
+                }, 5000);
+                
+                // Clear input
+                document.getElementById('toolCode').value = '';
+                document.getElementById('toolDetailsBtn').disabled = true;
+                
+                // Load offline tools to show in the list
+                loadOfflineTools();
+                
+            } catch (error) {
+                console.error('Error handling offline tool submission:', error);
+                showNotification('Error saving tool offline', 'error');
+            }
+        }
+        
+        // Load and display offline tools
+        async function loadOfflineTools() {
+            try {
+                const offlineTools = await getOfflineTools();
+                const toolList = document.getElementById('toolList');
+                
+                if (offlineTools.length > 0) {
+                    let html = '<h4 style="font-size: 1.1rem; margin-bottom: 8px;">Today\'s Tools (Including Offline)</h4>';
+                    
+                    offlineTools.forEach((tool, index) => {
+                        const time = tool.data.timestamp.toLocaleString('en-GB', {
+                            day: '2-digit', month: '2-digit', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                        });
+                        
+                        html += `
+                            <div class="register-tool-card out" style="border: 2px dashed #ffc107;">
+                                <div class="register-tool-title">${index + 1}. ${tool.data.toolName} (Offline)</div>
+                                <div class="register-tool-date" style="display: flex; align-items: center; justify-content: space-between;">
+                                    <span>${time}</span>
+                                    <span style="font-size:1em;font-weight:bold;color:#222;">WorkOn: <span style="color:#888;font-weight:bold;">${tool.data.WorkOn}</span></span>
+                                </div>
+                                <div class="register-tool-row">
+                                    <div class="register-tool-col">
+                                        <div class="register-tool-label">TID</div>
+                                        <div class="register-tool-value">${tool.id}</div>
+                                    </div>
+                                    <div class="register-tool-col">
+                                        <div class="register-tool-label">P/N</div>
+                                        <div class="register-tool-value">${tool.data.partNumber}</div>
+                                    </div>
+                                    <div class="register-tool-col">
+                                        <div class="register-tool-status out">OUT</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    toolList.innerHTML = html;
+                }
+            } catch (error) {
+                console.error('Error loading offline tools:', error);
+            }
+        }
+
+        // Initialize offline functionality
+        document.addEventListener('DOMContentLoaded', async function() {
+        // Initialize IndexedDB
+        await initIndexedDB();
+        
+        // Set up online/offline event listeners
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        
+        // Initial status check
+        updateOnlineStatus();
+        
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            try {
+                const registration = await navigator.serviceWorker.register('/service-worker.js');
+                console.log('Service Worker registered:', registration);
+                
+                // Listen for messages from service worker
+                navigator.serviceWorker.addEventListener('message', event => {
+                    if (event.data.type === 'OFFLINE_SYNC_COMPLETE') {
+                        showNotification(`Synced ${event.data.syncedCount} offline tools`, 'success');
+                    }
+                });
+                
+            } catch (error) {
+                console.error('Service Worker registration failed:', error);
+            }
+        }
+    });
     </script>
 </body>
 </html> 
