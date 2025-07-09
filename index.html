@@ -1814,13 +1814,8 @@
                 // Send email verification
                 await userCredential.user.sendEmailVerification();
                 
-                // Create technician document with all required fields
-                await db.collection('technicians').doc(userCredential.user.uid).set({
-                    fullName: fullName,
-                    email: email,
-                    isAdmin: false,
-                    lastSignIn: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                // Sign out the user immediately to prevent access
+                await auth.signOut();
 
                 alertBox.classList.add('d-none');
                 showLogin();
@@ -1901,9 +1896,11 @@
                         ...technicianData
                     };
                 } else {
-                    // Create new technician
+                    // Create new technician (first time login after email verification)
+                    // Get the full name from the user's display name or email
+                    const fullName = user.displayName || user.email;
                     technicianData = {
-                        fullName: user.displayName || user.email,
+                        fullName: fullName,
                         email: user.email,
                         isAdmin: false,
                         lastSignIn: firebase.firestore.FieldValue.serverTimestamp()
