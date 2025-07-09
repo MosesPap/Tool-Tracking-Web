@@ -1852,6 +1852,12 @@
                 // Sign in with Google
                 const result = await auth.signInWithPopup(provider);
                 const user = result.user;
+                
+                // Verify that the user has a valid email
+                if (!user.email || !user.emailVerified) {
+                    throw new Error('Please use a verified Google account with a valid email address');
+                }
+                
                 // Save user data to technicians collection
                 await saveTechnicianToFirestore(user);
                 // Success: hide login, show only main menu
@@ -5026,29 +5032,47 @@
     // Function to fetch and update previous OUT tools count
     async function updatePreviousOutToolsCount() {
         const user = auth.currentUser;
-        if (!user) return;
+        if (!user) {
+            console.log('updatePreviousOutToolsCount: No user logged in');
+            return;
+        }
         
         const fullName = localStorage.getItem('fullName') || user.email;
+        console.log('updatePreviousOutToolsCount: Searching for tools with technician:', fullName);
+        
         try {
             const snapshot = await db.collection('tools')
                 .where('technician', '==', fullName)
                 .where('status', '==', 'OUT')
                 .get();
             
+            console.log('updatePreviousOutToolsCount: Found', snapshot.docs.length, 'OUT tools for technician:', fullName);
+            
             if (!snapshot.empty) {
-                // Get today's start time
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
+                // Get today's start time in local timezone
+                const now = new Date();
+                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                console.log('updatePreviousOutToolsCount: Today start time (local):', today.toISOString());
+                console.log('updatePreviousOutToolsCount: Today start time (local date):', today.toDateString());
                 
                 // Filter tools from previous days
                 const previousTools = snapshot.docs.filter(doc => {
                     const timestamp = doc.data().timestamp;
+                    console.log('updatePreviousOutToolsCount: Tool', doc.id, 'timestamp:', timestamp);
+                    
                     if (timestamp && timestamp.toDate) {
                         const toolDate = timestamp.toDate();
-                        return toolDate < today;
+                        // Compare dates in local timezone
+                        const toolDateLocal = new Date(toolDate.getFullYear(), toolDate.getMonth(), toolDate.getDate());
+                        const isPrevious = toolDateLocal < today;
+                        console.log('updatePreviousOutToolsCount: Tool', doc.id, 'date (UTC):', toolDate.toISOString(), 'date (local):', toolDateLocal.toDateString(), 'isPrevious:', isPrevious);
+                        return isPrevious;
                     }
+                    console.log('updatePreviousOutToolsCount: Tool', doc.id, 'has no valid timestamp');
                     return false;
                 });
+                
+                console.log('updatePreviousOutToolsCount: Previous tools count:', previousTools.length);
                 
                 previousOutToolsCount = previousTools.length;
                 previousOutToolsData = previousTools.map(doc => ({
@@ -5056,13 +5080,14 @@
                     ...doc.data()
                 }));
                 
-                // Update button text with count
+                // Update button text with previous OUT tools count
                 const menuOutBtn = document.getElementById('menuOutBtn');
                 if (menuOutBtn) {
                     menuOutBtn.innerHTML = `<i class="fas fa-sign-out-alt"></i> View OUT Tools (${previousOutToolsCount})`;
                     menuOutBtn.disabled = previousOutToolsCount === 0;
                 }
             } else {
+                console.log('updatePreviousOutToolsCount: No OUT tools found for technician:', fullName);
                 previousOutToolsCount = 0;
                 previousOutToolsData = [];
                 const menuOutBtn = document.getElementById('menuOutBtn');
@@ -5075,12 +5100,20 @@
             console.error('Error fetching previous OUT tools count:', error);
             previousOutToolsCount = 0;
             previousOutToolsData = [];
+            const menuOutBtn = document.getElementById('menuOutBtn');
+            if (menuOutBtn) {
+                menuOutBtn.innerHTML = `<i class="fas fa-sign-out-alt"></i> View OUT Tools (0)`;
+                menuOutBtn.disabled = true;
+            }
         }
     }
 
     async function showPreviousOutTools() {
         const user = auth.currentUser;
-        if (!user) return;
+        if (!user) {
+            console.log('showPreviousOutTools: No user logged in');
+            return;
+        }
         
         // Hide other screens and show previous OUT tools screen
         document.getElementById('toolScannerMenu').style.display = 'none';
@@ -5099,12 +5132,17 @@
         try {
             // Fetch fresh data
             const fullName = localStorage.getItem('fullName') || user.email;
+            console.log('showPreviousOutTools: Searching for tools with technician:', fullName);
+            
             const snapshot = await db.collection('tools')
                 .where('technician', '==', fullName)
                 .where('status', '==', 'OUT')
                 .get();
             
+            console.log('showPreviousOutTools: Found', snapshot.docs.length, 'OUT tools for technician:', fullName);
+            
             if (snapshot.empty) {
+                console.log('showPreviousOutTools: No OUT tools found for technician:', fullName);
                 previousOutToolsList.innerHTML = '<div class="text-center text-muted">No previous OUT tools found.</div>';
                 const now = new Date();
                 const timeString = now.toLocaleString('en-GB', {
@@ -5120,21 +5158,33 @@
                 return;
             }
             
-            // Get today's start time
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
+            // Get today's start time in local timezone
+            const currentTime = new Date();
+            const today = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate());
+            console.log('showPreviousOutTools: Today start time (local):', today.toISOString());
+            console.log('showPreviousOutTools: Today start time (local date):', today.toDateString());
             
             // Filter tools from previous days
             const previousTools = snapshot.docs.filter(doc => {
                 const timestamp = doc.data().timestamp;
+                console.log('showPreviousOutTools: Tool', doc.id, 'timestamp:', timestamp);
+                
                 if (timestamp && timestamp.toDate) {
                     const toolDate = timestamp.toDate();
-                    return toolDate < today;
+                    // Compare dates in local timezone
+                    const toolDateLocal = new Date(toolDate.getFullYear(), toolDate.getMonth(), toolDate.getDate());
+                    const isPrevious = toolDateLocal < today;
+                    console.log('showPreviousOutTools: Tool', doc.id, 'date (UTC):', toolDate.toISOString(), 'date (local):', toolDateLocal.toDateString(), 'isPrevious:', isPrevious);
+                    return isPrevious;
                 }
+                console.log('showPreviousOutTools: Tool', doc.id, 'has no valid timestamp');
                 return false;
             });
             
+            console.log('showPreviousOutTools: Previous tools count:', previousTools.length);
+            
             if (previousTools.length === 0) {
+                console.log('showPreviousOutTools: No previous tools found after filtering');
                 previousOutToolsList.innerHTML = '<div class="text-center text-muted">No previous OUT tools found.</div>';
                 const now = new Date();
                 const timeString = now.toLocaleString('en-GB', {
