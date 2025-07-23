@@ -3008,7 +3008,7 @@ if (!userCredential.user.emailVerified) {
                             let totalPhotos = 0;
                             
                             for (const collectionName of collections) {
-                                const collectionQuery = await db.collection('collections').where('collectionName', '==', collectionName).get();
+                                const collectionQuery = await db.collection('collections').where('collectionCode', '==', collectionName).get();
                                 if (!collectionQuery.empty) {
                                     const collectionDoc = collectionQuery.docs[0];
                                     totalPhotos += (collectionDoc.data().photoUrls || []).length;
@@ -3023,7 +3023,7 @@ if (!userCredential.user.emailVerified) {
                 // Update My Tools by Collection screen buttons
                 const myToolsByCollectionBtn = document.getElementById('myToolsByCollectionPhotosBtn');
                 if (myToolsByCollectionBtn && lastViewedCollectionName) {
-                    const collectionQuery = await db.collection('collections').where('collectionName', '==', lastViewedCollectionName).get();
+                    const collectionQuery = await db.collection('collections').where('collectionCode', '==', lastViewedCollectionName).get();
                     let photoCount = 0;
                     if (!collectionQuery.empty) {
                         const collectionDoc = collectionQuery.docs[0];
@@ -3080,7 +3080,7 @@ if (!userCredential.user.emailVerified) {
                 // Get photo counts for each collection
                 const collectionsWithPhotos = [];
                 for (const collectionName of collections) {
-                    const collectionQuery = await db.collection('collections').where('collectionName', '==', collectionName).get();
+                    const collectionQuery = await db.collection('collections').where('collectionCode', '==', collectionName).get();
                     let photoCount = 0;
                     if (!collectionQuery.empty) {
                         const collectionDoc = collectionQuery.docs[0];
@@ -3556,13 +3556,13 @@ if (!userCredential.user.emailVerified) {
                         // 3. Query collections for those codes (batch if >10)
                         let collections = [];
                         if (collectionCodes.length <= 10) {
-                          const colSnap = await db.collection('collections').where('collectionName', 'in', collectionCodes).get();
+                          const colSnap = await db.collection('collections').where('collectionCode', 'in', collectionCodes).get();
                           collections = colSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                         } else {
                           // Firestore 'in' query limit is 10, so batch if needed
                           for (let i = 0; i < collectionCodes.length; i += 10) {
                             const batch = collectionCodes.slice(i, i + 10);
-                            const colSnap = await db.collection('collections').where('collectionName', 'in', batch).get();
+                            const colSnap = await db.collection('collections').where('collectionCode', 'in', batch).get();
                             collections = collections.concat(colSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
                           }
                         }
@@ -3571,9 +3571,9 @@ if (!userCredential.user.emailVerified) {
                         } else {
                             let html = '<div class="list-group">';
                             collections.forEach(data => {
-                                html += `<button class="list-group-item list-group-item-action" style="font-weight:bold;color:#1976d2;" data-collection="${data.collectionName}">
-                                    <span style="font-size:1.1em;">${data.collectionName}</span><br>
-                                    <span style="font-size:0.9em;color:#888;">Code: ${data.collectionName}</span>
+                                html += `<button class="list-group-item list-group-item-action" style="font-weight:bold;color:#1976d2;" data-collection="${data.collectionCode}">
+                                    <span style="font-size:1.1em;">${data.collectionCode}</span><br>
+                                    <span style="font-size:0.9em;color:#888;">Code: ${data.collectionCode}</span>
                                 </button>`;
                             });
                             html += '</div>';
@@ -4903,13 +4903,13 @@ if (!userCredential.user.emailVerified) {
                 // 3. Query collections for those codes (batch if >10)
                 let collections = [];
                 if (collectionCodes.length <= 10) {
-                  const colSnap = await db.collection('collections').where('collectionName', 'in', collectionCodes).get();
+                  const colSnap = await db.collection('collections').where('collectionCode', 'in', collectionCodes).get();
                   collections = colSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                        } else {
+                } else {
                   // Firestore 'in' query limit is 10, so batch if needed
                   for (let i = 0; i < collectionCodes.length; i += 10) {
                     const batch = collectionCodes.slice(i, i + 10);
-                    const colSnap = await db.collection('collections').where('collectionName', 'in', batch).get();
+                    const colSnap = await db.collection('collections').where('collectionCode', 'in', batch).get();
                     collections = collections.concat(colSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
                   }
                 }
@@ -4918,11 +4918,11 @@ if (!userCredential.user.emailVerified) {
                 } else {
                     let html = '<div class="list-group">';
                     collections.forEach(data => {
-                        const isCurrentCollection = data.collectionName === lastViewedCollectionName;
-                        html += `<button class="list-group-item list-group-item-action ${isCurrentCollection ? 'active' : ''}" style="font-weight:bold;color:${isCurrentCollection ? 'white' : '#1976d2'};" data-collection="${data.collectionName}">
-                            <span style="font-size:1.1em;">${data.collectionName}</span><br>
+                        const isCurrentCollection = data.collectionCode === lastViewedCollectionName;
+                        html += `<button class="list-group-item list-group-item-action ${isCurrentCollection ? 'active' : ''}" style="font-weight:bold;color:${isCurrentCollection ? 'white' : '#1976d2'};" data-collection="${data.collectionCode}">
+                            <span style="font-size:1.1em;">${data.collectionCode}</span><br>
                             <span style="font-size:0.9em;color:${isCurrentCollection ? 'rgba(255,255,255,0.8)' : '#888'};">
-                                ${isCurrentCollection ? 'Current Collection' : 'Code: ' + data.collectionName}
+                                ${isCurrentCollection ? 'Current Collection' : 'Code: ' + data.collectionCode}
                             </span>
                         </button>`;
                     });
@@ -5651,7 +5651,7 @@ if (!userCredential.user.emailVerified) {
         
         try {
             // Query collections collection where collectionName matches the collectionCode from tools
-            const querySnapshot = await db.collection('collections').where('collectionName', '==', collectionCode).get();
+            const querySnapshot = await db.collection('collections').where('collectionCode', '==', collectionCode).get();
             if (querySnapshot.empty) {
                 content.innerHTML = `<div class="text-center text-danger">Collection not found.</div>`;
             } else {
