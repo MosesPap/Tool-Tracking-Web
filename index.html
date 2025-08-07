@@ -1966,6 +1966,13 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
         const storage = firebase.storage();
+        
+        // Initialize IndexedDB early
+        initIndexedDB().then(() => {
+            console.log('IndexedDB initialized successfully');
+        }).catch(error => {
+            console.warn('IndexedDB initialization failed:', error);
+        });
 
         // Configure Firebase Auth to require email verification
         auth.useDeviceLanguage();
@@ -2062,6 +2069,15 @@
                 alertBox.textContent = 'Please fill in all fields.';
                 alertBox.classList.remove('d-none');
                 return;
+            }
+            
+            // Ensure IndexedDB is initialized (fallback)
+            if (!indexedDB) {
+                try {
+                    await initIndexedDB();
+                } catch (error) {
+                    console.warn('IndexedDB initialization failed, continuing without offline support:', error);
+                }
             }
             
             // Show loading state
@@ -7536,59 +7552,106 @@
     // Initialize IndexedDB
     async function initIndexedDB() {
         return new Promise((resolve, reject) => {
-            const request = window.indexedDB.open('ToolTrackingDB', 1);
+            // Check if IndexedDB is available
+            if (!window.indexedDB) {
+                console.warn('IndexedDB not supported in this browser');
+                resolve(null);
+                return;
+            }
             
-            request.onerror = () => reject(request.error);
-            request.onsuccess = () => {
-                indexedDB = request.result;
-                resolve(indexedDB);
-            };
-            
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
+            try {
+                const request = window.indexedDB.open('ToolTrackingDB', 1);
                 
-                // Create object store for offline tools
-                if (!db.objectStoreNames.contains('offlineTools')) {
-                    const store = db.createObjectStore('offlineTools', { keyPath: 'id' });
-                    store.createIndex('timestamp', 'timestamp', { unique: false });
-                }
-            };
+                request.onerror = () => {
+                    console.error('IndexedDB error:', request.error);
+                    resolve(null);
+                };
+                
+                request.onsuccess = () => {
+                    indexedDB = request.result;
+                    console.log('IndexedDB initialized successfully');
+                    resolve(indexedDB);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    
+                    // Create object store for offline tools
+                    if (!db.objectStoreNames.contains('offlineTools')) {
+                        const store = db.createObjectStore('offlineTools', { keyPath: 'id' });
+                        store.createIndex('timestamp', 'timestamp', { unique: false });
+                    }
+                };
+            } catch (error) {
+                console.error('Error initializing IndexedDB:', error);
+                resolve(null);
+            }
         });
     }
     
     // Save tool to offline storage
     async function saveToolOffline(toolData) {
+        if (!indexedDB) {
+            console.warn('IndexedDB not available, skipping offline save');
+            return;
+        }
+        
         return new Promise((resolve, reject) => {
-            const transaction = indexedDB.transaction(['offlineTools'], 'readwrite');
-            const store = transaction.objectStore('offlineTools');
-            const request = store.put(toolData);
-            
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+            try {
+                const transaction = indexedDB.transaction(['offlineTools'], 'readwrite');
+                const store = transaction.objectStore('offlineTools');
+                const request = store.put(toolData);
+                
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            } catch (error) {
+                console.error('Error saving to IndexedDB:', error);
+                resolve(null);
+            }
         });
     }
     
     // Get all offline tools
     async function getOfflineTools() {
+        if (!indexedDB) {
+            console.warn('IndexedDB not available, returning empty array');
+            return [];
+        }
+        
         return new Promise((resolve, reject) => {
-            const transaction = indexedDB.transaction(['offlineTools'], 'readonly');
-            const store = transaction.objectStore('offlineTools');
-            const request = store.getAll();
-            
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+            try {
+                const transaction = indexedDB.transaction(['offlineTools'], 'readonly');
+                const store = transaction.objectStore('offlineTools');
+                const request = store.getAll();
+                
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            } catch (error) {
+                console.error('Error reading from IndexedDB:', error);
+                resolve([]);
+            }
         });
     }
     
     // Remove tool from offline storage
     async function removeOfflineTool(toolId) {
+        if (!indexedDB) {
+            console.warn('IndexedDB not available, skipping offline remove');
+            return;
+        }
+        
         return new Promise((resolve, reject) => {
-            const transaction = indexedDB.transaction(['offlineTools'], 'readwrite');
-            const store = transaction.objectStore('offlineTools');
-            const request = store.delete(toolId);
-            
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+            try {
+                const transaction = indexedDB.transaction(['offlineTools'], 'readwrite');
+                const store = transaction.objectStore('offlineTools');
+                const request = store.delete(toolId);
+                
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            } catch (error) {
+                console.error('Error removing from IndexedDB:', error);
+                resolve(null);
+            }
         });
     }
     
@@ -7790,9 +7853,6 @@
 
         // Initialize offline functionality
         document.addEventListener('DOMContentLoaded', async function() {
-        // Initialize IndexedDB
-        await initIndexedDB();
-        
         // Set up online/offline event listeners
         window.addEventListener('online', updateOnlineStatus);
         window.addEventListener('offline', updateOnlineStatus);
