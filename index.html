@@ -2979,8 +2979,12 @@
 
         // Load today's tools
         async function loadTools() {
+            console.log('loadTools function called');
             const user = auth.currentUser;
-            if (!user) return;
+            if (!user) {
+                console.log('No user logged in');
+                return;
+            }
 
             try {
                 // Get technician name
@@ -2989,16 +2993,24 @@
 
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
+                console.log('Querying tools for technician:', technicianName, 'from date:', today);
 
                 const snapshot = await db.collection('tools')
                     .where('technician', '==', technicianName)
                     .where('timestamp', '>=', today)
                     .get();
 
+                console.log('Found', snapshot.docs.length, 'tools for today');
+
                 const toolList = document.getElementById('toolList');
+                if (!toolList) {
+                    console.error('toolList element not found');
+                    return;
+                }
                 toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4>';
 
                 if (snapshot.empty) {
+                    console.log('No tools found for today');
                     toolList.innerHTML += '<p>No tools scanned today.</p>';
                     return;
                 }
@@ -3987,9 +3999,9 @@
         function showRegisterTools() {
             document.getElementById('toolScannerMenu').style.display = 'none';
             document.getElementById('appSection').style.display = 'block';
+            document.getElementById('headerBranding').style.display = 'none';
             updateWorkLocationLabel();
-            // Always show helicopter model selection dialog when entering register tools screen
-            showLocationSelectionModalForRegisterTools();
+            // Load today's tools immediately
             loadTools();
             showNotificationsInSequence();
         }
@@ -4772,9 +4784,7 @@
             const menuRegisterBtn = document.getElementById('menuRegisterBtn');
             if (menuRegisterBtn) {
                 menuRegisterBtn.onclick = function() {
-                    hideAllMainScreens();
-                    document.getElementById('appSection').style.display = 'block';
-                    document.getElementById('headerBranding').style.display = 'none';
+                    showRegisterTools();
                 };
             }
             
