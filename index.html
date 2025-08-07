@@ -2049,10 +2049,15 @@
 
         // Login logic
         async function login() {
+            console.log('Login function called');
             const email = document.getElementById('loginEmail').value.trim();
             const password = document.getElementById('loginPassword').value.trim();
             const alertBox = document.getElementById('loginAlert');
             alertBox.classList.add('d-none');
+            
+            console.log('Email:', email);
+            console.log('Password length:', password.length);
+            
             if (!email || !password) {
                 alertBox.textContent = 'Please fill in all fields.';
                 alertBox.classList.remove('d-none');
@@ -2066,76 +2071,77 @@
             loginBtn.disabled = true;
             
             try {
-                // First, check if this email exists in pending registrations (unverified)
-const pendingRegistrationDoc = await db.collection('pendingRegistrations').doc(email).get();
-if (pendingRegistrationDoc.exists) {
-    // Try to sign in and reload user
-    const userCredential = await auth.signInWithEmailAndPassword(email, password);
-    await userCredential.user.reload();
-    if (!userCredential.user.emailVerified) {
-        await auth.signOut();
-        throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
-    } else {
-        // User is verified but still in pendingRegistrations, clean up
-        const pendingData = pendingRegistrationDoc.data();
-        await db.collection('technicians').doc(userCredential.user.uid).set({
-            fullName: pendingData.fullName,
-            email: email,
-            isAdmin: false,
-            lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        await db.collection('pendingRegistrations').doc(email).delete();
-        localStorage.setItem('fullName', pendingData.fullName);
-        // Continue to main menu...
-        document.getElementById('loginSection').classList.add('d-none');
-        hideAllMainScreens();
-        document.getElementById('toolScannerMenu').style.display = 'block';
-        document.getElementById('headerBranding').style.display = 'none';
-        updateLoggedInTechnician();
-        return;
-    }
-}
-                
-                // Now attempt to sign in
+                // Attempt to sign in
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
-// Reload user to get latest verification status
-await userCredential.user.reload();
-if (!userCredential.user.emailVerified) {
-    await auth.signOut();
-    throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
-}
+                const user = userCredential.user;
                 
-                // Check if this is the first verified login
-                const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
-                if (pendingDoc.exists) {
-                    const pendingData = pendingDoc.data();
-                    // This is the first verified login, create technician document
-                    await db.collection('technicians').doc(userCredential.user.uid).set({
-                        fullName: pendingData.fullName,
-                        email: email,
-                        isAdmin: false,
-                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                    
-                    // Remove from pending registrations
-                    await db.collection('pendingRegistrations').doc(email).delete();
-                    
-                    // Store full name in localStorage
-                    localStorage.setItem('fullName', pendingData.fullName);
-                } else {
-                    // Regular login, update technician data
-                    await saveTechnicianToFirestore(userCredential.user);
+                // Check if user is verified (only for email/password accounts)
+                if (user.providerData[0].providerId === 'password' && !user.emailVerified) {
+                    await auth.signOut();
+                    throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
                 }
                 
-                // Success: hide login, show only main menu
+                // Check if this is a new user (first time login)
+                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                
+                if (!technicianDoc.exists) {
+                    // New user - check if they have pending registration
+                    const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
+                    
+                    if (pendingDoc.exists) {
+                        // User has pending registration, complete it
+                        const pendingData = pendingDoc.data();
+                        await db.collection('technicians').doc(user.uid).set({
+                            fullName: pendingData.fullName,
+                            email: email,
+                            isAdmin: false,
+                            lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        
+                        // Remove from pending registrations
+                        await db.collection('pendingRegistrations').doc(email).delete();
+                        
+                        // Store full name in localStorage
+                        localStorage.setItem('fullName', pendingData.fullName);
+                    } else {
+                        // New user without pending registration (Google sign-in)
+                        const fullName = user.displayName || user.email;
+                        await db.collection('technicians').doc(user.uid).set({
+                            fullName: fullName,
+                            email: email,
+                            isAdmin: false,
+                            lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        
+                        localStorage.setItem('fullName', fullName);
+                    }
+                } else {
+                    // Existing user - update last sign in
+                    await db.collection('technicians').doc(user.uid).update({
+                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    // Get stored full name
+                    const technicianData = technicianDoc.data();
+                    localStorage.setItem('fullName', technicianData.fullName || user.email);
+                }
+                
+                // Success: hide login, show main menu
                 document.getElementById('loginSection').classList.add('d-none');
                 hideAllMainScreens();
                 document.getElementById('toolScannerMenu').style.display = 'block';
                 document.getElementById('headerBranding').style.display = 'none';
                 updateLoggedInTechnician();
+                
+                // Set up menu button event listeners
+                setupMenuButtons();
+                
+                console.log('Login successful for:', email);
+                
             } catch (error) {
+                console.error('Login error:', error);
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
             } finally {
@@ -2345,6 +2351,9 @@ if (!userCredential.user.emailVerified) {
                 document.getElementById('toolScannerMenu').style.display = 'block';
                 document.getElementById('headerBranding').style.display = 'none';
                 updateLoggedInTechnician();
+                
+                // Set up menu button event listeners
+                setupMenuButtons();
             } catch (error) {
                 console.error('Google Sign-In Error:', error);
                 alertBox.textContent = error.message;
@@ -4511,6 +4520,50 @@ if (!userCredential.user.emailVerified) {
             
             // Update previous OUT tools count
             updatePreviousOutToolsCount();
+        }
+        
+        // Set up menu button event listeners
+        function setupMenuButtons() {
+            // Register Tools button
+            const menuRegisterBtn = document.getElementById('menuRegisterBtn');
+            if (menuRegisterBtn) {
+                menuRegisterBtn.onclick = function() {
+                    hideAllMainScreens();
+                    document.getElementById('appSection').style.display = 'block';
+                    document.getElementById('headerBranding').style.display = 'none';
+                };
+            }
+            
+            // My Tools button
+            const menuMyToolsBtn = document.getElementById('menuMyToolsBtn');
+            if (menuMyToolsBtn) {
+                menuMyToolsBtn.onclick = function() {
+                    hideAllMainScreens();
+                    document.getElementById('myToolsScreen').style.display = 'block';
+                    document.getElementById('headerBranding').style.display = 'none';
+                    loadMyTools();
+                };
+            }
+            
+            // Search Tools button
+            const menuSearchBtn = document.getElementById('menuSearchBtn');
+            if (menuSearchBtn) {
+                menuSearchBtn.onclick = function() {
+                    hideAllMainScreens();
+                    document.getElementById('searchToolsScreen').style.display = 'block';
+                    document.getElementById('headerBranding').style.display = 'none';
+                };
+            }
+            
+            // Logout button
+            const menuLogoutBtn = document.getElementById('menuLogoutBtn');
+            if (menuLogoutBtn) {
+                menuLogoutBtn.onclick = function() {
+                    logout();
+                };
+            }
+            
+            console.log('Menu buttons set up successfully');
         }
 
         // Service Worker registration with protocol check
