@@ -2181,6 +2181,7 @@
 
         // QR Scanner
         let html5QrCode;
+        let isScannerRunning = false;
 
         // Show/Hide password logic
         const loginPassword = document.getElementById('loginPassword');
@@ -3184,6 +3185,14 @@
         let videoTrack = null;
         
         function startScanner() {
+            // Check if scanner is already running
+            if (isScannerRunning) {
+                console.log('Scanner is already running');
+                return;
+            }
+            
+            isScannerRunning = true;
+            
             var reader = document.getElementById('reader');
             reader.style.display = 'block';
             reader.style.height = '400px';
@@ -3195,6 +3204,7 @@
             updateZoomDisplay();
             updateTorchButton();
             
+            // Create new scanner instance
             html5QrCode = new Html5Qrcode("reader");
             const config = {
                 fps: 15, // Increased FPS for better performance
@@ -3292,10 +3302,12 @@
                             }
                         }
                     }
-                }).catch(err => {
-                    alert('Camera error: ' + err);
-                    stopCamera();
-                });
+                            }).catch(err => {
+                console.error('Camera error:', err);
+                isScannerRunning = false;
+                alert('Camera error: ' + err);
+                stopCamera();
+            });
             });
         }
         
@@ -3412,11 +3424,36 @@
             torchEnabled = false;
             videoTrack = null;
             
+            // Reset scanner state
+            isScannerRunning = false;
+            
             if (html5QrCode) {
-                html5QrCode.stop().then(() => {
-                    html5QrCode.clear();
-                });
-                html5QrCode = null;
+                try {
+                    // Check if scanner is actually running before trying to stop it
+                    if (html5QrCode.isScanning && html5QrCode.isScanning()) {
+                        html5QrCode.stop().then(() => {
+                            html5QrCode.clear();
+                            html5QrCode = null;
+                        }).catch(error => {
+                            console.log('Error stopping scanner:', error);
+                            html5QrCode.clear();
+                            html5QrCode = null;
+                        });
+                    } else {
+                        // Scanner is not running, just clear it
+                        html5QrCode.clear();
+                        html5QrCode = null;
+                    }
+                } catch (error) {
+                    console.log('Error checking scanner state:', error);
+                    // Force cleanup
+                    try {
+                        html5QrCode.clear();
+                    } catch (e) {
+                        console.log('Error clearing scanner:', e);
+                    }
+                    html5QrCode = null;
+                }
             }
         }
 
