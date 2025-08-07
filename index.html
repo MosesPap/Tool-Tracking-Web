@@ -2243,6 +2243,7 @@
             document.getElementById('myToolsByCollectionScreen').style.display = 'none';
             document.getElementById('collectionCheckupScreen').style.display = 'none';
             document.getElementById('previousOutToolsScreen').style.display = 'none';
+            document.getElementById('searchToolsScreen').style.display = 'none';
             // Add any other sections you may have
         }
 
@@ -4780,41 +4781,74 @@
         
         // Set up menu button event listeners
         function setupMenuButtons() {
+            console.log('Setting up menu buttons...');
+            
             // Register Tools button
             const menuRegisterBtn = document.getElementById('menuRegisterBtn');
             if (menuRegisterBtn) {
+                console.log('Register Tools button found');
                 menuRegisterBtn.onclick = function() {
+                    console.log('Register Tools button clicked');
                     showRegisterTools();
                 };
+            } else {
+                console.log('Register Tools button not found');
             }
             
             // My Tools button
             const menuMyToolsBtn = document.getElementById('menuMyToolsBtn');
             if (menuMyToolsBtn) {
+                console.log('My Tools button found');
                 menuMyToolsBtn.onclick = function() {
+                    console.log('My Tools button clicked');
                     hideAllMainScreens();
                     document.getElementById('myToolsScreen').style.display = 'block';
                     document.getElementById('headerBranding').style.display = 'none';
                     loadMyTools();
                 };
+            } else {
+                console.log('My Tools button not found');
+            }
+            
+            // View OUT Tools button
+            const menuOutBtn = document.getElementById('menuOutBtn');
+            if (menuOutBtn) {
+                console.log('View OUT Tools button found');
+                menuOutBtn.onclick = function() {
+                    console.log('View OUT Tools button clicked');
+                    // Auto-refresh: Update count first, then show the screen
+                    updatePreviousOutToolsCount().then(() => {
+                        showPreviousOutTools();
+                    });
+                };
+            } else {
+                console.log('View OUT Tools button not found');
             }
             
             // Search Tools button
             const menuSearchBtn = document.getElementById('menuSearchBtn');
             if (menuSearchBtn) {
+                console.log('Search Tools button found');
                 menuSearchBtn.onclick = function() {
+                    console.log('Search Tools button clicked');
                     hideAllMainScreens();
                     document.getElementById('searchToolsScreen').style.display = 'block';
                     document.getElementById('headerBranding').style.display = 'none';
                 };
+            } else {
+                console.log('Search Tools button not found');
             }
             
             // Logout button
             const menuLogoutBtn = document.getElementById('menuLogoutBtn');
             if (menuLogoutBtn) {
+                console.log('Logout button found');
                 menuLogoutBtn.onclick = function() {
+                    console.log('Logout button clicked');
                     logout();
                 };
+            } else {
+                console.log('Logout button not found');
             }
             
             console.log('Menu buttons set up successfully');
@@ -6036,13 +6070,7 @@
         document.getElementById('myToolsByCollectionScreen').style.display = 'block';
     };
 
-    // Previous OUT Tools functionality
-    document.getElementById('menuOutBtn').onclick = function() {
-        // Auto-refresh: Update count first, then show the screen
-        updatePreviousOutToolsCount().then(() => {
-            showPreviousOutTools();
-        });
-    };
+
 
     // Back button for Previous OUT Tools
     document.getElementById('backToMenuFromOutToolsBtn').onclick = function() {
