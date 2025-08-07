@@ -319,20 +319,244 @@
         
         .camera-view {
             width: 100%;
-            max-width: 320px;
+            max-width: 400px;
             margin: 10px auto;
         }
         #reader {
-            border: 1px solid #ccc !important;
+            border: 2px solid #FF9800 !important;
+            border-radius: 12px !important;
             width: 100% !important;
-            max-width: 320px;
+            max-width: 400px;
             aspect-ratio: 1/1 !important; /* Make the reader square */
             overflow: hidden !important;
+            position: relative !important;
+            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3) !important;
         }
         #reader video {
             object-fit: cover !important;
             width: 100% !important;
             height: 100% !important;
+            border-radius: 10px !important;
+        }
+        
+        /* Advanced Scanner Controls */
+        .scanner-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .scanner-control-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .scanner-control-btn:hover {
+            background: rgba(0, 0, 0, 0.9);
+            transform: scale(1.1);
+        }
+        
+        .scanner-control-btn.active {
+            background: #FF9800;
+            color: white;
+        }
+        
+        /* Zoom Controls */
+        .zoom-controls {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 12px;
+            border-radius: 20px;
+        }
+        
+        .zoom-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .zoom-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+        
+        .zoom-level {
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            min-width: 40px;
+            text-align: center;
+        }
+        
+        /* Scan Area Overlay */
+        .scan-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 999;
+        }
+        
+        .scan-area {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px;
+            height: 200px;
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            border-radius: 8px;
+        }
+        
+        .scan-corner {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #FF9800;
+        }
+        
+        .scan-corner.top-left {
+            top: -3px;
+            left: -3px;
+            border-right: none;
+            border-bottom: none;
+        }
+        
+        .scan-corner.top-right {
+            top: -3px;
+            right: -3px;
+            border-left: none;
+            border-bottom: none;
+        }
+        
+        .scan-corner.bottom-left {
+            bottom: -3px;
+            left: -3px;
+            border-right: none;
+            border-top: none;
+        }
+        
+        .scan-corner.bottom-right {
+            bottom: -3px;
+            right: -3px;
+            border-left: none;
+            border-top: none;
+        }
+        
+        /* Instructions */
+        .scanner-instructions {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            text-align: center;
+            max-width: 280px;
+        }
+        
+        /* Mobile Responsive Adjustments */
+        @media (max-width: 768px) {
+            #reader {
+                max-width: 100% !important;
+                border-radius: 8px !important;
+            }
+            
+            .scanner-controls {
+                top: 5px;
+                right: 5px;
+            }
+            
+            .scanner-control-btn {
+                width: 36px;
+                height: 36px;
+                font-size: 14px;
+            }
+            
+            .zoom-controls {
+                bottom: 5px;
+                padding: 6px 10px;
+            }
+            
+            .zoom-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 12px;
+            }
+            
+            .zoom-level {
+                font-size: 12px;
+                min-width: 35px;
+            }
+            
+            .scanner-instructions {
+                font-size: 11px;
+                padding: 6px 10px;
+                max-width: 250px;
+            }
+            
+            .scan-area {
+                width: 180px;
+                height: 180px;
+            }
+        }
+        
+        /* Animation for scan corners */
+        .scan-corner {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+        }
+        
+        /* Success animation */
+        .scan-success {
+            animation: successPulse 0.5s ease-in-out;
+        }
+        
+        @keyframes successPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
         }
         .tool-item {
             padding: 10px;
@@ -1044,10 +1268,43 @@
                                 <div class="card-body" style="padding-bottom: 10px; padding-top: 12px;">
                                     <h4 style="font-size: 1.1rem; margin-bottom: 10px;">Scan Tool</h4>
                                     <button onclick="startScanner()" class="btn btn-primary btn-scan mb-2">
-                                        <i class="fas fa-camera"></i> Start Scanner
+                                        <i class="fas fa-camera"></i> Start Advanced Scanner
                                     </button>
                                     <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-2" style="display:none;">Stop Scanner</button>
-                                    <div id="reader" style="display:none;"></div>
+                                    <div id="reader" style="display:none;">
+                                        <!-- Scan Area Overlay -->
+                                        <div class="scan-overlay">
+                                            <div class="scan-area">
+                                                <div class="scan-corner top-left"></div>
+                                                <div class="scan-corner top-right"></div>
+                                                <div class="scan-corner bottom-left"></div>
+                                                <div class="scan-corner bottom-right"></div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Instructions -->
+                                        <div class="scanner-instructions">
+                                            <i class="fas fa-crosshairs"></i> Point camera at barcode
+                                        </div>
+                                        
+                                        <!-- Scanner Controls -->
+                                        <div class="scanner-controls">
+                                            <button class="scanner-control-btn" id="torchBtn" onclick="toggleTorch()" title="Toggle Flashlight">
+                                                <i class="fas fa-lightbulb"></i>
+                                            </button>
+                                        </div>
+                                        
+                                        <!-- Zoom Controls -->
+                                        <div class="zoom-controls">
+                                            <button class="zoom-btn" onclick="zoomOut()" title="Zoom Out">
+                                                <i class="fas fa-minus"></i>
+                                            </button>
+                                            <span class="zoom-level" id="zoomLevel">1.0x</span>
+                                            <button class="zoom-btn" onclick="zoomIn()" title="Zoom In">
+                                                <i class="fas fa-plus"></i>
+                                            </button>
+                                        </div>
+                                    </div>
                                     <div class="input-group mb-2">
                                         <input type="text" id="toolCode" class="form-control" placeholder="Enter Tool Code">
                                         <button onclick="submitCode()" class="btn btn-primary">
@@ -1106,11 +1363,26 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
           <h2 class="mytools-title" style="margin:0;">MY TOOLS</h2>
           <div style="display:flex;gap:8px;">
+            <button id="editMyToolsBtn" style="background:#2196F3;color:white;border:none;border-radius:16px;padding:8px 16px;font-size:0.9rem;font-weight:bold;cursor:pointer;">Edit My Tools</button>
             <button id="myToolsAddCollectionPhotoBtn" style="background:#4CAF50;color:white;border:none;border-radius:16px;padding:8px 16px;font-size:0.9rem;font-weight:bold;cursor:pointer;"><i class="fas fa-camera"></i> Add Collection Photo</button>
             <button id="myToolsCollectionPhotosBtn" style="background:#9C27B0;color:white;border:none;border-radius:16px;padding:8px 16px;font-size:0.9rem;font-weight:bold;cursor:pointer;"><i class="fas fa-images"></i> Collection Photos</button>
           </div>
         </div>
         <div id="myToolsScreenBody"></div>
+      </div>
+    </div>
+
+    <!-- Edit My Tools Screen (hidden by default) -->
+    <div id="editMyToolsScreen" style="display:none;">
+      <div class="container py-4">
+        <div style="background:#FF9800;color:white;font-weight:bold;font-size:1.3rem;padding:12px 16px;border-radius:8px 8px 0 0;">Edit My Tools</div>
+        <div style="display:flex;gap:8px;margin:16px 0;align-items:center;">
+          <input id="editMyToolsSearch" type="text" placeholder="Search or scan tool..." style="flex:1;padding:8px 12px;font-size:1.1rem;border-radius:6px;border:1px solid #ccc;">
+          <button id="editMyToolsSearchBtn" style="background:#2196F3;color:white;border:none;border-radius:6px;padding:8px 16px;font-size:1rem;font-weight:bold;cursor:pointer;">Search</button>
+          <!-- Optionally add a scan button here if you have barcode scanning support -->
+        </div>
+        <button id="editMyToolsBackBtn" class="mytools-back"><i class="fas fa-arrow-left"></i> Back</button>
+        <div id="editMyToolsResults"></div>
       </div>
     </div>
 
@@ -2688,22 +2960,35 @@ if (!userCredential.user.emailVerified) {
             }
         }
 
-        // QR Code Scanner
+        // Advanced QR Code Scanner with Zoom and Torch
+        let currentZoom = 1.0;
+        let maxZoom = 5.0;
+        let minZoom = 1.0;
+        let torchEnabled = false;
+        let videoTrack = null;
+        
         function startScanner() {
             var reader = document.getElementById('reader');
             reader.style.display = 'block';
-            reader.style.height = '320px';
+            reader.style.height = '400px';
             document.getElementById('stopScannerBtn').style.display = 'inline-block';
+            
+            // Reset zoom and torch state
+            currentZoom = 1.0;
+            torchEnabled = false;
+            updateZoomDisplay();
+            updateTorchButton();
             
             html5QrCode = new Html5Qrcode("reader");
             const config = {
-                fps: 10,
-                qrbox: { width: 250, height: 250 }, // Square QR box
+                fps: 15, // Increased FPS for better performance
+                qrbox: { width: 200, height: 200 }, // Smaller QR box for better precision
                 aspectRatio: 1.0, // Square aspect ratio
                 formatsToSupport: [
                     Html5QrcodeSupportedFormats.QR_CODE,
                     Html5QrcodeSupportedFormats.CODE_128,
                     Html5QrcodeSupportedFormats.CODE_39,
+                    Html5QrcodeSupportedFormats.CODE_93,
                     Html5QrcodeSupportedFormats.EAN_13,
                     Html5QrcodeSupportedFormats.EAN_8,
                     Html5QrcodeSupportedFormats.UPC_A,
@@ -2718,34 +3003,185 @@ if (!userCredential.user.emailVerified) {
 
             // Try to use the environment camera (back camera) first
             html5QrCode.start(
-                { facingMode: "environment" },
+                { 
+                    facingMode: "environment",
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
                 config,
                 (decodedText) => {
+                    // Success callback
                     document.getElementById('toolCode').value = decodedText;
                     document.getElementById('toolDetailsBtn').disabled = false;
-                    stopCamera();
+                    
+                    // Show success feedback
+                    showScanSuccess();
+                    
+                    // Stop camera after a short delay to show the success
+                    setTimeout(() => {
+                        stopCamera();
+                    }, 1000);
                 },
                 (errorMessage) => {
                     // Ignore errors during scanning
                 }
-            ).catch(err => {
+            ).then(() => {
+                // Get video track for zoom and torch controls
+                const videoElement = reader.querySelector('video');
+                if (videoElement && videoElement.srcObject) {
+                    const stream = videoElement.srcObject;
+                    videoTrack = stream.getVideoTracks()[0];
+                    
+                    // Check zoom capabilities
+                    if (videoTrack && videoTrack.getCapabilities) {
+                        const capabilities = videoTrack.getCapabilities();
+                        if (capabilities.zoom) {
+                            maxZoom = capabilities.zoom.max || 5.0;
+                            minZoom = capabilities.zoom.min || 1.0;
+                        }
+                    }
+                }
+            }).catch(err => {
                 // If environment camera fails, try user camera (front camera)
                 html5QrCode.start(
-                    { facingMode: "user" },
+                    { 
+                        facingMode: "user",
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
                     config,
                     (decodedText) => {
                         document.getElementById('toolCode').value = decodedText;
                         document.getElementById('toolDetailsBtn').disabled = false;
-                        stopCamera();
+                        showScanSuccess();
+                        setTimeout(() => {
+                            stopCamera();
+                        }, 1000);
                     },
                     (errorMessage) => {
                         // Ignore errors during scanning
                     }
-                ).catch(err => {
+                ).then(() => {
+                    // Get video track for zoom and torch controls
+                    const videoElement = reader.querySelector('video');
+                    if (videoElement && videoElement.srcObject) {
+                        const stream = videoElement.srcObject;
+                        videoTrack = stream.getVideoTracks()[0];
+                        
+                        if (videoTrack && videoTrack.getCapabilities) {
+                            const capabilities = videoTrack.getCapabilities();
+                            if (capabilities.zoom) {
+                                maxZoom = capabilities.zoom.max || 5.0;
+                                minZoom = capabilities.zoom.min || 1.0;
+                            }
+                        }
+                    }
+                }).catch(err => {
                     alert('Camera error: ' + err);
                     stopCamera();
                 });
             });
+        }
+        
+        // Zoom functions
+        function zoomIn() {
+            if (videoTrack && currentZoom < maxZoom) {
+                currentZoom = Math.min(currentZoom + 0.5, maxZoom);
+                applyZoom();
+                updateZoomDisplay();
+            }
+        }
+        
+        function zoomOut() {
+            if (videoTrack && currentZoom > minZoom) {
+                currentZoom = Math.max(currentZoom - 0.5, minZoom);
+                applyZoom();
+                updateZoomDisplay();
+            }
+        }
+        
+        function applyZoom() {
+            if (videoTrack && videoTrack.getCapabilities) {
+                const capabilities = videoTrack.getCapabilities();
+                if (capabilities.zoom) {
+                    videoTrack.applyConstraints({
+                        advanced: [{ zoom: currentZoom }]
+                    }).catch(err => {
+                        console.log('Zoom not supported on this device');
+                    });
+                }
+            }
+        }
+        
+        function updateZoomDisplay() {
+            const zoomLevel = document.getElementById('zoomLevel');
+            if (zoomLevel) {
+                zoomLevel.textContent = currentZoom.toFixed(1) + 'x';
+            }
+        }
+        
+        // Torch functions
+        function toggleTorch() {
+            if (videoTrack && videoTrack.getCapabilities) {
+                const capabilities = videoTrack.getCapabilities();
+                if (capabilities.torch) {
+                    torchEnabled = !torchEnabled;
+                    videoTrack.applyConstraints({
+                        advanced: [{ torch: torchEnabled }]
+                    }).then(() => {
+                        updateTorchButton();
+                    }).catch(err => {
+                        console.log('Torch not supported on this device');
+                        torchEnabled = false;
+                        updateTorchButton();
+                    });
+                } else {
+                    alert('Flashlight not supported on this device');
+                }
+            } else {
+                alert('Flashlight not supported on this device');
+            }
+        }
+        
+        function updateTorchButton() {
+            const torchBtn = document.getElementById('torchBtn');
+            if (torchBtn) {
+                if (torchEnabled) {
+                    torchBtn.classList.add('active');
+                    torchBtn.innerHTML = '<i class="fas fa-lightbulb" style="color: #FFD700;"></i>';
+                } else {
+                    torchBtn.classList.remove('active');
+                    torchBtn.innerHTML = '<i class="fas fa-lightbulb"></i>';
+                }
+            }
+        }
+        
+        // Success feedback
+        function showScanSuccess() {
+            const scanArea = document.querySelector('.scan-area');
+            if (scanArea) {
+                scanArea.classList.add('scan-success');
+                scanArea.style.border = '3px solid #4CAF50';
+                scanArea.style.boxShadow = '0 0 20px rgba(76, 175, 80, 0.8)';
+                
+                // Show success message
+                const instructions = document.querySelector('.scanner-instructions');
+                if (instructions) {
+                    instructions.innerHTML = '<i class="fas fa-check-circle" style="color: #4CAF50;"></i> Barcode detected!';
+                    instructions.style.background = 'rgba(76, 175, 80, 0.9)';
+                }
+                
+                setTimeout(() => {
+                    scanArea.classList.remove('scan-success');
+                    scanArea.style.border = '2px solid rgba(255, 255, 255, 0.8)';
+                    scanArea.style.boxShadow = 'none';
+                    
+                    if (instructions) {
+                        instructions.innerHTML = '<i class="fas fa-crosshairs"></i> Point camera at barcode';
+                        instructions.style.background = 'rgba(0, 0, 0, 0.7)';
+                    }
+                }, 1000);
+            }
         }
 
         function stopCamera() {
@@ -2754,6 +3190,12 @@ if (!userCredential.user.emailVerified) {
             reader.style.display = 'none';
             reader.style.height = '0';
             document.getElementById('stopScannerBtn').style.display = 'none';
+            
+            // Reset zoom and torch
+            currentZoom = 1.0;
+            torchEnabled = false;
+            videoTrack = null;
+            
             if (html5QrCode) {
                 html5QrCode.stop().then(() => {
                     html5QrCode.clear();
@@ -3709,7 +4151,8 @@ if (!userCredential.user.emailVerified) {
                                     <span style="font-size:1.01rem;font-weight:bold;color:#222;">WorkOn: <span style="color:#888;font-weight:bold;">${(typeof tool.WorkOn === 'string' && tool.WorkOn.trim()) ? tool.WorkOn : 'N/A'}</span></span>
                                 </span><br>
                                 <span style="font-weight:bold;color:${statusColor};">Status: ${tool.status || ''}</span><br>
-                                <span style="font-size:1.01rem;color:#222;">Location: ${tool.location || ''}</span>
+                                <span style="font-size:1.01rem;color:#222;">Location: ${tool.location || ''}</span><br>
+                                <span style="font-size:1.01rem;color:#1976d2;font-weight:bold;">Cal Due Date: ${tool.calDueDate || 'N/A'}</span>
                                 </div>
                                 <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;">
                                     <button onclick="event.stopPropagation(); createPhotoUploadInput('${tool.id}', '${tool.partNumber || tool.id}')" 
@@ -4911,7 +5354,7 @@ if (!userCredential.user.emailVerified) {
                 if (collectionCodes.length <= 10) {
                   const colSnap = await db.collection('collections').where('collectionName', 'in', collectionCodes).get();
                   collections = colSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                } else {
+                        } else {
                   // Firestore 'in' query limit is 10, so batch if needed
                   for (let i = 0; i < collectionCodes.length; i += 10) {
                     const batch = collectionCodes.slice(i, i + 10);
@@ -7034,636 +7477,8 @@ if (!userCredential.user.emailVerified) {
     </script>
 
     <script>
-    // --- Search Tools Screen Logic ---
-    (function() {
-      // Navigation
-      const searchScreen = document.getElementById('searchToolsScreen');
-      const menuBtn = document.getElementById('menuSearchBtn');
-      const backBtn = document.getElementById('searchToolsBackBtn');
-      const input = document.getElementById('searchToolsInput');
-      const clearBtn = document.getElementById('searchToolsClearBtn');
-      const partNumberBtn = document.getElementById('searchTypePartNumber');
-      const partNameBtn = document.getElementById('searchTypePartName');
-      const resultsDiv = document.getElementById('searchToolsResults');
-      const suggestionsDiv = document.getElementById('searchToolsSuggestions');
-
-      let searchType = 'partNumber'; // 'partNumber' or 'partName'
-      let searchTimeout = null;
-      let lastQuery = '';
-      let suggestionsTimeout = null;
-
-      // Show Search Tools screen
-      if (menuBtn) {
-        menuBtn.onclick = function() {
-          hideAllMainScreens();
-          searchScreen.style.display = 'block';
-          input.value = '';
-          resultsDiv.innerHTML = '';
-          suggestionsDiv.innerHTML = '';
-          setSearchType('partNumber');
-          input.placeholder = 'Search by Part Number';
-          input.focus();
-        };
-      }
-      // Back to menu
-      if (backBtn) {
-        backBtn.onclick = function() {
-          searchScreen.style.display = 'none';
-          document.getElementById('toolScannerMenu').style.display = 'block';
-        };
-      }
-      // Clear input
-      if (clearBtn) {
-        clearBtn.onclick = function() {
-          input.value = '';
-          resultsDiv.innerHTML = '';
-          suggestionsDiv.innerHTML = '';
-          input.focus();
-        };
-      }
-      // Search type toggle
-      function setSearchType(type) {
-        searchType = type;
-        if (type === 'partNumber') {
-          partNumberBtn.classList.add('btn-success');
-          partNumberBtn.classList.remove('btn-outline-secondary');
-          partNameBtn.classList.remove('btn-success');
-          partNameBtn.classList.add('btn-outline-secondary');
-          input.placeholder = 'Search by Part Number';
-        } else {
-          partNameBtn.classList.add('btn-success');
-          partNameBtn.classList.remove('btn-outline-secondary');
-          partNumberBtn.classList.remove('btn-success');
-          partNumberBtn.classList.add('btn-outline-secondary');
-          input.placeholder = 'Search by Part Name';
-        }
-        input.value = '';
-        resultsDiv.innerHTML = '';
-        suggestionsDiv.innerHTML = '';
-        input.focus();
-      }
-      if (partNumberBtn) partNumberBtn.onclick = () => setSearchType('partNumber');
-      if (partNameBtn) partNameBtn.onclick = () => setSearchType('partName');
-
-      // Debounced search and suggestions
-      if (input) {
-        input.oninput = function() {
-          if (searchTimeout) clearTimeout(searchTimeout);
-          if (suggestionsTimeout) clearTimeout(suggestionsTimeout);
-          const query = input.value.trim();
-          if (!query) {
-            resultsDiv.innerHTML = '';
-            suggestionsDiv.innerHTML = '';
-            return;
-          }
-          // Show suggestions after short delay
-          suggestionsTimeout = setTimeout(() => {
-            showSuggestions(query);
-          }, 150);
-          // Debounced search
-          searchTimeout = setTimeout(() => {
-            performSearch(query);
-          }, 300);
-        };
-        input.onkeydown = function(e) {
-          if (e.key === 'Enter') {
-            if (searchTimeout) clearTimeout(searchTimeout);
-            if (suggestionsTimeout) clearTimeout(suggestionsTimeout);
-            performSearch(input.value.trim());
-            suggestionsDiv.innerHTML = '';
-          }
-        };
-      }
-
-      // Show live suggestions
-      async function showSuggestions(query) {
-        if (!query) {
-          suggestionsDiv.innerHTML = '';
-          return;
-        }
-        try {
-          let snapshot;
-          if (searchType === 'partNumber') {
-            snapshot = await db.collection('tools')
-              .where('partNumber', '>=', query)
-              .where('partNumber', '<=', query + '\uf8ff')
-              .orderBy('partNumber')
-              .limit(10)
-              .get();
-          } else {
-            snapshot = await db.collection('tools')
-              .where('toolName', '>=', query)
-              .where('toolName', '<=', query + '\uf8ff')
-              .orderBy('toolName')
-              .limit(10)
-              .get();
-          }
-          if (snapshot.empty) {
-            suggestionsDiv.innerHTML = '';
-            return;
-          }
-          let html = '<div class="list-group">';
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            const value = searchType === 'partNumber' ? (data.partNumber || doc.id) : (data.toolName || 'Unknown Tool');
-            html += `<button type="button" class="list-group-item list-group-item-action" style="font-weight:bold;" onclick="window.selectSearchSuggestion && window.selectSearchSuggestion('${value.replace(/'/g, "&#39;")}')">${value}</button>`;
-          });
-          html += '</div>';
-          suggestionsDiv.innerHTML = html;
-        } catch (e) {
-          suggestionsDiv.innerHTML = '';
-        }
-      }
-      // Global function for suggestion click
-      window.selectSearchSuggestion = function(value) {
-        input.value = value;
-        suggestionsDiv.innerHTML = '';
-        performSearch(value);
-        input.focus();
-      };
-
-      // Firestore search logic
-      async function performSearch(query) {
-        if (!query) return;
-        resultsDiv.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div></div>';
-        suggestionsDiv.innerHTML = '';
-        lastQuery = query;
-        try {
-          let snapshot;
-          if (searchType === 'partNumber') {
-            snapshot = await db.collection('tools')
-              .where('partNumber', '>=', query)
-              .where('partNumber', '<=', query + '\uf8ff')
-              .get();
-          } else {
-            snapshot = await db.collection('tools')
-              .where('toolName', '>=', query)
-              .where('toolName', '<=', query + '\uf8ff')
-              .get();
-          }
-          if (input.value.trim() !== lastQuery) return; // Ignore if input changed
-          if (snapshot.empty) {
-            resultsDiv.innerHTML = '<div class="text-center text-muted">No tools found.</div>';
-            return;
-          }
-          // Render results
-          let html = `<div class="mb-2">Found ${snapshot.size} tool(s)</div>`;
-          snapshot.forEach((doc, index) => {
-            const data = doc.data();
-            const status = (data.status || '').toUpperCase();
-            
-            // Status-based background colors (overrides alternating colors)
-            let cardClass = 'search-tool-card';
-            if (status === 'OUT') cardClass += ' out';
-            else if (status === 'IN') cardClass += ' in';
-            else {
-                // Apply alternating background colors for other statuses
-                const bgClass = index % 2 === 0 ? 'search-tool-bg1' : 'search-tool-bg2';
-                cardClass += ' ' + bgClass;
-            }
-            
-            // Status color logic
-            let statusColor = '#388E3C';
-            if (status === 'OUT') statusColor = '#d32f2f';
-            else if (status === 'BROKEN') statusColor = '#ff6f00';
-            else if (status === 'LOST') statusColor = '#ff8f00';
-            else if (status === 'CALIBRATION') statusColor = '#1976d2';
-            
-            html += `<div class="card mb-3 ${cardClass}" style="border-radius:12px;box-shadow:0 2px 4px rgba(0,0,0,0.08);transition:box-shadow 0.3s ease;cursor:pointer;" onclick="showToolDetailsFromSearch(${JSON.stringify({documentId: doc.id, ...data}).replace(/"/g, '&quot;')})">
-              <div class="card-body">
-                <div style="font-weight:bold;font-size:1.2em;">${data.toolName || 'Unknown Tool'}</div>
-                <div style="color:#888;font-size:1.05em;">Part #: <span style="color:#333;font-weight:bold;">${data.partNumber || doc.id}</span></div>
-                <div style="color:#888;font-size:1.05em;">TID: <span style="color:#333;font-weight:bold;">${doc.id}</span></div>
-                <div style="font-weight:bold;font-size:1.1em;margin-top:4px;">Status: <span style="color:${statusColor};">${status}</span></div>
-              </div>
-            </div>`;
-          });
-          resultsDiv.innerHTML = html;
-        } catch (e) {
-          resultsDiv.innerHTML = `<div class="text-danger text-center">Error: ${e.message}</div>`;
-        }
-      }
-
-      // Function to show tool details from search results
-      window.showToolDetailsFromSearch = function(tool) {
-        showToolDetails(tool, 'searchTools');
-      };
-    })();
-    </script>
-
-    <script>
-    // --- Orange Overlay Logic ---
-    document.addEventListener('DOMContentLoaded', function() {
-      // Orange overlay logic
-      const orangeOverlay = document.getElementById('orangeOverlay');
-      setTimeout(() => {
-        orangeOverlay.classList.add('hidden');
-      }, 500); // 0.5 seconds
-    });
-    </script>
-
-    <script>
-    // --- Add event listeners for Register Tools and Logout buttons ---
-    document.addEventListener('DOMContentLoaded', function() {
-        // Orange overlay logic
-        const orangeOverlay = document.getElementById('orangeOverlay');
-        const splashScreen = document.getElementById('splashScreen');
-        const splashVideo = document.getElementById('splashVideo');
-        
-        // --- Add event listeners for Register Tools and Logout buttons ---
-        const registerBtn = document.getElementById('menuRegisterBtn');
-        if (registerBtn) {
-            registerBtn.onclick = function() {
-                showRegisterTools();
-            };
-        }
-        const logoutBtn = document.getElementById('menuLogoutBtn');
-        if (logoutBtn) {
-            logoutBtn.onclick = function() {
-                logout();
-                document.getElementById('toolScannerMenu').style.display = 'none';
-            };
-        }
-        
-        // --- Mobile Back Button Handler ---
-        function handleBackButton() {
-            // Check which screen is currently visible
-            const toolScannerMenu = document.getElementById('toolScannerMenu');
-            const appSection = document.getElementById('appSection');
-            const myToolsScreen = document.getElementById('myToolsScreen');
-            const myToolsByCollectionScreen = document.getElementById('myToolsByCollectionScreen');
-            const collectionCheckupScreen = document.getElementById('collectionCheckupScreen');
-            const checkupHistoryScreen = document.getElementById('checkupHistoryScreen');
-            const previousOutToolsScreen = document.getElementById('previousOutToolsScreen');
-            const searchToolsScreen = document.getElementById('searchToolsScreen');
-            const loginSection = document.getElementById('loginSection');
-            const signUpSection = document.getElementById('signUpSection');
-            
-            // Debug logging
-            console.log('Back button pressed - checking screens:');
-            console.log('myToolsScreen display:', myToolsScreen ? myToolsScreen.style.display : 'element not found');
-            console.log('myToolsScreen visibility:', myToolsScreen ? myToolsScreen.offsetParent !== null : 'element not found');
-            console.log('myToolsScreen computed style:', myToolsScreen ? window.getComputedStyle(myToolsScreen).display : 'element not found');
-            console.log('checkupHistoryScreen display:', checkupHistoryScreen ? checkupHistoryScreen.style.display : 'element not found');
-            
-            // If we're on any screen other than the main menu, go back to menu
-            if (appSection && appSection.style.display !== 'none') {
-                console.log('Handling back from Register Tools screen');
-                document.getElementById('appSection').style.display = 'none';
-                document.getElementById('toolScannerMenu').style.display = 'block';
-                updatePreviousOutToolsCount();
-                return true;
-            } else if (myToolsScreen && (myToolsScreen.style.display !== 'none' || myToolsScreen.offsetParent !== null)) {
-                console.log('Handling back from My Tools screen');
-                document.getElementById('myToolsScreen').style.display = 'none';
-                document.getElementById('toolScannerMenu').style.display = 'block';
-                updatePreviousOutToolsCount();
-                return true;
-            } else if (myToolsByCollectionScreen && myToolsByCollectionScreen.style.display !== 'none') {
-                console.log('Handling back from My Tools by Collection screen');
-                document.getElementById('myToolsByCollectionScreen').style.display = 'none';
-                document.getElementById('toolScannerMenu').style.display = 'block';
-                updatePreviousOutToolsCount();
-                return true;
-            } else if (collectionCheckupScreen && collectionCheckupScreen.style.display !== 'none') {
-                console.log('Handling back from Collection Checkup screen');
-                document.getElementById('collectionCheckupScreen').style.display = 'none';
-                document.getElementById('myToolsByCollectionScreen').style.display = 'block';
-                return true;
-            } else if (checkupHistoryScreen && checkupHistoryScreen.style.display !== 'none') {
-                console.log('Handling back from Checkup History screen');
-                document.getElementById('checkupHistoryScreen').style.display = 'none';
-                document.getElementById('collectionCheckupScreen').style.display = 'block';
-                return true;
-            } else if (previousOutToolsScreen && previousOutToolsScreen.style.display !== 'none') {
-                console.log('Handling back from Previous OUT Tools screen');
-                document.getElementById('previousOutToolsScreen').style.display = 'none';
-                document.getElementById('toolScannerMenu').style.display = 'block';
-                updatePreviousOutToolsCount();
-                return true;
-            } else if (searchToolsScreen && searchToolsScreen.style.display !== 'none') {
-                console.log('Handling back from Search Tools screen');
-                document.getElementById('searchToolsScreen').style.display = 'none';
-                document.getElementById('toolScannerMenu').style.display = 'block';
-                updatePreviousOutToolsCount();
-                return true;
-            } else if (signUpSection && !signUpSection.classList.contains('d-none')) {
-                console.log('Handling back from Sign Up screen');
-                showLogin();
-                return true;
-            } else if (loginSection && loginSection.style.display !== 'none' && !loginSection.classList.contains('d-none')) {
-                console.log('On login screen - staying put');
-                return false;
-            }
-            
-            console.log('No screen detected - allowing default back behavior');
-            // If we're already on the main menu, don't prevent default
-            return false;
-        }
-        
-        // Listen for browser back button
-        window.addEventListener('popstate', function(event) {
-            if (handleBackButton()) {
-                // Prevent the default back behavior since we handled it
-                event.preventDefault();
-                // Push a new state to maintain history
-                history.pushState(null, null, window.location.pathname);
-            }
-        });
-        
-        // Listen for Android back button (WebView)
-        document.addEventListener('backbutton', function(event) {
-            if (handleBackButton()) {
-                event.preventDefault();
-            }
-        });
-        
-        // Add initial state to history
-        history.pushState(null, null, window.location.pathname);
-        
-        // Handle beforeunload for Android WebView
-        window.addEventListener('beforeunload', function(event) {
-            // This helps with Android back button handling
-            if (handleBackButton()) {
-                event.preventDefault();
-                event.returnValue = '';
-            }
-        });
-    });
-    </script>
-
-    <!-- Helicopter Model Selection Modal -->
-    <div class="modal fade" id="helicopterModelSelectionModal" tabindex="-1" aria-labelledby="helicopterModelSelectionModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header bg-primary text-white">
-            <h5 class="modal-title" id="helicopterModelSelectionModalLabel">Select Helicopter Model</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <p class="mb-3">Please select the helicopter model:</p>
-            <div class="row">
-              <div class="col-md-6">
-                <div class="list-group">
-                  <button class="list-group-item list-group-item-action helicopter-model-option" data-model="AW139">
-                    <strong>AW139</strong>
-                    <br><small class="text-muted">Work Locations: 701, 702, 703</small>
-                  </button>
-                  <button class="list-group-item list-group-item-action helicopter-model-option" data-model="SA342L">
-                    <strong>SA342L</strong>
-                    <br><small class="text-muted">Work Locations: 352, 353, 354, 355</small>
-                  </button>
-                  <button class="list-group-item list-group-item-action helicopter-model-option" data-model="B206L">
-                    <strong>B206L</strong>
-                    <br><small class="text-muted">Work Locations: 110, 111</small>
-                  </button>
-                </div>
-              </div>
-              <div class="col-md-6">
-                <div class="list-group">
-                  <button class="list-group-item list-group-item-action helicopter-model-option" data-model="H145M">
-                    <strong>H145M</strong>
-                    <br><small class="text-muted">Work Locations: 1955, 1956, 1957, 1958, 1959, 1960</small>
-                  </button>
-                  <button class="list-group-item list-group-item-action helicopter-model-option" data-model="Other">
-                    <strong>Other</strong>
-                    <br><small class="text-muted">Work Location: Other</small>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Work Location Selection Modal -->
-    <div class="modal fade" id="workLocationSelectionModal" tabindex="-1" aria-labelledby="workLocationSelectionModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header bg-primary text-white">
-            <h5 class="modal-title" id="workLocationSelectionModalLabel">Select Work Location</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body" id="workLocationSelectionModalBody">
-            <!-- Dynamic content will be inserted here -->
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Add this modal after other modals, before </body> -->
-    <div class="modal fade" id="locationSelectionModal" tabindex="-1" aria-labelledby="locationSelectionModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header bg-primary text-white">
-            <h5 class="modal-title" id="locationSelectionModalLabel">Select Work Location</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <p class="mb-3">Please select where the tool will be used:</p>
-            <div class="row">
-              <div class="col-md-6">
-                <div class="list-group">
-                  <button class="list-group-item list-group-item-action location-option" data-location="701">701</button>
-                  <button class="list-group-item list-group-item-action location-option" data-location="702">702</button>
-                  <button class="list-group-item list-group-item-action location-option" data-location="703">703</button>
-                  <button class="list-group-item list-group-item-action location-option" data-location="110">110</button>
-                  <button class="list-group-item list-group-item-action location-option" data-location="111">111</button>
-                  <button class="list-group-item list-group-item-action location-option" data-location="352">352</button>
-                  <button class="list-group-item list-group-item-action location-option" data-location="353">353</button>
-                  <button class="list-group-item list-group-item-action location-option" data-location="354">354</button>
-                </div>
-              </div>
-              <div class="col-md-6">
-                <div class="list-group">
-                  <button class="list-group-item list-group-item-action location-option" data-location="355">355</button>
-                  <button class="list-group-item list-group-item-action location-option" data-location="1955">1955</button>
-                  <button class="list-group-item list-group-item-action location-option" data-location="1956">1956</button>
-                  <button class="list-group-item list-group-item-action location-option" data-location="1957">1957</button>
-                  <button class="list-group-item list-group-item-action location-option" data-location="1958">1958</button>
-                  <button class="list-group-item list-group-item-action location-option" data-location="1959">1959</button>
-                  <button class="list-group-item list-group-item-action location-option" data-location="1960">1960</button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Add this modal after other modals, before </body> -->
-    <div class="modal fade" id="toolAlreadyCheckedOutModal" tabindex="-1" aria-labelledby="toolAlreadyCheckedOutModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header bg-primary text-white">
-            <h5 class="modal-title" id="toolAlreadyCheckedOutModalLabel">TOOL ALREADY CHECKED OUT</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body" id="toolAlreadyCheckedOutModalBody">
-            <!-- Message will be set by JS -->
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <!-- Add this modal after other modals, before </body> -->
-    <div class="modal fade" id="toolPreviousDateModal" tabindex="-1" aria-labelledby="toolPreviousDateModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header bg-primary text-white">
-            <h5 class="modal-title" id="toolPreviousDateModalLabel">Tool from Previous Date</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            This tool was checked out on a previous date. Please contact an administrator to check it IN.
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <script>
-    // ... existing code ...
-    function showLocationPhotoDialog(collectionName, location) {
-      // Create or show a modal for location photos
-      let modal = document.getElementById('locationPhotoModal');
-      if (!modal) {
-        modal = document.createElement('div');
-        modal.className = 'modal fade';
-        modal.id = 'locationPhotoModal';
-        modal.tabIndex = -1;
-        modal.innerHTML = `
-          <div class="modal-dialog">
-            <div class="modal-content">
-              <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">Location Photo: <span id="locationPhotoModalTitle"></span></h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-              </div>
-              <div class="modal-body">
-                <div id="locationPhotoModalBody" class="mb-3"></div>
-                <input type="file" id="locationPhotoInput" accept="image/*" class="form-control mb-2" style="display:none;">
-                <button id="uploadLocationPhotoBtn" class="btn btn-success mb-2"><i class="fas fa-upload"></i> Add Photo</button>
-                <button id="viewLocationPhotosBtn" class="btn btn-info mb-2"><i class="fas fa-images"></i> View Photos</button>
-                <div id="locationPhotoUploadStatus" class="mt-2"></div>
-              </div>
-            </div>
-          </div>
-        `;
-        document.body.appendChild(modal);
-      }
-      document.getElementById('locationPhotoModalTitle').textContent = `${collectionName} / ${location}`;
-      document.getElementById('locationPhotoModalBody').innerHTML = '';
-      document.getElementById('locationPhotoUploadStatus').innerHTML = '';
-      // Show modal
-      const bsModal = new bootstrap.Modal(modal);
-      bsModal.show();
-      // Set up upload button
-      document.getElementById('uploadLocationPhotoBtn').onclick = function() {
-        document.getElementById('locationPhotoInput').click();
-      };
-      document.getElementById('locationPhotoInput').onchange = function(e) {
-        if (e.target.files && e.target.files[0]) {
-          uploadLocationPhoto(collectionName, location, e.target.files[0]);
-        }
-      };
-      document.getElementById('viewLocationPhotosBtn').onclick = function() {
-        viewLocationPhotos(collectionName, location);
-      };
-    }
     // ... existing code ...
     </script>
-
-    <!-- Offline Functionality Script -->
-    <script>
-    // Offline functionality variables
-    let isOnline = navigator.onLine;
-    let offlineTools = [];
-    let offlineDB = null;
-    
-    // Initialize IndexedDB for offline storage
-    function initIndexedDB() {
-        return new Promise((resolve, reject) => {
-            const request = window.indexedDB.open('ToolTrackingDB', 1);
-            
-            request.onerror = () => reject(request.error);
-            request.onsuccess = () => {
-                offlineDB = request.result;
-                resolve(offlineDB);
-            };
-            
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains('offlineTools')) {
-                    db.createObjectStore('offlineTools', { keyPath: 'id' });
-                }
-            };
-        });
-    }
-    
-    // Save tool to offline storage
-    async function saveToolOffline(toolData) {
-        if (!offlineDB) {
-            await initIndexedDB();
-        }
-        
-        return new Promise((resolve, reject) => {
-            const transaction = offlineDB.transaction(['offlineTools'], 'readwrite');
-            const store = transaction.objectStore('offlineTools');
-            const request = store.add(toolData);
-            
-            request.onsuccess = () => {
-                console.log('Tool saved offline:', toolData.id);
-                resolve();
-            };
-            request.onerror = () => reject(request.error);
-        });
-    }
-    
-    // Get all offline tools
-    async function getOfflineTools() {
-        if (!offlineDB) {
-            await initIndexedDB();
-        }
-        
-        return new Promise((resolve, reject) => {
-            const transaction = offlineDB.transaction(['offlineTools'], 'readonly');
-            const store = transaction.objectStore('offlineTools');
-            const request = store.getAll();
-            
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
-    }
-    
-    // Remove tool from offline storage
-    async function removeOfflineTool(toolId) {
-        if (!offlineDB) {
-            await initIndexedDB();
-        }
-        
-        return new Promise((resolve, reject) => {
-            const transaction = offlineDB.transaction(['offlineTools'], 'readwrite');
-            const store = transaction.objectStore('offlineTools');
-            const request = store.delete(toolId);
-            
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
-        });
-    }
     
     // Sync offline tools when back online
     async function syncOfflineTools() {
