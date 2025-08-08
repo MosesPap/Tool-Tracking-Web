@@ -2076,6 +2076,9 @@
 
         // QR Scanner
         let html5QrCode;
+        
+        // Online/Offline status
+        let isOnline = navigator.onLine;
 
         // Show/Hide password logic
         const loginPassword = document.getElementById('loginPassword');
@@ -2874,25 +2877,55 @@ if (!userCredential.user.emailVerified) {
                 const toolList = document.getElementById('toolList');
                 toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4>';
 
-                if (snapshot.empty) {
+                let allTools = [];
+
+                // Add online tools
+                if (!snapshot.empty) {
+                    snapshot.docs.forEach(doc => {
+                        allTools.push({
+                            id: doc.id,
+                            data: doc.data(),
+                            isOffline: false,
+                            doc: doc
+                        });
+                    });
+                }
+
+                // Add offline tools
+                try {
+                    const offlineTools = await getOfflineTools();
+                    offlineTools.forEach(tool => {
+                        allTools.push({
+                            id: tool.id,
+                            data: tool.data,
+                            isOffline: true
+                        });
+                    });
+                } catch (error) {
+                    console.error('Error loading offline tools:', error);
+                }
+
+                if (allTools.length === 0) {
                     toolList.innerHTML += '<p>No tools scanned today.</p>';
                     return;
                 }
 
                 // Sort tools: OUT first, then IN, and by timestamp within each group
-                const sortedTools = snapshot.docs.sort((a, b) => {
-                    const aData = a.data();
-                    const bData = b.data();
+                allTools.sort((a, b) => {
+                    const aData = a.data;
+                    const bData = b.data;
                     // First sort by status (OUT before IN)
                     if (aData.status !== bData.status) {
                         return aData.status === 'OUT' ? -1 : 1;
                     }
                     // Then sort by timestamp (newest first)
-                    return bData.timestamp.toDate() - aData.timestamp.toDate();
+                    const aTime = aData.timestamp ? (aData.timestamp.toDate ? aData.timestamp.toDate() : new Date(aData.timestamp)) : new Date(0);
+                    const bTime = bData.timestamp ? (bData.timestamp.toDate ? bData.timestamp.toDate() : new Date(bData.timestamp)) : new Date(0);
+                    return bTime - aTime;
                 });
 
-                sortedTools.forEach((doc, index) => {
-                    const data = doc.data();
+                allTools.forEach((tool, index) => {
+                    const data = tool.data;
                     const status = (data.status || '').toUpperCase();
                     let statusClass = 'in';
                     if (status === 'OUT') statusClass = 'out';
@@ -2900,23 +2933,47 @@ if (!userCredential.user.emailVerified) {
                     else if (status === 'LOST') statusClass = 'lost';
                     else if (status === 'CALIBRATION') statusClass = 'calibration';
 
-                    const time = data.timestamp ? data.timestamp.toDate().toLocaleString('en-GB', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        hour12: false
-                    }) : 'N/A';
+                    const time = data.timestamp ? 
+                        (data.timestamp.toDate ? 
+                            data.timestamp.toDate().toLocaleString('en-GB', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false
+                            }) : 
+                            new Date(data.timestamp).toLocaleString('en-GB', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false
+                            })
+                        ) : 'N/A';
 
                     const card = document.createElement('div');
                     card.className = `register-tool-card ${statusClass}`;
+                    if (tool.isOffline) {
+                        card.style.border = '2px dashed #ffc107';
+                        card.style.background = '#fff3cd';
+                    }
+                    
                     card.onclick = function() {
-                        showToolDetails(buildToolDetailsObject(doc, data), 'registerTools');
+                        if (tool.isOffline) {
+                            // Show offline tool details
+                            showOfflineToolDetails(tool);
+                        } else {
+                            showToolDetails(buildToolDetailsObject(tool.doc, data), 'registerTools');
+                        }
                     };
+                    
+                    const offlineIndicator = tool.isOffline ? ' (Offline)' : '';
                     card.innerHTML = `
-                        <div class="register-tool-title">${index + 1}. ${data.toolName || 'Unknown Tool'}</div>
+                        <div class="register-tool-title">${index + 1}. ${data.toolName || 'Unknown Tool'}${offlineIndicator}</div>
                         <div class="register-tool-date" style="display: flex; align-items: center; justify-content: space-between;">
                             <span>${time}</span>
                             ${status === 'OUT' && data.WorkOn ? `<span style="font-size:1em;font-weight:bold;color:#222;">WorkOn: <span style="color:#888;font-weight:bold;">${data.WorkOn}</span></span>` : ''}
@@ -2924,18 +2981,17 @@ if (!userCredential.user.emailVerified) {
                         <div class="register-tool-row">
                             <div class="register-tool-col">
                                 <div class="register-tool-label">TID</div>
-                                <div class="register-tool-value">${doc.id}</div>
-                        </div>
+                                <div class="register-tool-value">${tool.id}</div>
+                            </div>
                             <div class="register-tool-col">
                                 <div class="register-tool-label">P/N</div>
-                                <div class="register-tool-value">${data.partNumber || doc.id}</div>
+                                <div class="register-tool-value">${data.partNumber || tool.id}</div>
                             </div>
                             <div class="register-tool-col">
                                 <div class="register-tool-label">STS</div>
                                 <div class="register-tool-status ${statusClass}">${status}</div>
                             </div>
                         </div>
-                        
                     `;
                     toolList.appendChild(card);
                 });
@@ -2944,6 +3000,46 @@ if (!userCredential.user.emailVerified) {
                 const toolList = document.getElementById('toolList');
                 toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4><p class="text-danger">Error loading tools. Please try again.</p>';
             }
+        }
+
+        // Show offline tool details
+        function showOfflineToolDetails(tool) {
+            const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
+            const modalBody = document.getElementById('toolDetailsBody');
+            
+            const time = tool.data.timestamp ? 
+                new Date(tool.data.timestamp).toLocaleString('en-GB', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                }) : 'N/A';
+            
+            modalBody.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-wifi-slash me-2"></i>
+                    This tool was saved offline and will be synced when connection is restored.
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Tool ID:</strong> ${tool.id}<br>
+                        <strong>Tool Name:</strong> ${tool.data.toolName || 'Unknown Tool'}<br>
+                        <strong>Part Number:</strong> ${tool.data.partNumber || tool.id}<br>
+                        <strong>Status:</strong> <span class="badge bg-warning">${tool.data.status || 'OUT'}</span>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Technician:</strong> ${tool.data.technician || 'Unknown'}<br>
+                        <strong>Work Location:</strong> ${tool.data.WorkOn || 'Unknown'}<br>
+                        <strong>Timestamp:</strong> ${time}<br>
+                        <strong>Collection:</strong> ${tool.data.collectionName || 'Default Collection'}
+                    </div>
+                </div>
+            `;
+            
+            modal.show();
         }
 
         // Load previous out tools
@@ -3173,8 +3269,29 @@ if (!userCredential.user.emailVerified) {
                 
             } catch (error) {
                 console.error('Enhanced scanner error:', error);
-                alert('Failed to start enhanced scanner: ' + error.message);
-                closeEnhancedScanner();
+                // Try fallback to user camera
+                try {
+                    const fallbackConstraints = {
+                        video: {
+                            facingMode: 'user',
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    };
+                    
+                    enhancedScannerStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                    enhancedScannerVideo.srcObject = enhancedScannerStream;
+                    
+                    enhancedScannerVideo.onloadedmetadata = () => {
+                        enhancedScannerVideo.play();
+                        startBarcodeDetection();
+                        setupTouchEvents();
+                    };
+                } catch (fallbackError) {
+                    console.error('Enhanced scanner fallback error:', fallbackError);
+                    alert('Failed to start enhanced scanner: ' + fallbackError.message);
+                    closeEnhancedScanner();
+                }
             }
         }
 
@@ -3258,6 +3375,21 @@ if (!userCredential.user.emailVerified) {
                 }
             ).catch(err => {
                 console.error('Enhanced scanner detection error:', err);
+                // Fallback: try user camera
+                enhancedHtml5QrCode.start(
+                    { facingMode: "user" },
+                    config,
+                    (decodedText) => {
+                        document.getElementById('toolCode').value = decodedText;
+                        document.getElementById('toolDetailsBtn').disabled = false;
+                        closeEnhancedScanner();
+                    },
+                    (errorMessage) => {
+                        // Ignore errors during scanning
+                    }
+                ).catch(err2 => {
+                    console.error('Enhanced scanner fallback error:', err2);
+                });
             });
             
             // Store reference for cleanup
@@ -7832,8 +7964,8 @@ if (!userCredential.user.emailVerified) {
                 document.getElementById('toolCode').value = '';
                 document.getElementById('toolDetailsBtn').disabled = true;
                 
-                // Load offline tools to show in the list
-                loadOfflineTools();
+                // Load tools to show in the list (including offline)
+                loadTools();
                 
             } catch (error) {
                 console.error('Error handling offline tool submission:', error);
@@ -7841,54 +7973,80 @@ if (!userCredential.user.emailVerified) {
             }
         }
         
-        // Load and display offline tools
-        async function loadOfflineTools() {
-            try {
-                const offlineTools = await getOfflineTools();
-                const toolList = document.getElementById('toolList');
-                
-                if (offlineTools.length > 0) {
-                    let html = '<h4 style="font-size: 1.1rem; margin-bottom: 8px;">Today\'s Tools (Including Offline)</h4>';
-                    
-                    offlineTools.forEach((tool, index) => {
-                        const time = tool.data.timestamp.toLocaleString('en-GB', {
-                            day: '2-digit', month: '2-digit', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-                        });
-                        
-                        html += `
-                            <div class="register-tool-card out" style="border: 2px dashed #ffc107;">
-                                <div class="register-tool-title">${index + 1}. ${tool.data.toolName} (Offline)</div>
-                                <div class="register-tool-date" style="display: flex; align-items: center; justify-content: space-between;">
-                                    <span>${time}</span>
-                                    <span style="font-size:1em;font-weight:bold;color:#222;">WorkOn: <span style="color:#888;font-weight:bold;">${tool.data.WorkOn}</span></span>
-                                </div>
-                                <div class="register-tool-row">
-                                    <div class="register-tool-col">
-                                        <div class="register-tool-label">TID</div>
-                                        <div class="register-tool-value">${tool.id}</div>
-                                    </div>
-                                    <div class="register-tool-col">
-                                        <div class="register-tool-label">P/N</div>
-                                        <div class="register-tool-value">${tool.data.partNumber}</div>
-                                    </div>
-                                    <div class="register-tool-col">
-                                        <div class="register-tool-status out">OUT</div>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    
-                    toolList.innerHTML = html;
-                }
-            } catch (error) {
-                console.error('Error loading offline tools:', error);
-            }
-        }
 
-        // Initialize offline functionality
-        document.addEventListener('DOMContentLoaded', async function() {
+
+            // IndexedDB operations for offline storage
+    let db = null;
+
+    async function initIndexedDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open('ToolTrackingDB', 1);
+            
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => {
+                db = request.result;
+                resolve(db);
+            };
+            
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains('offlineTools')) {
+                    db.createObjectStore('offlineTools', { keyPath: 'id' });
+                }
+            };
+        });
+    }
+
+    async function getOfflineTools() {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                resolve([]);
+                return;
+            }
+            
+            const transaction = db.transaction(['offlineTools'], 'readonly');
+            const store = transaction.objectStore('offlineTools');
+            const getAllRequest = store.getAll();
+            
+            getAllRequest.onsuccess = () => resolve(getAllRequest.result);
+            getAllRequest.onerror = () => reject(getAllRequest.error);
+        });
+    }
+
+    async function saveToolOffline(toolData) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                reject(new Error('Database not initialized'));
+                return;
+            }
+            
+            const transaction = db.transaction(['offlineTools'], 'readwrite');
+            const store = transaction.objectStore('offlineTools');
+            const addRequest = store.put(toolData);
+            
+            addRequest.onsuccess = () => resolve();
+            addRequest.onerror = () => reject(addRequest.error);
+        });
+    }
+
+    async function removeOfflineTool(toolId) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                resolve();
+                return;
+            }
+            
+            const transaction = db.transaction(['offlineTools'], 'readwrite');
+            const store = transaction.objectStore('offlineTools');
+            const deleteRequest = store.delete(toolId);
+            
+            deleteRequest.onsuccess = () => resolve();
+            deleteRequest.onerror = () => reject(deleteRequest.error);
+        });
+    }
+
+    // Initialize offline functionality
+    document.addEventListener('DOMContentLoaded', async function() {
         // Initialize IndexedDB
         await initIndexedDB();
         
