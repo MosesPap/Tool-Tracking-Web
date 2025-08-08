@@ -2140,7 +2140,7 @@
                         <!-- Work location buttons will be dynamically loaded here -->
                     </div>
                     <div class="text-center mt-4">
-                        <button type="button" class="btn btn-link text-decoration-none" onclick="showHelicopterModelSelectionModal()" style="color: #666; font-size: 1rem;">
+                        <button type="button" class="btn btn-link text-decoration-none" onclick="goBackToHelicopterModels()" style="color: #666; font-size: 1rem;">
                             <i class="fas fa-arrow-left me-2"></i>Back to Models
                         </button>
                     </div>
@@ -4474,6 +4474,40 @@ if (!userCredential.user.emailVerified) {
                 'Other': ['Other']
             };
             return locationMap[model] || [];
+        }
+
+        function goBackToHelicopterModels() {
+            // Get the current work location modal
+            const workLocationModalElement = document.getElementById('workLocationSelectionModal');
+            const workLocationModal = bootstrap.Modal.getInstance(workLocationModalElement);
+            
+            if (workLocationModal) {
+                // Hide the current modal and show helicopter model modal when hidden
+                workLocationModalElement.addEventListener('hidden.bs.modal', function onHidden() {
+                    workLocationModalElement.removeEventListener('hidden.bs.modal', onHidden);
+                    showHelicopterModelSelectionModal();
+                }, { once: true });
+                
+                workLocationModal.hide();
+            } else {
+                // Fallback: manually hide and show
+                if (workLocationModalElement) {
+                    workLocationModalElement.classList.remove('show');
+                    workLocationModalElement.style.display = 'none';
+                    document.body.classList.remove('modal-open');
+                    
+                    // Remove backdrop
+                    const backdrop = document.querySelector('.modal-backdrop');
+                    if (backdrop) {
+                        backdrop.remove();
+                    }
+                    
+                    // Show helicopter model modal
+                    setTimeout(() => {
+                        showHelicopterModelSelectionModal();
+                    }, 150);
+                }
+            }
         }
 
         function enterRegisterToolsScreen() {
