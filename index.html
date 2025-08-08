@@ -1131,6 +1131,50 @@
           opacity: 0;
           pointer-events: none;
         }
+
+        /* Custom modal styles for mobile app look */
+        .modal-dialog-centered {
+          display: flex;
+          align-items: center;
+          min-height: calc(100% - 1rem);
+        }
+
+        .modal-content {
+          border: none !important;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
+        }
+
+        .helicopter-model-option:hover,
+        .work-location-option:hover {
+          transform: scale(1.02) !important;
+          transition: all 0.3s ease !important;
+        }
+
+        .helicopter-model-option.active,
+        .work-location-option.active {
+          background: #FF9800 !important;
+          border-color: #FF9800 !important;
+          color: white !important;
+          transform: scale(1.02) !important;
+        }
+
+        /* Mobile-specific modal adjustments */
+        @media (max-width: 768px) {
+          .modal-dialog {
+            margin: 1rem;
+            max-width: calc(100% - 2rem);
+          }
+          
+          .modal-body {
+            padding: 1.5rem !important;
+          }
+          
+          .helicopter-model-option,
+          .work-location-option {
+            font-size: 1rem !important;
+            padding: 1rem !important;
+          }
+        }
     </style>
 </head>
 <body>
@@ -2035,44 +2079,46 @@
     
     <!-- Helicopter Model Selection Modal -->
     <div class="modal fade" id="helicopterModelSelectionModal" tabindex="-1" aria-labelledby="helicopterModelSelectionModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="helicopterModelSelectionModalLabel">Select Helicopter Model</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                <div class="modal-header" style="background: #FF9800; color: white; border-radius: 16px 16px 0 0; border: none; padding: 20px;">
+                    <h5 class="modal-title" id="helicopterModelSelectionModalLabel" style="font-weight: bold; font-size: 1.3rem;">Select Helicopter Model</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <p class="mb-3">Please select the helicopter model you'll be working on:</p>
-                    <div class="row">
-                        <div class="col-md-6 mb-2">
-                            <button class="btn btn-outline-primary w-100 helicopter-model-option" data-model="AW139">
-                                AW139
+                <div class="modal-body" style="padding: 24px;">
+                    <p class="mb-4" style="font-size: 1.1rem; color: #333;">Please select the helicopter model:</p>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <button class="btn helicopter-model-option w-100 text-start p-3" data-model="AW139" style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; transition: all 0.3s ease;">
+                                <div style="font-weight: bold; font-size: 1.2rem; color: #333;">AW139</div>
+                                <div style="font-size: 0.9rem; color: #666; margin-top: 4px;">Work Locations: 701, 702, 703</div>
                             </button>
                         </div>
-                        <div class="col-md-6 mb-2">
-                            <button class="btn btn-outline-primary w-100 helicopter-model-option" data-model="SA342L">
-                                SA342L
+                        <div class="col-12">
+                            <button class="btn helicopter-model-option w-100 text-start p-3" data-model="SA342L" style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; transition: all 0.3s ease;">
+                                <div style="font-weight: bold; font-size: 1.2rem; color: #333;">SA342L</div>
+                                <div style="font-size: 0.9rem; color: #666; margin-top: 4px;">Work Locations: 352, 353, 354, 355</div>
                             </button>
                         </div>
-                        <div class="col-md-6 mb-2">
-                            <button class="btn btn-outline-primary w-100 helicopter-model-option" data-model="B206L">
-                                B206L
+                        <div class="col-12">
+                            <button class="btn helicopter-model-option w-100 text-start p-3" data-model="B206L" style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; transition: all 0.3s ease;">
+                                <div style="font-weight: bold; font-size: 1.2rem; color: #333;">B206L</div>
+                                <div style="font-size: 0.9rem; color: #666; margin-top: 4px;">Work Locations: 110, 111</div>
                             </button>
                         </div>
-                        <div class="col-md-6 mb-2">
-                            <button class="btn btn-outline-primary w-100 helicopter-model-option" data-model="H145M">
-                                H145M
+                        <div class="col-12">
+                            <button class="btn helicopter-model-option w-100 text-start p-3" data-model="H145M" style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; transition: all 0.3s ease;">
+                                <div style="font-weight: bold; font-size: 1.2rem; color: #333;">H145M</div>
+                                <div style="font-size: 0.9rem; color: #666; margin-top: 4px;">Work Locations: 1955, 1956, 1957, 1958, 1959, 1960</div>
                             </button>
                         </div>
-                        <div class="col-md-6 mb-2">
-                            <button class="btn btn-outline-primary w-100 helicopter-model-option" data-model="Other">
-                                Other
+                        <div class="col-12">
+                            <button class="btn helicopter-model-option w-100 text-start p-3" data-model="Other" style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; transition: all 0.3s ease;">
+                                <div style="font-weight: bold; font-size: 1.2rem; color: #333;">Other</div>
+                                <div style="font-size: 0.9rem; color: #666; margin-top: 4px;">Work Locations: Other</div>
                             </button>
                         </div>
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 </div>
             </div>
         </div>
@@ -2080,17 +2126,24 @@
 
     <!-- Work Location Selection Modal -->
     <div class="modal fade" id="workLocationSelectionModal" tabindex="-1" aria-labelledby="workLocationSelectionModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="workLocationSelectionModalLabel">Select Work Location</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                <div class="modal-header" style="background: #FF9800; color: white; border-radius: 16px 16px 0 0; border: none; padding: 20px;">
+                    <h5 class="modal-title" id="workLocationSelectionModalLabel" style="font-weight: bold; font-size: 1.3rem;">Select Work Location</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body" id="workLocationSelectionModalBody">
-                    <!-- Work location options will be dynamically loaded here -->
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <div class="modal-body" style="padding: 24px;">
+                    <p class="mb-4" id="workLocationSelectionModalBody" style="font-size: 1.1rem; color: #333;">
+                        <!-- Work location options will be dynamically loaded here -->
+                    </p>
+                    <div class="row g-3" id="workLocationOptions">
+                        <!-- Work location buttons will be dynamically loaded here -->
+                    </div>
+                    <div class="text-center mt-4">
+                        <button type="button" class="btn btn-link text-decoration-none" onclick="showHelicopterModelSelectionModal()" style="color: #666; font-size: 1rem;">
+                            <i class="fas fa-arrow-left me-2"></i>Back to Models
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -4288,12 +4341,44 @@ if (!userCredential.user.emailVerified) {
             const modal = new bootstrap.Modal(document.getElementById('helicopterModelSelectionModal'));
             document.querySelectorAll('.helicopter-model-option').forEach(btn => {
                 btn.classList.remove('active');
+                // Remove any existing hover effects
+                btn.style.background = '#f8f9fa';
+                btn.style.borderColor = '#e9ecef';
+                btn.style.transform = 'scale(1)';
+                
                 btn.onclick = function() {
-                    document.querySelectorAll('.helicopter-model-option').forEach(b => b.classList.remove('active'));
+                    document.querySelectorAll('.helicopter-model-option').forEach(b => {
+                        b.classList.remove('active');
+                        b.style.background = '#f8f9fa';
+                        b.style.borderColor = '#e9ecef';
+                        b.style.transform = 'scale(1)';
+                    });
                     this.classList.add('active');
+                    this.style.background = '#FF9800';
+                    this.style.borderColor = '#FF9800';
+                    this.style.color = 'white';
+                    this.style.transform = 'scale(1.02)';
+                    
                     const selectedModel = this.getAttribute('data-model');
                     modal.hide();
                     showWorkLocationSelectionModal(selectedModel);
+                };
+                
+                // Add hover effects
+                btn.onmouseenter = function() {
+                    if (!this.classList.contains('active')) {
+                        this.style.background = '#e9ecef';
+                        this.style.borderColor = '#FF9800';
+                        this.style.transform = 'scale(1.02)';
+                    }
+                };
+                
+                btn.onmouseleave = function() {
+                    if (!this.classList.contains('active')) {
+                        this.style.background = '#f8f9fa';
+                        this.style.borderColor = '#e9ecef';
+                        this.style.transform = 'scale(1)';
+                    }
                 };
             });
             modal.show();
@@ -4310,43 +4395,71 @@ if (!userCredential.user.emailVerified) {
             }
             
             const modal = new bootstrap.Modal(document.getElementById('workLocationSelectionModal'));
+            const modalTitle = document.getElementById('workLocationSelectionModalLabel');
             const modalBody = document.getElementById('workLocationSelectionModalBody');
+            const modalOptions = document.getElementById('workLocationOptions');
+            
+            // Update modal title
+            modalTitle.textContent = `Select Work Location for ${helicopterModel}`;
             
             // Clear previous content
-            modalBody.innerHTML = '';
+            modalBody.innerHTML = `Select work location for <strong>${helicopterModel}</strong>:`;
+            modalOptions.innerHTML = '';
             
             // Get locations for the selected helicopter model
             const locations = getLocationsForHelicopterModel(helicopterModel);
             
             // Create location buttons
-            let html = `<p class="mb-3">Select work location for <strong>${helicopterModel}</strong>:</p>`;
-            html += '<div class="row">';
-            
             locations.forEach((location, index) => {
-                if (index % 3 === 0 && index !== 0) {
-                    html += '</div><div class="row">';
-                }
-                html += `
-                    <div class="col-md-4 mb-2">
-                        <button class="btn btn-outline-primary w-100 work-location-option" data-location="${location}">
-                            ${location}
-                        </button>
-                    </div>
-                `;
-            });
-            
-            html += '</div>';
-            modalBody.innerHTML = html;
-            
-            // Add click handlers for location buttons
-            document.querySelectorAll('.work-location-option').forEach(btn => {
-                btn.onclick = function() {
+                const colDiv = document.createElement('div');
+                colDiv.className = 'col-4 mb-3';
+                
+                const button = document.createElement('button');
+                button.className = 'btn work-location-option w-100 p-3';
+                button.setAttribute('data-location', location);
+                button.style.cssText = 'background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; transition: all 0.3s ease; font-weight: bold; font-size: 1.1rem; color: #333;';
+                button.textContent = location;
+                
+                // Add hover effects
+                button.onmouseenter = function() {
+                    if (!this.classList.contains('active')) {
+                        this.style.background = '#e9ecef';
+                        this.style.borderColor = '#FF9800';
+                        this.style.transform = 'scale(1.02)';
+                    }
+                };
+                
+                button.onmouseleave = function() {
+                    if (!this.classList.contains('active')) {
+                        this.style.background = '#f8f9fa';
+                        this.style.borderColor = '#e9ecef';
+                        this.style.transform = 'scale(1)';
+                    }
+                };
+                
+                // Add click handler
+                button.onclick = function() {
+                    document.querySelectorAll('.work-location-option').forEach(b => {
+                        b.classList.remove('active');
+                        b.style.background = '#f8f9fa';
+                        b.style.borderColor = '#e9ecef';
+                        b.style.transform = 'scale(1)';
+                    });
+                    this.classList.add('active');
+                    this.style.background = '#FF9800';
+                    this.style.borderColor = '#FF9800';
+                    this.style.color = 'white';
+                    this.style.transform = 'scale(1.02)';
+                    
                     selectedWorkLocation = this.getAttribute('data-location');
                     modal.hide();
                     updateWorkLocationLabel();
                     // Enter Register Tools screen after location selection
                     enterRegisterToolsScreen();
                 };
+                
+                colDiv.appendChild(button);
+                modalOptions.appendChild(colDiv);
             });
             
             modal.show();
