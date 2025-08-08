@@ -2079,6 +2079,9 @@
         
         // Online/Offline status
         let isOnline = navigator.onLine;
+        
+        // IndexedDB for offline storage
+        let indexedDB = null;
 
         // Show/Hide password logic
         const loginPassword = document.getElementById('loginPassword');
@@ -7831,12 +7834,8 @@ if (!userCredential.user.emailVerified) {
         }
       });
     </script>
-    </script>
 
     <script>
-    // ... existing code ...
-    </script>
-    
     // Sync offline tools when back online
     async function syncOfflineTools() {
         try {
@@ -7976,16 +7975,15 @@ if (!userCredential.user.emailVerified) {
 
 
             // IndexedDB operations for offline storage
-    let db = null;
 
     async function initIndexedDB() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open('ToolTrackingDB', 1);
+            const request = window.indexedDB.open('ToolTrackingDB', 1);
             
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
-                db = request.result;
-                resolve(db);
+                indexedDB = request.result;
+                resolve(indexedDB);
             };
             
             request.onupgradeneeded = (event) => {
@@ -7999,12 +7997,12 @@ if (!userCredential.user.emailVerified) {
 
     async function getOfflineTools() {
         return new Promise((resolve, reject) => {
-            if (!db) {
+            if (!indexedDB) {
                 resolve([]);
                 return;
             }
             
-            const transaction = db.transaction(['offlineTools'], 'readonly');
+            const transaction = indexedDB.transaction(['offlineTools'], 'readonly');
             const store = transaction.objectStore('offlineTools');
             const getAllRequest = store.getAll();
             
@@ -8015,12 +8013,12 @@ if (!userCredential.user.emailVerified) {
 
     async function saveToolOffline(toolData) {
         return new Promise((resolve, reject) => {
-            if (!db) {
+            if (!indexedDB) {
                 reject(new Error('Database not initialized'));
                 return;
             }
             
-            const transaction = db.transaction(['offlineTools'], 'readwrite');
+            const transaction = indexedDB.transaction(['offlineTools'], 'readwrite');
             const store = transaction.objectStore('offlineTools');
             const addRequest = store.put(toolData);
             
@@ -8031,12 +8029,12 @@ if (!userCredential.user.emailVerified) {
 
     async function removeOfflineTool(toolId) {
         return new Promise((resolve, reject) => {
-            if (!db) {
+            if (!indexedDB) {
                 resolve();
                 return;
             }
             
-            const transaction = db.transaction(['offlineTools'], 'readwrite');
+            const transaction = indexedDB.transaction(['offlineTools'], 'readwrite');
             const store = transaction.objectStore('offlineTools');
             const deleteRequest = store.delete(toolId);
             
