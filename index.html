@@ -4101,6 +4101,126 @@ if (!userCredential.user.emailVerified) {
             showNotificationsInSequence();
         }
 
+        function showSearchTools() {
+            document.getElementById('toolScannerMenu').style.display = 'none';
+            document.getElementById('searchToolsScreen').style.display = 'block';
+            
+            // Set up search functionality
+            setupSearchTools();
+        }
+
+        function setupSearchTools() {
+            const searchInput = document.getElementById('searchToolsInput');
+            const searchResults = document.getElementById('searchToolsResults');
+            const searchTypePartNumber = document.getElementById('searchTypePartNumber');
+            const searchTypePartName = document.getElementById('searchTypePartName');
+            const searchToolsClearBtn = document.getElementById('searchToolsClearBtn');
+            const searchToolsBackBtn = document.getElementById('searchToolsBackBtn');
+            
+            let currentSearchType = 'partNumber';
+            
+            // Set up search type buttons
+            searchTypePartNumber.onclick = function() {
+                currentSearchType = 'partNumber';
+                searchTypePartNumber.className = 'btn btn-success flex-fill';
+                searchTypePartName.className = 'btn btn-outline-secondary flex-fill';
+                searchInput.placeholder = 'Search by Part Number';
+                searchInput.value = '';
+                searchResults.innerHTML = '';
+            };
+            
+            searchTypePartName.onclick = function() {
+                currentSearchType = 'partName';
+                searchTypePartName.className = 'btn btn-success flex-fill';
+                searchTypePartNumber.className = 'btn btn-outline-secondary flex-fill';
+                searchInput.placeholder = 'Search by Part Name';
+                searchInput.value = '';
+                searchResults.innerHTML = '';
+            };
+            
+            // Set up search input
+            searchInput.oninput = function() {
+                const query = this.value.trim();
+                if (query.length >= 2) {
+                    performSearch(query, currentSearchType);
+                } else {
+                    searchResults.innerHTML = '';
+                }
+            };
+            
+            // Set up clear button
+            searchToolsClearBtn.onclick = function() {
+                searchInput.value = '';
+                searchResults.innerHTML = '';
+            };
+            
+            // Set up back button
+            searchToolsBackBtn.onclick = function() {
+                document.getElementById('searchToolsScreen').style.display = 'none';
+                document.getElementById('toolScannerMenu').style.display = 'block';
+            };
+        }
+
+        async function performSearch(query, searchType) {
+            const searchResults = document.getElementById('searchToolsResults');
+            searchResults.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><br>Searching...</div>';
+            
+            try {
+                let snapshot;
+                if (searchType === 'partNumber') {
+                    snapshot = await db.collection('tools')
+                        .where('partNumber', '>=', query)
+                        .where('partNumber', '<=', query + '\uf8ff')
+                        .limit(20)
+                        .get();
+                } else {
+                    snapshot = await db.collection('tools')
+                        .where('toolName', '>=', query)
+                        .where('toolName', '<=', query + '\uf8ff')
+                        .limit(20)
+                        .get();
+                }
+                
+                if (snapshot.empty) {
+                    searchResults.innerHTML = '<div class="alert alert-info">No tools found matching your search.</div>';
+                    return;
+                }
+                
+                let html = '<div class="row">';
+                snapshot.docs.forEach((doc, index) => {
+                    const data = doc.data();
+                    const status = (data.status || '').toUpperCase();
+                    let statusClass = 'in';
+                    if (status === 'OUT') statusClass = 'out';
+                    else if (status === 'BROKEN') statusClass = 'broken';
+                    else if (status === 'LOST') statusClass = 'lost';
+                    else if (status === 'CALIBRATION') statusClass = 'calibration';
+                    
+                    html += `
+                        <div class="col-md-6 mb-3">
+                            <div class="card register-tool-card ${statusClass}" onclick="showToolDetails(${JSON.stringify({id: doc.id, ...data})}, 'searchTools')">
+                                <div class="card-body">
+                                    <h6 class="card-title">${data.toolName || 'Unknown Tool'}</h6>
+                                    <p class="card-text">
+                                        <strong>Part Number:</strong> ${data.partNumber || doc.id}<br>
+                                        <strong>Status:</strong> <span class="badge bg-${statusClass === 'out' ? 'danger' : statusClass === 'in' ? 'success' : 'warning'}">${status}</span><br>
+                                        <strong>Location:</strong> ${data.WorkOn || 'Unknown'}<br>
+                                        <strong>Technician:</strong> ${data.technician || 'Unknown'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                searchResults.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Search error:', error);
+                searchResults.innerHTML = '<div class="alert alert-danger">Error performing search. Please try again.</div>';
+            }
+        }
+
         function showLocationSelectionModalForRegisterTools() {
             // Show helicopter model selection first
             showHelicopterModelSelectionModal();
@@ -4191,6 +4311,32 @@ if (!userCredential.user.emailVerified) {
             if (lastCleanup !== today) {
                 cleanupUnverifiedAccounts();
                 localStorage.setItem('lastCleanupDate', today);
+            }
+            
+            // Set up menu button event handlers
+            const menuRegisterBtn = document.getElementById('menuRegisterBtn');
+            const menuSearchBtn = document.getElementById('menuSearchBtn');
+            const menuLogoutBtn = document.getElementById('menuLogoutBtn');
+            
+            if (menuRegisterBtn) {
+                menuRegisterBtn.addEventListener('click', function() {
+                    console.log('Register Tools button clicked');
+                    showRegisterTools();
+                });
+            }
+            
+            if (menuSearchBtn) {
+                menuSearchBtn.addEventListener('click', function() {
+                    console.log('Search for Tools button clicked');
+                    showSearchTools();
+                });
+            }
+            
+            if (menuLogoutBtn) {
+                menuLogoutBtn.addEventListener('click', function() {
+                    console.log('Logout button clicked');
+                    logout();
+                });
             }
             
             // Orange overlay logic
