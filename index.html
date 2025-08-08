@@ -2033,6 +2033,69 @@
         </div>
     </div>
     
+    <!-- Helicopter Model Selection Modal -->
+    <div class="modal fade" id="helicopterModelSelectionModal" tabindex="-1" aria-labelledby="helicopterModelSelectionModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="helicopterModelSelectionModalLabel">Select Helicopter Model</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3">Please select the helicopter model you'll be working on:</p>
+                    <div class="row">
+                        <div class="col-md-6 mb-2">
+                            <button class="btn btn-outline-primary w-100 helicopter-model-option" data-model="AW139">
+                                AW139
+                            </button>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <button class="btn btn-outline-primary w-100 helicopter-model-option" data-model="SA342L">
+                                SA342L
+                            </button>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <button class="btn btn-outline-primary w-100 helicopter-model-option" data-model="B206L">
+                                B206L
+                            </button>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <button class="btn btn-outline-primary w-100 helicopter-model-option" data-model="H145M">
+                                H145M
+                            </button>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <button class="btn btn-outline-primary w-100 helicopter-model-option" data-model="Other">
+                                Other
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Work Location Selection Modal -->
+    <div class="modal fade" id="workLocationSelectionModal" tabindex="-1" aria-labelledby="workLocationSelectionModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="workLocationSelectionModalLabel">Select Work Location</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="workLocationSelectionModalBody">
+                    <!-- Work location options will be dynamically loaded here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -4092,13 +4155,8 @@ if (!userCredential.user.emailVerified) {
         };
 
         function showRegisterTools() {
-            document.getElementById('toolScannerMenu').style.display = 'none';
-            document.getElementById('appSection').style.display = 'block';
-            updateWorkLocationLabel();
-            // Always show helicopter model selection dialog when entering register tools screen
+            // Show location selection dialog first, before entering register tools screen
             showLocationSelectionModalForRegisterTools();
-            loadTools();
-            showNotificationsInSequence();
         }
 
         function showSearchTools() {
@@ -4246,6 +4304,8 @@ if (!userCredential.user.emailVerified) {
             if (helicopterModel === 'Other') {
                 selectedWorkLocation = 'Other';
                 updateWorkLocationLabel();
+                // Enter Register Tools screen after location selection
+                enterRegisterToolsScreen();
                 return;
             }
             
@@ -4284,6 +4344,8 @@ if (!userCredential.user.emailVerified) {
                     selectedWorkLocation = this.getAttribute('data-location');
                     modal.hide();
                     updateWorkLocationLabel();
+                    // Enter Register Tools screen after location selection
+                    enterRegisterToolsScreen();
                 };
             });
             
@@ -4299,6 +4361,19 @@ if (!userCredential.user.emailVerified) {
                 'Other': ['Other']
             };
             return locationMap[model] || [];
+        }
+
+        function enterRegisterToolsScreen() {
+            // Hide the menu and show the register tools screen
+            document.getElementById('toolScannerMenu').style.display = 'none';
+            document.getElementById('appSection').style.display = 'block';
+            
+            // Update the work location label
+            updateWorkLocationLabel();
+            
+            // Load tools and show notifications
+            loadTools();
+            showNotificationsInSequence();
         }
 
         document.addEventListener('DOMContentLoaded', function() {
