@@ -319,244 +319,20 @@
         
         .camera-view {
             width: 100%;
-            max-width: 400px;
+            max-width: 320px;
             margin: 10px auto;
         }
         #reader {
-            border: 2px solid #FF9800 !important;
-            border-radius: 12px !important;
+            border: 1px solid #ccc !important;
             width: 100% !important;
-            max-width: 400px;
+            max-width: 320px;
             aspect-ratio: 1/1 !important; /* Make the reader square */
             overflow: hidden !important;
-            position: relative !important;
-            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3) !important;
         }
         #reader video {
             object-fit: cover !important;
             width: 100% !important;
             height: 100% !important;
-            border-radius: 10px !important;
-        }
-        
-        /* Advanced Scanner Controls */
-        .scanner-controls {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        
-        .scanner-control-btn {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            border: none;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .scanner-control-btn:hover {
-            background: rgba(0, 0, 0, 0.9);
-            transform: scale(1.1);
-        }
-        
-        .scanner-control-btn.active {
-            background: #FF9800;
-            color: white;
-        }
-        
-        /* Zoom Controls */
-        .zoom-controls {
-            position: absolute;
-            bottom: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 1000;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 8px 12px;
-            border-radius: 20px;
-        }
-        
-        .zoom-btn {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            border: none;
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .zoom-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: scale(1.1);
-        }
-        
-        .zoom-level {
-            color: white;
-            font-weight: bold;
-            font-size: 14px;
-            min-width: 40px;
-            text-align: center;
-        }
-        
-        /* Scan Area Overlay */
-        .scan-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            pointer-events: none;
-            z-index: 999;
-        }
-        
-        .scan-area {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 200px;
-            height: 200px;
-            border: 2px solid rgba(255, 255, 255, 0.8);
-            border-radius: 8px;
-        }
-        
-        .scan-corner {
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            border: 3px solid #FF9800;
-        }
-        
-        .scan-corner.top-left {
-            top: -3px;
-            left: -3px;
-            border-right: none;
-            border-bottom: none;
-        }
-        
-        .scan-corner.top-right {
-            top: -3px;
-            right: -3px;
-            border-left: none;
-            border-bottom: none;
-        }
-        
-        .scan-corner.bottom-left {
-            bottom: -3px;
-            left: -3px;
-            border-right: none;
-            border-top: none;
-        }
-        
-        .scan-corner.bottom-right {
-            bottom: -3px;
-            right: -3px;
-            border-left: none;
-            border-top: none;
-        }
-        
-        /* Instructions */
-        .scanner-instructions {
-            position: absolute;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 1000;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 12px;
-            text-align: center;
-            max-width: 280px;
-        }
-        
-        /* Mobile Responsive Adjustments */
-        @media (max-width: 768px) {
-            #reader {
-                max-width: 100% !important;
-                border-radius: 8px !important;
-            }
-            
-            .scanner-controls {
-                top: 5px;
-                right: 5px;
-            }
-            
-            .scanner-control-btn {
-                width: 36px;
-                height: 36px;
-                font-size: 14px;
-            }
-            
-            .zoom-controls {
-                bottom: 5px;
-                padding: 6px 10px;
-            }
-            
-            .zoom-btn {
-                width: 32px;
-                height: 32px;
-                font-size: 12px;
-            }
-            
-            .zoom-level {
-                font-size: 12px;
-                min-width: 35px;
-            }
-            
-            .scanner-instructions {
-                font-size: 11px;
-                padding: 6px 10px;
-                max-width: 250px;
-            }
-            
-            .scan-area {
-                width: 180px;
-                height: 180px;
-            }
-        }
-        
-        /* Animation for scan corners */
-        .scan-corner {
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0% { opacity: 0.7; }
-            50% { opacity: 1; }
-            100% { opacity: 0.7; }
-        }
-        
-        /* Success animation */
-        .scan-success {
-            animation: successPulse 0.5s ease-in-out;
-        }
-        
-        @keyframes successPulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
         }
         .tool-item {
             padding: 10px;
@@ -996,6 +772,296 @@
             z-index: 10000;
         }
 
+        /* Enhanced Scanner Styles */
+        .enhanced-scanner-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .scanner-video-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1/1;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .scanner-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Scan Area Overlay */
+        .scan-area-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .scan-area-mask {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .scan-area-hole {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px;
+            height: 200px;
+            background: transparent;
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            border-radius: 12px;
+        }
+
+        .scan-area-corners {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px;
+            height: 200px;
+        }
+
+        .scan-corner {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border: 3px solid #fff;
+        }
+
+        .scan-corner.top-left {
+            top: -3px;
+            left: -3px;
+            border-right: none;
+            border-bottom: none;
+            border-top-left-radius: 8px;
+        }
+
+        .scan-corner.top-right {
+            top: -3px;
+            right: -3px;
+            border-left: none;
+            border-bottom: none;
+            border-top-right-radius: 8px;
+        }
+
+        .scan-corner.bottom-left {
+            bottom: -3px;
+            left: -3px;
+            border-right: none;
+            border-top: none;
+            border-bottom-left-radius: 8px;
+        }
+
+        .scan-corner.bottom-right {
+            bottom: -3px;
+            right: -3px;
+            border-left: none;
+            border-top: none;
+            border-bottom-right-radius: 8px;
+        }
+
+        /* Scanner Controls */
+        .scanner-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 12px 20px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+        }
+
+        .scanner-control-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 18px;
+        }
+
+        .scanner-control-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+
+        .scanner-control-btn.active {
+            background: #FF9800;
+            color: white;
+        }
+
+        .zoom-level {
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            min-width: 40px;
+            text-align: center;
+        }
+
+        /* Top Controls */
+        .scanner-top-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 8px;
+            z-index: 15;
+        }
+
+        .torch-btn {
+            background: rgba(0, 0, 0, 0.7);
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 18px;
+            backdrop-filter: blur(10px);
+        }
+
+        .torch-btn:hover {
+            background: rgba(0, 0, 0, 0.8);
+            transform: scale(1.1);
+        }
+
+        .torch-btn.active {
+            background: #FFD700;
+            color: #000;
+        }
+
+        /* Instructions */
+        .scanner-instructions {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            z-index: 15;
+        }
+
+        /* Focus Indicator */
+        .focus-indicator {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            border: 2px solid #2196F3;
+            border-radius: 50%;
+            background: rgba(33, 150, 243, 0.2);
+            pointer-events: none;
+            z-index: 20;
+            animation: focusPulse 2s ease-out;
+        }
+
+        @keyframes focusPulse {
+            0% {
+                transform: scale(0.8);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(1.2);
+                opacity: 0;
+            }
+        }
+
+        /* Enhanced Scanner Modal */
+        .enhanced-scanner-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .enhanced-scanner-content {
+            background: #1a1a1a;
+            border-radius: 16px;
+            padding: 20px;
+            max-width: 90vw;
+            max-height: 90vh;
+            width: 100%;
+            position: relative;
+        }
+
+        .enhanced-scanner-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            color: white;
+        }
+
+        .enhanced-scanner-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+        }
+
+        .enhanced-scanner-close {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 18px;
+        }
+
+        .enhanced-scanner-close:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+
         @media (max-width: 600px) {
             .d-grid.col-6.mx-auto {
                 max-width: 100% !important;
@@ -1267,44 +1333,16 @@
                             <div class="card mb-2">
                                 <div class="card-body" style="padding-bottom: 10px; padding-top: 12px;">
                                     <h4 style="font-size: 1.1rem; margin-bottom: 10px;">Scan Tool</h4>
-                                    <button onclick="startScanner()" class="btn btn-primary btn-scan mb-2">
-                                        <i class="fas fa-camera"></i> Start Advanced Scanner
-                                    </button>
-                                    <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-2" style="display:none;">Stop Scanner</button>
-                                    <div id="reader" style="display:none;">
-                                        <!-- Scan Area Overlay -->
-                                        <div class="scan-overlay">
-                                            <div class="scan-area">
-                                                <div class="scan-corner top-left"></div>
-                                                <div class="scan-corner top-right"></div>
-                                                <div class="scan-corner bottom-left"></div>
-                                                <div class="scan-corner bottom-right"></div>
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Instructions -->
-                                        <div class="scanner-instructions">
-                                            <i class="fas fa-crosshairs"></i> Point camera at barcode
-                                        </div>
-                                        
-                                        <!-- Scanner Controls -->
-                                        <div class="scanner-controls">
-                                            <button class="scanner-control-btn" id="torchBtn" onclick="toggleTorch()" title="Toggle Flashlight">
-                                                <i class="fas fa-lightbulb"></i>
-                                            </button>
-                                        </div>
-                                        
-                                        <!-- Zoom Controls -->
-                                        <div class="zoom-controls">
-                                            <button class="zoom-btn" onclick="zoomOut()" title="Zoom Out">
-                                                <i class="fas fa-minus"></i>
-                                            </button>
-                                            <span class="zoom-level" id="zoomLevel">1.0x</span>
-                                            <button class="zoom-btn" onclick="zoomIn()" title="Zoom In">
-                                                <i class="fas fa-plus"></i>
-                                            </button>
-                                        </div>
+                                    <div class="d-flex gap-2 mb-2">
+                                        <button onclick="startEnhancedScanner()" class="btn btn-primary btn-scan flex-fill">
+                                            <i class="fas fa-camera"></i> Advanced Scanner
+                                        </button>
+                                        <button onclick="startScanner()" class="btn btn-outline-primary btn-scan flex-fill">
+                                            <i class="fas fa-qrcode"></i> Basic Scanner
+                                        </button>
                                     </div>
+                                    <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-2" style="display:none;">Stop Scanner</button>
+                                    <div id="reader" style="display:none;"></div>
                                     <div class="input-group mb-2">
                                         <input type="text" id="toolCode" class="form-control" placeholder="Enter Tool Code">
                                         <button onclick="submitCode()" class="btn btn-primary">
@@ -1940,6 +1978,61 @@
         <div id="searchToolsResults"></div>
       </div>
     </div>
+    
+    <!-- Enhanced Scanner Modal -->
+    <div class="enhanced-scanner-modal" id="enhancedScannerModal" style="display: none;">
+        <div class="enhanced-scanner-content">
+            <div class="enhanced-scanner-header">
+                <div class="enhanced-scanner-title">Advanced Barcode Scanner</div>
+                <button class="enhanced-scanner-close" onclick="closeEnhancedScanner()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="enhanced-scanner-container">
+                <div class="scanner-video-container">
+                    <video id="enhancedScannerVideo" class="scanner-video" autoplay playsinline muted></video>
+                    
+                    <!-- Scan Area Overlay -->
+                    <div class="scan-area-overlay">
+                        <div class="scan-area-mask">
+                            <div class="scan-area-hole"></div>
+                        </div>
+                        <div class="scan-area-corners">
+                            <div class="scan-corner top-left"></div>
+                            <div class="scan-corner top-right"></div>
+                            <div class="scan-corner bottom-left"></div>
+                            <div class="scan-corner bottom-right"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Instructions -->
+                    <div class="scanner-instructions">
+                        Pinch or use buttons to zoom • Tap to focus • Aim at barcode
+                    </div>
+                    
+                    <!-- Top Controls -->
+                    <div class="scanner-top-controls">
+                        <button class="torch-btn" id="torchBtn" onclick="toggleTorch()">
+                            <i class="fas fa-star"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Bottom Controls -->
+                    <div class="scanner-controls">
+                        <button class="scanner-control-btn" onclick="zoomOut()">
+                            <i class="fas fa-search-minus"></i>
+                        </button>
+                        <div class="zoom-level" id="zoomLevel">1.0x</div>
+                        <button class="scanner-control-btn" onclick="zoomIn()">
+                            <i class="fas fa-search-plus"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -1961,209 +2054,11 @@
             appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
         };
 
-        // IndexedDB for offline storage
-        let indexedDB;
-        let isOnline = navigator.onLine;
-        
-        // Initialize IndexedDB
-        async function initIndexedDB() {
-            return new Promise((resolve, reject) => {
-                // Check if IndexedDB is available
-                if (!window.indexedDB) {
-                    console.warn('IndexedDB not supported in this browser');
-                    resolve(null);
-                    return;
-                }
-                
-                try {
-                    const request = window.indexedDB.open('ToolTrackingDB', 1);
-                    
-                    request.onerror = () => {
-                        console.error('IndexedDB error:', request.error);
-                        resolve(null);
-                    };
-                    
-                    request.onsuccess = () => {
-                        indexedDB = request.result;
-                        console.log('IndexedDB initialized successfully');
-                        resolve(indexedDB);
-                    };
-                    
-                    request.onupgradeneeded = (event) => {
-                        const db = event.target.result;
-                        
-                        // Create object store for offline tools
-                        if (!db.objectStoreNames.contains('offlineTools')) {
-                            const store = db.createObjectStore('offlineTools', { keyPath: 'id' });
-                            store.createIndex('timestamp', 'timestamp', { unique: false });
-                        }
-                    };
-                } catch (error) {
-                    console.error('Error initializing IndexedDB:', error);
-                    resolve(null);
-                }
-            });
-        }
-        
-        // Save tool to offline storage
-        async function saveToolOffline(toolData) {
-            if (!indexedDB) {
-                console.warn('IndexedDB not available, skipping offline save');
-                return;
-            }
-            
-            return new Promise((resolve, reject) => {
-                try {
-                    const transaction = indexedDB.transaction(['offlineTools'], 'readwrite');
-                    const store = transaction.objectStore('offlineTools');
-                    const request = store.put(toolData);
-                    
-                    request.onsuccess = () => resolve(request.result);
-                    request.onerror = () => reject(request.error);
-                } catch (error) {
-                    console.error('Error saving to IndexedDB:', error);
-                    resolve(null);
-                }
-            });
-        }
-        
-        // Get all offline tools
-        async function getOfflineTools() {
-            if (!indexedDB) {
-                console.warn('IndexedDB not available, returning empty array');
-                return [];
-            }
-            
-            return new Promise((resolve, reject) => {
-                try {
-                    const transaction = indexedDB.transaction(['offlineTools'], 'readonly');
-                    const store = transaction.objectStore('offlineTools');
-                    const request = store.getAll();
-                    
-                    request.onsuccess = () => resolve(request.result);
-                    request.onerror = () => reject(request.error);
-                } catch (error) {
-                    console.error('Error reading from IndexedDB:', error);
-                    resolve([]);
-                }
-            });
-        }
-        
-        // Remove tool from offline storage
-        async function removeOfflineTool(toolId) {
-            if (!indexedDB) {
-                console.warn('IndexedDB not available, skipping offline remove');
-                return;
-            }
-            
-            return new Promise((resolve, reject) => {
-                try {
-                    const transaction = indexedDB.transaction(['offlineTools'], 'readwrite');
-                    const store = transaction.objectStore('offlineTools');
-                    const request = store.delete(toolId);
-                    
-                    request.onsuccess = () => resolve(request.result);
-                    request.onerror = () => reject(request.error);
-                } catch (error) {
-                    console.error('Error removing from IndexedDB:', error);
-                    resolve(null);
-                }
-            });
-        }
-        
-        // Sync offline tools when back online
-        async function syncOfflineTools() {
-            try {
-                const offlineTools = await getOfflineTools();
-                
-                if (offlineTools.length === 0) {
-                    console.log('No offline tools to sync');
-                    return;
-                }
-                
-                console.log(`Syncing ${offlineTools.length} offline tools`);
-                
-                for (const tool of offlineTools) {
-                    try {
-                        // Add tool to Firestore
-                        await db.collection('tools').doc(tool.id).set(tool.data);
-                        
-                        // Remove from offline storage
-                        await removeOfflineTool(tool.id);
-                        
-                        console.log(`Successfully synced tool: ${tool.id}`);
-                    } catch (error) {
-                        console.error(`Failed to sync tool ${tool.id}:`, error);
-                    }
-                }
-                
-                // Refresh the tool list
-                if (typeof loadTools === 'function') {
-                    loadTools();
-                }
-                
-                // Show success message
-                showNotification(`Successfully synced ${offlineTools.length} offline tools`, 'success');
-                
-            } catch (error) {
-                console.error('Error syncing offline tools:', error);
-                showNotification('Error syncing offline tools', 'error');
-            }
-        }
-        
-        // Check online status and update UI
-        function updateOnlineStatus() {
-            isOnline = navigator.onLine;
-            const statusElement = document.getElementById('onlineStatus');
-            
-            if (statusElement) {
-                if (isOnline) {
-                    statusElement.textContent = '🟢 Online';
-                    statusElement.className = 'text-success';
-                    // Trigger sync when back online
-                    syncOfflineTools();
-                } else {
-                    statusElement.textContent = '🔴 Offline';
-                    statusElement.className = 'text-danger';
-                }
-            }
-        }
-        
-        // Enhanced notification function
-        function showNotification(message, type = 'info') {
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'info'} alert-dismissible fade show`;
-            alertDiv.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            
-            // Insert at the top of the app section
-            const appSection = document.getElementById('appSection');
-            if (appSection) {
-                appSection.insertBefore(alertDiv, appSection.firstChild);
-                
-                // Auto-remove after 5 seconds
-                setTimeout(() => {
-                    if (alertDiv.parentNode) {
-                        alertDiv.remove();
-                    }
-                }, 5000);
-            }
-        }
-
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.firestore();
         const storage = firebase.storage();
-        
-        // Initialize IndexedDB early
-        initIndexedDB().then(() => {
-            console.log('IndexedDB initialized successfully');
-        }).catch(error => {
-            console.warn('IndexedDB initialization failed:', error);
-        });
 
         // Configure Firebase Auth to require email verification
         auth.useDeviceLanguage();
@@ -2181,7 +2076,6 @@
 
         // QR Scanner
         let html5QrCode;
-        let isScannerRunning = false;
 
         // Show/Hide password logic
         const loginPassword = document.getElementById('loginPassword');
@@ -2243,34 +2137,19 @@
             document.getElementById('myToolsByCollectionScreen').style.display = 'none';
             document.getElementById('collectionCheckupScreen').style.display = 'none';
             document.getElementById('previousOutToolsScreen').style.display = 'none';
-            document.getElementById('searchToolsScreen').style.display = 'none';
             // Add any other sections you may have
         }
 
         // Login logic
         async function login() {
-            console.log('Login function called');
             const email = document.getElementById('loginEmail').value.trim();
             const password = document.getElementById('loginPassword').value.trim();
             const alertBox = document.getElementById('loginAlert');
             alertBox.classList.add('d-none');
-            
-            console.log('Email:', email);
-            console.log('Password length:', password.length);
-            
             if (!email || !password) {
                 alertBox.textContent = 'Please fill in all fields.';
                 alertBox.classList.remove('d-none');
                 return;
-            }
-            
-            // Ensure IndexedDB is initialized (fallback)
-            if (!indexedDB) {
-                try {
-                    await initIndexedDB();
-                } catch (error) {
-                    console.warn('IndexedDB initialization failed, continuing without offline support:', error);
-                }
             }
             
             // Show loading state
@@ -2280,77 +2159,76 @@
             loginBtn.disabled = true;
             
             try {
-                // Attempt to sign in
+                // First, check if this email exists in pending registrations (unverified)
+const pendingRegistrationDoc = await db.collection('pendingRegistrations').doc(email).get();
+if (pendingRegistrationDoc.exists) {
+    // Try to sign in and reload user
+    const userCredential = await auth.signInWithEmailAndPassword(email, password);
+    await userCredential.user.reload();
+    if (!userCredential.user.emailVerified) {
+        await auth.signOut();
+        throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
+    } else {
+        // User is verified but still in pendingRegistrations, clean up
+        const pendingData = pendingRegistrationDoc.data();
+        await db.collection('technicians').doc(userCredential.user.uid).set({
+            fullName: pendingData.fullName,
+            email: email,
+            isAdmin: false,
+            lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        await db.collection('pendingRegistrations').doc(email).delete();
+        localStorage.setItem('fullName', pendingData.fullName);
+        // Continue to main menu...
+        document.getElementById('loginSection').classList.add('d-none');
+        hideAllMainScreens();
+        document.getElementById('toolScannerMenu').style.display = 'block';
+        document.getElementById('headerBranding').style.display = 'none';
+        updateLoggedInTechnician();
+        return;
+    }
+}
+                
+                // Now attempt to sign in
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
-                const user = userCredential.user;
+// Reload user to get latest verification status
+await userCredential.user.reload();
+if (!userCredential.user.emailVerified) {
+    await auth.signOut();
+    throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
+}
                 
-                // Check if user is verified (only for email/password accounts)
-                if (user.providerData[0].providerId === 'password' && !user.emailVerified) {
-                    await auth.signOut();
-                    throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
-                }
-                
-                // Check if this is a new user (first time login)
-                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-                
-                if (!technicianDoc.exists) {
-                    // New user - check if they have pending registration
-                    const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
-                    
-                    if (pendingDoc.exists) {
-                        // User has pending registration, complete it
-                        const pendingData = pendingDoc.data();
-                        await db.collection('technicians').doc(user.uid).set({
-                            fullName: pendingData.fullName,
-                            email: email,
-                            isAdmin: false,
-                            lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
-                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                        
-                        // Remove from pending registrations
-                        await db.collection('pendingRegistrations').doc(email).delete();
-                        
-                        // Store full name in localStorage
-                        localStorage.setItem('fullName', pendingData.fullName);
-                    } else {
-                        // New user without pending registration (Google sign-in)
-                        const fullName = user.displayName || user.email;
-                        await db.collection('technicians').doc(user.uid).set({
-                            fullName: fullName,
-                            email: email,
-                            isAdmin: false,
-                            lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
-                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                        
-                        localStorage.setItem('fullName', fullName);
-                    }
-                } else {
-                    // Existing user - update last sign in
-                    await db.collection('technicians').doc(user.uid).update({
-                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp()
+                // Check if this is the first verified login
+                const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
+                if (pendingDoc.exists) {
+                    const pendingData = pendingDoc.data();
+                    // This is the first verified login, create technician document
+                    await db.collection('technicians').doc(userCredential.user.uid).set({
+                        fullName: pendingData.fullName,
+                        email: email,
+                        isAdmin: false,
+                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
                     
-                    // Get stored full name
-                    const technicianData = technicianDoc.data();
-                    localStorage.setItem('fullName', technicianData.fullName || user.email);
+                    // Remove from pending registrations
+                    await db.collection('pendingRegistrations').doc(email).delete();
+                    
+                    // Store full name in localStorage
+                    localStorage.setItem('fullName', pendingData.fullName);
+                } else {
+                    // Regular login, update technician data
+                    await saveTechnicianToFirestore(userCredential.user);
                 }
                 
-                // Success: hide login, show main menu
+                // Success: hide login, show only main menu
                 document.getElementById('loginSection').classList.add('d-none');
                 hideAllMainScreens();
                 document.getElementById('toolScannerMenu').style.display = 'block';
                 document.getElementById('headerBranding').style.display = 'none';
                 updateLoggedInTechnician();
-                
-                // Set up menu button event listeners
-                setupMenuButtons();
-                
-                console.log('Login successful for:', email);
-                
             } catch (error) {
-                console.error('Login error:', error);
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
             } finally {
@@ -2560,9 +2438,6 @@
                 document.getElementById('toolScannerMenu').style.display = 'block';
                 document.getElementById('headerBranding').style.display = 'none';
                 updateLoggedInTechnician();
-                
-                // Set up menu button event listeners
-                setupMenuButtons();
             } catch (error) {
                 console.error('Google Sign-In Error:', error);
                 alertBox.textContent = error.message;
@@ -2980,12 +2855,8 @@
 
         // Load today's tools
         async function loadTools() {
-            console.log('loadTools function called');
             const user = auth.currentUser;
-            if (!user) {
-                console.log('No user logged in');
-                return;
-            }
+            if (!user) return;
 
             try {
                 // Get technician name
@@ -2994,24 +2865,16 @@
 
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-                console.log('Querying tools for technician:', technicianName, 'from date:', today);
 
                 const snapshot = await db.collection('tools')
                     .where('technician', '==', technicianName)
                     .where('timestamp', '>=', today)
                     .get();
 
-                console.log('Found', snapshot.docs.length, 'tools for today');
-
                 const toolList = document.getElementById('toolList');
-                if (!toolList) {
-                    console.error('toolList element not found');
-                    return;
-                }
                 toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4>';
 
                 if (snapshot.empty) {
-                    console.log('No tools found for today');
                     toolList.innerHTML += '<p>No tools scanned today.</p>';
                     return;
                 }
@@ -3190,44 +3053,22 @@
             }
         }
 
-        // Advanced QR Code Scanner with Zoom and Torch
-        let currentZoom = 1.0;
-        let maxZoom = 5.0;
-        let minZoom = 1.0;
-        let torchEnabled = false;
-        let videoTrack = null;
-        
+        // QR Code Scanner
         function startScanner() {
-            // Check if scanner is already running
-            if (isScannerRunning) {
-                console.log('Scanner is already running');
-                return;
-            }
-            
-            isScannerRunning = true;
-            
             var reader = document.getElementById('reader');
             reader.style.display = 'block';
-            reader.style.height = '400px';
+            reader.style.height = '320px';
             document.getElementById('stopScannerBtn').style.display = 'inline-block';
             
-            // Reset zoom and torch state
-            currentZoom = 1.0;
-            torchEnabled = false;
-            updateZoomDisplay();
-            updateTorchButton();
-            
-            // Create new scanner instance
             html5QrCode = new Html5Qrcode("reader");
             const config = {
-                fps: 15, // Increased FPS for better performance
-                qrbox: { width: 200, height: 200 }, // Smaller QR box for better precision
+                fps: 10,
+                qrbox: { width: 250, height: 250 }, // Square QR box
                 aspectRatio: 1.0, // Square aspect ratio
                 formatsToSupport: [
                     Html5QrcodeSupportedFormats.QR_CODE,
                     Html5QrcodeSupportedFormats.CODE_128,
                     Html5QrcodeSupportedFormats.CODE_39,
-                    Html5QrcodeSupportedFormats.CODE_93,
                     Html5QrcodeSupportedFormats.EAN_13,
                     Html5QrcodeSupportedFormats.EAN_8,
                     Html5QrcodeSupportedFormats.UPC_A,
@@ -3242,187 +3083,34 @@
 
             // Try to use the environment camera (back camera) first
             html5QrCode.start(
-                { 
-                    facingMode: "environment",
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                },
+                { facingMode: "environment" },
                 config,
                 (decodedText) => {
-                    // Success callback
                     document.getElementById('toolCode').value = decodedText;
                     document.getElementById('toolDetailsBtn').disabled = false;
-                    
-                    // Show success feedback
-                    showScanSuccess();
-                    
-                    // Stop camera after a short delay to show the success
-                    setTimeout(() => {
-                        stopCamera();
-                    }, 1000);
+                    stopCamera();
                 },
                 (errorMessage) => {
                     // Ignore errors during scanning
                 }
-            ).then(() => {
-                // Get video track for zoom and torch controls
-                const videoElement = reader.querySelector('video');
-                if (videoElement && videoElement.srcObject) {
-                    const stream = videoElement.srcObject;
-                    videoTrack = stream.getVideoTracks()[0];
-                    
-                    // Check zoom capabilities
-                    if (videoTrack && videoTrack.getCapabilities) {
-                        const capabilities = videoTrack.getCapabilities();
-                        if (capabilities.zoom) {
-                            maxZoom = capabilities.zoom.max || 5.0;
-                            minZoom = capabilities.zoom.min || 1.0;
-                        }
-                    }
-                }
-            }).catch(err => {
+            ).catch(err => {
                 // If environment camera fails, try user camera (front camera)
                 html5QrCode.start(
-                    { 
-                        facingMode: "user",
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    },
+                    { facingMode: "user" },
                     config,
                     (decodedText) => {
                         document.getElementById('toolCode').value = decodedText;
                         document.getElementById('toolDetailsBtn').disabled = false;
-                        showScanSuccess();
-                        setTimeout(() => {
-                            stopCamera();
-                        }, 1000);
+                        stopCamera();
                     },
                     (errorMessage) => {
                         // Ignore errors during scanning
                     }
-                ).then(() => {
-                    // Get video track for zoom and torch controls
-                    const videoElement = reader.querySelector('video');
-                    if (videoElement && videoElement.srcObject) {
-                        const stream = videoElement.srcObject;
-                        videoTrack = stream.getVideoTracks()[0];
-                        
-                        if (videoTrack && videoTrack.getCapabilities) {
-                            const capabilities = videoTrack.getCapabilities();
-                            if (capabilities.zoom) {
-                                maxZoom = capabilities.zoom.max || 5.0;
-                                minZoom = capabilities.zoom.min || 1.0;
-                            }
-                        }
-                    }
-                            }).catch(err => {
-                console.error('Camera error:', err);
-                isScannerRunning = false;
-                alert('Camera error: ' + err);
-                stopCamera();
+                ).catch(err => {
+                    alert('Camera error: ' + err);
+                    stopCamera();
+                });
             });
-            });
-        }
-        
-        // Zoom functions
-        function zoomIn() {
-            if (videoTrack && currentZoom < maxZoom) {
-                currentZoom = Math.min(currentZoom + 0.5, maxZoom);
-                applyZoom();
-                updateZoomDisplay();
-            }
-        }
-        
-        function zoomOut() {
-            if (videoTrack && currentZoom > minZoom) {
-                currentZoom = Math.max(currentZoom - 0.5, minZoom);
-                applyZoom();
-                updateZoomDisplay();
-            }
-        }
-        
-        function applyZoom() {
-            if (videoTrack && videoTrack.getCapabilities) {
-                const capabilities = videoTrack.getCapabilities();
-                if (capabilities.zoom) {
-                    videoTrack.applyConstraints({
-                        advanced: [{ zoom: currentZoom }]
-                    }).catch(err => {
-                        console.log('Zoom not supported on this device');
-                    });
-                }
-            }
-        }
-        
-        function updateZoomDisplay() {
-            const zoomLevel = document.getElementById('zoomLevel');
-            if (zoomLevel) {
-                zoomLevel.textContent = currentZoom.toFixed(1) + 'x';
-            }
-        }
-        
-        // Torch functions
-        function toggleTorch() {
-            if (videoTrack && videoTrack.getCapabilities) {
-                const capabilities = videoTrack.getCapabilities();
-                if (capabilities.torch) {
-                    torchEnabled = !torchEnabled;
-                    videoTrack.applyConstraints({
-                        advanced: [{ torch: torchEnabled }]
-                    }).then(() => {
-                        updateTorchButton();
-                    }).catch(err => {
-                        console.log('Torch not supported on this device');
-                        torchEnabled = false;
-                        updateTorchButton();
-                    });
-                } else {
-                    alert('Flashlight not supported on this device');
-                }
-            } else {
-                alert('Flashlight not supported on this device');
-            }
-        }
-        
-        function updateTorchButton() {
-            const torchBtn = document.getElementById('torchBtn');
-            if (torchBtn) {
-                if (torchEnabled) {
-                    torchBtn.classList.add('active');
-                    torchBtn.innerHTML = '<i class="fas fa-lightbulb" style="color: #FFD700;"></i>';
-                } else {
-                    torchBtn.classList.remove('active');
-                    torchBtn.innerHTML = '<i class="fas fa-lightbulb"></i>';
-                }
-            }
-        }
-        
-        // Success feedback
-        function showScanSuccess() {
-            const scanArea = document.querySelector('.scan-area');
-            if (scanArea) {
-                scanArea.classList.add('scan-success');
-                scanArea.style.border = '3px solid #4CAF50';
-                scanArea.style.boxShadow = '0 0 20px rgba(76, 175, 80, 0.8)';
-                
-                // Show success message
-                const instructions = document.querySelector('.scanner-instructions');
-                if (instructions) {
-                    instructions.innerHTML = '<i class="fas fa-check-circle" style="color: #4CAF50;"></i> Barcode detected!';
-                    instructions.style.background = 'rgba(76, 175, 80, 0.9)';
-                }
-                
-                setTimeout(() => {
-                    scanArea.classList.remove('scan-success');
-                    scanArea.style.border = '2px solid rgba(255, 255, 255, 0.8)';
-                    scanArea.style.boxShadow = 'none';
-                    
-                    if (instructions) {
-                        instructions.innerHTML = '<i class="fas fa-crosshairs"></i> Point camera at barcode';
-                        instructions.style.background = 'rgba(0, 0, 0, 0.7)';
-                    }
-                }, 1000);
-            }
         }
 
         function stopCamera() {
@@ -3431,42 +3119,313 @@
             reader.style.display = 'none';
             reader.style.height = '0';
             document.getElementById('stopScannerBtn').style.display = 'none';
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                });
+                html5QrCode = null;
+            }
+        }
+
+        // Enhanced Scanner Functions
+        let enhancedScannerStream = null;
+        let enhancedScannerVideo = null;
+        let enhancedScannerCanvas = null;
+        let enhancedScannerContext = null;
+        let enhancedScannerInterval = null;
+        let currentZoom = 1.0;
+        let torchEnabled = false;
+        let focusIndicator = null;
+
+        async function startEnhancedScanner() {
+            try {
+                // Show the enhanced scanner modal
+                document.getElementById('enhancedScannerModal').style.display = 'flex';
+                
+                // Get video element
+                enhancedScannerVideo = document.getElementById('enhancedScannerVideo');
+                
+                // Request camera access with enhanced constraints
+                const constraints = {
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                };
+                
+                enhancedScannerStream = await navigator.mediaDevices.getUserMedia(constraints);
+                enhancedScannerVideo.srcObject = enhancedScannerStream;
+                
+                // Wait for video to load
+                enhancedScannerVideo.onloadedmetadata = () => {
+                    enhancedScannerVideo.play();
+                    startBarcodeDetection();
+                    setupTouchEvents();
+                };
+                
+                // Handle video errors
+                enhancedScannerVideo.onerror = (error) => {
+                    console.error('Video error:', error);
+                    alert('Camera access failed. Please check permissions.');
+                    closeEnhancedScanner();
+                };
+                
+            } catch (error) {
+                console.error('Enhanced scanner error:', error);
+                alert('Failed to start enhanced scanner: ' + error.message);
+                closeEnhancedScanner();
+            }
+        }
+
+        function closeEnhancedScanner() {
+            // Stop the scanner
+            if (enhancedScannerStream) {
+                enhancedScannerStream.getTracks().forEach(track => track.stop());
+                enhancedScannerStream = null;
+            }
             
-            // Reset zoom and torch
+            if (enhancedScannerInterval) {
+                if (typeof enhancedScannerInterval.stop === 'function') {
+                    enhancedScannerInterval.stop().then(() => {
+                        enhancedScannerInterval.clear();
+                    }).catch(err => {
+                        console.log('Error stopping enhanced scanner:', err);
+                    });
+                }
+                enhancedScannerInterval = null;
+            }
+            
+            // Remove temporary div
+            const tempDiv = document.getElementById('enhancedScannerTemp');
+            if (tempDiv) {
+                tempDiv.remove();
+            }
+            
+            // Hide the modal
+            document.getElementById('enhancedScannerModal').style.display = 'none';
+            
+            // Reset state
             currentZoom = 1.0;
             torchEnabled = false;
-            videoTrack = null;
+            updateZoomDisplay();
+            updateTorchButton();
+        }
+
+        function startBarcodeDetection() {
+            // Create a temporary div for the enhanced scanner
+            const tempDiv = document.createElement('div');
+            tempDiv.id = 'enhancedScannerTemp';
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.top = '-9999px';
+            tempDiv.style.left = '-9999px';
+            document.body.appendChild(tempDiv);
             
-            // Reset scanner state
-            isScannerRunning = false;
+            // Create a new Html5Qrcode instance for the enhanced scanner
+            const enhancedHtml5QrCode = new Html5Qrcode("enhancedScannerTemp");
             
-            if (html5QrCode) {
-                try {
-                    // Check if scanner is actually running before trying to stop it
-                    if (html5QrCode.isScanning && html5QrCode.isScanning()) {
-                        html5QrCode.stop().then(() => {
-                            html5QrCode.clear();
-                            html5QrCode = null;
-                        }).catch(error => {
-                            console.log('Error stopping scanner:', error);
-                            html5QrCode.clear();
-                            html5QrCode = null;
-                        });
-                    } else {
-                        // Scanner is not running, just clear it
-                        html5QrCode.clear();
-                        html5QrCode = null;
-                    }
-                } catch (error) {
-                    console.log('Error checking scanner state:', error);
-                    // Force cleanup
-                    try {
-                        html5QrCode.clear();
-                    } catch (e) {
-                        console.log('Error clearing scanner:', e);
-                    }
-                    html5QrCode = null;
+            const config = {
+                fps: 10,
+                qrbox: { width: 200, height: 200 },
+                aspectRatio: 1.0,
+                formatsToSupport: [
+                    Html5QrcodeSupportedFormats.QR_CODE,
+                    Html5QrcodeSupportedFormats.CODE_128,
+                    Html5QrcodeSupportedFormats.CODE_39,
+                    Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.EAN_8,
+                    Html5QrcodeSupportedFormats.UPC_A,
+                    Html5QrcodeSupportedFormats.UPC_E,
+                    Html5QrcodeSupportedFormats.ITF,
+                    Html5QrcodeSupportedFormats.AZTEC,
+                    Html5QrcodeSupportedFormats.DATA_MATRIX,
+                    Html5QrcodeSupportedFormats.CODABAR,
+                    Html5QrcodeSupportedFormats.PDF_417
+                ]
+            };
+            
+            // Start detection using the video stream
+            enhancedHtml5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText) => {
+                    document.getElementById('toolCode').value = decodedText;
+                    document.getElementById('toolDetailsBtn').disabled = false;
+                    closeEnhancedScanner();
+                },
+                (errorMessage) => {
+                    // Ignore errors during scanning
                 }
+            ).catch(err => {
+                console.error('Enhanced scanner detection error:', err);
+            });
+            
+            // Store reference for cleanup
+            enhancedScannerInterval = enhancedHtml5QrCode;
+        }
+
+        function setupTouchEvents() {
+            const videoContainer = document.querySelector('.scanner-video-container');
+            let initialDistance = 0;
+            let initialZoom = currentZoom;
+            
+            // Handle tap to focus
+            videoContainer.addEventListener('click', (e) => {
+                const rect = videoContainer.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                // Show focus indicator
+                showFocusIndicator(x, y);
+                
+                // Try to focus (if supported)
+                if (enhancedScannerStream) {
+                    const track = enhancedScannerStream.getVideoTracks()[0];
+                    if (track && track.getCapabilities && track.getCapabilities().focusMode) {
+                        track.applyConstraints({
+                            advanced: [{
+                                focusMode: 'manual',
+                                focusDistance: 0.5
+                            }]
+                        }).catch(error => {
+                            console.log('Focus not supported:', error);
+                        });
+                    }
+                }
+            });
+            
+            // Handle pinch to zoom
+            videoContainer.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 2) {
+                    initialDistance = getDistance(e.touches[0], e.touches[1]);
+                    initialZoom = currentZoom;
+                }
+            });
+            
+            videoContainer.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 2) {
+                    e.preventDefault();
+                    const currentDistance = getDistance(e.touches[0], e.touches[1]);
+                    const scale = currentDistance / initialDistance;
+                    const newZoom = Math.max(1.0, Math.min(3.0, initialZoom * scale));
+                    
+                    if (Math.abs(newZoom - currentZoom) > 0.1) {
+                        currentZoom = newZoom;
+                        updateZoomDisplay();
+                        applyZoom();
+                    }
+                }
+            });
+        }
+        
+        function getDistance(touch1, touch2) {
+            const dx = touch1.clientX - touch2.clientX;
+            const dy = touch1.clientY - touch2.clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function showFocusIndicator(x, y) {
+            // Remove existing focus indicator
+            if (focusIndicator) {
+                focusIndicator.remove();
+            }
+            
+            // Create new focus indicator
+            focusIndicator = document.createElement('div');
+            focusIndicator.className = 'focus-indicator';
+            focusIndicator.style.left = (x - 25) + 'px';
+            focusIndicator.style.top = (y - 25) + 'px';
+            
+            document.querySelector('.scanner-video-container').appendChild(focusIndicator);
+            
+            // Remove after animation
+            setTimeout(() => {
+                if (focusIndicator) {
+                    focusIndicator.remove();
+                    focusIndicator = null;
+                }
+            }, 2000);
+        }
+
+        function zoomIn() {
+            if (currentZoom < 3.0) {
+                currentZoom += 0.5;
+                updateZoomDisplay();
+                applyZoom();
+            }
+        }
+
+        function zoomOut() {
+            if (currentZoom > 1.0) {
+                currentZoom -= 0.5;
+                updateZoomDisplay();
+                applyZoom();
+            }
+        }
+
+        function updateZoomDisplay() {
+            document.getElementById('zoomLevel').textContent = currentZoom.toFixed(1) + 'x';
+        }
+
+        function applyZoom() {
+            if (enhancedScannerStream) {
+                const track = enhancedScannerStream.getVideoTracks()[0];
+                if (track && track.getCapabilities && track.getCapabilities().zoom) {
+                    track.applyConstraints({
+                        advanced: [{
+                            zoom: currentZoom
+                        }]
+                    }).catch(error => {
+                        console.log('Zoom not supported:', error);
+                    });
+                } else {
+                    // Fallback: use CSS transform for zoom
+                    const video = document.getElementById('enhancedScannerVideo');
+                    if (video) {
+                        video.style.transform = `scale(${currentZoom})`;
+                        video.style.transformOrigin = 'center center';
+                    }
+                }
+            }
+        }
+
+        function toggleTorch() {
+            torchEnabled = !torchEnabled;
+            updateTorchButton();
+            
+            if (enhancedScannerStream) {
+                const track = enhancedScannerStream.getVideoTracks()[0];
+                if (track && track.getCapabilities && track.getCapabilities().torch) {
+                    track.applyConstraints({
+                        advanced: [{
+                            torch: torchEnabled
+                        }]
+                    }).catch(error => {
+                        console.log('Torch not supported:', error);
+                    });
+                } else {
+                    // Fallback: show a message that torch is not supported
+                    if (torchEnabled) {
+                        alert('Torch/flashlight is not supported on this device.');
+                        torchEnabled = false;
+                        updateTorchButton();
+                    }
+                }
+            }
+        }
+
+        function updateTorchButton() {
+            const torchBtn = document.getElementById('torchBtn');
+            if (torchEnabled) {
+                torchBtn.classList.add('active');
+                torchBtn.innerHTML = '<i class="fas fa-star"></i>';
+                torchBtn.style.background = '#FFD700';
+                torchBtn.style.color = '#000';
+            } else {
+                torchBtn.classList.remove('active');
+                torchBtn.innerHTML = '<i class="fas fa-star"></i>';
+                torchBtn.style.background = 'rgba(0, 0, 0, 0.7)';
+                torchBtn.style.color = 'white';
             }
         }
 
@@ -4000,9 +3959,9 @@
         function showRegisterTools() {
             document.getElementById('toolScannerMenu').style.display = 'none';
             document.getElementById('appSection').style.display = 'block';
-            document.getElementById('headerBranding').style.display = 'none';
             updateWorkLocationLabel();
-            // Load today's tools immediately
+            // Always show helicopter model selection dialog when entering register tools screen
+            showLocationSelectionModalForRegisterTools();
             loadTools();
             showNotificationsInSequence();
         }
@@ -4777,81 +4736,6 @@
             
             // Update previous OUT tools count
             updatePreviousOutToolsCount();
-        }
-        
-        // Set up menu button event listeners
-        function setupMenuButtons() {
-            console.log('Setting up menu buttons...');
-            
-            // Register Tools button
-            const menuRegisterBtn = document.getElementById('menuRegisterBtn');
-            if (menuRegisterBtn) {
-                console.log('Register Tools button found');
-                menuRegisterBtn.onclick = function() {
-                    console.log('Register Tools button clicked');
-                    showRegisterTools();
-                };
-            } else {
-                console.log('Register Tools button not found');
-            }
-            
-            // My Tools button
-            const menuMyToolsBtn = document.getElementById('menuMyToolsBtn');
-            if (menuMyToolsBtn) {
-                console.log('My Tools button found');
-                menuMyToolsBtn.onclick = function() {
-                    console.log('My Tools button clicked');
-                    hideAllMainScreens();
-                    document.getElementById('myToolsScreen').style.display = 'block';
-                    document.getElementById('headerBranding').style.display = 'none';
-                    loadMyTools();
-                };
-            } else {
-                console.log('My Tools button not found');
-            }
-            
-            // View OUT Tools button
-            const menuOutBtn = document.getElementById('menuOutBtn');
-            if (menuOutBtn) {
-                console.log('View OUT Tools button found');
-                menuOutBtn.onclick = function() {
-                    console.log('View OUT Tools button clicked');
-                    // Auto-refresh: Update count first, then show the screen
-                    updatePreviousOutToolsCount().then(() => {
-                        showPreviousOutTools();
-                    });
-                };
-            } else {
-                console.log('View OUT Tools button not found');
-            }
-            
-            // Search Tools button
-            const menuSearchBtn = document.getElementById('menuSearchBtn');
-            if (menuSearchBtn) {
-                console.log('Search Tools button found');
-                menuSearchBtn.onclick = function() {
-                    console.log('Search Tools button clicked');
-                    hideAllMainScreens();
-                    document.getElementById('searchToolsScreen').style.display = 'block';
-                    document.getElementById('headerBranding').style.display = 'none';
-                };
-            } else {
-                console.log('Search Tools button not found');
-            }
-            
-            // Logout button
-            const menuLogoutBtn = document.getElementById('menuLogoutBtn');
-            if (menuLogoutBtn) {
-                console.log('Logout button found');
-                menuLogoutBtn.onclick = function() {
-                    console.log('Logout button clicked');
-                    logout();
-                };
-            } else {
-                console.log('Logout button not found');
-            }
-            
-            console.log('Menu buttons set up successfully');
         }
 
         // Service Worker registration with protocol check
@@ -6070,7 +5954,13 @@
         document.getElementById('myToolsByCollectionScreen').style.display = 'block';
     };
 
-
+    // Previous OUT Tools functionality
+    document.getElementById('menuOutBtn').onclick = function() {
+        // Auto-refresh: Update count first, then show the screen
+        updatePreviousOutToolsCount().then(() => {
+            showPreviousOutTools();
+        });
+    };
 
     // Back button for Previous OUT Tools
     document.getElementById('backToMenuFromOutToolsBtn').onclick = function() {
@@ -7809,8 +7699,224 @@
         }
       });
     </script>
+    </script>
 
+    <script>
+    // ... existing code ...
+    </script>
+    
+    // Sync offline tools when back online
+    async function syncOfflineTools() {
+        try {
+            const offlineTools = await getOfflineTools();
+            
+            if (offlineTools.length === 0) {
+                console.log('No offline tools to sync');
+                return;
+            }
+            
+            console.log(`Syncing ${offlineTools.length} offline tools`);
+            
+            for (const tool of offlineTools) {
+                try {
+                    // Add tool to Firestore
+                    await db.collection('tools').doc(tool.id).set(tool.data);
+                    
+                    // Remove from offline storage
+                    await removeOfflineTool(tool.id);
+                    
+                    console.log(`Successfully synced tool: ${tool.id}`);
+                } catch (error) {
+                    console.error(`Failed to sync tool ${tool.id}:`, error);
+                }
+            }
+            
+            // Refresh the tool list
+            loadTools();
+            
+            // Show success message
+            showNotification(`Successfully synced ${offlineTools.length} offline tools`, 'success');
+            
+        } catch (error) {
+            console.error('Error syncing offline tools:', error);
+            showNotification('Error syncing offline tools', 'error');
+        }
+    }
+    
+    // Check online status and update UI
+    function updateOnlineStatus() {
+        isOnline = navigator.onLine;
+        const statusElement = document.getElementById('onlineStatus');
+        
+        if (statusElement) {
+            if (isOnline) {
+                statusElement.textContent = '🟢 Online';
+                statusElement.className = 'text-success';
+                // Trigger sync when back online
+                syncOfflineTools();
+            } else {
+                statusElement.textContent = '🔴 Offline';
+                statusElement.className = 'text-danger';
+            }
+        }
+    }
+    
+    // Enhanced notification function
+    function showNotification(message, type = 'info') {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'info'} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        // Insert at the top of the app section
+        const appSection = document.getElementById('appSection');
+        if (appSection) {
+            appSection.insertBefore(alertDiv, appSection.firstChild);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.remove();
+                }
+            }, 5000);
+        }
+    }
+    
+            // Handle offline tool submission
+        async function handleOfflineToolSubmission(code, user) {
+            try {
+                // Get technician name
+                const technicianName = localStorage.getItem('fullName') || user.email || 'Unknown Technician';
+                
+                // Create tool data for offline storage
+                const toolData = {
+                    id: code,
+                    data: {
+                        toolName: `Tool ${code}`,
+                        partNumber: code,
+                        technician: technicianName,
+                        owner: technicianName,
+                        status: 'OUT',
+                        timestamp: new Date(),
+                        WorkOn: selectedWorkLocation || 'Unknown',
+                        collectionCode: 'DEFAULT',
+                        collectionName: 'Default Collection',
+                        isOfflineSubmission: true
+                    }
+                };
+                
+                // Save to offline storage
+                await saveToolOffline(toolData);
+                
+                // Show success message
+                const alertDiv = document.createElement('div');
+                alertDiv.className = `alert alert-warning alert-dismissible fade show`;
+                alertDiv.innerHTML = `
+                    <i class="fas fa-wifi-slash me-2"></i>
+                    Tool saved offline. Will sync when connection is restored.
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                `;
+                
+                const scannerView = document.getElementById('scannerView');
+                scannerView.insertBefore(alertDiv, scannerView.firstChild);
+                
+                setTimeout(() => {
+                    if (alertDiv.parentNode) {
+                        alertDiv.remove();
+                    }
+                }, 5000);
+                
+                // Clear input
+                document.getElementById('toolCode').value = '';
+                document.getElementById('toolDetailsBtn').disabled = true;
+                
+                // Load offline tools to show in the list
+                loadOfflineTools();
+                
+            } catch (error) {
+                console.error('Error handling offline tool submission:', error);
+                showNotification('Error saving tool offline', 'error');
+            }
+        }
+        
+        // Load and display offline tools
+        async function loadOfflineTools() {
+            try {
+                const offlineTools = await getOfflineTools();
+                const toolList = document.getElementById('toolList');
+                
+                if (offlineTools.length > 0) {
+                    let html = '<h4 style="font-size: 1.1rem; margin-bottom: 8px;">Today\'s Tools (Including Offline)</h4>';
+                    
+                    offlineTools.forEach((tool, index) => {
+                        const time = tool.data.timestamp.toLocaleString('en-GB', {
+                            day: '2-digit', month: '2-digit', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                        });
+                        
+                        html += `
+                            <div class="register-tool-card out" style="border: 2px dashed #ffc107;">
+                                <div class="register-tool-title">${index + 1}. ${tool.data.toolName} (Offline)</div>
+                                <div class="register-tool-date" style="display: flex; align-items: center; justify-content: space-between;">
+                                    <span>${time}</span>
+                                    <span style="font-size:1em;font-weight:bold;color:#222;">WorkOn: <span style="color:#888;font-weight:bold;">${tool.data.WorkOn}</span></span>
+                                </div>
+                                <div class="register-tool-row">
+                                    <div class="register-tool-col">
+                                        <div class="register-tool-label">TID</div>
+                                        <div class="register-tool-value">${tool.id}</div>
+                                    </div>
+                                    <div class="register-tool-col">
+                                        <div class="register-tool-label">P/N</div>
+                                        <div class="register-tool-value">${tool.data.partNumber}</div>
+                                    </div>
+                                    <div class="register-tool-col">
+                                        <div class="register-tool-status out">OUT</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    toolList.innerHTML = html;
+                }
+            } catch (error) {
+                console.error('Error loading offline tools:', error);
+            }
+        }
 
+        // Initialize offline functionality
+        document.addEventListener('DOMContentLoaded', async function() {
+        // Initialize IndexedDB
+        await initIndexedDB();
+        
+        // Set up online/offline event listeners
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        
+        // Initial status check
+        updateOnlineStatus();
+        
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            try {
+                const registration = await navigator.serviceWorker.register('/service-worker.js');
+                console.log('Service Worker registered:', registration);
+                
+                // Listen for messages from service worker
+                navigator.serviceWorker.addEventListener('message', event => {
+                    if (event.data.type === 'OFFLINE_SYNC_COMPLETE') {
+                        showNotification(`Synced ${event.data.syncedCount} offline tools`, 'success');
+                    }
+                });
+                
+            } catch (error) {
+                console.error('Service Worker registration failed:', error);
+            }
+        }
+    });
     </script>
 </body>
 </html> 
