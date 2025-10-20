@@ -4277,28 +4277,42 @@ if (!userCredential.user.emailVerified) {
             searchResults.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><br>Searching...</div>';
             
             try {
-                let snapshot;
-                if (searchType === 'partNumber') {
-                    snapshot = await db.collection('tools')
-                        .where('partNumber', '>=', query)
-                        .where('partNumber', '<=', query + '\uf8ff')
-                        .limit(20)
-                        .get();
-                } else {
-                    snapshot = await db.collection('tools')
-                        .where('toolName', '>=', query)
-                        .where('toolName', '<=', query + '\uf8ff')
-                        .limit(20)
-                        .get();
-                }
+                // Convert query to lowercase for case-insensitive search
+                const lowerQuery = query.toLowerCase();
+                
+                // Get all tools and filter client-side for case-insensitive search
+                const snapshot = await db.collection('tools').limit(500).get();
                 
                 if (snapshot.empty) {
+                    searchResults.innerHTML = '<div class="alert alert-info">No tools found.</div>';
+                    return;
+                }
+                
+                // Filter results based on search type and query (case-insensitive)
+                const filteredDocs = snapshot.docs.filter(doc => {
+                    const data = doc.data();
+                    
+                    if (searchType === 'partNumber') {
+                        // Search in part number (case-insensitive)
+                        const partNumber = (data.partNumber || doc.id || '').toLowerCase();
+                        return partNumber.includes(lowerQuery);
+                    } else {
+                        // Search in tool name (case-insensitive)
+                        const toolName = (data.toolName || '').toLowerCase();
+                        return toolName.includes(lowerQuery);
+                    }
+                });
+                
+                if (filteredDocs.length === 0) {
                     searchResults.innerHTML = '<div class="alert alert-info">No tools found matching your search.</div>';
                     return;
                 }
                 
+                // Limit results to 50 for performance
+                const limitedDocs = filteredDocs.slice(0, 50);
+                
                 let html = '<div class="row">';
-                snapshot.docs.forEach((doc, index) => {
+                limitedDocs.forEach((doc, index) => {
                     const data = doc.data();
                     const status = (data.status || '').toUpperCase();
                     let statusClass = 'in';
