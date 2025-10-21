@@ -7320,7 +7320,7 @@ if (!userCredential.user.emailVerified) {
     }
 
     // Settings button logic - setup after DOM loads
-    function setupSettingsButton() {
+    document.addEventListener('DOMContentLoaded', function() {
         const settingsBtn = document.getElementById('settingsBtn');
         if (settingsBtn) {
             console.log('Settings button found and configured');
@@ -7332,16 +7332,9 @@ if (!userCredential.user.emailVerified) {
                 modal.show();
             };
         } else {
-            console.log('Settings button not found yet');
+            console.log('Settings button not found');
         }
-    }
-    
-    // Try to setup immediately if DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', setupSettingsButton);
-    } else {
-        setupSettingsButton();
-    }
+    });
 
     // Verify admin code logic
     const verifyAdminCodeBtn = document.getElementById('verifyAdminCodeBtn');
