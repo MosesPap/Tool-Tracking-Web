@@ -1003,6 +1003,25 @@
             }
         }
 
+        /* Work Location Flash Animation */
+        @keyframes workLocationFlash {
+            0%, 100% {
+                background-color: transparent;
+                color: red;
+            }
+            50% {
+                background-color: red;
+                color: white;
+            }
+        }
+
+        .work-location-flashing {
+            animation: workLocationFlash 0.5s ease-in-out;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+
         /* Enhanced Scanner Modal */
         .enhanced-scanner-modal {
             position: fixed;
@@ -1340,7 +1359,10 @@
                 <i class="fas fa-arrow-left"></i> Back to Menu
             </button>
             <div id="registerToolsHeader" style="display: flex; align-items: center; justify-content: flex-start; gap: 16px; margin-bottom: 12px;">
-              <span id="workLocationLabel" style="font-weight: bold; color: #1976d2; font-size: 1.1rem;">Work Location: (not selected)</span>
+              <span id="workLocationLabel" style="font-weight: bold; font-size: 1.5rem;">
+                <span style="color: black;">Work Location:</span> 
+                <span id="workLocationValue" style="color: red;">(not selected)</span>
+              </span>
               <button id="changeWorkLocationBtn" class="btn btn-outline-primary btn-sm" type="button">
                 <i class="fas fa-map-marker-alt"></i> Change Work Location
               </button>
@@ -4195,13 +4217,67 @@ if (!userCredential.user.emailVerified) {
 
 
         function updateWorkLocationLabel() {
-            const label = document.getElementById('workLocationLabel');
-            if (label) {
-                label.textContent = selectedWorkLocation
-                    ? `Work Location: ${selectedWorkLocation}`
-                    : 'Work Location: (not selected)';
+            const valueSpan = document.getElementById('workLocationValue');
+            if (valueSpan) {
+                valueSpan.textContent = selectedWorkLocation || '(not selected)';
             }
         }
+
+        // Work Location Flash Effect
+        let flashTimeout = null;
+        let flashInterval = null;
+
+        function startWorkLocationFlash() {
+            const valueSpan = document.getElementById('workLocationValue');
+            if (!valueSpan) return;
+
+            // Clear any existing flash
+            clearWorkLocationFlash();
+
+            // Add flashing class repeatedly for 4 seconds
+            let flashCount = 0;
+            const totalDuration = 4000; // 4 seconds
+            const flashDuration = 500; // 0.5 seconds per flash cycle
+
+            flashInterval = setInterval(() => {
+                valueSpan.classList.add('work-location-flashing');
+                setTimeout(() => {
+                    valueSpan.classList.remove('work-location-flashing');
+                }, flashDuration);
+            }, flashDuration);
+
+            // Stop flashing after 4 seconds
+            flashTimeout = setTimeout(() => {
+                clearWorkLocationFlash();
+            }, totalDuration);
+        }
+
+        function clearWorkLocationFlash() {
+            const valueSpan = document.getElementById('workLocationValue');
+            if (valueSpan) {
+                valueSpan.classList.remove('work-location-flashing');
+            }
+            if (flashTimeout) {
+                clearTimeout(flashTimeout);
+                flashTimeout = null;
+            }
+            if (flashInterval) {
+                clearInterval(flashInterval);
+                flashInterval = null;
+            }
+        }
+
+        // Add event listener to toolCode input to trigger flash
+        document.addEventListener('DOMContentLoaded', function() {
+            const toolCodeInput = document.getElementById('toolCode');
+            if (toolCodeInput) {
+                toolCodeInput.addEventListener('input', function() {
+                    if (this.value.trim().length > 0) {
+                        startWorkLocationFlash();
+                    }
+                });
+            }
+        });
 
         document.getElementById('changeWorkLocationBtn').onclick = function() {
             showLocationSelectionModalForRegisterTools();
@@ -4793,6 +4869,24 @@ if (!userCredential.user.emailVerified) {
             return isMobileDevice() ? mobileText : desktopText;
         }
 
+        // Function to get location photo count
+        async function getLocationPhotoCount(collectionName, location) {
+            try {
+                const documentId = `${collectionName}_${location}`;
+                const docRef = db.collection('locationPhotos').doc(documentId);
+                const doc = await docRef.get();
+                
+                if (doc.exists) {
+                    const data = doc.data();
+                    return data.photoUrls ? data.photoUrls.length : 0;
+                }
+                return 0;
+            } catch (error) {
+                console.error('Error getting photo count:', error);
+                return 0;
+            }
+        }
+
         async function showMyToolsByCollection(collectionName) {
             lastViewedCollectionName = collectionName;
             const user = auth.currentUser;
@@ -4866,14 +4960,17 @@ if (!userCredential.user.emailVerified) {
                     const locs = selectedLoc === 'All' ? locations : [selectedLoc];
                     
                     // Fetch photo counts for all locations
+                    console.log('Fetching photo counts for locations:', locs);
                     const photoCountPromises = locs.map(loc => getLocationPhotoCount(collectionName, loc));
                     const photoCounts = await Promise.all(photoCountPromises);
+                    console.log('Photo counts received:', photoCounts);
                     
                     locs.forEach((loc, locIndex) => {
                         const toolsAtLoc = tools.filter(t => (t.location || 'No Location') === loc);
                         if (!toolsAtLoc.length) return;
                         
                         const photoCount = photoCounts[locIndex];
+                        console.log(`Location: ${loc}, Photo count: ${photoCount}`);
                         const photoText = getResponsiveButtonText(`Photos (${photoCount})`, `Pics (${photoCount})`);
                         
                         html += `<div style="background:#FF9800;color:white;font-weight:bold;font-size:1.1em;padding:4px 12px;border-radius:6px 6px 0 0;position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;">
@@ -6054,23 +6151,6 @@ if (!userCredential.user.emailVerified) {
                 const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
                 if (loadingModal) loadingModal.hide();
                 alert('Delete failed: ' + error.message);
-            }
-        }
-
-        async function getLocationPhotoCount(collectionName, location) {
-            try {
-                const documentId = `${collectionName}_${location}`;
-                const docRef = db.collection('locationPhotos').doc(documentId);
-                const doc = await docRef.get();
-                
-                if (doc.exists) {
-                    const data = doc.data();
-                    return data.photoUrls ? data.photoUrls.length : 0;
-                }
-                return 0;
-            } catch (error) {
-                console.error('Error getting photo count:', error);
-                return 0;
             }
         }
 
