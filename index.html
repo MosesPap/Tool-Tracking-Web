@@ -3176,10 +3176,10 @@ if (!userCredential.user.emailVerified) {
                             <span style="color: blue; font-weight: bold;">${calDueDate}</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                            <div style="color: blue; font-weight: normal; cursor: pointer; text-align: left;" onclick="event.stopPropagation();">
+                            <div style="color: blue; font-weight: normal; cursor: pointer; text-align: left;">
                                 Click For Details
                             </div>
-                            ${status === 'OUT' ? `<div id="countdown-${tool.id}" class="cooldown-countdown" style="background: #FF9800; color: white; padding: 6px 8px; border-radius: 4px; font-weight: bold; text-align: center; white-space: nowrap;">
+                            ${status === 'OUT' ? `<div id="countdown-${tool.id}" class="cooldown-countdown" style="background: #FF9800; color: white; padding: 6px 8px; border-radius: 4px; font-weight: bold; text-align: center; white-space: nowrap;" onclick="event.stopPropagation();">
                                 <span style="font-weight: bold;">Check-in in:</span> <span class="countdown-value">Loading...</span>
                             </div>` : ''}
                         </div>
