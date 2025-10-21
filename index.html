@@ -1007,19 +1007,33 @@
         @keyframes workLocationFlash {
             0%, 100% {
                 background-color: transparent;
-                color: red;
             }
             50% {
                 background-color: red;
+            }
+        }
+
+        @keyframes workLocationTextFlash {
+            0%, 100% {
+                color: black;
+            }
+            50% {
                 color: white;
             }
         }
 
-        .work-location-flashing {
-            animation: workLocationFlash 0.5s ease-in-out;
+        .work-location-label-flashing {
+            animation: workLocationFlash 0.6s ease-in-out infinite, 
+                       workLocationTextFlash 0.6s ease-in-out infinite;
             padding: 4px 8px;
             border-radius: 4px;
-            transition: all 0.3s ease;
+        }
+
+        .work-location-value-flashing {
+            animation: workLocationFlash 0.6s ease-in-out infinite;
+            padding: 4px 8px;
+            border-radius: 4px;
+            color: white !important;
         }
 
         /* Enhanced Scanner Modal */
@@ -4225,45 +4239,49 @@ if (!userCredential.user.emailVerified) {
 
         // Work Location Flash Effect
         let flashTimeout = null;
-        let flashInterval = null;
 
         function startWorkLocationFlash() {
+            const labelSpan = document.getElementById('workLocationLabel');
             const valueSpan = document.getElementById('workLocationValue');
-            if (!valueSpan) return;
+            
+            if (!labelSpan || !valueSpan) return;
 
             // Clear any existing flash
             clearWorkLocationFlash();
 
-            // Add flashing class repeatedly for 4 seconds
-            let flashCount = 0;
-            const totalDuration = 4000; // 4 seconds
-            const flashDuration = 500; // 0.5 seconds per flash cycle
+            // Get the label text span (the "Work Location:" part)
+            const labelTextSpan = labelSpan.querySelector('span:first-child');
+            
+            // Add flashing classes to both label and value
+            if (labelTextSpan) {
+                labelTextSpan.classList.add('work-location-label-flashing');
+            }
+            valueSpan.classList.add('work-location-value-flashing');
 
-            flashInterval = setInterval(() => {
-                valueSpan.classList.add('work-location-flashing');
-                setTimeout(() => {
-                    valueSpan.classList.remove('work-location-flashing');
-                }, flashDuration);
-            }, flashDuration);
-
-            // Stop flashing after 4 seconds
+            // Stop flashing after exactly 4 seconds
             flashTimeout = setTimeout(() => {
                 clearWorkLocationFlash();
-            }, totalDuration);
+            }, 4000);
         }
 
         function clearWorkLocationFlash() {
+            const labelSpan = document.getElementById('workLocationLabel');
             const valueSpan = document.getElementById('workLocationValue');
-            if (valueSpan) {
-                valueSpan.classList.remove('work-location-flashing');
+            
+            if (labelSpan) {
+                const labelTextSpan = labelSpan.querySelector('span:first-child');
+                if (labelTextSpan) {
+                    labelTextSpan.classList.remove('work-location-label-flashing');
+                }
             }
+            
+            if (valueSpan) {
+                valueSpan.classList.remove('work-location-value-flashing');
+            }
+            
             if (flashTimeout) {
                 clearTimeout(flashTimeout);
                 flashTimeout = null;
-            }
-            if (flashInterval) {
-                clearInterval(flashInterval);
-                flashInterval = null;
             }
         }
 
@@ -4283,9 +4301,16 @@ if (!userCredential.user.emailVerified) {
             showLocationSelectionModalForRegisterTools();
         };
 
-        function showRegisterTools() {
-            // Show location selection dialog first, before entering register tools screen
-            showLocationSelectionModalForRegisterTools();
+        function showRegisterTools(skipModal = false) {
+            if (skipModal) {
+                // If coming back from another screen, just refresh
+                document.getElementById('toolScannerMenu').style.display = 'none';
+                document.getElementById('appSection').style.display = 'block';
+                refreshRegisterToolsScreen();
+            } else {
+                // Show location selection dialog first, before entering register tools screen
+                showLocationSelectionModalForRegisterTools();
+            }
         }
 
         function showSearchTools() {
@@ -4600,17 +4625,33 @@ if (!userCredential.user.emailVerified) {
             }
         }
 
+        function refreshRegisterToolsScreen() {
+            // Clear the tool code input
+            const toolCodeInput = document.getElementById('toolCode');
+            if (toolCodeInput) {
+                toolCodeInput.value = '';
+            }
+            
+            // Stop any flashing effects
+            clearWorkLocationFlash();
+            
+            // Update the work location label
+            updateWorkLocationLabel();
+            
+            // Reload tools list
+            loadTools();
+            
+            // Show notifications
+            showNotificationsInSequence();
+        }
+
         function enterRegisterToolsScreen() {
             // Hide the menu and show the register tools screen
             document.getElementById('toolScannerMenu').style.display = 'none';
             document.getElementById('appSection').style.display = 'block';
             
-            // Update the work location label
-            updateWorkLocationLabel();
-            
-            // Load tools and show notifications
-            loadTools();
-            showNotificationsInSequence();
+            // Refresh the screen
+            refreshRegisterToolsScreen();
         }
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -7293,7 +7334,7 @@ if (!userCredential.user.emailVerified) {
             backBtn.textContent = 'Back to Register Tools List';
             backBtn.onclick = function() {
                 document.getElementById('collectionDetailsScreen').style.display = 'none';
-                showRegisterTools();
+                showRegisterTools(true); // Skip modal and refresh when coming back
             };
         }
     }
