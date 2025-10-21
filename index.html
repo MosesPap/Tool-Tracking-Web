@@ -1387,19 +1387,6 @@
               </button>
               <span id="onlineStatus" style="font-weight: bold; font-size: 1rem;">🟢 Online</span>
             </div>
-            <div class="row align-items-center mb-2">
-                <div class="col-6 d-flex align-items-center">
-                    <!-- Remove the My Tools button from appSection -->
-                    <!-- <button onclick="showMyTools()" id="myToolsButton" class="btn btn-warning">
-                        <i class="fas fa-toolbox"></i> My Tools
-                    </button> -->
-                </div>
-                <div class="col-6 d-flex justify-content-end align-items-center">
-                    <button onclick="toggleAdmin()" id="adminButton" class="btn btn-info me-2" style="display: none;">
-                        <i class="fas fa-cog"></i> Admin
-                    </button>
-                </div>
-            </div>
 
             <!-- Register Tools Title -->
             <!-- REMOVE the following block:
@@ -1589,17 +1576,17 @@
 
     <!-- ToolScanner Menu Section -->
     <div id="toolScannerMenu" style="display:none;">
-        <!-- Orange Top Bar with Title and Settings (now outside container) -->
+        <!-- Orange Top Bar with Title -->
         <div style="background: #FF9800; color: white; width: 100vw; min-width: 100vw; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
             <h2 style="margin: 0 0 0 20px; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px;">ToolScanner Menu</h2>
-            <button id="settingsBtn" class="btn btn-link p-0" style="position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-size: 2rem; color: white; z-index: 2;" title="Settings">
-                <i class="fas fa-cog" style="color: white;"></i>
-                </button>
             </div>
         <div class="container py-4">
-            <!-- Welcome Message (no background) -->
-            <div style="margin: 8px 0 10px 0; text-align: left;">
+            <!-- Welcome Message with Edit Icon -->
+            <div style="margin: 8px 0 10px 0; text-align: left; display: flex; align-items: center; gap: 10px;">
                 <span style="font-size: 1.5rem; color: #333; font-weight: bold;">Welcome, <span id="fullName" class="technician-name"></span></span>
+                <button id="settingsBtn" class="btn btn-link p-0" style="font-size: 1.3rem; color: #1976d2;" title="Edit Profile">
+                    <i class="fas fa-pencil-alt"></i>
+                </button>
             </div>
             <div class="d-grid gap-3 col-6 mx-auto">
                 <button class="btn btn-success" id="menuRegisterBtn"><i class="fas fa-plus"></i> Register Tools</button>
@@ -3048,7 +3035,7 @@ if (!userCredential.user.emailVerified) {
                     console.error('loadTools: toolList element not found!');
                     return;
                 }
-                toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4>';
+                toolList.innerHTML = '<h4 class="tool-title">Today\'s Scanned Tools:</h4>';
 
                 let allTools = [];
 
@@ -3202,7 +3189,7 @@ if (!userCredential.user.emailVerified) {
                 console.error('loadTools: Error loading tools:', error);
                 const toolList = document.getElementById('toolList');
                 if (toolList) {
-                    toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4><p class="text-danger">Error loading tools. Please try again.</p>';
+                    toolList.innerHTML = '<h4 class="tool-title">Today\'s Scanned Tools:</h4><p class="text-danger">Error loading tools. Please try again.</p>';
                 }
             }
         }
