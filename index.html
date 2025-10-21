@@ -3127,28 +3127,54 @@ if (!userCredential.user.emailVerified) {
                     };
                     
                     const offlineIndicator = tool.isOffline ? ' (Offline)' : '';
+                    const workOnValue = (status === 'OUT' && data.WorkOn) ? data.WorkOn : 'N/A';
+                    const serialNumber = data.serialNumber || data.partNumber || 'N/A';
+                    const calDueDate = data.calDueDate && data.calDueDate.toDate 
+                        ? data.calDueDate.toDate().toLocaleDateString('en-GB')
+                        : 'N/A';
+                    
+                    // Determine status color
+                    const statusColor = status === 'IN' ? 'green' : 'red';
+                    
                     card.innerHTML = `
-                        <div class="register-tool-title">${index + 1}. ${data.toolName || 'Unknown Tool'}${offlineIndicator}</div>
-                        <div class="register-tool-date" style="display: flex; align-items: center; justify-content: space-between;">
-                            <span>${time}</span>
-                            ${status === 'OUT' && data.WorkOn ? `<span style="font-size:1em;font-weight:bold;color:#222;">WorkOn: <span style="color:#888;font-weight:bold;">${data.WorkOn}</span></span>` : ''}
+                        <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000;">
+                            ${index + 1}. ${data.toolName || 'Unknown Tool'}${offlineIndicator}
                         </div>
-                        <div class="register-tool-row">
-                            <div class="register-tool-col">
-                                <div class="register-tool-label">TID</div>
-                                <div class="register-tool-value">${tool.id}</div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <div>
+                                <span style="color: black; font-weight: bold;">TID:</span> 
+                                <span style="color: #666; font-weight: bold;">${tool.id}</span>
                             </div>
-                            <div class="register-tool-col">
-                                <div class="register-tool-label">P/N</div>
-                                <div class="register-tool-value">${data.partNumber || tool.id}</div>
-                            </div>
-                            <div class="register-tool-col">
-                                <div class="register-tool-label">STS</div>
-                                <div class="register-tool-status ${statusClass}">${status}</div>
+                            <div>
+                                <span style="color: black; font-weight: bold;">WorkOn:</span> 
+                                <span style="color: #666; font-weight: bold;">${workOnValue}</span>
                             </div>
                         </div>
+                        <div style="margin-bottom: 6px;">
+                            <span style="color: black; font-weight: bold;">S/N:</span> 
+                            <span style="color: #666; font-weight: bold;">${serialNumber}</span>
+                        </div>
+                        <div style="margin-bottom: 6px;">
+                            <span style="color: black; font-weight: bold;">Status:</span> 
+                            <span style="color: ${statusColor}; font-weight: bold;">${status}</span>
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <span style="color: black; font-weight: bold;">Cal Due Date:</span> 
+                            <span style="color: blue; font-weight: bold;">${calDueDate}</span>
+                        </div>
+                        <div style="color: blue; font-weight: normal; margin-bottom: 8px; cursor: pointer;" onclick="event.stopPropagation();">
+                            Click For Details
+                        </div>
+                        ${status === 'OUT' ? `<div id="countdown-${tool.id}" class="cooldown-countdown" style="background: #FF9800; color: white; padding: 6px 8px; border-radius: 4px; font-weight: bold; text-align: center;">
+                            <span style="font-weight: bold;">Check-in in:</span> <span class="countdown-value">Loading...</span>
+                        </div>` : ''}
                     `;
                     toolList.appendChild(card);
+                    
+                    // Start countdown for OUT tools
+                    if (status === 'OUT' && data.timestamp && data.timestamp.toDate) {
+                        startCooldownCountdown(tool.id, data.timestamp.toDate());
+                    }
                 });
             } catch (error) {
                 console.error('Error loading tools:', error);
@@ -4126,6 +4152,70 @@ if (!userCredential.user.emailVerified) {
             document.querySelector('#cooldownWarnModal .modal-body').textContent = `You must wait ${mins} minute${mins !== 1 ? 's' : ''} and ${secs} second${secs !== 1 ? 's' : ''} before you can return this tool.`;
         }
 
+        // Store active countdown intervals
+        const activeCountdowns = {};
+
+        // Start cooldown countdown for a tool card
+        async function startCooldownCountdown(toolId, outTime) {
+            try {
+                // Fetch cooldown minutes from settings
+                const settingsDoc = await db.collection('settings').doc('admin').get();
+                let cooldownMinutes = 5; // default
+                if (settingsDoc.exists && settingsDoc.data().CheckINCooldownMinutes) {
+                    cooldownMinutes = settingsDoc.data().CheckINCooldownMinutes;
+                }
+                const cooldownMs = cooldownMinutes * 60 * 1000;
+                
+                const countdownElement = document.getElementById(`countdown-${toolId}`);
+                if (!countdownElement) return;
+                
+                const valueSpan = countdownElement.querySelector('.countdown-value');
+                if (!valueSpan) return;
+                
+                // Clear any existing interval for this tool
+                if (activeCountdowns[toolId]) {
+                    clearInterval(activeCountdowns[toolId]);
+                }
+                
+                // Update countdown every second
+                function updateCountdown() {
+                    const now = new Date();
+                    const diffMs = now - outTime;
+                    const remainingMs = cooldownMs - diffMs;
+                    
+                    if (remainingMs <= 0) {
+                        valueSpan.textContent = 'Ready to check-in';
+                        countdownElement.style.background = '#4CAF50'; // Green when ready
+                        if (activeCountdowns[toolId]) {
+                            clearInterval(activeCountdowns[toolId]);
+                            delete activeCountdowns[toolId];
+                        }
+                    } else {
+                        const mins = Math.floor(remainingMs / 60000);
+                        const secs = Math.floor((remainingMs % 60000) / 1000);
+                        valueSpan.textContent = `${mins}m ${secs}s`;
+                    }
+                }
+                
+                // Initial update
+                updateCountdown();
+                
+                // Update every second
+                activeCountdowns[toolId] = setInterval(updateCountdown, 1000);
+                
+            } catch (error) {
+                console.error('Error starting countdown:', error);
+            }
+        }
+
+        // Clear all countdowns when leaving the page
+        function clearAllCountdowns() {
+            Object.keys(activeCountdowns).forEach(toolId => {
+                clearInterval(activeCountdowns[toolId]);
+            });
+            activeCountdowns = {};
+        }
+
         // Tab change handler
         // (removed previous-tab event listener as the tab is no longer present)
 
@@ -4634,6 +4724,9 @@ if (!userCredential.user.emailVerified) {
             
             // Stop any flashing effects
             clearWorkLocationFlash();
+            
+            // Clear all active countdowns
+            clearAllCountdowns();
             
             // Update the work location label
             updateWorkLocationLabel();
