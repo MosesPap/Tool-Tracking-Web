@@ -1207,6 +1207,11 @@
             font-size: 1rem !important;
             padding: 1rem !important;
           }
+          
+          /* Smaller Work Location font on mobile */
+          #workLocationLabel {
+            font-size: 1.1rem !important;
+          }
         }
     </style>
 </head>
@@ -3140,7 +3145,7 @@ if (!userCredential.user.emailVerified) {
                     };
                     
                     const offlineIndicator = tool.isOffline ? ' (Offline)' : '';
-                    const workOnValue = (status === 'OUT' && data.WorkOn) ? data.WorkOn : 'N/A';
+                    const workOnValue = data.WorkOn ? data.WorkOn : 'N/A';
                     const serialNumber = data.serialNumber || data.partNumber || 'N/A';
                     const calDueDate = data.calDueDate && data.calDueDate.toDate 
                         ? data.calDueDate.toDate().toLocaleDateString('en-GB')
