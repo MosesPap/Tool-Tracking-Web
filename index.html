@@ -6961,9 +6961,18 @@ if (!userCredential.user.emailVerified) {
         // Add owner information below back button
         const backButton = document.getElementById('backToRegisterToolsBtn');
         if (backButton) {
-            const ownerDiv = document.createElement('div');
+            // Check if owner div already exists
+            let ownerDiv = document.getElementById('collectionOwnerDiv');
+            
+            if (!ownerDiv) {
+                // Create new owner div only if it doesn't exist
+                ownerDiv = document.createElement('div');
+                ownerDiv.id = 'collectionOwnerDiv';
+                backButton.parentNode.insertBefore(ownerDiv, backButton.nextSibling);
+            }
+            
+            // Update the content (whether new or existing)
             ownerDiv.innerHTML = `<div style="color: #1976d2; font-weight: bold; font-size: 1.1em; margin-bottom: 1rem;">Owner: ${ownerFromTools}</div>`;
-            backButton.parentNode.insertBefore(ownerDiv, backButton.nextSibling);
         }
 
         const content = document.getElementById('collectionDetailsContent');
