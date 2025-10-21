@@ -3014,22 +3014,35 @@ if (!userCredential.user.emailVerified) {
         // Load today's tools
         async function loadTools() {
             const user = auth.currentUser;
-            if (!user) return;
+            if (!user) {
+                console.log('loadTools: No user logged in');
+                return;
+            }
 
             try {
+                console.log('loadTools: Starting to load tools...');
+                
                 // Get technician name
                 const technicianDoc = await db.collection('technicians').doc(user.uid).get();
                 const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+                console.log('loadTools: Technician name:', technicianName);
 
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
+                console.log('loadTools: Today date:', today);
 
                 const snapshot = await db.collection('tools')
                     .where('technician', '==', technicianName)
                     .where('timestamp', '>=', today)
                     .get();
 
+                console.log('loadTools: Found', snapshot.size, 'tools');
+
                 const toolList = document.getElementById('toolList');
+                if (!toolList) {
+                    console.error('loadTools: toolList element not found!');
+                    return;
+                }
                 toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4>';
 
                 let allTools = [];
@@ -3178,10 +3191,14 @@ if (!userCredential.user.emailVerified) {
                         startCooldownCountdown(tool.id, data.timestamp.toDate());
                     }
                 });
+                
+                console.log('loadTools: Successfully loaded', allTools.length, 'tools');
             } catch (error) {
-                console.error('Error loading tools:', error);
+                console.error('loadTools: Error loading tools:', error);
                 const toolList = document.getElementById('toolList');
-                toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4><p class="text-danger">Error loading tools. Please try again.</p>';
+                if (toolList) {
+                    toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4><p class="text-danger">Error loading tools. Please try again.</p>';
+                }
             }
         }
 
