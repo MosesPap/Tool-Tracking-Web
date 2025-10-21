@@ -1218,7 +1218,7 @@
 <body>
     <div id="orangeOverlay"></div>
     <div id="splashScreen">
-        <video id="splashVideo" autoplay muted playsinline webkit-playsinline preload="auto" loop>
+        <video id="splashVideo" autoplay muted playsinline webkit-playsinline preload="auto">
             <source src="src/main/res/raw/helicopter_animation.mp4" type="video/mp4">
             <source src="src/helicopter_animation.mp4" type="video/mp4">
         </video>
@@ -4855,13 +4855,23 @@ if (!userCredential.user.emailVerified) {
                 
                 if (splashVideo) {
                     let splashHidden = false;
+                    const minDisplayTime = 2000; // Minimum 2 seconds
+                    const maxDisplayTime = 8000; // Maximum 8 seconds
+                    const startTime = Date.now();
+                    
                     function hideSplashScreen() {
                         if (!splashHidden) {
-                            splashScreen.classList.add('splash-hidden');
+                            const elapsed = Date.now() - startTime;
+                            const remaining = Math.max(0, minDisplayTime - elapsed);
+                            
                             setTimeout(() => {
-                                splashScreen.style.display = 'none';
-                            }, 500);
-                            splashHidden = true;
+                                splashScreen.classList.add('splash-hidden');
+                                setTimeout(() => {
+                                    splashScreen.style.display = 'none';
+                                }, 500);
+                                splashHidden = true;
+                                console.log('Splash screen hidden');
+                            }, remaining);
                         }
                     }
                     
@@ -4869,7 +4879,10 @@ if (!userCredential.user.emailVerified) {
                     attemptVideoPlay();
                     
                     // Listen for video events
-                    splashVideo.addEventListener('ended', hideSplashScreen);
+                    splashVideo.addEventListener('ended', () => {
+                        console.log('Video ended');
+                        hideSplashScreen();
+                    });
                     splashVideo.addEventListener('canplaythrough', () => {
                         console.log('Video can play through');
                     });
@@ -4888,8 +4901,11 @@ if (!userCredential.user.emailVerified) {
                         showFallbackSplash();
                     });
                     
-                    // Fallback: hide after 6 seconds if video doesn't end
-                    setTimeout(hideSplashScreen, 6000);
+                    // Fallback: hide after maximum time if video doesn't end
+                    setTimeout(() => {
+                        console.log('Fallback timer triggered after', maxDisplayTime, 'ms');
+                        hideSplashScreen();
+                    }, maxDisplayTime);
                 } else {
                     showFallbackSplash();
                 }
@@ -7319,15 +7335,27 @@ if (!userCredential.user.emailVerified) {
             }
     }
 
-    // Settings button logic
-    const settingsBtn = document.getElementById('settingsBtn');
-    if (settingsBtn) {
-        settingsBtn.onclick = function() {
-            document.getElementById('adminCodeInput').value = '';
-            document.getElementById('adminCodeError').style.display = 'none';
-            const modal = new bootstrap.Modal(document.getElementById('adminCodeModal'));
-            modal.show();
-        };
+    // Settings button logic - ensure it runs after DOM is loaded
+    function setupSettingsButton() {
+        const settingsBtn = document.getElementById('settingsBtn');
+        if (settingsBtn) {
+            console.log('Settings button found, attaching handler');
+            settingsBtn.onclick = function() {
+                console.log('Settings button clicked');
+                document.getElementById('adminCodeInput').value = '';
+                document.getElementById('adminCodeError').style.display = 'none';
+                const modal = new bootstrap.Modal(document.getElementById('adminCodeModal'));
+                modal.show();
+            };
+        } else {
+            console.error('Settings button not found!');
+        }
+    }
+    
+    // Call immediately and also after DOM is ready
+    setupSettingsButton();
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupSettingsButton);
     }
 
     // Verify admin code logic
