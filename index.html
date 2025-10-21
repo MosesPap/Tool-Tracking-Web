@@ -1367,7 +1367,7 @@
             </div>
             <!-- Welcome Message (no background) -->
             <div style="margin: 8px 0 10px 0; text-align: left;">
-                <span style="font-size: 1.1rem; color: #333; font-weight: 500;">Welcome, <span id="registerScreenName" class="technician-name"></span></span>
+                <span style="font-size: 1.5rem; color: #333; font-weight: bold;">Welcome, <span id="registerScreenName" class="technician-name"></span></span>
             </div>
             <button id="backToMenuBtn" class="btn btn-outline-secondary mb-2">
                 <i class="fas fa-arrow-left"></i> Back to Menu
@@ -1594,7 +1594,7 @@
         <div class="container py-4">
             <!-- Welcome Message (no background) -->
             <div style="margin: 8px 0 10px 0; text-align: left;">
-                <span style="font-size: 1.1rem; color: #333; font-weight: 500;">Welcome, <span id="fullName" class="technician-name"></span></span>
+                <span style="font-size: 1.5rem; color: #333; font-weight: bold;">Welcome, <span id="fullName" class="technician-name"></span></span>
             </div>
             <div class="d-grid gap-3 col-6 mx-auto">
                 <button class="btn btn-success" id="menuRegisterBtn"><i class="fas fa-plus"></i> Register Tools</button>
@@ -4172,7 +4172,7 @@ if (!userCredential.user.emailVerified) {
         }
 
         // Store active countdown intervals
-        const activeCountdowns = {};
+        let activeCountdowns = {};
 
         // Start cooldown countdown for a tool card
         async function startCooldownCountdown(toolId, outTime) {
