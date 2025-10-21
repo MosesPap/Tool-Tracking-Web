@@ -4853,7 +4853,7 @@ if (!userCredential.user.emailVerified) {
                 // Initial filtered tools
                 let filteredTools = tools.slice();
                 // Render function
-                function renderToolsByLocation(selectedLoc) {
+                async function renderToolsByLocation(selectedLoc) {
                     // Update the filter bar with new selected state
                     let filterHtml = '<div id="locationFilterBar" style="display:flex;gap:8px;overflow-x:auto;position:sticky;top:0;z-index:10;background:#fff;padding:8px 0 8px 0;border-bottom:2px solid #FF9800;margin-bottom:10px;">';
                     filterHtml += `<button class="btn btn-sm ${selectedLoc==='All'?'btn-orange':'btn-outline-secondary'}" data-location="All" style="${selectedLoc==='All'?'background-color:#FF9800;color:white;border-color:#FF9800;':'background-color:transparent;color:#6c757d;border-color:#6c757d;'}">All</button>`;
@@ -4864,14 +4864,22 @@ if (!userCredential.user.emailVerified) {
                     
                     let html = '';
                     const locs = selectedLoc === 'All' ? locations : [selectedLoc];
-                    locs.forEach(loc => {
+                    
+                    // Fetch photo counts for all locations
+                    const photoCountPromises = locs.map(loc => getLocationPhotoCount(collectionName, loc));
+                    const photoCounts = await Promise.all(photoCountPromises);
+                    
+                    locs.forEach((loc, locIndex) => {
                         const toolsAtLoc = tools.filter(t => (t.location || 'No Location') === loc);
                         if (!toolsAtLoc.length) return;
+                        
+                        const photoCount = photoCounts[locIndex];
+                        const photoText = getResponsiveButtonText(`Photos (${photoCount})`, `Pics (${photoCount})`);
                         
                         html += `<div style="background:#FF9800;color:white;font-weight:bold;font-size:1.1em;padding:4px 12px;border-radius:6px 6px 0 0;position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;">
                             <span>Location: ${loc} (Total: ${toolsAtLoc.length} tools)</span>
                             <button class="btn btn-sm btn-info ms-2" style="background:#1976d2;color:white;font-weight:bold;" onclick="event.stopPropagation(); showLocationPhotosFromTitleBar('${collectionName}','${loc}')">
-                                <i class="fas fa-images"></i> ${getResponsiveButtonText('Photos', 'Pics')}
+                                <i class="fas fa-images"></i> ${photoText}
                             </button>
                         </div>`;
                         // OUT first, then IN, then others
@@ -4917,15 +4925,15 @@ if (!userCredential.user.emailVerified) {
                     list.innerHTML = filterHtml + `<div style="height:calc(100vh - 300px);overflow-y:auto;padding-right:5px;">` + html + `</div>`;
                     // Add event listeners for filter buttons
                     list.querySelectorAll('button[data-location]').forEach(btn => {
-                        btn.onclick = function() {
+                        btn.onclick = async function() {
                             selectedLocation = this.getAttribute('data-location');
-                            renderToolsByLocation(selectedLocation);
+                            await renderToolsByLocation(selectedLocation);
                         };
                     });
                     
 
                 }
-                renderToolsByLocation(selectedLocation);
+                await renderToolsByLocation(selectedLocation);
             } catch (e) {
                 title.textContent = `Collection: ${collectionName}`;
                 list.innerHTML = '<div class="text-center text-danger">Error loading tools.</div>';
