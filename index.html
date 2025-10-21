@@ -1231,39 +1231,6 @@
             <div id="splashLoading"></div>
         </div>
     </div>
-    
-    <!-- Emergency splash screen timeout - runs immediately -->
-    <script>
-        (function() {
-            console.log('Emergency splash timeout initiated');
-            const emergencyTimeout = setTimeout(function() {
-                console.log('EMERGENCY: Force hiding splash screen after 10 seconds');
-                const splash = document.getElementById('splashScreen');
-                if (splash) {
-                    splash.style.opacity = '0';
-                    splash.style.transition = 'opacity 0.5s';
-                    setTimeout(function() {
-                        splash.style.display = 'none';
-                        console.log('Splash screen force hidden');
-                    }, 500);
-                }
-            }, 10000); // 10 second absolute maximum
-            
-            // Also add a click/tap handler to skip splash
-            const splash = document.getElementById('splashScreen');
-            if (splash) {
-                splash.addEventListener('click', function() {
-                    console.log('Splash screen clicked - skipping');
-                    clearTimeout(emergencyTimeout);
-                    splash.style.opacity = '0';
-                    splash.style.transition = 'opacity 0.5s';
-                    setTimeout(function() {
-                        splash.style.display = 'none';
-                    }, 500);
-                });
-            }
-        })();
-    </script>
     <!-- Removed old static splash/logo section -->
 
     <div id="headerBranding">
@@ -4888,23 +4855,13 @@ if (!userCredential.user.emailVerified) {
                 
                 if (splashVideo) {
                     let splashHidden = false;
-                    const minDisplayTime = 2000; // Minimum 2 seconds
-                    const maxDisplayTime = 8000; // Maximum 8 seconds
-                    const startTime = Date.now();
-                    
                     function hideSplashScreen() {
                         if (!splashHidden) {
-                            const elapsed = Date.now() - startTime;
-                            const remaining = Math.max(0, minDisplayTime - elapsed);
-                            
+                            splashScreen.classList.add('splash-hidden');
                             setTimeout(() => {
-                                splashScreen.classList.add('splash-hidden');
-                                setTimeout(() => {
-                                    splashScreen.style.display = 'none';
-                                }, 500);
-                                splashHidden = true;
-                                console.log('Splash screen hidden');
-                            }, remaining);
+                                splashScreen.style.display = 'none';
+                            }, 500);
+                            splashHidden = true;
                         }
                     }
                     
@@ -4912,10 +4869,7 @@ if (!userCredential.user.emailVerified) {
                     attemptVideoPlay();
                     
                     // Listen for video events
-                    splashVideo.addEventListener('ended', () => {
-                        console.log('Video ended');
-                        hideSplashScreen();
-                    });
+                    splashVideo.addEventListener('ended', hideSplashScreen);
                     splashVideo.addEventListener('canplaythrough', () => {
                         console.log('Video can play through');
                     });
@@ -4934,11 +4888,8 @@ if (!userCredential.user.emailVerified) {
                         showFallbackSplash();
                     });
                     
-                    // Fallback: hide after maximum time if video doesn't end
-                    setTimeout(() => {
-                        console.log('Fallback timer triggered after', maxDisplayTime, 'ms');
-                        hideSplashScreen();
-                    }, maxDisplayTime);
+                    // Fallback: hide after 6 seconds if video doesn't end
+                    setTimeout(hideSplashScreen, 6000);
                 } else {
                     showFallbackSplash();
                 }
@@ -7368,11 +7319,11 @@ if (!userCredential.user.emailVerified) {
             }
     }
 
-    // Settings button logic - ensure it runs after DOM is loaded
+    // Settings button logic - setup after DOM loads
     function setupSettingsButton() {
         const settingsBtn = document.getElementById('settingsBtn');
         if (settingsBtn) {
-            console.log('Settings button found, attaching handler');
+            console.log('Settings button found and configured');
             settingsBtn.onclick = function() {
                 console.log('Settings button clicked');
                 document.getElementById('adminCodeInput').value = '';
@@ -7381,14 +7332,15 @@ if (!userCredential.user.emailVerified) {
                 modal.show();
             };
         } else {
-            console.error('Settings button not found!');
+            console.log('Settings button not found yet');
         }
     }
     
-    // Call immediately and also after DOM is ready
-    setupSettingsButton();
+    // Try to setup immediately if DOM is ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', setupSettingsButton);
+    } else {
+        setupSettingsButton();
     }
 
     // Verify admin code logic
