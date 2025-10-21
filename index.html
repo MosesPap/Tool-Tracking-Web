@@ -1218,7 +1218,7 @@
 <body>
     <div id="orangeOverlay"></div>
     <div id="splashScreen">
-        <video id="splashVideo" autoplay muted playsinline webkit-playsinline preload="auto">
+        <video id="splashVideo" autoplay muted playsinline webkit-playsinline preload="auto" loop>
             <source src="src/main/res/raw/helicopter_animation.mp4" type="video/mp4">
             <source src="src/helicopter_animation.mp4" type="video/mp4">
         </video>
@@ -1576,17 +1576,17 @@
 
     <!-- ToolScanner Menu Section -->
     <div id="toolScannerMenu" style="display:none;">
-        <!-- Orange Top Bar with Title -->
+        <!-- Orange Top Bar with Title and Settings (now outside container) -->
         <div style="background: #FF9800; color: white; width: 100vw; min-width: 100vw; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
             <h2 style="margin: 0 0 0 20px; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px;">ToolScanner Menu</h2>
+            <button id="settingsBtn" class="btn btn-link p-0" style="position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-size: 2rem; color: white; z-index: 2;" title="Settings">
+                <i class="fas fa-cog" style="color: white;"></i>
+                </button>
             </div>
         <div class="container py-4">
-            <!-- Welcome Message with Edit Icon -->
-            <div style="margin: 8px 0 10px 0; text-align: left; display: flex; align-items: center; gap: 10px;">
+            <!-- Welcome Message (no background) -->
+            <div style="margin: 8px 0 10px 0; text-align: left;">
                 <span style="font-size: 1.5rem; color: #333; font-weight: bold;">Welcome, <span id="fullName" class="technician-name"></span></span>
-                <button id="settingsBtn" class="btn btn-link p-0" style="font-size: 1.3rem; color: #1976d2;" title="Edit Profile">
-                    <i class="fas fa-pencil-alt"></i>
-                </button>
             </div>
             <div class="d-grid gap-3 col-6 mx-auto">
                 <button class="btn btn-success" id="menuRegisterBtn"><i class="fas fa-plus"></i> Register Tools</button>
@@ -7319,22 +7319,16 @@ if (!userCredential.user.emailVerified) {
             }
     }
 
-    // Settings button logic - setup after DOM loads
-    document.addEventListener('DOMContentLoaded', function() {
-        const settingsBtn = document.getElementById('settingsBtn');
-        if (settingsBtn) {
-            console.log('Settings button found and configured');
-            settingsBtn.onclick = function() {
-                console.log('Settings button clicked');
-                document.getElementById('adminCodeInput').value = '';
-                document.getElementById('adminCodeError').style.display = 'none';
-                const modal = new bootstrap.Modal(document.getElementById('adminCodeModal'));
-                modal.show();
-            };
-        } else {
-            console.log('Settings button not found');
-        }
-    });
+    // Settings button logic
+    const settingsBtn = document.getElementById('settingsBtn');
+    if (settingsBtn) {
+        settingsBtn.onclick = function() {
+            document.getElementById('adminCodeInput').value = '';
+            document.getElementById('adminCodeError').style.display = 'none';
+            const modal = new bootstrap.Modal(document.getElementById('adminCodeModal'));
+            modal.show();
+        };
+    }
 
     // Verify admin code logic
     const verifyAdminCodeBtn = document.getElementById('verifyAdminCodeBtn');
