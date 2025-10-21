@@ -1387,19 +1387,6 @@
               </button>
               <span id="onlineStatus" style="font-weight: bold; font-size: 1rem;">🟢 Online</span>
             </div>
-            <div class="row align-items-center mb-2">
-                <div class="col-6 d-flex align-items-center">
-                    <!-- Remove the My Tools button from appSection -->
-                    <!-- <button onclick="showMyTools()" id="myToolsButton" class="btn btn-warning">
-                        <i class="fas fa-toolbox"></i> My Tools
-                    </button> -->
-                </div>
-                <div class="col-6 d-flex justify-content-end align-items-center">
-                    <button onclick="toggleAdmin()" id="adminButton" class="btn btn-info me-2" style="display: none;">
-                        <i class="fas fa-cog"></i> Admin
-                    </button>
-                </div>
-            </div>
 
             <!-- Register Tools Title -->
             <!-- REMOVE the following block:
@@ -3048,7 +3035,7 @@ if (!userCredential.user.emailVerified) {
                     console.error('loadTools: toolList element not found!');
                     return;
                 }
-                toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4>';
+                toolList.innerHTML = '<h4 class="tool-title">Today\'s Scanned Tools:</h4>';
 
                 let allTools = [];
 
@@ -3202,7 +3189,7 @@ if (!userCredential.user.emailVerified) {
                 console.error('loadTools: Error loading tools:', error);
                 const toolList = document.getElementById('toolList');
                 if (toolList) {
-                    toolList.innerHTML = '<h4 class="tool-title">Scanned Tools:</h4><p class="text-danger">Error loading tools. Please try again.</p>';
+                    toolList.innerHTML = '<h4 class="tool-title">Today\'s Scanned Tools:</h4><p class="text-danger">Error loading tools. Please try again.</p>';
                 }
             }
         }
