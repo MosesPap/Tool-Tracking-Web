@@ -1231,6 +1231,39 @@
             <div id="splashLoading"></div>
         </div>
     </div>
+    
+    <!-- Emergency splash screen timeout - runs immediately -->
+    <script>
+        (function() {
+            console.log('Emergency splash timeout initiated');
+            const emergencyTimeout = setTimeout(function() {
+                console.log('EMERGENCY: Force hiding splash screen after 10 seconds');
+                const splash = document.getElementById('splashScreen');
+                if (splash) {
+                    splash.style.opacity = '0';
+                    splash.style.transition = 'opacity 0.5s';
+                    setTimeout(function() {
+                        splash.style.display = 'none';
+                        console.log('Splash screen force hidden');
+                    }, 500);
+                }
+            }, 10000); // 10 second absolute maximum
+            
+            // Also add a click/tap handler to skip splash
+            const splash = document.getElementById('splashScreen');
+            if (splash) {
+                splash.addEventListener('click', function() {
+                    console.log('Splash screen clicked - skipping');
+                    clearTimeout(emergencyTimeout);
+                    splash.style.opacity = '0';
+                    splash.style.transition = 'opacity 0.5s';
+                    setTimeout(function() {
+                        splash.style.display = 'none';
+                    }, 500);
+                });
+            }
+        })();
+    </script>
     <!-- Removed old static splash/logo section -->
 
     <div id="headerBranding">
