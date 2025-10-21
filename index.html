@@ -3137,10 +3137,10 @@ if (!userCredential.user.emailVerified) {
                     const statusColor = status === 'IN' ? 'green' : 'red';
                     
                     card.innerHTML = `
-                        <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000;">
+                        <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000; text-align: left;">
                             ${index + 1}. ${data.toolName || 'Unknown Tool'}${offlineIndicator}
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px; text-align: left;">
                             <div>
                                 <span style="color: black; font-weight: bold;">TID:</span> 
                                 <span style="color: #666; font-weight: bold;">${tool.id}</span>
@@ -3150,24 +3150,26 @@ if (!userCredential.user.emailVerified) {
                                 <span style="color: #666; font-weight: bold;">${workOnValue}</span>
                             </div>
                         </div>
-                        <div style="margin-bottom: 6px;">
+                        <div style="margin-bottom: 6px; text-align: left;">
                             <span style="color: black; font-weight: bold;">S/N:</span> 
                             <span style="color: #666; font-weight: bold;">${serialNumber}</span>
                         </div>
-                        <div style="margin-bottom: 6px;">
+                        <div style="margin-bottom: 6px; text-align: left;">
                             <span style="color: black; font-weight: bold;">Status:</span> 
                             <span style="color: ${statusColor}; font-weight: bold;">${status}</span>
                         </div>
-                        <div style="margin-bottom: 8px;">
+                        <div style="margin-bottom: 12px; text-align: left;">
                             <span style="color: black; font-weight: bold;">Cal Due Date:</span> 
                             <span style="color: blue; font-weight: bold;">${calDueDate}</span>
                         </div>
-                        <div style="color: blue; font-weight: normal; margin-bottom: 8px; cursor: pointer;" onclick="event.stopPropagation();">
-                            Click For Details
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                            <div style="color: blue; font-weight: normal; cursor: pointer; text-align: left;" onclick="event.stopPropagation();">
+                                Click For Details
+                            </div>
+                            ${status === 'OUT' ? `<div id="countdown-${tool.id}" class="cooldown-countdown" style="background: #FF9800; color: white; padding: 6px 8px; border-radius: 4px; font-weight: bold; text-align: center; white-space: nowrap;">
+                                <span style="font-weight: bold;">Check-in in:</span> <span class="countdown-value">Loading...</span>
+                            </div>` : ''}
                         </div>
-                        ${status === 'OUT' ? `<div id="countdown-${tool.id}" class="cooldown-countdown" style="background: #FF9800; color: white; padding: 6px 8px; border-radius: 4px; font-weight: bold; text-align: center;">
-                            <span style="font-weight: bold;">Check-in in:</span> <span class="countdown-value">Loading...</span>
-                        </div>` : ''}
                     `;
                     toolList.appendChild(card);
                     
@@ -4184,7 +4186,8 @@ if (!userCredential.user.emailVerified) {
                     const remainingMs = cooldownMs - diffMs;
                     
                     if (remainingMs <= 0) {
-                        valueSpan.textContent = 'Ready to check-in';
+                        // Change the entire content when ready
+                        countdownElement.innerHTML = '<span style="font-weight: bold;">Check/In :</span> <span class="countdown-value">Ready</span>';
                         countdownElement.style.background = '#4CAF50'; // Green when ready
                         if (activeCountdowns[toolId]) {
                             clearInterval(activeCountdowns[toolId]);
