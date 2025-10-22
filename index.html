@@ -4237,7 +4237,10 @@ if (!userCredential.user.emailVerified) {
                 loginSection.style.display = 'none';
                 signUpSection.classList.add('d-none');
                 adminSection.style.display = 'none';
-                document.getElementById('adminButton').style.display = 'none';
+                const adminButton = document.getElementById('adminButton');
+                if (adminButton) {
+                    adminButton.style.display = 'none';
+                }
                 document.getElementById('headerBranding').style.display = 'none';
                 // Always fetch fresh data from Firestore
                 db.collection('technicians').doc(user.uid)
@@ -4251,7 +4254,10 @@ if (!userCredential.user.emailVerified) {
                             localStorage.setItem('fullName', name);
                             document.getElementById('fullName').textContent = name;
                             if (technicianData.isAdmin) {
-                                document.getElementById('adminButton').style.display = 'inline-block';
+                                const adminButton = document.getElementById('adminButton');
+                                if (adminButton) {
+                                    adminButton.style.display = 'inline-block';
+                                }
                             }
                         } else {
                             document.getElementById('fullName').textContent = user.email;
@@ -4270,7 +4276,10 @@ if (!userCredential.user.emailVerified) {
                 loginSection.style.display = 'block';
                 appSection.style.display = 'none';
                 adminSection.style.display = 'none';
-                document.getElementById('adminButton').style.display = 'none';
+                const adminButton = document.getElementById('adminButton');
+                if (adminButton) {
+                    adminButton.style.display = 'none';
+                }
                 document.getElementById('headerBranding').style.display = 'block';
                 localStorage.removeItem('fullName');
             }
