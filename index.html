@@ -1978,6 +1978,38 @@
       </div>
     </div>
 
+    <!-- Existing Photo Choice Modal -->
+    <div class="modal fade" id="existingPhotoChoiceModal" tabindex="-1" aria-labelledby="existingPhotoChoiceModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+          <div class="modal-header" style="background: #4CAF50; color: white; border-radius: 16px 16px 0 0; border: none; padding: 20px;">
+            <h5 class="modal-title" id="existingPhotoChoiceModalLabel" style="font-weight: bold; font-size: 1.3rem;">
+              <i class="fas fa-images"></i> Existing Photos Found
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" style="padding: 24px;">
+            <div style="margin-bottom: 16px;">
+              <strong style="font-size: 1.1rem; color: #333;">Other tools with part number <span id="existingPhotoPartNumber" style="color: #4CAF50;"></span> already have photos:</strong>
+            </div>
+            <div id="existingPhotoPreview" style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; max-height: 400px; overflow-y: auto;"></div>
+            <p style="color: #666; margin-bottom: 20px;">Do you want to use the existing photo(s) or add your new photo?</p>
+            <div class="d-grid gap-2">
+              <button type="button" class="btn" id="useExistingPhotoBtn" style="background: #4CAF50; color: white; font-weight: bold; border-radius: 12px; padding: 12px; font-size: 1rem;">
+                <i class="fas fa-check-circle"></i> Use Existing Photo(s)
+              </button>
+              <button type="button" class="btn" id="addNewPhotoAnywayBtn" style="background: #FF9800; color: white; font-weight: bold; border-radius: 12px; padding: 12px; font-size: 1rem;">
+                <i class="fas fa-plus-circle"></i> Add My New Photo (Only to My Tool)
+              </button>
+            </div>
+            <div style="margin-top: 12px; text-align: center; font-size: 0.9rem; color: #999;">
+              <i class="fas fa-info-circle"></i> New photos added individually won't be shared with other tools
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Photo Delete Choice Modal -->
     <div class="modal fade" id="photoDeleteChoiceModal" tabindex="-1" aria-labelledby="photoDeleteChoiceModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
@@ -7302,8 +7334,14 @@ if (!userCredential.user.emailVerified) {
                     
                     // Handle "Delete from MY Tool Only" button
                     document.getElementById('deleteMyToolOnlyBtn').onclick = function() {
-                        deleteFromAll = false;
                         choiceModal.hide();
+                        
+                        // Ask for confirmation before deleting from my tool
+                        if (!confirm('⚠️ Are you sure you want to delete this photo from YOUR tool?\n\nThis action cannot be undone.')) {
+                            return;
+                        }
+                        
+                        deleteFromAll = false;
                         proceedWithDeletion();
                     };
                     
@@ -7330,6 +7368,11 @@ if (!userCredential.user.emailVerified) {
                         
                         if (enteredPassword !== adminPassword) {
                             alert('❌ Incorrect admin password. Photo deletion cancelled.');
+                            return;
+                        }
+                        
+                        // After successful password, ask for final confirmation
+                        if (!confirm(`⚠️ Are you sure you want to delete this photo from ALL ${toolsWithSamePart.docs.length} tools?\n\nThis will permanently remove the photo from:\n${owners.join('\n')}\n\nThis action CANNOT be undone!`)) {
                             return;
                         }
                         
@@ -7599,12 +7642,81 @@ if (!userCredential.user.emailVerified) {
         }
 
         // Photo upload functionality for My Tools
-        async function uploadToolPhoto(toolId, partNumber, file) {
+        async function uploadToolPhoto(toolId, partNumber, file, forceUpload = false) {
             try {
                 console.log('=== PHOTO UPLOAD STARTED ===');
                 console.log('Tool ID:', toolId);
                 console.log('Part Number:', partNumber);
                 console.log('File:', file.name, file.size, 'bytes');
+                console.log('Force Upload:', forceUpload);
+                
+                // Check if other tools with same part number have photos (unless forceUpload is true)
+                if (!forceUpload) {
+                    const toolsWithSamePart = await db.collection('tools')
+                        .where('partNumber', '==', partNumber)
+                        .get();
+                    
+                    // Collect all existing photos from other tools
+                    let existingPhotos = [];
+                    toolsWithSamePart.docs.forEach(doc => {
+                        if (doc.id !== toolId) { // Don't check the current tool
+                            const photoUrls = doc.data().photoUrls || [];
+                            photoUrls.forEach(url => {
+                                if (!existingPhotos.includes(url)) {
+                                    existingPhotos.push(url);
+                                }
+                            });
+                        }
+                    });
+                    
+                    // If other tools have photos, show the choice modal
+                    if (existingPhotos.length > 0) {
+                        console.log('Found existing photos:', existingPhotos.length);
+                        
+                        // Show modal with existing photos
+                        document.getElementById('existingPhotoPartNumber').textContent = partNumber;
+                        const previewContainer = document.getElementById('existingPhotoPreview');
+                        previewContainer.innerHTML = existingPhotos.map(url => 
+                            `<img src="${url}" style="width: 150px; height: 150px; object-fit: cover; border-radius: 8px; border: 2px solid #ddd; cursor: pointer;" onclick="window.open('${url}', '_blank')">`
+                        ).join('');
+                        
+                        const choiceModal = new bootstrap.Modal(document.getElementById('existingPhotoChoiceModal'));
+                        choiceModal.show();
+                        
+                        // Handle "Use Existing Photo(s)" button
+                        document.getElementById('useExistingPhotoBtn').onclick = async function() {
+                            choiceModal.hide();
+                            
+                            // Add existing photos to current tool
+                            const toolDoc = await db.collection('tools').doc(toolId).get();
+                            const currentPhotoUrls = toolDoc.exists ? (toolDoc.data().photoUrls || []) : [];
+                            const newPhotoUrls = [...currentPhotoUrls, ...existingPhotos];
+                            
+                            await db.collection('tools').doc(toolId).update({
+                                photoUrls: newPhotoUrls
+                            });
+                            
+                            alert(`✅ Existing photo(s) added to your tool!`);
+                            
+                            // Refresh the view
+                            if (lastViewedCollectionName) {
+                                showMyToolsByCollection(lastViewedCollectionName);
+                            } else {
+                                loadTools();
+                                updatePreviousOutToolsCount();
+                            }
+                        };
+                        
+                        // Handle "Add My New Photo (Only to My Tool)" button
+                        document.getElementById('addNewPhotoAnywayBtn').onclick = function() {
+                            choiceModal.hide();
+                            // Proceed with upload but don't share with other tools
+                            uploadToolPhoto(toolId, partNumber, file, true);
+                        };
+                        
+                        return; // Stop here and wait for user choice
+                    }
+                }
                 
                 // Show loading modal
                 const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
@@ -7660,27 +7772,34 @@ if (!userCredential.user.emailVerified) {
                                 photoUrls: newPhotoUrls
                             });
                             
-                            // Find all tools with the same part number and add the same photo
-                            const toolsWithSamePart = await db.collection('tools')
-                                .where('partNumber', '==', partNumber)
-                                .get();
-                            
-                            const updatePromises = toolsWithSamePart.docs.map(async (doc) => {
-                                if (doc.id !== toolId) { // Don't update the original tool again
-                                    const existingPhotoUrls = doc.data().photoUrls || [];
-                                    const updatedPhotoUrls = [...existingPhotoUrls, downloadURL];
-                                    await doc.ref.update({
-                                        photoUrls: updatedPhotoUrls
-                                    });
-                                    console.log('Updated tool', doc.id, 'with same photo');
-                                }
-                            });
-                            
-                            await Promise.all(updatePromises);
-                            
-                            console.log('=== PHOTO UPLOAD COMPLETED ===');
-                            loadingModal.hide();
-                            alert('Photo uploaded successfully! Added to ' + (toolsWithSamePart.docs.length) + ' tools with the same part number.');
+                            // Only share with other tools if this is NOT a forced individual upload
+                            if (!forceUpload) {
+                                // Find all tools with the same part number and add the same photo
+                                const toolsWithSamePart = await db.collection('tools')
+                                    .where('partNumber', '==', partNumber)
+                                    .get();
+                                
+                                const updatePromises = toolsWithSamePart.docs.map(async (doc) => {
+                                    if (doc.id !== toolId) { // Don't update the original tool again
+                                        const existingPhotoUrls = doc.data().photoUrls || [];
+                                        const updatedPhotoUrls = [...existingPhotoUrls, downloadURL];
+                                        await doc.ref.update({
+                                            photoUrls: updatedPhotoUrls
+                                        });
+                                        console.log('Updated tool', doc.id, 'with same photo');
+                                    }
+                                });
+                                
+                                await Promise.all(updatePromises);
+                                
+                                console.log('=== PHOTO UPLOAD COMPLETED ===');
+                                loadingModal.hide();
+                                alert('Photo uploaded successfully! Added to ' + (toolsWithSamePart.docs.length) + ' tools with the same part number.');
+                            } else {
+                                console.log('=== PHOTO UPLOAD COMPLETED (INDIVIDUAL) ===');
+                                loadingModal.hide();
+                                alert('✅ Photo uploaded successfully! Added to YOUR tool only.');
+                            }
                             
                             // Refresh the current view
                             if (lastViewedCollectionName) {
