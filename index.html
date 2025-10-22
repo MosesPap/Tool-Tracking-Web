@@ -1593,6 +1593,7 @@
                 <button class="btn btn-danger" id="menuOutBtn"><i class="fas fa-sign-out-alt"></i> View OUT Tools</button>
                 <button class="btn btn-warning" id="menuMyToolsBtn"><i class="fas fa-toolbox"></i> My Tools</button>
                 <button class="btn btn-primary" id="menuSearchBtn"><i class="fas fa-search"></i> Search for Tools</button>
+                <button class="btn btn-info" id="menuAdminBtn" style="display: none;"><i class="fas fa-user-shield"></i> Tool Administrator</button>
                 <button class="btn btn-secondary" id="menuLogoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
             </div>
         </div>
@@ -4317,10 +4318,17 @@ if (!userCredential.user.emailVerified) {
                             localStorage.setItem('techniciansId', doc.id);
                             localStorage.setItem('fullName', name);
                             document.getElementById('fullName').textContent = name;
+                            
+                            // Check if user is admin
                             if (technicianData.isAdmin) {
                                 const adminButton = document.getElementById('adminButton');
                                 if (adminButton) {
                                     adminButton.style.display = 'inline-block';
+                                }
+                                // Show Tool Administrator button in menu
+                                const menuAdminBtn = document.getElementById('menuAdminBtn');
+                                if (menuAdminBtn) {
+                                    menuAdminBtn.style.display = 'block';
                                 }
                             }
                         } else {
@@ -4848,6 +4856,7 @@ if (!userCredential.user.emailVerified) {
             const menuRegisterBtn = document.getElementById('menuRegisterBtn');
             const menuSearchBtn = document.getElementById('menuSearchBtn');
             const menuLogoutBtn = document.getElementById('menuLogoutBtn');
+            const menuAdminBtn = document.getElementById('menuAdminBtn');
             
             if (menuRegisterBtn) {
                 menuRegisterBtn.addEventListener('click', function() {
@@ -4860,6 +4869,14 @@ if (!userCredential.user.emailVerified) {
                 menuSearchBtn.addEventListener('click', function() {
                     console.log('Search for Tools button clicked');
                     showSearchTools();
+                });
+            }
+            
+            if (menuAdminBtn) {
+                menuAdminBtn.addEventListener('click', function() {
+                    console.log('Tool Administrator button clicked');
+                    // Redirect to admin.html
+                    window.location.href = 'admin.html';
                 });
             }
             
