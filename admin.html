@@ -489,6 +489,71 @@
             padding: 20px;
         }
 
+        /* Section Modal/Overlay */
+        .section-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            overflow-y: auto;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .section-modal.active {
+            display: block;
+        }
+
+        .section-modal-content {
+            background: #f5f7fa;
+            min-height: 100%;
+            animation: slideUp 0.3s ease;
+        }
+
+        .section-modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .section-modal-body {
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(100%);
+            }
+            to {
+                transform: translateY(0);
+            }
+        }
+
+        /* Desktop: Centered modal */
+        @media (min-width: 769px) {
+            .section-modal-content {
+                max-width: 1200px;
+                margin: 40px auto;
+                min-height: auto;
+                border-radius: 20px;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                animation: slideUp 0.3s ease, fadeIn 0.3s ease;
+            }
+
+            .section-modal-header {
+                border-radius: 20px 20px 0 0;
+            }
+        }
+
         @media (max-width: 768px) {
             .login-card {
                 padding: 30px 20px;
@@ -498,7 +563,37 @@
                 font-size: 1.5rem;
             }
 
+            /* Smaller statistics on mobile */
+            .stat-card {
+                padding: 15px;
+            }
+
+            .stat-card .icon {
+                font-size: 2rem;
+            }
+
             .stat-card h3 {
+                font-size: 1.3rem;
+            }
+
+            .stat-card p {
+                font-size: 0.85rem;
+            }
+
+            /* Button grid on mobile */
+            .nav-buttons-container {
+                padding: 15px;
+            }
+
+            .nav-button {
+                flex: 0 0 calc(50% - 10px);
+                padding: 15px 20px;
+                font-size: 1rem;
+            }
+
+            .nav-button i {
+                display: block;
+                margin: 0 0 5px 0;
                 font-size: 1.5rem;
             }
         }
@@ -617,28 +712,28 @@
 
                 <!-- Animated Push Buttons -->
                 <div class="nav-buttons-container">
-                    <button class="nav-button active" id="settings-btn" onclick="showSection('settings')">
+                    <button class="nav-button" onclick="openSectionModal('settings')">
                         <i class="fas fa-cog"></i> Settings
                     </button>
-                    <button class="nav-button" id="users-btn" onclick="showSection('users')">
+                    <button class="nav-button" onclick="openSectionModal('users')">
                         <i class="fas fa-users"></i> Users
                     </button>
-                    <button class="nav-button" id="tools-btn" onclick="showSection('tools')">
+                    <button class="nav-button" onclick="openSectionModal('tools')">
                         <i class="fas fa-toolbox"></i> Tools
                     </button>
-                    <button class="nav-button" id="analytics-btn" onclick="showSection('analytics')">
+                    <button class="nav-button" onclick="openSectionModal('analytics')">
                         <i class="fas fa-chart-bar"></i> Analytics
                     </button>
-                    <button class="nav-button" id="checkups-btn" onclick="showSection('checkups')">
+                    <button class="nav-button" onclick="openSectionModal('checkups')">
                         <i class="fas fa-clipboard-check"></i> Checkups
                     </button>
-                    <button class="nav-button" id="activity-btn" onclick="showSection('activity')">
+                    <button class="nav-button" onclick="openSectionModal('activity')">
                         <i class="fas fa-user-check"></i> Check User Activity
                     </button>
                 </div>
 
-                <!-- Section Content -->
-                <div id="adminSectionsContent">
+                <!-- Section Content (hidden templates for modals) -->
+                <div id="adminSectionsContent" style="display: none;">
                     <!-- Settings Section -->
                     <div class="section-content active" id="settings">
                         <div class="admin-card">
@@ -981,6 +1076,14 @@
             </div>
         </div>
     </div>
+
+    <!-- Section Modals -->
+    <div id="settingsModal" class="section-modal"></div>
+    <div id="usersModal" class="section-modal"></div>
+    <div id="toolsModal" class="section-modal"></div>
+    <div id="analyticsModal" class="section-modal"></div>
+    <div id="checkupsModal" class="section-modal"></div>
+    <div id="activityModal" class="section-modal"></div>
 
     <!-- Checkup Details Modal -->
     <div class="modal fade" id="checkupDetailsModal" tabindex="-1" aria-labelledby="checkupDetailsModalLabel" aria-hidden="true">
@@ -1514,34 +1617,108 @@
         // ========================================
 
         // Show section and handle button states
-        window.showSection = function(sectionId) {
-            // Hide all sections
-            document.querySelectorAll('.section-content').forEach(section => {
-                section.classList.remove('active');
-            });
+        // Section titles and icons
+        const sectionConfig = {
+            settings: { title: 'Settings', icon: 'fa-cog', subtitle: 'Manage system configurations' },
+            users: { title: 'User Management', icon: 'fa-users', subtitle: 'Manage users and permissions' },
+            tools: { title: 'Tool Management', icon: 'fa-toolbox', subtitle: 'View and manage all tools' },
+            analytics: { title: 'Analytics & Reports', icon: 'fa-chart-bar', subtitle: 'View system analytics and activity' },
+            checkups: { title: 'Collection Checkups', icon: 'fa-clipboard-check', subtitle: 'Review checkup history' },
+            activity: { title: 'Check User Activity', icon: 'fa-user-check', subtitle: 'Track tool usage and registration' }
+        };
 
-            // Remove active class from all buttons
-            document.querySelectorAll('.nav-button').forEach(btn => {
-                btn.classList.remove('active');
-            });
-
-            // Show selected section
-            document.getElementById(sectionId).classList.add('active');
-            document.getElementById(sectionId + '-btn').classList.add('active');
-
+        // Open section in modal
+        window.openSectionModal = function(sectionId) {
+            const modal = document.getElementById(sectionId + 'Modal');
+            const content = document.getElementById(sectionId);
+            const config = sectionConfig[sectionId];
+            
+            if (!modal || !content || !config) return;
+            
+            // Create modal structure
+            const modalContent = document.createElement('div');
+            modalContent.className = 'section-modal-content';
+            modalContent.innerHTML = `
+                <div class="section-modal-header">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <h3 class="mb-0"><i class="fas ${config.icon}"></i> ${config.title}</h3>
+                            <small>${config.subtitle}</small>
+                        </div>
+                        <button class="btn btn-light" onclick="closeSectionModal('${sectionId}Modal')">
+                            <i class="fas fa-times"></i> Close
+                        </button>
+                    </div>
+                </div>
+                <div class="section-modal-body" id="${sectionId}ModalBody">
+                </div>
+            `;
+            
+            // Move the actual content into the modal
+            const modalBody = modalContent.querySelector('.section-modal-body');
+            modalBody.appendChild(content);
+            content.style.display = 'block';
+            
+            // Append to modal
+            modal.innerHTML = '';
+            modal.appendChild(modalContent);
+            
+            // Show modal
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            
             // Load data for specific sections
             if (sectionId === 'checkups') {
-                loadCheckupUsers();
+                setTimeout(() => loadCheckupUsers(), 100);
             } else if (sectionId === 'users') {
-                loadUsers();
+                setTimeout(() => loadUsers(), 100);
             } else if (sectionId === 'tools') {
-                loadTools();
+                setTimeout(() => loadTools(), 100);
             } else if (sectionId === 'analytics') {
-                loadAnalytics();
+                setTimeout(() => loadAnalytics(), 100);
             } else if (sectionId === 'activity') {
-                loadAllToolsForActivity();
+                setTimeout(() => loadAllToolsForActivity(), 100);
             }
         };
+
+        // Close section modal
+        window.closeSectionModal = function(modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            
+            const sectionId = modalId.replace('Modal', '');
+            const content = document.getElementById(sectionId);
+            const hiddenContainer = document.getElementById('adminSectionsContent');
+            
+            // Move content back to hidden container
+            if (content && hiddenContainer) {
+                hiddenContainer.appendChild(content);
+            }
+            
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            
+            // Clear modal content after animation
+            setTimeout(() => {
+                modal.innerHTML = '';
+            }, 300);
+        };
+
+        // Close modal on background click
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('section-modal')) {
+                closeSectionModal(e.target.id);
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.section-modal.active').forEach(modal => {
+                    closeSectionModal(modal.id);
+                });
+            }
+        });
 
         // Load all tools for activity dropdown
         async function loadAllToolsForActivity() {
