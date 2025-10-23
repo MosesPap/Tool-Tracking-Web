@@ -1130,19 +1130,19 @@
 
                                 <!-- Time Filters -->
                                 <div class="mb-3 d-flex gap-2 flex-wrap">
-                                    <button class="btn btn-sm btn-primary filter-time-btn active" onclick="filterToolHistory('today')">
+                                    <button class="btn btn-sm btn-primary filter-time-btn active" onclick="filterToolHistory('today', this)">
                                         <i class="fas fa-calendar-day"></i> Today
                                     </button>
-                                    <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('week')">
+                                    <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('week', this)">
                                         <i class="fas fa-calendar-week"></i> Last Week
                                     </button>
-                                    <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('month')">
+                                    <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('month', this)">
                                         <i class="fas fa-calendar-alt"></i> Last Month
                                     </button>
-                                    <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('year')">
+                                    <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('year', this)">
                                         <i class="fas fa-calendar"></i> Last Year
                                     </button>
-                                    <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('all')">
+                                    <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('all', this)">
                                         <i class="fas fa-infinity"></i> All Time
                                     </button>
                                 </div>
@@ -1956,6 +1956,7 @@
         // Load all tool history for a user
         async function loadUserToolHistory(userName) {
             try {
+                // Use the existing logtoolmovements index
                 const snapshot = await db.collection('toolHistory')
                     .where('technicianName', '==', userName)
                     .orderBy('timestamp', 'desc')
@@ -1970,7 +1971,7 @@
                     });
                 });
 
-                console.log(`Loaded ${allToolHistory.length} history entries for ${userName}`);
+                console.log(`Loaded ${allToolHistory.length} history entries for ${userName} using logtoolmovements index`);
             } catch (error) {
                 console.error('Error loading tool history:', error);
                 allToolHistory = [];
@@ -1978,14 +1979,24 @@
         }
 
         // Filter tool history by time period
-        window.filterToolHistory = function(period) {
+        window.filterToolHistory = function(period, clickedButton = null) {
             currentToolsFilter = period;
             
             // Update button states
             document.querySelectorAll('.filter-time-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            event.target.classList.add('active');
+            
+            // If a button was clicked, activate it
+            if (clickedButton) {
+                clickedButton.classList.add('active');
+            } else {
+                // Find the button with the matching period and activate it
+                const targetButton = document.querySelector(`[onclick*="filterToolHistory('${period}')"]`);
+                if (targetButton) {
+                    targetButton.classList.add('active');
+                }
+            }
             
             const now = new Date();
             let startDate;
