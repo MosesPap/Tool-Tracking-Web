@@ -369,6 +369,63 @@
             font-size: 1.5rem;
         }
 
+        /* Activity Search Dropdown */
+        .activity-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 2px solid #667eea;
+            border-top: none;
+            border-radius: 0 0 10px 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            display: none;
+        }
+
+        .activity-dropdown-item {
+            padding: 12px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.2s ease;
+        }
+
+        .activity-dropdown-item:hover {
+            background: #f8f9fa;
+        }
+
+        .activity-dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-dropdown-item .tool-id {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 1rem;
+        }
+
+        .activity-dropdown-item .tool-name {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 3px;
+        }
+
+        .activity-dropdown-item .tool-owner {
+            color: #999;
+            font-size: 0.85rem;
+            margin-top: 2px;
+        }
+
+        .activity-dropdown-empty {
+            padding: 15px;
+            text-align: center;
+            color: #999;
+            font-style: italic;
+        }
+
         .btn-admin-action {
             border-radius: 10px;
             padding: 10px 20px;
@@ -886,18 +943,23 @@
                                     <label for="activityToolSearch" class="form-label" style="font-weight: bold; font-size: 1.1rem;">
                                         <i class="fas fa-search"></i> Enter Tool Code or Scan QR
                                     </label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control" id="activityToolSearch" 
-                                               placeholder="Enter tool code (e.g., AMS-001) or scan QR code..." 
-                                               style="font-size: 1.1rem; padding: 12px;">
-                                        <button class="btn btn-primary" id="activitySearchBtn" onclick="searchToolActivity()">
-                                            <i class="fas fa-search"></i> Search
-                                        </button>
-                                        <button class="btn btn-success" id="activityScanBtn" onclick="toggleActivityScanner()">
-                                            <i class="fas fa-qrcode"></i> Scan QR
-                                        </button>
+                                    <div style="position: relative;">
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" id="activityToolSearch" 
+                                                   placeholder="Enter tool code (e.g., AMS-001) or scan QR code..." 
+                                                   style="font-size: 1.1rem; padding: 12px;"
+                                                   autocomplete="off">
+                                            <button class="btn btn-primary" id="activitySearchBtn" onclick="searchToolActivity()">
+                                                <i class="fas fa-search"></i> Search
+                                            </button>
+                                            <button class="btn btn-success" id="activityScanBtn" onclick="toggleActivityScanner()">
+                                                <i class="fas fa-qrcode"></i> Scan QR
+                                            </button>
+                                        </div>
+                                        <!-- Dropdown for suggestions -->
+                                        <div id="activityDropdown" class="activity-dropdown"></div>
                                     </div>
-                                    <small class="text-muted">Case-insensitive search - works with any format</small>
+                                    <small class="text-muted">Case-insensitive search - searches Tool ID, Tool Name, and Part Number. Start typing to see suggestions.</small>
                                 </div>
 
                                 <!-- QR Scanner Container -->
@@ -1476,8 +1538,35 @@
                 loadTools();
             } else if (sectionId === 'analytics') {
                 loadAnalytics();
+            } else if (sectionId === 'activity') {
+                loadAllToolsForActivity();
             }
         };
+
+        // Load all tools for activity dropdown
+        async function loadAllToolsForActivity() {
+            if (allToolsForActivity.length > 0) return; // Already loaded
+
+            try {
+                const toolsSnapshot = await db.collection('tools').get();
+                allToolsForActivity = [];
+                
+                toolsSnapshot.forEach(doc => {
+                    allToolsForActivity.push({
+                        id: doc.id,
+                        toolName: doc.data().toolName || 'Unknown Tool',
+                        partNumber: doc.data().partNumber || '',
+                        owner: doc.data().collectionName || 'Unknown',
+                        status: doc.data().status || 'Unknown'
+                    });
+                });
+
+                // Sort by tool ID
+                allToolsForActivity.sort((a, b) => a.id.toLowerCase().localeCompare(b.id.toLowerCase()));
+            } catch (error) {
+                console.error('Error loading tools for activity:', error);
+            }
+        }
 
         // ========================================
         // CHECKUPS MANAGEMENT FUNCTIONALITY
@@ -1511,52 +1600,103 @@
 
                 // Get all technicians from the technicians collection
                 const techniciansSnapshot = await db.collection('technicians').get();
-                const allUsers = [];
+                const usersWithCheckups = [];
+                const usersWithoutCheckups = [];
                 
                 techniciansSnapshot.forEach(doc => {
                     const userData = doc.data();
                     const userName = userData.fullName || userData.email || 'Unknown';
                     const checkupCount = userCheckupCounts[userName] || 0;
                     
-                    allUsers.push({
+                    const userObj = {
                         name: userName,
                         checkupCount: checkupCount,
                         hasCheckups: checkupCount > 0
-                    });
+                    };
+
+                    if (checkupCount > 0) {
+                        usersWithCheckups.push(userObj);
+                    } else {
+                        usersWithoutCheckups.push(userObj);
+                    }
                 });
 
-                // Sort users alphabetically
-                allUsers.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+                // Sort both groups alphabetically
+                usersWithCheckups.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+                usersWithoutCheckups.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
-                if (allUsers.length === 0) {
+                if (usersWithCheckups.length === 0 && usersWithoutCheckups.length === 0) {
                     usersList.innerHTML = '<p class="text-muted text-center">No users found in the system.</p>';
                 } else {
-                    // Create numbered list with all users
-                    allUsers.forEach((user, index) => {
-                        const userItem = document.createElement('div');
-                        userItem.className = 'user-list-item';
-                        
-                        // Add disabled styling and remove click for users without checkups
-                        if (!user.hasCheckups) {
+                    let currentNumber = 1;
+
+                    // Group 1: Users WITH checkups
+                    if (usersWithCheckups.length > 0) {
+                        // Add group header
+                        const groupHeader1 = document.createElement('div');
+                        groupHeader1.style.cssText = 'background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; padding: 12px 20px; border-radius: 10px; margin-bottom: 15px; font-weight: bold; font-size: 1.1rem; box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);';
+                        groupHeader1.innerHTML = `
+                            <i class="fas fa-check-circle"></i> Active Users (${usersWithCheckups.length})
+                            <span style="float: right; font-size: 0.9rem; opacity: 0.9;">Has performed checkups</span>
+                        `;
+                        usersList.appendChild(groupHeader1);
+
+                        usersWithCheckups.forEach((user) => {
+                            const userItem = document.createElement('div');
+                            userItem.className = 'user-list-item';
+                            userItem.onclick = () => selectCheckupUser(user.name);
+                            
+                            userItem.innerHTML = `
+                                <div class="user-number">${currentNumber}</div>
+                                <div class="user-info">
+                                    <div class="user-name">${user.name}</div>
+                                    <div class="user-checkup-count">${user.checkupCount} checkup${user.checkupCount !== 1 ? 's' : ''}</div>
+                                </div>
+                                <div class="user-arrow">
+                                    <i class="fas fa-chevron-right"></i>
+                                </div>
+                            `;
+                            usersList.appendChild(userItem);
+                            currentNumber++;
+                        });
+                    }
+
+                    // Group 2: Users WITHOUT checkups
+                    if (usersWithoutCheckups.length > 0) {
+                        // Add spacing and group header
+                        const spacer = document.createElement('div');
+                        spacer.style.height = '30px';
+                        usersList.appendChild(spacer);
+
+                        const groupHeader2 = document.createElement('div');
+                        groupHeader2.style.cssText = 'background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%); color: white; padding: 12px 20px; border-radius: 10px; margin-bottom: 15px; font-weight: bold; font-size: 1.1rem; box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);';
+                        groupHeader2.innerHTML = `
+                            <i class="fas fa-user-times"></i> Inactive Users (${usersWithoutCheckups.length})
+                            <span style="float: right; font-size: 0.9rem; opacity: 0.9;">No checkups performed yet</span>
+                        `;
+                        usersList.appendChild(groupHeader2);
+
+                        usersWithoutCheckups.forEach((user) => {
+                            const userItem = document.createElement('div');
+                            userItem.className = 'user-list-item';
                             userItem.style.opacity = '0.5';
                             userItem.style.cursor = 'not-allowed';
                             userItem.style.borderLeftColor = '#ccc';
-                        } else {
-                            userItem.onclick = () => selectCheckupUser(user.name);
-                        }
-                        
-                        userItem.innerHTML = `
-                            <div class="user-number" style="${!user.hasCheckups ? 'background: #ccc;' : ''}">${index + 1}</div>
-                            <div class="user-info">
-                                <div class="user-name">${user.name}</div>
-                                <div class="user-checkup-count">${user.checkupCount} checkup${user.checkupCount !== 1 ? 's' : ''}</div>
-                            </div>
-                            <div class="user-arrow" style="${!user.hasCheckups ? 'color: #ccc;' : ''}">
-                                ${user.hasCheckups ? '<i class="fas fa-chevron-right"></i>' : '<i class="fas fa-ban"></i>'}
-                            </div>
-                        `;
-                        usersList.appendChild(userItem);
-                    });
+                            
+                            userItem.innerHTML = `
+                                <div class="user-number" style="background: #ccc;">${currentNumber}</div>
+                                <div class="user-info">
+                                    <div class="user-name">${user.name}</div>
+                                    <div class="user-checkup-count">0 checkups</div>
+                                </div>
+                                <div class="user-arrow" style="color: #ccc;">
+                                    <i class="fas fa-ban"></i>
+                                </div>
+                            `;
+                            usersList.appendChild(userItem);
+                            currentNumber++;
+                        });
+                    }
                 }
 
                 loading.style.display = 'none';
@@ -2065,6 +2205,7 @@
         // ========================================
 
         let activityQrCodeScanner = null;
+        let allToolsForActivity = []; // Cache all tools for dropdown
 
         // Toggle QR Scanner
         window.toggleActivityScanner = async function() {
@@ -2089,6 +2230,7 @@
                         (decodedText) => {
                             // On scan success
                             document.getElementById('activityToolSearch').value = decodedText;
+                            document.getElementById('activityDropdown').style.display = 'none';
                             stopActivityScanner();
                             searchToolActivity();
                         },
@@ -2411,13 +2553,88 @@
             }
         };
 
-        // Allow Enter key to trigger search
+        // Show dropdown with tool suggestions
+        function showActivityDropdown(searchTerm) {
+            const dropdown = document.getElementById('activityDropdown');
+            
+            if (!searchTerm || searchTerm.length < 1) {
+                dropdown.style.display = 'none';
+                return;
+            }
+
+            // Filter tools based on search term (case-insensitive)
+            const lowerSearch = searchTerm.toLowerCase();
+            const matches = allToolsForActivity.filter(tool => 
+                tool.id.toLowerCase().includes(lowerSearch) ||
+                tool.toolName.toLowerCase().includes(lowerSearch) ||
+                (tool.partNumber && tool.partNumber.toLowerCase().includes(lowerSearch))
+            ).slice(0, 10); // Limit to 10 results
+
+            if (matches.length === 0) {
+                dropdown.innerHTML = '<div class="activity-dropdown-empty">No tools found matching "' + searchTerm + '"</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+
+            // Build dropdown HTML
+            dropdown.innerHTML = matches.map(tool => {
+                const statusColor = tool.status === 'IN' ? '#28a745' : tool.status === 'OUT' ? '#dc3545' : '#6c757d';
+                const partNumberDisplay = tool.partNumber ? `P/N: ${tool.partNumber} | ` : '';
+                return `
+                    <div class="activity-dropdown-item" onclick="selectToolFromDropdown('${tool.id}')">
+                        <div class="tool-id">${tool.id}</div>
+                        <div class="tool-name">${tool.toolName}</div>
+                        <div class="tool-owner">
+                            ${partNumberDisplay}Owner: ${tool.owner} | 
+                            <span style="color: ${statusColor}; font-weight: bold;">${tool.status}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            dropdown.style.display = 'block';
+        }
+
+        // Select tool from dropdown
+        window.selectToolFromDropdown = function(toolId) {
+            document.getElementById('activityToolSearch').value = toolId;
+            document.getElementById('activityDropdown').style.display = 'none';
+            searchToolActivity();
+        };
+
+        // Hide dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            const searchInput = document.getElementById('activityToolSearch');
+            const dropdown = document.getElementById('activityDropdown');
+            
+            if (searchInput && dropdown && 
+                e.target !== searchInput && 
+                !dropdown.contains(e.target)) {
+                dropdown.style.display = 'none';
+            }
+        });
+
+        // Allow Enter key to trigger search and setup input listener
         document.addEventListener('DOMContentLoaded', function() {
             const activitySearch = document.getElementById('activityToolSearch');
             if (activitySearch) {
+                // Enter key to search
                 activitySearch.addEventListener('keypress', function(e) {
                     if (e.key === 'Enter') {
+                        document.getElementById('activityDropdown').style.display = 'none';
                         searchToolActivity();
+                    }
+                });
+
+                // Input event to show dropdown
+                activitySearch.addEventListener('input', function(e) {
+                    showActivityDropdown(e.target.value);
+                });
+
+                // Focus event to show dropdown if there's text
+                activitySearch.addEventListener('focus', function(e) {
+                    if (e.target.value) {
+                        showActivityDropdown(e.target.value);
                     }
                 });
             }
