@@ -692,40 +692,42 @@
 
             /* Smaller statistics on mobile */
             .stat-card {
-                padding: 12px;
-                margin-bottom: 10px;
+                padding: 8px !important;
+                margin-bottom: 8px !important;
             }
 
             .stat-card .icon {
-                font-size: 1.8rem;
+                font-size: 1.5rem !important;
             }
 
             .stat-card h3 {
-                font-size: 1.2rem;
-                margin: 8px 0 2px 0;
+                font-size: 1rem !important;
+                margin: 4px 0 2px 0 !important;
             }
 
             .stat-card p {
-                font-size: 0.75rem;
-                margin: 0;
+                font-size: 0.7rem !important;
+                margin: 0 !important;
             }
 
             /* Button grid on mobile */
             .nav-buttons-container {
-                padding: 10px;
+                padding: 8px;
+                gap: 8px;
             }
 
             .nav-button {
-                flex: 0 0 calc(50% - 10px);
-                padding: 12px 15px;
-                font-size: 0.9rem;
-                margin: 5px;
+                flex: 0 0 calc(50% - 4px) !important;
+                padding: 10px 12px !important;
+                font-size: 0.85rem !important;
+                margin: 2px !important;
+                min-height: auto !important;
             }
 
             .nav-button i {
-                display: block;
-                margin: 0 0 5px 0;
-                font-size: 1.3rem;
+                display: block !important;
+                margin: 0 0 4px 0 !important;
+                font-size: 1.2rem !important;
             }
 
             /* Modal adjustments for mobile */
@@ -2408,13 +2410,24 @@
             activity: { title: 'Check User Activity', icon: 'fa-user-check', subtitle: 'Track tool usage and registration' }
         };
 
+        // Ensure functions are available immediately
+        console.log('Defining openSectionModal function...');
+
         // Open section in modal
         window.openSectionModal = function(sectionId) {
+            console.log('openSectionModal called with:', sectionId);
             const modal = document.getElementById(sectionId + 'Modal');
             const content = document.getElementById(sectionId);
             const config = sectionConfig[sectionId];
             
-            if (!modal || !content || !config) return;
+            console.log('Modal element:', modal);
+            console.log('Content element:', content);
+            console.log('Config:', config);
+            
+            if (!modal || !content || !config) {
+                console.error('Missing elements:', { modal, content, config });
+                return;
+            }
             
             // Create modal structure
             const modalContent = document.createElement('div');
@@ -2461,6 +2474,8 @@
                 setTimeout(() => loadAllToolsForActivity(), 100);
             }
         };
+
+        console.log('openSectionModal function defined successfully');
 
         // Close section modal
         window.closeSectionModal = function(modalId) {
