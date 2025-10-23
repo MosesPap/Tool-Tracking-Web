@@ -3207,26 +3207,39 @@ if (!userCredential.user.emailVerified) {
                     const statusColor = status === 'IN' ? 'green' : 'red';
                     
                     card.innerHTML = `
-                        <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000; text-align: left;">
-                            ${index + 1}. ${data.toolName || 'Unknown Tool'}${offlineIndicator}
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div style="font-weight: bold; font-size: 1.1rem; color: #000;">
+                                ${index + 1}. ${data.toolName || 'Unknown Tool'}${offlineIndicator}
+                            </div>
+                            <div style="color: #666; font-size: 0.9rem;">
+                                ${time}
+                            </div>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px; text-align: left;">
-                            <div>
-                                <span style="color: black; font-weight: bold;">TID</span> 
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <div style="text-align: left;">
+                                <span style="color: black; font-weight: bold;">TID</span>
+                            </div>
+                            <div style="text-align: center;">
+                                <span style="color: black; font-weight: bold;">P/N</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <span style="color: black; font-weight: bold;">STS</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <div style="text-align: left;">
                                 <span style="color: #666; font-weight: bold;">${tool.id}</span>
                             </div>
-                            <div>
-                                <span style="color: black; font-weight: bold;">WorkOn:</span> 
-                                <span style="color: #666; font-weight: bold;">${workOnValue}</span>
+                            <div style="text-align: center;">
+                                <span style="color: #666; font-weight: bold;">${serialNumber}</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <span style="color: ${statusColor}; font-weight: bold;">${status}</span>
                             </div>
                         </div>
                         <div style="margin-bottom: 6px; text-align: left;">
-                            <span style="color: black; font-weight: bold;">P/N</span> 
-                            <span style="color: #666; font-weight: bold;">${serialNumber}</span>
-                        </div>
-                        <div style="margin-bottom: 6px; text-align: left;">
-                            <span style="color: black; font-weight: bold;">STS</span> 
-                            <span style="color: ${statusColor}; font-weight: bold;">${status}</span>
+                            <span style="color: black; font-weight: bold;">WorkOn:</span> 
+                            <span style="color: #666; font-weight: bold;">${workOnValue}</span>
                         </div>
                         <div style="margin-bottom: 12px; text-align: left;">
                             <span style="color: black; font-weight: bold;">Cal Due Date:</span> 
