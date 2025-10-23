@@ -2032,7 +2032,7 @@
             const showOutOnly = document.getElementById('showOutToolsOnly').checked;
             
             if (showOutOnly) {
-                // Fetch current OUT tools for this user
+                // Fetch current OUT tools for this user from tools collection
                 const snapshot = await db.collection('tools')
                     .where('currentOwner', '==', currentToolsUser.name)
                     .where('status', '==', 'OUT')
@@ -2044,8 +2044,15 @@
                         id: doc.id,
                         toolId: doc.id,
                         toolName: doc.data().toolName,
-                        ...doc.data(),
-                        timestamp: doc.data().timestamp
+                        status: 'OUT',
+                        timestamp: doc.data().timestamp,
+                        WorkOn: doc.data().WorkOn,
+                        workLocation: doc.data().WorkOn,
+                        serialNumber: doc.data().serialNumber,
+                        partNumber: doc.data().partNumber,
+                        calDueDate: doc.data().calDueDate,
+                        technician: doc.data().technician,
+                        ...doc.data()
                     });
                 });
                 
@@ -2103,8 +2110,17 @@
                 groupedByTool[toolId].push(entry);
             });
             
-            // Display each tool's history
-            Object.keys(groupedByTool).forEach(toolId => {
+            // Sort tools by newest entry first
+            const sortedTools = Object.keys(groupedByTool).sort((a, b) => {
+                const aLatest = groupedByTool[a][0];
+                const bLatest = groupedByTool[b][0];
+                const aTime = aLatest.timestamp?.toDate ? aLatest.timestamp.toDate() : new Date(aLatest.timestamp || 0);
+                const bTime = bLatest.timestamp?.toDate ? bLatest.timestamp.toDate() : new Date(bLatest.timestamp || 0);
+                return bTime - aTime; // Newest first
+            });
+            
+            // Display each tool's history with numbering
+            sortedTools.forEach((toolId, index) => {
                 const toolEntries = groupedByTool[toolId];
                 const latestEntry = toolEntries[0];
                 
@@ -2145,7 +2161,7 @@
                 
                 card.innerHTML = `
                     <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000; text-align: left;">
-                        ${latestEntry.toolName || 'Unknown Tool'}
+                        ${index + 1}. ${latestEntry.toolName || 'Unknown Tool'}
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <div style="color: #666; font-size: 0.9rem;">
@@ -2178,12 +2194,9 @@
                             <span class="badge bg-${status === 'IN' || status === 'CHECK-IN' ? 'success' : 'danger'}" style="font-weight: bold; border-radius: 15px; padding: 4px 8px;">${status}</span>
                         </div>
                     </div>
-                    <div style="margin-bottom: 6px; text-align: left;">
+                    <div style="margin-bottom: 12px; text-align: left;">
                         <span style="color: black; font-weight: bold;">Cal Due Date:</span> 
                         <span style="color: blue; font-weight: bold;">${calDueDate}</span>
-                    </div>
-                    <div style="margin-bottom: 12px; text-align: left; color: #666; font-size: 0.9rem;">
-                        <i class="fas fa-clock"></i> ${time}
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div style="color: blue; font-weight: normal; cursor: pointer;">
