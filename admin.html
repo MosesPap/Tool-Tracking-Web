@@ -2144,23 +2144,27 @@
                 };
                 
                 card.innerHTML = `
+                    <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000; text-align: left;">
+                        ${latestEntry.toolName || 'Unknown Tool'}
+                    </div>
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <div style="font-weight: bold; font-size: 1.1rem; color: #000;">
-                            ${latestEntry.toolName || 'Unknown Tool'}
-                        </div>
                         <div style="color: #666; font-size: 0.9rem;">
                             ${time}
+                        </div>
+                        <div>
+                            <span style="color: black; font-weight: bold;">WorkOn:</span> 
+                            <span style="color: #666; font-weight: bold;">${workOnValue}</span>
                         </div>
                     </div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                         <div style="text-align: left;">
-                            <span style="color: black; font-weight: bold;">TID</span>
+                            <span style="color: black; font-weight: bold; text-decoration: underline;">TID</span>
                         </div>
                         <div style="text-align: center;">
-                            <span style="color: black; font-weight: bold;">P/N</span>
+                            <span style="color: black; font-weight: bold; text-decoration: underline;">P/N</span>
                         </div>
                         <div style="text-align: right;">
-                            <span style="color: black; font-weight: bold;">STS</span>
+                            <span style="color: black; font-weight: bold; text-decoration: underline;">STS</span>
                         </div>
                     </div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
@@ -2171,12 +2175,8 @@
                             <span style="color: #666; font-weight: bold;">${serialNumber}</span>
                         </div>
                         <div style="text-align: right;">
-                            <span style="color: ${statusColor}; font-weight: bold;">${status}</span>
+                            <span class="badge bg-${status === 'IN' || status === 'CHECK-IN' ? 'success' : 'danger'}" style="font-weight: bold; border-radius: 15px; padding: 4px 8px;">${status}</span>
                         </div>
-                    </div>
-                    <div style="margin-bottom: 6px; text-align: left;">
-                        <span style="color: black; font-weight: bold;">WorkOn:</span> 
-                        <span style="color: #666; font-weight: bold;">${workOnValue}</span>
                     </div>
                     <div style="margin-bottom: 6px; text-align: left;">
                         <span style="color: black; font-weight: bold;">Cal Due Date:</span> 
