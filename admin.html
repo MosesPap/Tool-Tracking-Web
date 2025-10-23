@@ -228,6 +228,147 @@
             padding-bottom: 10px;
         }
 
+        /* Animated Push Buttons */
+        .nav-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            padding: 20px 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            position: relative;
+            overflow: hidden;
+            margin: 10px;
+        }
+
+        .nav-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .nav-button:active {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 10px rgba(102, 126, 234, 0.3);
+        }
+
+        .nav-button.active {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4);
+        }
+
+        .nav-button i {
+            margin-right: 10px;
+            font-size: 1.2rem;
+        }
+
+        .nav-button::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .nav-button:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .nav-buttons-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+        }
+
+        .section-content {
+            display: none;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        .section-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* User List Styles */
+        .user-list-item {
+            background: white;
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-left: 4px solid #667eea;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .user-list-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-left-color: #28a745;
+        }
+
+        .user-number {
+            background: #667eea;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .user-info {
+            flex: 1;
+        }
+
+        .user-name {
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: #333;
+            margin-bottom: 3px;
+        }
+
+        .user-checkup-count {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .user-arrow {
+            color: #667eea;
+            font-size: 1.5rem;
+        }
+
         .btn-admin-action {
             border-radius: 10px;
             padding: 10px 20px;
@@ -417,39 +558,29 @@
                     </div>
                 </div>
 
-                <!-- Tabs -->
-                <ul class="nav nav-tabs mb-4" id="adminTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab">
-                            <i class="fas fa-cog"></i> Settings
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="users-tab" data-bs-toggle="tab" data-bs-target="#users" type="button" role="tab">
-                            <i class="fas fa-users"></i> Users
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="tools-tab" data-bs-toggle="tab" data-bs-target="#tools" type="button" role="tab">
-                            <i class="fas fa-toolbox"></i> Tools
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="analytics-tab" data-bs-toggle="tab" data-bs-target="#analytics" type="button" role="tab">
-                            <i class="fas fa-chart-bar"></i> Analytics
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="checkups-tab" data-bs-toggle="tab" data-bs-target="#checkups" type="button" role="tab">
-                            <i class="fas fa-clipboard-check"></i> Checkups
-                        </button>
-                    </li>
-                </ul>
+                <!-- Animated Push Buttons -->
+                <div class="nav-buttons-container">
+                    <button class="nav-button active" id="settings-btn" onclick="showSection('settings')">
+                        <i class="fas fa-cog"></i> Settings
+                    </button>
+                    <button class="nav-button" id="users-btn" onclick="showSection('users')">
+                        <i class="fas fa-users"></i> Users
+                    </button>
+                    <button class="nav-button" id="tools-btn" onclick="showSection('tools')">
+                        <i class="fas fa-toolbox"></i> Tools
+                    </button>
+                    <button class="nav-button" id="analytics-btn" onclick="showSection('analytics')">
+                        <i class="fas fa-chart-bar"></i> Analytics
+                    </button>
+                    <button class="nav-button" id="checkups-btn" onclick="showSection('checkups')">
+                        <i class="fas fa-clipboard-check"></i> Checkups
+                    </button>
+                </div>
 
-                <!-- Tab Content -->
-                <div class="tab-content" id="adminTabsContent">
-                    <!-- Settings Tab -->
-                    <div class="tab-pane fade show active" id="settings" role="tabpanel">
+                <!-- Section Content -->
+                <div id="adminSectionsContent">
+                    <!-- Settings Section -->
+                    <div class="section-content active" id="settings">
                         <div class="admin-card">
                             <h4><i class="fas fa-cog"></i> System Settings</h4>
                             
@@ -493,8 +624,8 @@
                         </div>
                     </div>
 
-                    <!-- Users Tab -->
-                    <div class="tab-pane fade" id="users" role="tabpanel">
+                    <!-- Users Section -->
+                    <div class="section-content" id="users">
                         <div class="admin-card">
                             <h4><i class="fas fa-users"></i> User Management</h4>
                             
@@ -527,8 +658,8 @@
                         </div>
                     </div>
 
-                    <!-- Tools Tab -->
-                    <div class="tab-pane fade" id="tools" role="tabpanel">
+                    <!-- Tools Section -->
+                    <div class="section-content" id="tools">
                         <div class="admin-card">
                             <h4><i class="fas fa-toolbox"></i> Tool Management</h4>
                             
@@ -549,8 +680,8 @@
                         </div>
                     </div>
 
-                    <!-- Analytics Tab -->
-                    <div class="tab-pane fade" id="analytics" role="tabpanel">
+                    <!-- Analytics Section -->
+                    <div class="section-content" id="analytics">
                         <div class="admin-card">
                             <h4><i class="fas fa-chart-bar"></i> Analytics & Reports</h4>
                             
@@ -595,14 +726,14 @@
                         </div>
                     </div>
 
-                    <!-- Checkups Tab -->
-                    <div class="tab-pane fade" id="checkups" role="tabpanel">
+                    <!-- Checkups Section -->
+                    <div class="section-content" id="checkups">
                         <div class="admin-card">
                             <h4><i class="fas fa-clipboard-check"></i> Collection Checkups Management</h4>
                             
                             <!-- Step 1: Select User -->
                             <div id="checkupStep1" class="settings-group">
-                                <h5><i class="fas fa-user"></i> Step 1: Select User</h5>
+                                <h5><i class="fas fa-user"></i> Select User</h5>
                                 <div class="mb-3">
                                     <input type="text" class="form-control" id="checkupUserSearch" placeholder="Search users...">
                                 </div>
@@ -610,8 +741,8 @@
                                     <div class="spinner-border text-primary" role="status"></div>
                                     <p>Loading users...</p>
                                 </div>
-                                <div id="checkupUsersList" class="row g-3">
-                                    <!-- Users will be populated here -->
+                                <div id="checkupUsersList">
+                                    <!-- Users will be populated here as numbered list -->
                                 </div>
                             </div>
 
@@ -631,9 +762,9 @@
                             <!-- Step 3: View Checkup History -->
                             <div id="checkupStep3" class="settings-group" style="display: none;">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h5><i class="fas fa-history"></i> Checkup History: <span id="selectedCollectionName" style="color: #667eea;"></span></h5>
+                                    <h5><i class="fas fa-history"></i> <span id="selectedCollectionName" style="color: #667eea;"></span></h5>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="backToCollections()">
-                                        <i class="fas fa-arrow-left"></i> Back to Collections
+                                        <i class="fas fa-arrow-left"></i> Back to Users
                                     </button>
                                 </div>
 
@@ -711,15 +842,16 @@
                                     <table class="table table-hover">
                                         <thead>
                                             <tr>
-                                                <th style="width: 50px;">
-                                                    <input type="checkbox" id="selectAllCheckups" onchange="toggleSelectAllCheckups()">
-                                                </th>
-                                                <th>Date & Time</th>
-                                                <th>Total Tools</th>
-                                                <th>Checked</th>
-                                                <th>Unchecked</th>
-                                                <th>Completion %</th>
-                                                <th>Actions</th>
+                                <th style="width: 50px;">
+                                    <input type="checkbox" id="selectAllCheckups" onchange="toggleSelectAllCheckups()">
+                                </th>
+                                <th>Date & Time</th>
+                                <th>Collection</th>
+                                <th>Total Tools</th>
+                                <th>Checked</th>
+                                <th>Unchecked</th>
+                                <th>Completion %</th>
+                                <th>Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody id="checkupHistoryTableBody">
@@ -1268,6 +1400,38 @@
         });
 
         // ========================================
+        // SECTION NAVIGATION
+        // ========================================
+
+        // Show section and handle button states
+        window.showSection = function(sectionId) {
+            // Hide all sections
+            document.querySelectorAll('.section-content').forEach(section => {
+                section.classList.remove('active');
+            });
+
+            // Remove active class from all buttons
+            document.querySelectorAll('.nav-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Show selected section
+            document.getElementById(sectionId).classList.add('active');
+            document.getElementById(sectionId + '-btn').classList.add('active');
+
+            // Load data for specific sections
+            if (sectionId === 'checkups') {
+                loadCheckupUsers();
+            } else if (sectionId === 'users') {
+                loadUsers();
+            } else if (sectionId === 'tools') {
+                loadTools();
+            } else if (sectionId === 'analytics') {
+                loadAnalytics();
+            }
+        };
+
+        // ========================================
         // CHECKUPS MANAGEMENT FUNCTIONALITY
         // ========================================
 
@@ -1276,12 +1440,6 @@
         let selectedCheckupIds = new Set();
         let currentSelectedUser = null;
         let currentSelectedCollection = null;
-
-        // Load Checkups Tab when clicked
-        document.getElementById('checkups-tab').addEventListener('click', function() {
-            if (this.classList.contains('active')) return;
-            loadCheckupUsers();
-        });
 
         // Load all users who have performed checkups
         async function loadCheckupUsers() {
@@ -1309,38 +1467,32 @@
                 );
 
                 if (sortedUsers.length === 0) {
-                    usersList.innerHTML = '<div class="col-12"><p class="text-muted text-center">No checkups found in the system.</p></div>';
+                    usersList.innerHTML = '<p class="text-muted text-center">No checkups found in the system.</p>';
                 } else {
-                    sortedUsers.forEach(userName => {
+                    // Create numbered list
+                    sortedUsers.forEach((userName, index) => {
                         const count = userCheckupCounts[userName];
-                        const card = document.createElement('div');
-                        card.className = 'col-md-4 col-sm-6';
-                        card.innerHTML = `
-                            <div class="stat-card" style="cursor: pointer; padding: 20px;" onclick="selectCheckupUser('${userName}')">
-                                <div style="display: flex; align-items: center; gap: 15px;">
-                                    <div style="font-size: 2.5rem; color: #667eea;">
-                                        <i class="fas fa-user-circle"></i>
-                                    </div>
-                                    <div style="flex: 1;">
-                                        <h6 style="margin: 0; font-weight: bold; color: #333;">${userName}</h6>
-                                        <p style="margin: 5px 0 0 0; color: #666; font-size: 0.9rem;">
-                                            ${count} checkup${count !== 1 ? 's' : ''}
-                                        </p>
-                                    </div>
-                                    <div style="font-size: 1.5rem; color: #667eea;">
-                                        <i class="fas fa-chevron-right"></i>
-                                    </div>
-                                </div>
+                        const userItem = document.createElement('div');
+                        userItem.className = 'user-list-item';
+                        userItem.onclick = () => selectCheckupUser(userName);
+                        userItem.innerHTML = `
+                            <div class="user-number">${index + 1}</div>
+                            <div class="user-info">
+                                <div class="user-name">${userName}</div>
+                                <div class="user-checkup-count">${count} checkup${count !== 1 ? 's' : ''}</div>
+                            </div>
+                            <div class="user-arrow">
+                                <i class="fas fa-chevron-right"></i>
                             </div>
                         `;
-                        usersList.appendChild(card);
+                        usersList.appendChild(userItem);
                     });
                 }
 
                 loading.style.display = 'none';
             } catch (error) {
                 console.error('Error loading checkup users:', error);
-                usersList.innerHTML = '<div class="col-12"><p class="text-danger text-center">Error loading users</p></div>';
+                usersList.innerHTML = '<p class="text-danger text-center">Error loading users</p>';
                 loading.style.display = 'none';
             }
         }
@@ -1348,80 +1500,28 @@
         // User search functionality
         document.getElementById('checkupUserSearch').addEventListener('input', function() {
             const searchTerm = this.value.toLowerCase();
-            const cards = document.querySelectorAll('#checkupUsersList .col-md-4');
-            cards.forEach(card => {
-                const text = card.textContent.toLowerCase();
-                card.style.display = text.includes(searchTerm) ? '' : 'none';
+            const userItems = document.querySelectorAll('#checkupUsersList .user-list-item');
+            userItems.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(searchTerm) ? 'flex' : 'none';
             });
         });
 
-        // Select a user and show their collections
+        // Select a user and load all their checkups
         window.selectCheckupUser = async function(userName) {
             currentSelectedUser = userName;
-            document.getElementById('selectedUserName').textContent = userName;
+            currentSelectedCollection = 'All'; // Show all collections
             
-            // Hide step 1, show step 2
+            // Update header
+            document.getElementById('selectedCollectionName').textContent = `All Checkups for ${userName}`;
+            
+            // Hide step 1, show step 3 directly
             document.getElementById('checkupStep1').style.display = 'none';
-            document.getElementById('checkupStep2').style.display = 'block';
-            document.getElementById('checkupStep3').style.display = 'none';
+            document.getElementById('checkupStep2').style.display = 'none';
+            document.getElementById('checkupStep3').style.display = 'block';
 
-            // Load collections for this user
-            const collectionsList = document.getElementById('checkupCollectionsList');
-            collectionsList.innerHTML = '<div class="col-12"><div class="spinner-border text-primary" role="status"></div><p>Loading collections...</p></div>';
-
-            try {
-                // Get all checkups for this user
-                const checkupsSnapshot = await db.collection('checkupResults')
-                    .where('technicianName', '==', userName)
-                    .get();
-
-                // Group by collection and count
-                const collectionCheckupCounts = {};
-                checkupsSnapshot.forEach(doc => {
-                    const data = doc.data();
-                    const collectionName = data.collectionCode || 'Unknown';
-                    collectionCheckupCounts[collectionName] = (collectionCheckupCounts[collectionName] || 0) + 1;
-                });
-
-                // Sort collections alphabetically
-                const sortedCollections = Object.keys(collectionCheckupCounts).sort((a, b) => 
-                    a.toLowerCase().localeCompare(b.toLowerCase())
-                );
-
-                collectionsList.innerHTML = '';
-
-                if (sortedCollections.length === 0) {
-                    collectionsList.innerHTML = '<div class="col-12"><p class="text-muted text-center">No collections found for this user.</p></div>';
-                } else {
-                    sortedCollections.forEach(collectionName => {
-                        const count = collectionCheckupCounts[collectionName];
-                        const card = document.createElement('div');
-                        card.className = 'col-md-4 col-sm-6';
-                        card.innerHTML = `
-                            <div class="stat-card" style="cursor: pointer; padding: 20px;" onclick="selectCheckupCollection('${collectionName}')">
-                                <div style="display: flex; align-items: center; gap: 15px;">
-                                    <div style="font-size: 2.5rem; color: #28a745;">
-                                        <i class="fas fa-folder-open"></i>
-                                    </div>
-                                    <div style="flex: 1;">
-                                        <h6 style="margin: 0; font-weight: bold; color: #333;">${collectionName}</h6>
-                                        <p style="margin: 5px 0 0 0; color: #666; font-size: 0.9rem;">
-                                            ${count} checkup${count !== 1 ? 's' : ''}
-                                        </p>
-                                    </div>
-                                    <div style="font-size: 1.5rem; color: #28a745;">
-                                        <i class="fas fa-chevron-right"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                        collectionsList.appendChild(card);
-                    });
-                }
-            } catch (error) {
-                console.error('Error loading collections:', error);
-                collectionsList.innerHTML = '<div class="col-12"><p class="text-danger text-center">Error loading collections</p></div>';
-            }
+            // Load all checkup history for this user
+            await loadCheckupHistoryForUser(userName);
         };
 
         // Reset to user selection
@@ -1434,11 +1534,9 @@
             document.getElementById('checkupUserSearch').value = '';
         };
 
-        // Back to collections
+        // Back to user list (renamed from backToCollections)
         window.backToCollections = function() {
-            currentSelectedCollection = null;
-            document.getElementById('checkupStep2').style.display = 'block';
-            document.getElementById('checkupStep3').style.display = 'none';
+            resetCheckupSelection();
         };
 
         // Select a collection and show checkup history
@@ -1453,6 +1551,49 @@
             // Load checkup history
             await loadCheckupHistory();
         };
+
+        // Load checkup history for a user (all collections)
+        async function loadCheckupHistoryForUser(userName) {
+            const loading = document.getElementById('checkupHistoryLoading');
+            const tableContainer = document.getElementById('checkupHistoryTableContainer');
+            const noMessage = document.getElementById('noCheckupsMessage');
+            
+            try {
+                loading.style.display = 'block';
+                tableContainer.style.display = 'none';
+                noMessage.style.display = 'none';
+
+                // Get all checkups for this user (all collections)
+                const checkupsSnapshot = await db.collection('checkupResults')
+                    .where('technicianName', '==', userName)
+                    .get();
+
+                allCheckupData = [];
+                checkupsSnapshot.forEach(doc => {
+                    allCheckupData.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+
+                // Sort by timestamp (newest first)
+                allCheckupData.sort((a, b) => {
+                    const timeA = a.timestamp ? a.timestamp.toDate() : new Date(0);
+                    const timeB = b.timestamp ? b.timestamp.toDate() : new Date(0);
+                    return timeB - timeA;
+                });
+
+                // Initially show all
+                filteredCheckupData = [...allCheckupData];
+                renderCheckupHistory();
+
+                loading.style.display = 'none';
+            } catch (error) {
+                console.error('Error loading checkup history:', error);
+                loading.style.display = 'none';
+                alert('Error loading checkup history: ' + error.message);
+            }
+        }
 
         // Load checkup history for selected user and collection
         async function loadCheckupHistory() {
@@ -1561,12 +1702,15 @@
                     ? checkup.timestamp.toDate().toLocaleString('en-GB')
                     : checkup.checkupDate || 'Unknown';
 
+                const collectionName = checkup.collectionCode || 'Unknown';
+
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>
                         <input type="checkbox" class="checkup-checkbox" data-id="${checkup.id}" onchange="updateDeleteButton()">
                     </td>
                     <td>${dateStr}</td>
+                    <td><span style="color: #667eea; font-weight: bold;">${collectionName}</span></td>
                     <td>${checkup.totalTools || 0}</td>
                     <td><span style="color: #28a745; font-weight: bold;">${checkup.checkedTools || 0}</span></td>
                     <td><span style="color: #dc3545; font-weight: bold;">${checkup.uncheckedTools || 0}</span></td>
