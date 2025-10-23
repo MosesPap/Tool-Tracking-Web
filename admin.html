@@ -1953,25 +1953,15 @@
             filterToolHistory('today');
         };
 
-        // Load all tool history for a user
+        // Load all tool history for a user from logtoolmovements collection
         async function loadUserToolHistory(userName) {
             try {
-                // Try different query approaches to avoid index issues
-                let snapshot;
-                
-                try {
-                    // First try: Query without orderBy to avoid index requirement
-                    snapshot = await db.collection('toolHistory')
-                        .where('technicianName', '==', userName)
-                        .limit(500)
-                        .get();
-                        
-                    console.log(`Loaded ${snapshot.size} documents for ${userName} (no orderBy)`);
-                } catch (error) {
-                    console.error('Error with toolHistory query:', error);
-                    allToolHistory = [];
-                    return;
-                }
+                // Use logtoolmovements collection with existing index
+                const snapshot = await db.collection('logtoolmovements')
+                    .where('technicianName', '==', userName)
+                    .orderBy('timestamp', 'desc')
+                    .limit(500)
+                    .get();
 
                 allToolHistory = [];
                 snapshot.forEach(doc => {
@@ -1981,16 +1971,9 @@
                     });
                 });
 
-                // Sort by timestamp in JavaScript (descending order)
-                allToolHistory.sort((a, b) => {
-                    const aTime = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp || 0);
-                    const bTime = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp || 0);
-                    return bTime - aTime; // Descending order (newest first)
-                });
-
-                console.log(`Loaded ${allToolHistory.length} history entries for ${userName} (sorted in JavaScript)`);
+                console.log(`Loaded ${allToolHistory.length} history entries for ${userName} from logtoolmovements collection`);
             } catch (error) {
-                console.error('Error loading tool history:', error);
+                console.error('Error loading tool history from logtoolmovements:', error);
                 allToolHistory = [];
             }
         }
