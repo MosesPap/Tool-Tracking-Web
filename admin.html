@@ -1956,9 +1956,9 @@
         // Load all tool history for a user from logtoolmovements collection
         async function loadUserToolHistory(userName) {
             try {
-                // Use logtoolmovements collection with existing index
+                // Use logtoolmovements collection with existing index (technician field, not technicianName)
                 const snapshot = await db.collection('logtoolmovements')
-                    .where('technicianName', '==', userName)
+                    .where('technician', '==', userName)
                     .orderBy('timestamp', 'desc')
                     .limit(500)
                     .get();
@@ -2598,7 +2598,7 @@
                 const userCheckupCounts = {};
                 checkupsSnapshot.forEach(doc => {
                     const data = doc.data();
-                    const techName = data.technicianName || 'Unknown';
+                    const techName = data.technician || 'Unknown';
                     userCheckupCounts[techName] = (userCheckupCounts[techName] || 0) + 1;
                 });
 
@@ -2779,7 +2779,7 @@
 
                 // Get all checkups for this user (all collections)
                 const checkupsSnapshot = await db.collection('checkupResults')
-                    .where('technicianName', '==', userName)
+                    .where('technician', '==', userName)
                     .get();
 
                 allCheckupData = [];
@@ -2822,7 +2822,7 @@
 
                 // Get all checkups for this user and collection
                 const checkupsSnapshot = await db.collection('checkupResults')
-                    .where('technicianName', '==', currentSelectedUser)
+                    .where('technician', '==', currentSelectedUser)
                     .where('collectionCode', '==', currentSelectedCollection)
                     .get();
 
@@ -3079,7 +3079,7 @@
                     <div class="row mb-4">
                         <div class="col-md-6">
                             <h6><i class="fas fa-user"></i> Technician:</h6>
-                            <p style="font-size: 1.1rem; font-weight: bold;">${checkup.technicianName || 'Unknown'}</p>
+                            <p style="font-size: 1.1rem; font-weight: bold;">${checkup.technician || 'Unknown'}</p>
                         </div>
                         <div class="col-md-6">
                             <h6><i class="fas fa-calendar"></i> Date & Time:</h6>
