@@ -329,7 +329,7 @@
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         }
 
-        .user-list-item:hover {
+        .user-list-item:not([style*="cursor: not-allowed"]):hover {
             transform: translateX(5px);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             border-left-color: #28a745;
@@ -574,6 +574,9 @@
                     </button>
                     <button class="nav-button" id="checkups-btn" onclick="showSection('checkups')">
                         <i class="fas fa-clipboard-check"></i> Checkups
+                    </button>
+                    <button class="nav-button" id="activity-btn" onclick="showSection('activity')">
+                        <i class="fas fa-user-check"></i> Check User Activity
                     </button>
                 </div>
 
@@ -863,6 +866,51 @@
                                 <div id="noCheckupsMessage" style="display: none; text-align: center; padding: 40px; color: #999;">
                                     <i class="fas fa-inbox" style="font-size: 3rem; margin-bottom: 15px;"></i>
                                     <p style="font-size: 1.1rem;">No checkups found for the selected period.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Check User Activity Section -->
+                    <div class="section-content" id="activity">
+                        <div class="admin-card">
+                            <h4><i class="fas fa-user-check"></i> Check User Activity - Tool Registration Verification</h4>
+                            
+                            <div class="settings-group">
+                                <p style="color: #666; margin-bottom: 20px;">
+                                    <i class="fas fa-info-circle"></i> Scan or enter a tool code to check who is currently using it and when it was registered.
+                                </p>
+
+                                <!-- Search Input with QR Scanner -->
+                                <div class="mb-3">
+                                    <label for="activityToolSearch" class="form-label" style="font-weight: bold; font-size: 1.1rem;">
+                                        <i class="fas fa-search"></i> Enter Tool Code or Scan QR
+                                    </label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="activityToolSearch" 
+                                               placeholder="Enter tool code (e.g., AMS-001) or scan QR code..." 
+                                               style="font-size: 1.1rem; padding: 12px;">
+                                        <button class="btn btn-primary" id="activitySearchBtn" onclick="searchToolActivity()">
+                                            <i class="fas fa-search"></i> Search
+                                        </button>
+                                        <button class="btn btn-success" id="activityScanBtn" onclick="toggleActivityScanner()">
+                                            <i class="fas fa-qrcode"></i> Scan QR
+                                        </button>
+                                    </div>
+                                    <small class="text-muted">Case-insensitive search - works with any format</small>
+                                </div>
+
+                                <!-- QR Scanner Container -->
+                                <div id="activityQrReader" style="display: none; margin-bottom: 20px;">
+                                    <div id="activityQrReaderElement" style="border: 3px solid #667eea; border-radius: 10px; overflow: hidden;"></div>
+                                    <button class="btn btn-danger mt-2" onclick="stopActivityScanner()">
+                                        <i class="fas fa-stop"></i> Stop Scanner
+                                    </button>
+                                </div>
+
+                                <!-- Results Container -->
+                                <div id="activityResults" style="display: none;">
+                                    <!-- Results will be populated here -->
                                 </div>
                             </div>
                         </div>
@@ -1441,7 +1489,7 @@
         let currentSelectedUser = null;
         let currentSelectedCollection = null;
 
-        // Load all users who have performed checkups
+        // Load all users (showing those without checkups as disabled)
         async function loadCheckupUsers() {
             const loading = document.getElementById('checkupUsersLoading');
             const usersList = document.getElementById('checkupUsersList');
@@ -1461,28 +1509,50 @@
                     userCheckupCounts[techName] = (userCheckupCounts[techName] || 0) + 1;
                 });
 
-                // Sort users alphabetically
-                const sortedUsers = Object.keys(userCheckupCounts).sort((a, b) => 
-                    a.toLowerCase().localeCompare(b.toLowerCase())
-                );
+                // Get all technicians from the technicians collection
+                const techniciansSnapshot = await db.collection('technicians').get();
+                const allUsers = [];
+                
+                techniciansSnapshot.forEach(doc => {
+                    const userData = doc.data();
+                    const userName = userData.fullName || userData.email || 'Unknown';
+                    const checkupCount = userCheckupCounts[userName] || 0;
+                    
+                    allUsers.push({
+                        name: userName,
+                        checkupCount: checkupCount,
+                        hasCheckups: checkupCount > 0
+                    });
+                });
 
-                if (sortedUsers.length === 0) {
-                    usersList.innerHTML = '<p class="text-muted text-center">No checkups found in the system.</p>';
+                // Sort users alphabetically
+                allUsers.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+
+                if (allUsers.length === 0) {
+                    usersList.innerHTML = '<p class="text-muted text-center">No users found in the system.</p>';
                 } else {
-                    // Create numbered list
-                    sortedUsers.forEach((userName, index) => {
-                        const count = userCheckupCounts[userName];
+                    // Create numbered list with all users
+                    allUsers.forEach((user, index) => {
                         const userItem = document.createElement('div');
                         userItem.className = 'user-list-item';
-                        userItem.onclick = () => selectCheckupUser(userName);
+                        
+                        // Add disabled styling and remove click for users without checkups
+                        if (!user.hasCheckups) {
+                            userItem.style.opacity = '0.5';
+                            userItem.style.cursor = 'not-allowed';
+                            userItem.style.borderLeftColor = '#ccc';
+                        } else {
+                            userItem.onclick = () => selectCheckupUser(user.name);
+                        }
+                        
                         userItem.innerHTML = `
-                            <div class="user-number">${index + 1}</div>
+                            <div class="user-number" style="${!user.hasCheckups ? 'background: #ccc;' : ''}">${index + 1}</div>
                             <div class="user-info">
-                                <div class="user-name">${userName}</div>
-                                <div class="user-checkup-count">${count} checkup${count !== 1 ? 's' : ''}</div>
+                                <div class="user-name">${user.name}</div>
+                                <div class="user-checkup-count">${user.checkupCount} checkup${user.checkupCount !== 1 ? 's' : ''}</div>
                             </div>
-                            <div class="user-arrow">
-                                <i class="fas fa-chevron-right"></i>
+                            <div class="user-arrow" style="${!user.hasCheckups ? 'color: #ccc;' : ''}">
+                                ${user.hasCheckups ? '<i class="fas fa-chevron-right"></i>' : '<i class="fas fa-ban"></i>'}
                             </div>
                         `;
                         usersList.appendChild(userItem);
@@ -1989,6 +2059,369 @@
                 modalBody.innerHTML = '<p class="text-danger">Error loading details: ' + error.message + '</p>';
             }
         };
+
+        // ========================================
+        // USER ACTIVITY CHECKER FUNCTIONALITY
+        // ========================================
+
+        let activityQrCodeScanner = null;
+
+        // Toggle QR Scanner
+        window.toggleActivityScanner = async function() {
+            const qrReaderDiv = document.getElementById('activityQrReader');
+            const scanBtn = document.getElementById('activityScanBtn');
+
+            if (qrReaderDiv.style.display === 'none') {
+                // Show and start scanner
+                qrReaderDiv.style.display = 'block';
+                scanBtn.innerHTML = '<i class="fas fa-qrcode"></i> Scanning...';
+                scanBtn.disabled = true;
+
+                try {
+                    activityQrCodeScanner = new Html5Qrcode("activityQrReaderElement");
+                    
+                    await activityQrCodeScanner.start(
+                        { facingMode: "environment" },
+                        {
+                            fps: 10,
+                            qrbox: { width: 250, height: 250 }
+                        },
+                        (decodedText) => {
+                            // On scan success
+                            document.getElementById('activityToolSearch').value = decodedText;
+                            stopActivityScanner();
+                            searchToolActivity();
+                        },
+                        (errorMessage) => {
+                            // Scan error (can be ignored)
+                        }
+                    );
+                } catch (error) {
+                    console.error('Error starting scanner:', error);
+                    alert('Error starting camera: ' + error.message);
+                    stopActivityScanner();
+                }
+            } else {
+                stopActivityScanner();
+            }
+        };
+
+        // Stop QR Scanner
+        window.stopActivityScanner = function() {
+            const qrReaderDiv = document.getElementById('activityQrReader');
+            const scanBtn = document.getElementById('activityScanBtn');
+
+            if (activityQrCodeScanner) {
+                activityQrCodeScanner.stop().then(() => {
+                    activityQrCodeScanner.clear();
+                    activityQrCodeScanner = null;
+                }).catch(err => {
+                    console.error('Error stopping scanner:', err);
+                });
+            }
+
+            qrReaderDiv.style.display = 'none';
+            scanBtn.innerHTML = '<i class="fas fa-qrcode"></i> Scan QR';
+            scanBtn.disabled = false;
+        };
+
+        // Search for tool activity
+        window.searchToolActivity = async function() {
+            const searchInput = document.getElementById('activityToolSearch');
+            const toolCode = searchInput.value.trim();
+            const resultsDiv = document.getElementById('activityResults');
+
+            if (!toolCode) {
+                alert('Please enter a tool code or scan a QR code');
+                return;
+            }
+
+            // Show loading
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = `
+                <div class="text-center" style="padding: 40px;">
+                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p style="margin-top: 20px; font-size: 1.1rem;">Searching for tool: <strong>${toolCode}</strong></p>
+                </div>
+            `;
+
+            try {
+                // Search for the tool (case-insensitive)
+                const toolsSnapshot = await db.collection('tools').get();
+                let foundTool = null;
+
+                // Find tool with case-insensitive match
+                toolsSnapshot.forEach(doc => {
+                    if (doc.id.toLowerCase() === toolCode.toLowerCase()) {
+                        foundTool = { id: doc.id, ...doc.data() };
+                    }
+                });
+
+                if (!foundTool) {
+                    // Tool not found
+                    resultsDiv.innerHTML = `
+                        <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 12px; padding: 30px; text-align: center;">
+                            <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: #ffc107; margin-bottom: 15px;"></i>
+                            <h4 style="color: #856404;">Tool Not Found</h4>
+                            <p style="color: #856404; font-size: 1.1rem;">
+                                No tool found with code: <strong>${toolCode}</strong>
+                            </p>
+                            <p style="color: #666;">Please check the code and try again.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Get the most recent log entry for this tool
+                const logsSnapshot = await db.collection('logtoolmovements')
+                    .where('toolId', '==', foundTool.id)
+                    .orderBy('timestamp', 'desc')
+                    .limit(1)
+                    .get();
+
+                let lastActivity = null;
+                if (!logsSnapshot.empty) {
+                    lastActivity = logsSnapshot.docs[0].data();
+                }
+
+                // Determine current owner
+                const currentOwner = foundTool.collectionName || 'Unknown';
+                const currentStatus = foundTool.status || 'Unknown';
+                const registeredAt = foundTool.registeredAt ? foundTool.registeredAt.toDate().toLocaleString('en-GB') : 'Unknown';
+                const lastUser = lastActivity ? lastActivity.technician : 'N/A';
+                const lastActionTime = lastActivity && lastActivity.timestamp ? lastActivity.timestamp.toDate().toLocaleString('en-GB') : 'N/A';
+                const lastAction = lastActivity ? lastActivity.status : 'N/A';
+                const workLocation = foundTool.WorkOn || 'N/A';
+
+                // Build result HTML
+                let statusColor = currentStatus === 'IN' ? '#28a745' : currentStatus === 'OUT' ? '#dc3545' : '#6c757d';
+                let statusIcon = currentStatus === 'IN' ? 'fa-check-circle' : currentStatus === 'OUT' ? 'fa-sign-out-alt' : 'fa-question-circle';
+
+                resultsDiv.innerHTML = `
+                    <div style="background: white; border: 3px solid ${statusColor}; border-radius: 15px; padding: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                        <!-- Tool Header -->
+                        <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #e0e0e0;">
+                            <i class="fas fa-tools" style="font-size: 3rem; color: #667eea; margin-bottom: 15px;"></i>
+                            <h3 style="margin: 0; color: #333;">${foundTool.toolName || 'Unknown Tool'}</h3>
+                            <p style="color: #666; font-size: 1.1rem; margin: 5px 0;">
+                                <strong>TID:</strong> ${foundTool.id}
+                            </p>
+                            <div style="display: inline-block; background: ${statusColor}; color: white; padding: 8px 20px; border-radius: 20px; font-weight: bold; font-size: 1.1rem; margin-top: 10px;">
+                                <i class="fas ${statusIcon}"></i> ${currentStatus}
+                            </div>
+                        </div>
+
+                        <!-- Tool Information Grid -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; height: 100%;">
+                                    <h5 style="color: #667eea; margin-bottom: 15px;">
+                                        <i class="fas fa-user"></i> Current Owner
+                                    </h5>
+                                    <p style="font-size: 1.2rem; font-weight: bold; color: #333; margin: 0;">
+                                        ${currentOwner}
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; height: 100%;">
+                                    <h5 style="color: #667eea; margin-bottom: 15px;">
+                                        <i class="fas fa-map-marker-alt"></i> Work Location
+                                    </h5>
+                                    <p style="font-size: 1.2rem; font-weight: bold; color: #333; margin: 0;">
+                                        ${workLocation}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Registration Details -->
+                        <div style="background: #e3f2fd; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                            <h5 style="color: #1976d2; margin-bottom: 15px;">
+                                <i class="fas fa-calendar-plus"></i> Registration Information
+                            </h5>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <p style="margin: 5px 0;">
+                                        <strong>Registered On:</strong> ${registeredAt}
+                                    </p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p style="margin: 5px 0;">
+                                        <strong>Part Number:</strong> ${foundTool.partNumber || 'N/A'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Last Activity -->
+                        <div style="background: #fff3e0; padding: 20px; border-radius: 10px;">
+                            <h5 style="color: #f57c00; margin-bottom: 15px;">
+                                <i class="fas fa-history"></i> Last Activity
+                            </h5>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <p style="margin: 5px 0;">
+                                        <strong>Last User:</strong><br>
+                                        <span style="color: #333; font-size: 1.1rem;">${lastUser}</span>
+                                    </p>
+                                </div>
+                                <div class="col-md-4">
+                                    <p style="margin: 5px 0;">
+                                        <strong>Last Action:</strong><br>
+                                        <span style="color: ${lastAction === 'IN' ? '#28a745' : '#dc3545'}; font-size: 1.1rem; font-weight: bold;">${lastAction}</span>
+                                    </p>
+                                </div>
+                                <div class="col-md-4">
+                                    <p style="margin: 5px 0;">
+                                        <strong>Action Time:</strong><br>
+                                        <span style="color: #333; font-size: 1.1rem;">${lastActionTime}</span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Additional Details -->
+                        ${foundTool.location ? `
+                            <div style="margin-top: 20px; padding: 15px; background: #f1f8e9; border-left: 4px solid #8bc34a; border-radius: 8px;">
+                                <p style="margin: 0;">
+                                    <i class="fas fa-map-pin"></i> <strong>Storage Location:</strong> ${foundTool.location}
+                                </p>
+                            </div>
+                        ` : ''}
+
+                        <!-- Action Buttons -->
+                        <div style="margin-top: 30px; text-align: center; display: flex; gap: 15px; justify-content: center;">
+                            <button class="btn btn-primary btn-lg" onclick="viewToolHistory('${foundTool.id}')">
+                                <i class="fas fa-history"></i> View Full History
+                            </button>
+                            <button class="btn btn-secondary btn-lg" onclick="clearActivityResults()">
+                                <i class="fas fa-search"></i> Search Another Tool
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                console.error('Error searching for tool:', error);
+                resultsDiv.innerHTML = `
+                    <div style="background: #f8d7da; border: 2px solid #dc3545; border-radius: 12px; padding: 30px; text-align: center;">
+                        <i class="fas fa-exclamation-circle" style="font-size: 3rem; color: #dc3545; margin-bottom: 15px;"></i>
+                        <h4 style="color: #721c24;">Error</h4>
+                        <p style="color: #721c24;">An error occurred while searching for the tool.</p>
+                        <p style="color: #666;">${error.message}</p>
+                    </div>
+                `;
+            }
+        };
+
+        // Clear activity results
+        window.clearActivityResults = function() {
+            document.getElementById('activityResults').style.display = 'none';
+            document.getElementById('activityToolSearch').value = '';
+            document.getElementById('activityToolSearch').focus();
+        };
+
+        // View tool history (shows all log entries)
+        window.viewToolHistory = async function(toolId) {
+            const resultsDiv = document.getElementById('activityResults');
+            
+            resultsDiv.innerHTML = `
+                <div class="text-center" style="padding: 40px;">
+                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+                    <p style="margin-top: 20px;">Loading tool history...</p>
+                </div>
+            `;
+
+            try {
+                const logsSnapshot = await db.collection('logtoolmovements')
+                    .where('toolId', '==', toolId)
+                    .orderBy('timestamp', 'desc')
+                    .limit(20)
+                    .get();
+
+                let historyHTML = `
+                    <div style="background: white; border: 3px solid #667eea; border-radius: 15px; padding: 30px;">
+                        <div style="text-align: center; margin-bottom: 20px;">
+                            <h4><i class="fas fa-history"></i> Tool Activity History - ${toolId}</h4>
+                            <button class="btn btn-secondary" onclick="searchToolActivity()">
+                                <i class="fas fa-arrow-left"></i> Back to Tool Details
+                            </button>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead style="background: #667eea; color: white;">
+                                    <tr>
+                                        <th>Date & Time</th>
+                                        <th>User</th>
+                                        <th>Action</th>
+                                        <th>Work Location</th>
+                                        <th>Tool Location</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                if (logsSnapshot.empty) {
+                    historyHTML += `
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">No activity history found</td>
+                        </tr>
+                    `;
+                } else {
+                    logsSnapshot.forEach(doc => {
+                        const log = doc.data();
+                        const timestamp = log.timestamp ? log.timestamp.toDate().toLocaleString('en-GB') : 'Unknown';
+                        const statusColor = log.status === 'IN' ? '#28a745' : '#dc3545';
+                        
+                        historyHTML += `
+                            <tr>
+                                <td>${timestamp}</td>
+                                <td><strong>${log.technician || 'Unknown'}</strong></td>
+                                <td><span style="color: ${statusColor}; font-weight: bold;">${log.status || 'N/A'}</span></td>
+                                <td>${log.WorkOn || 'N/A'}</td>
+                                <td>${log.location || 'N/A'}</td>
+                            </tr>
+                        `;
+                    });
+                }
+
+                historyHTML += `
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="text-muted text-center mt-3">
+                            <i class="fas fa-info-circle"></i> Showing last 20 activities
+                        </p>
+                    </div>
+                `;
+
+                resultsDiv.innerHTML = historyHTML;
+
+            } catch (error) {
+                console.error('Error loading tool history:', error);
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle"></i> Error loading history: ${error.message}
+                    </div>
+                `;
+            }
+        };
+
+        // Allow Enter key to trigger search
+        document.addEventListener('DOMContentLoaded', function() {
+            const activitySearch = document.getElementById('activityToolSearch');
+            if (activitySearch) {
+                activitySearch.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        searchToolActivity();
+                    }
+                });
+            }
+        });
     </script>
 </body>
 </html>
