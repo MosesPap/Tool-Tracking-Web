@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tool Administrator - AMS Tool Tracking</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Login Screen Styles */
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .login-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 450px;
+            width: 100%;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .login-header i {
+            font-size: 4rem;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .login-header h2 {
+            color: #333;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .login-header p {
+            color: #666;
+            font-size: 0.95rem;
+        }
+
+        .form-control {
+            border-radius: 10px;
+            border: 2px solid #e0e0e0;
+            padding: 12px 15px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+
+        .btn-login {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 12px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: white;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            color: white;
+        }
+
+        .btn-google {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 12px;
+            font-size: 1rem;
+            font-weight: bold;
+            color: #666;
+            transition: all 0.2s ease;
+        }
+
+        .btn-google:hover {
+            border-color: #4285f4;
+            color: #4285f4;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(66, 133, 244, 0.2);
+        }
+
+        .divider {
+            text-align: center;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .divider::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background: #e0e0e0;
+        }
+
+        .divider::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background: #e0e0e0;
+        }
+
+        .divider span {
+            background: white;
+            padding: 0 10px;
+            color: #999;
+            font-size: 0.9rem;
+        }
+
+        /* Admin Dashboard Styles */
+        .admin-dashboard {
+            display: none;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+
+        .admin-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .admin-header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        .admin-welcome {
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+
+        .admin-content {
+            padding: 30px 0;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-bottom: 20px;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-card .icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+
+        .stat-card h3 {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .stat-card p {
+            color: #666;
+            margin: 0;
+            font-size: 1rem;
+        }
+
+        .admin-card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            margin-bottom: 30px;
+        }
+
+        .admin-card h4 {
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .btn-admin-action {
+            border-radius: 10px;
+            padding: 10px 20px;
+            font-weight: bold;
+            transition: all 0.2s ease;
+        }
+
+        .btn-admin-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+        }
+
+        .settings-group {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .settings-group label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .user-table {
+            margin-top: 20px;
+        }
+
+        .user-table th {
+            background: #667eea;
+            color: white;
+            font-weight: bold;
+        }
+
+        .badge-admin {
+            background: #28a745;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.85rem;
+        }
+
+        .badge-user {
+            background: #6c757d;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.85rem;
+        }
+
+        .alert-custom {
+            border-radius: 10px;
+            border: none;
+            padding: 15px 20px;
+        }
+
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .login-card {
+                padding: 30px 20px;
+            }
+
+            .admin-header h1 {
+                font-size: 1.5rem;
+            }
+
+            .stat-card h3 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginSection" class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <i class="fas fa-user-shield"></i>
+                <h2>Tool Administrator</h2>
+                <p>AMS Tool Tracking System</p>
+            </div>
+
+            <div id="loginAlert" class="alert alert-custom" style="display: none;"></div>
+
+            <form id="loginForm">
+                <div class="mb-3">
+                    <label for="adminEmail" class="form-label">
+                        <i class="fas fa-envelope"></i> Email Address
+                    </label>
+                    <input type="email" class="form-control" id="adminEmail" placeholder="admin@example.com" required>
+                </div>
+                <div class="mb-3">
+                    <label for="adminPassword" class="form-label">
+                        <i class="fas fa-lock"></i> Password
+                    </label>
+                    <input type="password" class="form-control" id="adminPassword" placeholder="Enter your password" required>
+                </div>
+                <button type="submit" class="btn btn-login w-100 mb-3">
+                    <i class="fas fa-sign-in-alt"></i> Sign In
+                </button>
+            </form>
+
+            <div class="divider">
+                <span>OR</span>
+            </div>
+
+            <button id="googleSignInBtn" class="btn btn-google w-100">
+                <i class="fab fa-google"></i> Sign in with Google
+            </button>
+
+            <div class="text-center mt-4">
+                <a href="index.html" class="text-decoration-none" style="color: #667eea;">
+                    <i class="fas fa-arrow-left"></i> Back to Main App
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="adminDashboard" class="admin-dashboard">
+        <!-- Header -->
+        <div class="admin-header">
+            <div class="container">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h1><i class="fas fa-user-shield"></i> Tool Administrator</h1>
+                        <p class="admin-welcome mb-0">Welcome, <span id="adminName">Admin</span></p>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-light btn-admin-action" onclick="location.href='index.html'">
+                            <i class="fas fa-home"></i> Main App
+                        </button>
+                        <button class="btn btn-danger btn-admin-action" id="logoutBtn">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="admin-content">
+            <div class="container">
+                <!-- Statistics -->
+                <div class="row mb-4">
+                    <div class="col-md-3 col-sm-6">
+                        <div class="stat-card text-center">
+                            <div class="icon" style="color: #667eea;">
+                                <i class="fas fa-tools"></i>
+                            </div>
+                            <h3 id="totalTools">0</h3>
+                            <p>Total Tools</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="stat-card text-center">
+                            <div class="icon" style="color: #28a745;">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <h3 id="toolsIn">0</h3>
+                            <p>Tools Checked IN</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="stat-card text-center">
+                            <div class="icon" style="color: #dc3545;">
+                                <i class="fas fa-sign-out-alt"></i>
+                            </div>
+                            <h3 id="toolsOut">0</h3>
+                            <p>Tools Checked OUT</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="stat-card text-center">
+                            <div class="icon" style="color: #ff9800;">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <h3 id="totalUsers">0</h3>
+                            <p>Total Users</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <ul class="nav nav-tabs mb-4" id="adminTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab">
+                            <i class="fas fa-cog"></i> Settings
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="users-tab" data-bs-toggle="tab" data-bs-target="#users" type="button" role="tab">
+                            <i class="fas fa-users"></i> Users
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tools-tab" data-bs-toggle="tab" data-bs-target="#tools" type="button" role="tab">
+                            <i class="fas fa-toolbox"></i> Tools
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="analytics-tab" data-bs-toggle="tab" data-bs-target="#analytics" type="button" role="tab">
+                            <i class="fas fa-chart-bar"></i> Analytics
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- Tab Content -->
+                <div class="tab-content" id="adminTabsContent">
+                    <!-- Settings Tab -->
+                    <div class="tab-pane fade show active" id="settings" role="tabpanel">
+                        <div class="admin-card">
+                            <h4><i class="fas fa-cog"></i> System Settings</h4>
+                            
+                            <div class="settings-group">
+                                <label for="adminPassword">Admin Password</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="adminPasswordInput" placeholder="Enter new admin password">
+                                    <button class="btn btn-primary" id="updatePasswordBtn">
+                                        <i class="fas fa-save"></i> Update
+                                    </button>
+                                </div>
+                                <small class="text-muted">Used for sensitive operations like deleting photos from all tools</small>
+                            </div>
+
+                            <div class="settings-group">
+                                <label for="cooldownMinutes">Check-In Cooldown (Minutes)</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="cooldownMinutes" placeholder="15" min="1">
+                                    <button class="btn btn-primary" id="updateCooldownBtn">
+                                        <i class="fas fa-save"></i> Update
+                                    </button>
+                                </div>
+                                <small class="text-muted">Time users must wait before checking in a tool after checkout</small>
+                            </div>
+
+                            <div class="settings-group">
+                                <label>System Information</label>
+                                <table class="table table-sm">
+                                    <tbody>
+                                        <tr>
+                                            <td><strong>Firebase Project:</strong></td>
+                                            <td id="projectId">Loading...</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Last Settings Update:</strong></td>
+                                            <td id="lastUpdate">Loading...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Users Tab -->
+                    <div class="tab-pane fade" id="users" role="tabpanel">
+                        <div class="admin-card">
+                            <h4><i class="fas fa-users"></i> User Management</h4>
+                            
+                            <div class="mb-3">
+                                <input type="text" class="form-control" id="userSearch" placeholder="Search users by name or email...">
+                            </div>
+
+                            <div class="loading-spinner" id="usersLoading">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p>Loading users...</p>
+                            </div>
+
+                            <div class="table-responsive user-table">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Email</th>
+                                            <th>Role</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="usersTableBody">
+                                        <!-- Users will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tools Tab -->
+                    <div class="tab-pane fade" id="tools" role="tabpanel">
+                        <div class="admin-card">
+                            <h4><i class="fas fa-toolbox"></i> Tool Management</h4>
+                            
+                            <div class="mb-3">
+                                <input type="text" class="form-control" id="toolSearch" placeholder="Search tools by name, part number, or TID...">
+                            </div>
+
+                            <div class="loading-spinner" id="toolsLoading">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p>Loading tools...</p>
+                            </div>
+
+                            <div id="toolsListContainer">
+                                <!-- Tools will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Analytics Tab -->
+                    <div class="tab-pane fade" id="analytics" role="tabpanel">
+                        <div class="admin-card">
+                            <h4><i class="fas fa-chart-bar"></i> Analytics & Reports</h4>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="settings-group">
+                                        <h5>Today's Activity</h5>
+                                        <table class="table table-sm">
+                                            <tbody>
+                                                <tr>
+                                                    <td><i class="fas fa-check-circle text-success"></i> Check-Ins Today:</td>
+                                                    <td><strong id="checkInsToday">0</strong></td>
+                                                </tr>
+                                                <tr>
+                                                    <td><i class="fas fa-sign-out-alt text-danger"></i> Check-Outs Today:</td>
+                                                    <td><strong id="checkOutsToday">0</strong></td>
+                                                </tr>
+                                                <tr>
+                                                    <td><i class="fas fa-tools text-primary"></i> Active Users Today:</td>
+                                                    <td><strong id="activeUsersToday">0</strong></td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="settings-group">
+                                        <h5>Most Active Users</h5>
+                                        <div id="topUsersList">
+                                            <p class="text-muted">Loading...</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-group mt-3">
+                                <h5>Recent Activity Log</h5>
+                                <div id="recentActivityLog" style="max-height: 400px; overflow-y: auto;">
+                                    <p class="text-muted">Loading recent activities...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDmI0v_pVt_qFJlsqmw8QlIOi-4VLjyn54",
+            authDomain: "tool-tracking-system-15e84.firebaseapp.com",
+            projectId: "tool-tracking-system-15e84",
+            storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
+            messagingSenderId: "813615362050",
+            appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const storage = firebase.storage();
+
+        // DOM Elements
+        const loginSection = document.getElementById('loginSection');
+        const adminDashboard = document.getElementById('adminDashboard');
+        const loginAlert = document.getElementById('loginAlert');
+        const loginForm = document.getElementById('loginForm');
+        const googleSignInBtn = document.getElementById('googleSignInBtn');
+
+        // Show alert message
+        function showAlert(message, type = 'danger') {
+            loginAlert.className = `alert alert-custom alert-${type}`;
+            loginAlert.textContent = message;
+            loginAlert.style.display = 'block';
+            setTimeout(() => {
+                loginAlert.style.display = 'none';
+            }, 5000);
+        }
+
+        // Check if user is admin
+        async function checkAdminStatus(user) {
+            try {
+                const doc = await db.collection('technicians').doc(user.uid).get();
+                if (doc.exists) {
+                    const userData = doc.data();
+                    if (userData.isAdmin === true) {
+                        return { isAdmin: true, name: userData.fullName || user.email };
+                    }
+                }
+                return { isAdmin: false, name: null };
+            } catch (error) {
+                console.error('Error checking admin status:', error);
+                return { isAdmin: false, name: null };
+            }
+        }
+
+        // Email/Password Login
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('adminEmail').value.trim();
+            const password = document.getElementById('adminPassword').value;
+
+            try {
+                showAlert('Signing in...', 'info');
+                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+
+                // Check if user is admin
+                const { isAdmin, name } = await checkAdminStatus(user);
+                if (isAdmin) {
+                    showAlert('Success! Loading admin dashboard...', 'success');
+                    loadAdminDashboard(name);
+                } else {
+                    await auth.signOut();
+                    showAlert('Access Denied: You do not have administrator privileges.', 'danger');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                if (error.code === 'auth/user-not-found') {
+                    showAlert('User not found. Please check your email.', 'danger');
+                } else if (error.code === 'auth/wrong-password') {
+                    showAlert('Incorrect password. Please try again.', 'danger');
+                } else if (error.code === 'auth/invalid-email') {
+                    showAlert('Invalid email address.', 'danger');
+                } else {
+                    showAlert('Login failed: ' + error.message, 'danger');
+                }
+            }
+        });
+
+        // Google Sign-In
+        googleSignInBtn.addEventListener('click', async () => {
+            try {
+                showAlert('Opening Google Sign-In...', 'info');
+                const provider = new firebase.auth.GoogleAuthProvider();
+                const userCredential = await auth.signInWithPopup(provider);
+                const user = userCredential.user;
+
+                // Check if user is admin
+                const { isAdmin, name } = await checkAdminStatus(user);
+                if (isAdmin) {
+                    showAlert('Success! Loading admin dashboard...', 'success');
+                    loadAdminDashboard(name);
+                } else {
+                    await auth.signOut();
+                    showAlert('Access Denied: You do not have administrator privileges.', 'danger');
+                }
+            } catch (error) {
+                console.error('Google Sign-In error:', error);
+                if (error.code === 'auth/popup-closed-by-user') {
+                    showAlert('Sign-in cancelled.', 'warning');
+                } else {
+                    showAlert('Google Sign-In failed: ' + error.message, 'danger');
+                }
+            }
+        });
+
+        // Load Admin Dashboard
+        function loadAdminDashboard(adminName) {
+            loginSection.style.display = 'none';
+            adminDashboard.style.display = 'block';
+            document.getElementById('adminName').textContent = adminName;
+            
+            // Load all dashboard data
+            loadStatistics();
+            loadSettings();
+            loadUsers();
+            loadTools();
+            loadAnalytics();
+        }
+
+        // Load Statistics
+        async function loadStatistics() {
+            try {
+                // Total Tools
+                const toolsSnapshot = await db.collection('tools').get();
+                document.getElementById('totalTools').textContent = toolsSnapshot.size;
+
+                // Tools IN/OUT
+                let toolsIn = 0;
+                let toolsOut = 0;
+                toolsSnapshot.forEach(doc => {
+                    const status = doc.data().status;
+                    if (status === 'IN') toolsIn++;
+                    else if (status === 'OUT') toolsOut++;
+                });
+                document.getElementById('toolsIn').textContent = toolsIn;
+                document.getElementById('toolsOut').textContent = toolsOut;
+
+                // Total Users
+                const usersSnapshot = await db.collection('technicians').get();
+                document.getElementById('totalUsers').textContent = usersSnapshot.size;
+
+            } catch (error) {
+                console.error('Error loading statistics:', error);
+            }
+        }
+
+        // Load Settings
+        async function loadSettings() {
+            try {
+                const doc = await db.collection('settings').doc('admin').get();
+                if (doc.exists) {
+                    const data = doc.data();
+                    document.getElementById('adminPasswordInput').placeholder = data.AdminPassword ? '••••••••' : 'Not set';
+                    document.getElementById('cooldownMinutes').value = data.CheckINCooldownMinutes || 15;
+                    
+                    if (data.lastUpdated) {
+                        const date = data.lastUpdated.toDate();
+                        document.getElementById('lastUpdate').textContent = date.toLocaleString();
+                    } else {
+                        document.getElementById('lastUpdate').textContent = 'Never';
+                    }
+                }
+                document.getElementById('projectId').textContent = firebaseConfig.projectId;
+            } catch (error) {
+                console.error('Error loading settings:', error);
+            }
+        }
+
+        // Update Admin Password
+        document.getElementById('updatePasswordBtn').addEventListener('click', async () => {
+            const newPassword = document.getElementById('adminPasswordInput').value.trim();
+            if (!newPassword) {
+                alert('Please enter a password');
+                return;
+            }
+
+            try {
+                await db.collection('settings').doc('admin').set({
+                    AdminPassword: newPassword,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+                
+                alert('✅ Admin password updated successfully!');
+                document.getElementById('adminPasswordInput').value = '';
+                document.getElementById('adminPasswordInput').placeholder = '••••••••';
+            } catch (error) {
+                console.error('Error updating password:', error);
+                alert('Failed to update password: ' + error.message);
+            }
+        });
+
+        // Update Cooldown
+        document.getElementById('updateCooldownBtn').addEventListener('click', async () => {
+            const cooldownMinutes = parseInt(document.getElementById('cooldownMinutes').value);
+            if (!cooldownMinutes || cooldownMinutes < 1) {
+                alert('Please enter a valid number of minutes (minimum 1)');
+                return;
+            }
+
+            try {
+                await db.collection('settings').doc('admin').set({
+                    CheckINCooldownMinutes: cooldownMinutes,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+                
+                alert('✅ Cooldown period updated successfully!');
+            } catch (error) {
+                console.error('Error updating cooldown:', error);
+                alert('Failed to update cooldown: ' + error.message);
+            }
+        });
+
+        // Load Users
+        async function loadUsers() {
+            const tableBody = document.getElementById('usersTableBody');
+            const loading = document.getElementById('usersLoading');
+            
+            try {
+                loading.style.display = 'block';
+                const snapshot = await db.collection('technicians').get();
+                tableBody.innerHTML = '';
+
+                snapshot.forEach(doc => {
+                    const userData = doc.data();
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${userData.fullName || 'N/A'}</td>
+                        <td>${userData.email || 'N/A'}</td>
+                        <td>
+                            ${userData.isAdmin ? '<span class="badge-admin"><i class="fas fa-shield-alt"></i> Admin</span>' : '<span class="badge-user">User</span>'}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-${userData.isAdmin ? 'danger' : 'success'}" onclick="toggleAdmin('${doc.id}', ${!userData.isAdmin})">
+                                ${userData.isAdmin ? '<i class="fas fa-user-minus"></i> Remove Admin' : '<i class="fas fa-user-plus"></i> Make Admin'}
+                            </button>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+
+                loading.style.display = 'none';
+            } catch (error) {
+                console.error('Error loading users:', error);
+                tableBody.innerHTML = '<tr><td colspan="4" class="text-danger">Error loading users</td></tr>';
+                loading.style.display = 'none';
+            }
+        }
+
+        // Toggle Admin Status
+        window.toggleAdmin = async function(userId, makeAdmin) {
+            const confirmMsg = makeAdmin 
+                ? 'Are you sure you want to grant admin privileges to this user?' 
+                : 'Are you sure you want to remove admin privileges from this user?';
+            
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                await db.collection('technicians').doc(userId).update({
+                    isAdmin: makeAdmin
+                });
+                alert(`✅ User ${makeAdmin ? 'promoted to' : 'removed from'} admin successfully!`);
+                loadUsers(); // Reload users list
+                loadStatistics(); // Refresh stats
+            } catch (error) {
+                console.error('Error updating user:', error);
+                alert('Failed to update user: ' + error.message);
+            }
+        };
+
+        // User Search
+        document.getElementById('userSearch').addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const rows = document.querySelectorAll('#usersTableBody tr');
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(searchTerm) ? '' : 'none';
+            });
+        });
+
+        // Load Tools
+        async function loadTools() {
+            const container = document.getElementById('toolsListContainer');
+            const loading = document.getElementById('toolsLoading');
+            
+            try {
+                loading.style.display = 'block';
+                const snapshot = await db.collection('tools').limit(50).get();
+                container.innerHTML = '';
+
+                if (snapshot.empty) {
+                    container.innerHTML = '<p class="text-muted">No tools found.</p>';
+                } else {
+                    snapshot.forEach(doc => {
+                        const tool = doc.data();
+                        const card = document.createElement('div');
+                        card.className = 'settings-group';
+                        card.innerHTML = `
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 style="margin: 0; color: #333;">${tool.toolName || 'Unknown Tool'}</h6>
+                                    <p style="margin: 5px 0; color: #666;">
+                                        <strong>TID:</strong> ${doc.id} | 
+                                        <strong>P/N:</strong> ${tool.partNumber || 'N/A'} | 
+                                        <strong>Status:</strong> <span style="color: ${tool.status === 'IN' ? '#28a745' : '#dc3545'};">${tool.status || 'N/A'}</span>
+                                    </p>
+                                    <p style="margin: 0; color: #999; font-size: 0.9rem;">
+                                        Owner: ${tool.collectionName || 'N/A'} | Location: ${tool.location || 'N/A'}
+                                    </p>
+                                </div>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteTool('${doc.id}', '${tool.toolName || 'this tool'}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        `;
+                        container.appendChild(card);
+                    });
+                }
+
+                loading.style.display = 'none';
+            } catch (error) {
+                console.error('Error loading tools:', error);
+                container.innerHTML = '<p class="text-danger">Error loading tools</p>';
+                loading.style.display = 'none';
+            }
+        }
+
+        // Delete Tool
+        window.deleteTool = async function(toolId, toolName) {
+            if (!confirm(`Are you sure you want to delete "${toolName}"?\n\nThis action cannot be undone!`)) {
+                return;
+            }
+
+            try {
+                await db.collection('tools').doc(toolId).delete();
+                alert('✅ Tool deleted successfully!');
+                loadTools(); // Reload tools list
+                loadStatistics(); // Refresh stats
+            } catch (error) {
+                console.error('Error deleting tool:', error);
+                alert('Failed to delete tool: ' + error.message);
+            }
+        };
+
+        // Tool Search
+        document.getElementById('toolSearch').addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const cards = document.querySelectorAll('#toolsListContainer .settings-group');
+            cards.forEach(card => {
+                const text = card.textContent.toLowerCase();
+                card.style.display = text.includes(searchTerm) ? '' : 'none';
+            });
+        });
+
+        // Load Analytics
+        async function loadAnalytics() {
+            try {
+                // Get today's date range
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+
+                // Get today's tools (registered today)
+                const toolsSnapshot = await db.collection('tools')
+                    .where('registeredAt', '>=', firebase.firestore.Timestamp.fromDate(today))
+                    .where('registeredAt', '<', firebase.firestore.Timestamp.fromDate(tomorrow))
+                    .get();
+
+                let checkIns = 0;
+                let checkOuts = 0;
+                const activeUsers = new Set();
+
+                toolsSnapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.status === 'IN') checkIns++;
+                    else if (data.status === 'OUT') checkOuts++;
+                    if (data.loggedInTechnician) activeUsers.add(data.loggedInTechnician);
+                });
+
+                document.getElementById('checkInsToday').textContent = checkIns;
+                document.getElementById('checkOutsToday').textContent = checkOuts;
+                document.getElementById('activeUsersToday').textContent = activeUsers.size;
+
+                // Top users (simplified - just show count of tools per user)
+                const userToolCounts = {};
+                const allToolsSnapshot = await db.collection('tools').get();
+                allToolsSnapshot.forEach(doc => {
+                    const owner = doc.data().collectionName;
+                    if (owner) {
+                        userToolCounts[owner] = (userToolCounts[owner] || 0) + 1;
+                    }
+                });
+
+                const topUsers = Object.entries(userToolCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5);
+
+                const topUsersList = document.getElementById('topUsersList');
+                if (topUsers.length > 0) {
+                    topUsersList.innerHTML = topUsers.map(([user, count], index) => 
+                        `<div style="padding: 8px 0; border-bottom: 1px solid #eee;">
+                            <strong>${index + 1}. ${user}</strong> - ${count} tools
+                        </div>`
+                    ).join('');
+                } else {
+                    topUsersList.innerHTML = '<p class="text-muted">No data available</p>';
+                }
+
+                // Recent activity log (last 20 tools registered)
+                const recentSnapshot = await db.collection('tools')
+                    .orderBy('registeredAt', 'desc')
+                    .limit(20)
+                    .get();
+
+                const activityLog = document.getElementById('recentActivityLog');
+                if (!recentSnapshot.empty) {
+                    activityLog.innerHTML = recentSnapshot.docs.map(doc => {
+                        const data = doc.data();
+                        const date = data.registeredAt ? data.registeredAt.toDate().toLocaleString() : 'Unknown';
+                        const statusColor = data.status === 'IN' ? '#28a745' : '#dc3545';
+                        return `<div style="padding: 10px; border-bottom: 1px solid #eee;">
+                            <div style="display: flex; justify-content: space-between; align-items: start;">
+                                <div>
+                                    <strong>${data.toolName || 'Unknown Tool'}</strong>
+                                    <span style="color: ${statusColor}; font-weight: bold; margin-left: 10px;">${data.status || 'N/A'}</span>
+                                    <div style="font-size: 0.9rem; color: #666; margin-top: 5px;">
+                                        ${data.loggedInTechnician || 'Unknown'} | ${data.location || 'No location'}
+                                    </div>
+                                </div>
+                                <small style="color: #999;">${date}</small>
+                            </div>
+                        </div>`;
+                    }).join('');
+                } else {
+                    activityLog.innerHTML = '<p class="text-muted">No recent activity</p>';
+                }
+
+            } catch (error) {
+                console.error('Error loading analytics:', error);
+            }
+        }
+
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            if (confirm('Are you sure you want to logout?')) {
+                try {
+                    await auth.signOut();
+                    loginSection.style.display = 'flex';
+                    adminDashboard.style.display = 'none';
+                    document.getElementById('adminEmail').value = '';
+                    document.getElementById('adminPassword').value = '';
+                    showAlert('Logged out successfully', 'success');
+                } catch (error) {
+                    console.error('Logout error:', error);
+                    alert('Logout failed: ' + error.message);
+                }
+            }
+        });
+
+        // Check auth state on page load
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                const { isAdmin, name } = await checkAdminStatus(user);
+                if (isAdmin) {
+                    loadAdminDashboard(name);
+                } else {
+                    await auth.signOut();
+                    showAlert('Access Denied: Admin privileges required.', 'danger');
+                }
+            } else {
+                loginSection.style.display = 'flex';
+                adminDashboard.style.display = 'none';
+            }
+        });
+
+        // Session timeout (30 minutes of inactivity)
+        let sessionTimeout;
+        function resetSessionTimeout() {
+            clearTimeout(sessionTimeout);
+            sessionTimeout = setTimeout(async () => {
+                if (auth.currentUser) {
+                    alert('Session expired due to inactivity. Please login again.');
+                    await auth.signOut();
+                }
+            }, 30 * 60 * 1000); // 30 minutes
+        }
+
+        // Reset timeout on user activity
+        ['mousedown', 'keydown', 'scroll', 'touchstart'].forEach(event => {
+            document.addEventListener(event, resetSessionTimeout, true);
+        });
+    </script>
+</body>
+</html>
+
