@@ -597,8 +597,10 @@
         }
 
         .filter-time-btn.active {
-            background: #667eea !important;
-            border-color: #667eea !important;
+            background: #ff9800 !important;
+            border-color: #ff9800 !important;
+            color: white !important;
+            font-weight: bold !important;
         }
 
         .user-tool-card {
@@ -1213,7 +1215,7 @@
 
                                 <!-- Time Filters -->
                                 <div class="mb-3 d-flex gap-2 flex-wrap">
-                                    <button class="btn btn-sm btn-primary filter-time-btn active" onclick="filterToolHistory('today', this)">
+                                    <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('today', this)">
                                         <i class="fas fa-calendar-day"></i> Today
                                     </button>
                                     <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('week', this)">
@@ -1225,7 +1227,7 @@
                                     <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('year', this)">
                                         <i class="fas fa-calendar"></i> Last Year
                                     </button>
-                                    <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('all', this)">
+                                    <button class="btn btn-sm btn-primary filter-time-btn active" onclick="filterToolHistory('all', this)">
                                         <i class="fas fa-infinity"></i> All Time
                                     </button>
                                 </div>
@@ -2050,8 +2052,8 @@
             // Load all tool history for this user
             await loadUserToolHistory(userName);
             
-            // Apply default filter (today)
-            filterToolHistory('today');
+            // Apply default filter (all time)
+            filterToolHistory('all');
         };
 
         // Load all tool history for a user from logtoolmovements collection
