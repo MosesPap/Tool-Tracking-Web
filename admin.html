@@ -460,55 +460,6 @@
             display: none;
         }
 
-        /* Mobile layout for user cards - screens below 600px */
-        @media (max-width: 600px) {
-            .user-tool-card {
-                padding: 15px !important;
-                text-align: center !important;
-            }
-
-            .user-tool-card .d-flex {
-                flex-direction: column !important;
-                align-items: center !important;
-            }
-
-            .user-tool-card h6 {
-                margin-bottom: 8px !important;
-                font-size: 1rem !important;
-                color: #333 !important;
-            }
-
-            .user-tool-card small {
-                margin-bottom: 10px !important;
-                color: #666 !important;
-            }
-
-            /* Status badges positioned at bottom center */
-            .user-tool-card .out-badge,
-            .user-tool-card span[style*="color: #28a745"] {
-                margin-top: 10px !important;
-                align-self: center !important;
-                font-weight: bold !important;
-            }
-
-            .user-tool-card .out-badge {
-                background: linear-gradient(135deg, #dc3545, #c82333) !important;
-                box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3) !important;
-                border-radius: 20px !important;
-                padding: 6px 15px !important;
-                font-size: 0.9rem !important;
-            }
-
-            .user-tool-card span[style*="color: #28a745"] {
-                background: linear-gradient(135deg, #28a745, #20c997) !important;
-                color: white !important;
-                padding: 6px 15px !important;
-                border-radius: 20px !important;
-                box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3) !important;
-                font-size: 0.9rem !important;
-            }
-        }
-
         @media (max-width: 768px) {
             .user-table {
                 display: none;
@@ -614,6 +565,7 @@
             overflow: hidden;
             box-shadow: 0 4px 15px rgba(0,0,0,0.08);
             position: relative;
+            text-align: center;
         }
 
         .user-tool-card:hover {
@@ -633,14 +585,49 @@
             border-radius: 15px 15px 0 0;
         }
 
-        .user-tool-card .out-badge {
-            background: #dc3545;
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: bold;
+        /* Universal layout for all devices - status at bottom center */
+        .user-tool-card .d-flex {
+            flex-direction: column !important;
+            align-items: center !important;
         }
+
+        .user-tool-card h6 {
+            margin-bottom: 8px !important;
+            font-size: 1rem !important;
+            color: #333 !important;
+        }
+
+        .user-tool-card small {
+            margin-bottom: 15px !important;
+            color: #666 !important;
+        }
+
+        /* Status badges positioned at bottom center for all devices */
+        .user-tool-card .out-badge,
+        .user-tool-card span[style*="color: #28a745"] {
+            margin-top: 10px !important;
+            align-self: center !important;
+            font-weight: bold !important;
+        }
+
+        .user-tool-card .out-badge {
+            background: linear-gradient(135deg, #dc3545, #c82333) !important;
+            box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3) !important;
+            border-radius: 20px !important;
+            padding: 6px 15px !important;
+            font-size: 0.9rem !important;
+            color: white !important;
+        }
+
+        .user-tool-card span[style*="color: #28a745"] {
+            background: linear-gradient(135deg, #28a745, #20c997) !important;
+            color: white !important;
+            padding: 6px 15px !important;
+            border-radius: 20px !important;
+            box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3) !important;
+            font-size: 0.9rem !important;
+        }
+
 
         .badge-admin {
             background: #28a745;
