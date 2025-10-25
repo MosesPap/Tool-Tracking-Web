@@ -2057,14 +2057,30 @@
             // Apply default filter (all time) with a small delay to ensure DOM is ready
             setTimeout(() => {
                 console.log('Applying default filter: all');
+                
+                // First, manually activate the All Time button
+                const allTimeBtn = document.querySelector('button[onclick*="filterToolHistory(\'all\')"]');
+                if (allTimeBtn) {
+                    console.log('Found All Time button, manually activating...');
+                    allTimeBtn.classList.add('active');
+                } else {
+                    console.log('All Time button not found, trying alternative selectors...');
+                    const altBtn = document.querySelector('[onclick*="filterToolHistory(\'all\')"]');
+                    if (altBtn) {
+                        altBtn.classList.add('active');
+                        console.log('Activated with alternative selector');
+                    }
+                }
+                
+                // Then apply the filter
                 filterToolHistory('all');
                 
                 // Double-check the button state after a short delay
                 setTimeout(() => {
-                    const allTimeBtn = document.querySelector('[onclick*="filterToolHistory(\'all\')"]');
-                    console.log('All Time button after filter:', allTimeBtn);
-                    console.log('Button classes:', allTimeBtn ? allTimeBtn.className : 'Button not found');
-                    console.log('Button computed styles:', allTimeBtn ? window.getComputedStyle(allTimeBtn).backgroundColor : 'Button not found');
+                    const finalBtn = document.querySelector('button[onclick*="filterToolHistory(\'all\')"]');
+                    console.log('Final All Time button check:', finalBtn);
+                    console.log('Button classes:', finalBtn ? finalBtn.className : 'Button not found');
+                    console.log('Button computed styles:', finalBtn ? window.getComputedStyle(finalBtn).backgroundColor : 'Button not found');
                 }, 200);
             }, 100);
         };
@@ -2108,7 +2124,7 @@
                 clickedButton.classList.add('active');
             } else {
                 // Find the button with the matching period and activate it
-                const targetButton = document.querySelector(`[onclick*="filterToolHistory('${period}')"]`);
+                const targetButton = document.querySelector(`button[onclick*="filterToolHistory('${period}')"]`);
                 console.log(`Looking for button with period: ${period}`);
                 console.log(`Found target button:`, targetButton);
                 if (targetButton) {
@@ -2116,6 +2132,13 @@
                     console.log(`Activated button for period: ${period}`);
                 } else {
                     console.log(`No button found for period: ${period}`);
+                    // Try alternative selectors
+                    const altButton = document.querySelector(`[onclick*="filterToolHistory('${period}')"]`);
+                    console.log(`Alternative selector found:`, altButton);
+                    if (altButton) {
+                        altButton.classList.add('active');
+                        console.log(`Activated button with alternative selector for period: ${period}`);
+                    }
                 }
             }
             
