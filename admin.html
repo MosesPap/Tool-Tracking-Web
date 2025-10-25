@@ -2058,18 +2058,21 @@
             setTimeout(() => {
                 console.log('Applying default filter: all');
                 
-                // First, manually activate the All Time button
-                const allTimeBtn = document.querySelector('button[onclick*="filterToolHistory(\'all\')"]');
+                // First, manually activate the All Time button using a more reliable selector
+                const allTimeBtn = document.querySelector('#toolHistorySection button[onclick*="all"]');
                 if (allTimeBtn) {
-                    console.log('Found All Time button, manually activating...');
+                    console.log('Found All Time button with ID selector, manually activating...');
                     allTimeBtn.classList.add('active');
                 } else {
-                    console.log('All Time button not found, trying alternative selectors...');
-                    const altBtn = document.querySelector('[onclick*="filterToolHistory(\'all\')"]');
-                    if (altBtn) {
-                        altBtn.classList.add('active');
-                        console.log('Activated with alternative selector');
-                    }
+                    console.log('All Time button not found with ID selector, trying text content...');
+                    // Try finding by text content
+                    const buttons = document.querySelectorAll('#toolHistorySection .filter-time-btn');
+                    buttons.forEach(btn => {
+                        if (btn.textContent.includes('All Time')) {
+                            console.log('Found All Time button by text content, activating...');
+                            btn.classList.add('active');
+                        }
+                    });
                 }
                 
                 // Then apply the filter
@@ -2077,7 +2080,9 @@
                 
                 // Double-check the button state after a short delay
                 setTimeout(() => {
-                    const finalBtn = document.querySelector('button[onclick*="filterToolHistory(\'all\')"]');
+                    const finalBtn = document.querySelector('#toolHistorySection button[onclick*="all"]') || 
+                                   Array.from(document.querySelectorAll('#toolHistorySection .filter-time-btn'))
+                                        .find(btn => btn.textContent.includes('All Time'));
                     console.log('Final All Time button check:', finalBtn);
                     console.log('Button classes:', finalBtn ? finalBtn.className : 'Button not found');
                     console.log('Button computed styles:', finalBtn ? window.getComputedStyle(finalBtn).backgroundColor : 'Button not found');
@@ -2123,22 +2128,34 @@
             if (clickedButton) {
                 clickedButton.classList.add('active');
             } else {
-                // Find the button with the matching period and activate it
-                const targetButton = document.querySelector(`button[onclick*="filterToolHistory('${period}')"]`);
+                // Find the button with the matching period and activate it using multiple approaches
                 console.log(`Looking for button with period: ${period}`);
+                
+                // Try different selectors
+                let targetButton = document.querySelector(`#toolHistorySection button[onclick*="${period}"]`);
+                
+                if (!targetButton) {
+                    // Try finding by text content
+                    const buttons = document.querySelectorAll('#toolHistorySection .filter-time-btn');
+                    const periodTexts = {
+                        'today': 'Today',
+                        'week': 'Last Week', 
+                        'month': 'Last Month',
+                        'year': 'Last Year',
+                        'all': 'All Time'
+                    };
+                    
+                    targetButton = Array.from(buttons).find(btn => 
+                        btn.textContent.includes(periodTexts[period])
+                    );
+                }
+                
                 console.log(`Found target button:`, targetButton);
                 if (targetButton) {
                     targetButton.classList.add('active');
                     console.log(`Activated button for period: ${period}`);
                 } else {
                     console.log(`No button found for period: ${period}`);
-                    // Try alternative selectors
-                    const altButton = document.querySelector(`[onclick*="filterToolHistory('${period}')"]`);
-                    console.log(`Alternative selector found:`, altButton);
-                    if (altButton) {
-                        altButton.classList.add('active');
-                        console.log(`Activated button with alternative selector for period: ${period}`);
-                    }
                 }
             }
             
