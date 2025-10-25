@@ -723,15 +723,13 @@
                 padding: 5px !important;
                 gap: 5px !important;
                 margin-bottom: 15px !important;
-                display: flex !important;
-                flex-wrap: wrap !important;
-                justify-content: space-between !important;
+                display: grid !important;
+                grid-template-columns: 1fr 1fr !important;
+                justify-items: center !important;
             }
 
             .nav-button {
-                flex: 0 0 calc(50% - 2px) !important;
-                width: calc(50% - 2px) !important;
-                max-width: calc(50% - 2px) !important;
+                width: 100% !important;
                 padding: 8px 10px !important;
                 font-size: 0.8rem !important;
                 margin: 1px !important;
