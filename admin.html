@@ -1912,21 +1912,26 @@
                 const toolsSnapshot = await db.collection('tools').where('status', '==', 'OUT').get();
                 const outCounts = {};
                 
+                console.log('=== DEBUGGING OUT TOOLS COUNT ===');
                 toolsSnapshot.forEach(doc => {
-                    const owner = doc.data().currentOwner || 'Unknown';
+                    const owner = doc.data().technician || 'Unknown';
                     outCounts[owner] = (outCounts[owner] || 0) + 1;
+                    console.log(`Tool ${doc.id}: technician="${owner}", count=${outCounts[owner]}`);
                 });
+                console.log('Final outCounts:', outCounts);
 
                 // Collect all users and sort alphabetically
                 const users = [];
                 snapshot.forEach(doc => {
                     const userData = doc.data();
                     const userName = userData.fullName || 'Unknown';
+                    const outCount = outCounts[userName] || 0;
+                    console.log(`Technician: "${userName}", outCount: ${outCount}`);
                     users.push({
                         id: doc.id,
                         name: userName,
                         email: userData.email || 'N/A',
-                        outCount: outCounts[userName] || 0
+                        outCount: outCount
                     });
                 });
 
