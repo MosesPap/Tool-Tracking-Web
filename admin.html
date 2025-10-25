@@ -1257,6 +1257,21 @@
                                     </div>
                                 </div>
 
+                                <!-- Bulk Check-in Controls (hidden by default) -->
+                                <div id="bulkCheckinControls" class="mb-3" style="display: none;">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="selectAllTools" onchange="toggleSelectAllTools()">
+                                            <label class="form-check-label" for="selectAllTools">
+                                                <strong>Select All OUT Tools</strong>
+                                            </label>
+                                        </div>
+                                        <button class="btn btn-success" onclick="checkInSelectedTools()">
+                                            <i class="fas fa-check-circle"></i> Check In Selected Tools
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <!-- Tool History Cards -->
                                 <div id="toolHistoryCards">
                                     <p class="text-muted">Select a time period or search for a specific tool</p>
@@ -2191,8 +2206,12 @@
         // Toggle OUT tools only
         window.toggleOutToolsOnly = async function() {
             const showOutOnly = document.getElementById('showOutToolsOnly').checked;
+            const bulkControls = document.getElementById('bulkCheckinControls');
             
             if (showOutOnly) {
+                // Show bulk check-in controls
+                bulkControls.style.display = 'block';
+                
                 // Fetch current OUT tools for this user from tools collection
                 const snapshot = await db.collection('tools')
                     .where('technician', '==', currentToolsUser.name)
@@ -2219,8 +2238,80 @@
                 
                 displayToolHistory(outTools, true);
             } else {
+                // Hide bulk check-in controls
+                bulkControls.style.display = 'none';
+                
                 // Show filtered history
                 filterToolHistory(currentToolsFilter);
+            }
+        };
+
+        // Toggle select all tools checkbox
+        window.toggleSelectAllTools = function() {
+            const selectAllCheckbox = document.getElementById('selectAllTools');
+            const toolCheckboxes = document.querySelectorAll('.tool-checkbox');
+            
+            toolCheckboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+        };
+
+        // Check in selected tools
+        window.checkInSelectedTools = async function() {
+            const selectedCheckboxes = document.querySelectorAll('.tool-checkbox:checked');
+            
+            if (selectedCheckboxes.length === 0) {
+                alert('Please select at least one tool to check in.');
+                return;
+            }
+            
+            const confirmMessage = `Are you sure you want to check in ${selectedCheckboxes.length} tool(s)?`;
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+            
+            try {
+                const batch = db.batch();
+                const toolIds = [];
+                
+                selectedCheckboxes.forEach(checkbox => {
+                    const toolId = checkbox.getAttribute('data-tool-id');
+                    toolIds.push(toolId);
+                    
+                    // Update tool status to IN
+                    const toolRef = db.collection('tools').doc(toolId);
+                    batch.update(toolRef, {
+                        status: 'IN',
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                        technician: currentToolsUser.name
+                    });
+                });
+                
+                // Commit the batch update
+                await batch.commit();
+                
+                // Log the check-in action
+                const logPromises = toolIds.map(toolId => {
+                    return db.collection('logtoolmovements').add({
+                        toolId: toolId,
+                        technician: currentToolsUser.name,
+                        action: 'CHECK-IN',
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                        WorkOn: 'Admin Check-in',
+                        status: 'IN'
+                    });
+                });
+                
+                await Promise.all(logPromises);
+                
+                alert(`Successfully checked in ${toolIds.length} tool(s)!`);
+                
+                // Refresh the OUT tools list
+                await toggleOutToolsOnly();
+                
+            } catch (error) {
+                console.error('Error checking in tools:', error);
+                alert('Error checking in tools. Please try again.');
             }
         };
 
@@ -2316,55 +2407,105 @@
                 
                 const card = document.createElement('div');
                 card.className = `register-tool-card ${statusClass}`;
-                card.onclick = function() {
-                    showToolHistoryDetails(toolId, toolEntries);
-                };
                 
-                card.innerHTML = `
-                    <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000; text-align: left;">
-                        ${index + 1}. ${latestEntry.toolName || 'Unknown Tool'}
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <div style="color: #666; font-size: 0.9rem;">
-                            ${time}
+                // For OUT tools when toggle is enabled, add checkbox instead of click handler
+                if (isCurrentOut) {
+                    card.style.position = 'relative';
+                    card.innerHTML = `
+                        <div style="position: absolute; top: 10px; right: 10px;">
+                            <input type="checkbox" class="form-check-input tool-checkbox" data-tool-id="${toolId}" style="transform: scale(1.2);">
                         </div>
-                        <div>
-                            <span style="color: black; font-weight: bold;">WorkOn:</span> 
-                            <span style="color: #666; font-weight: bold;">${workOnValue}</span>
+                        <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000; text-align: left; padding-right: 30px;">
+                            ${index + 1}. ${latestEntry.toolName || 'Unknown Tool'}
                         </div>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                        <div style="text-align: left;">
-                            <span style="color: black; font-weight: bold; text-decoration: underline;">TID</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div style="color: #666; font-size: 0.9rem;">
+                                ${time}
+                            </div>
+                            <div>
+                                <span style="color: black; font-weight: bold;">WorkOn:</span> 
+                                <span style="color: #666; font-weight: bold;">${workOnValue}</span>
+                            </div>
                         </div>
-                        <div style="text-align: center;">
-                            <span style="color: black; font-weight: bold; text-decoration: underline;">P/N</span>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <div style="text-align: left;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">TID</span>
+                            </div>
+                            <div style="text-align: center;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">P/N</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">STS</span>
+                            </div>
                         </div>
-                        <div style="text-align: right;">
-                            <span style="color: black; font-weight: bold; text-decoration: underline;">STS</span>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <div style="text-align: left;">
+                                <span style="color: #666; font-weight: bold;">${toolId}</span>
+                            </div>
+                            <div style="text-align: center;">
+                                <span style="color: #666; font-weight: bold;">${serialNumber}</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <span class="badge bg-danger" style="font-weight: bold; border-radius: 15px; padding: 4px 8px;">OUT</span>
+                            </div>
                         </div>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                        <div style="text-align: left;">
-                            <span style="color: #666; font-weight: bold;">${toolId}</span>
+                        <div style="margin-bottom: 12px; text-align: left;">
+                            <span style="color: black; font-weight: bold;">Cal Due Date:</span> 
+                            <span style="color: blue; font-weight: bold;">${calDueDate}</span>
                         </div>
-                        <div style="text-align: center;">
-                            <span style="color: #666; font-weight: bold;">${serialNumber}</span>
+                    `;
+                } else {
+                    // Normal history view with click handler
+                    card.onclick = function() {
+                        showToolHistoryDetails(toolId, toolEntries);
+                    };
+                    
+                    card.innerHTML = `
+                        <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000; text-align: left;">
+                            ${index + 1}. ${latestEntry.toolName || 'Unknown Tool'}
                         </div>
-                        <div style="text-align: right;">
-                            <span class="badge bg-${status === 'IN' || status === 'CHECK-IN' ? 'success' : 'danger'}" style="font-weight: bold; border-radius: 15px; padding: 4px 8px;">${status}</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div style="color: #666; font-size: 0.9rem;">
+                                ${time}
+                            </div>
+                            <div>
+                                <span style="color: black; font-weight: bold;">WorkOn:</span> 
+                                <span style="color: #666; font-weight: bold;">${workOnValue}</span>
+                            </div>
                         </div>
-                    </div>
-                    <div style="margin-bottom: 12px; text-align: left;">
-                        <span style="color: black; font-weight: bold;">Cal Due Date:</span> 
-                        <span style="color: blue; font-weight: bold;">${calDueDate}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div style="color: blue; font-weight: normal; cursor: pointer;">
-                            Click For Details (${toolEntries.length} ${toolEntries.length === 1 ? 'entry' : 'entries'})
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <div style="text-align: left;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">TID</span>
+                            </div>
+                            <div style="text-align: center;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">P/N</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">STS</span>
+                            </div>
                         </div>
-                    </div>
-                `;
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <div style="text-align: left;">
+                                <span style="color: #666; font-weight: bold;">${toolId}</span>
+                            </div>
+                            <div style="text-align: center;">
+                                <span style="color: #666; font-weight: bold;">${serialNumber}</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <span class="badge bg-${status === 'IN' || status === 'CHECK-IN' ? 'success' : 'danger'}" style="font-weight: bold; border-radius: 15px; padding: 4px 8px;">${status}</span>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 12px; text-align: left;">
+                            <span style="color: black; font-weight: bold;">Cal Due Date:</span> 
+                            <span style="color: blue; font-weight: bold;">${calDueDate}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="color: blue; font-weight: normal; cursor: pointer;">
+                                Click For Details (${toolEntries.length} ${toolEntries.length === 1 ? 'entry' : 'entries'})
+                            </div>
+                        </div>
+                    `;
+                }
                 
                 container.appendChild(card);
             });
