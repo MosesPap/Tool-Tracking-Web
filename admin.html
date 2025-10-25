@@ -2178,7 +2178,7 @@
             if (showOutOnly) {
                 // Fetch current OUT tools for this user from tools collection
                 const snapshot = await db.collection('tools')
-                    .where('currentOwner', '==', currentToolsUser.name)
+                    .where('technician', '==', currentToolsUser.name)
                     .where('status', '==', 'OUT')
                     .get();
                 
