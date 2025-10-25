@@ -560,6 +560,7 @@
             margin-bottom: 10px;
             cursor: pointer;
             transition: all 0.2s ease;
+            overflow: hidden;
         }
 
         .user-tool-card:hover {
@@ -1943,7 +1944,7 @@
                                     <h6 class="mb-1"><i class="fas fa-user"></i> ${user.name}</h6>
                                     <small class="text-muted">${user.email}</small>
                                 </div>
-                                ${user.outCount > 0 ? `<span class="out-badge">OUT: ${user.outCount}</span>` : '<span style="color: #28a745;"><i class="fas fa-check-circle"></i> All IN</span>'}
+                                ${user.outCount > 0 ? `<span class="out-badge">OUT: ${user.outCount}</span>` : '<span style="color: #28a745; font-size: 0.85rem; white-space: nowrap;"><i class="fas fa-check-circle"></i> All IN</span>'}
                             </div>
                         </div>
                     `;
