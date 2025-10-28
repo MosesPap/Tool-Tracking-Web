@@ -769,32 +769,40 @@
                 border-radius: 0 !important;
             }
 
-            /* DEBUGGING: Test if media query is working */
+            /* DEBUGGING: Remove media query temporarily to test */
+        }
+
+        /* Test without media query */
+        #toolHistoryCards .register-tool-card {
+            border: 3px solid blue !important;
+            background: yellow !important;
+        }
+
+        #toolHistoryCards .register-tool-card,
+        #toolHistoryCards .register-tool-card * {
+            font-size: 1.5rem !important;
+            line-height: 1.6 !important;
+        }
+
+        #toolHistoryCards .register-tool-card > div:first-child {
+            font-size: 1.8rem !important;
+        }
+
+        #toolHistoryCards .register-tool-card .badge {
+            font-size: 1.3rem !important;
+            padding: 8px 16px !important;
+        }
+
+        #toolHistoryCards .register-tool-card {
+            padding: 20px !important;
+            margin-bottom: 12px !important;
+        }
+
+        /* Now add media query for desktop */
+        @media (min-width: 769px) {
             #toolHistoryCards .register-tool-card {
-                border: 3px solid blue !important;
-            }
-
-            /* Larger fonts for tool cards in modals on desktop and tablets */
-            #toolHistoryCards .register-tool-card,
-            #toolHistoryCards .register-tool-card * {
-                font-size: 1.5rem !important;
-                line-height: 1.6 !important;
-            }
-
-            /* Make first div (tool name) larger */
-            #toolHistoryCards .register-tool-card > div:first-child {
-                font-size: 1.8rem !important;
-            }
-
-            #toolHistoryCards .register-tool-card .badge {
-                font-size: 1.3rem !important;
-                padding: 8px 16px !important;
-            }
-
-            /* Increase card padding */
-            #toolHistoryCards .register-tool-card {
-                padding: 20px !important;
-                margin-bottom: 12px !important;
+                border: 3px solid green !important;
+                background: yellow !important;
             }
         }
 

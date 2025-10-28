@@ -1227,44 +1227,48 @@
           }
         }
 
-        /* DEBUGGING: Test if media query is working */
-        @media (min-width: 769px) {
-          /* DEBUG: Add visible background to confirm rules are being applied */
-          .register-tool-card {
-            border: 3px solid red !important;
-          }
+        /* DEBUGGING: Test without media query to see if selector works */
+        .register-tool-card {
+          border: 3px solid red !important;
+          background: yellow !important;
         }
 
-        /* Larger fonts for tool cards in modals on desktop and tablets */
+        /* Force larger fonts - testing without media query first */
+        .register-tool-card div,
+        .register-tool-card span,
+        .register-tool-card p,
+        .register-tool-card h6,
+        .register-tool-card h5,
+        .register-tool-card small,
+        .register-tool-card strong {
+          font-size: 1.5rem !important;
+        }
+
+        /* First div is the tool name - make it larger */
+        .register-tool-card > div:first-child {
+          font-size: 1.8rem !important;
+          font-weight: bold !important;
+        }
+
+        /* Badge styling */
+        .register-tool-card .badge {
+          font-size: 1.3rem !important;
+          padding: 8px 16px !important;
+          font-weight: bold !important;
+        }
+
+        /* Increase card padding for better readability */
+        .register-tool-card {
+          padding: 20px !important;
+          margin-bottom: 12px !important;
+        }
+
+        /* Now add media query for desktop/tablet only */
         @media (min-width: 769px) {
-          /* Force larger fonts - targeting every possible element inside register-tool-card */
-          .register-tool-card div,
-          .register-tool-card span,
-          .register-tool-card p,
-          .register-tool-card h6,
-          .register-tool-card h5,
-          .register-tool-card small,
-          .register-tool-card strong {
-            font-size: 1.5rem !important;
-          }
-
-          /* First div is the tool name - make it larger */
-          .register-tool-card > div:first-child {
-            font-size: 1.8rem !important;
-            font-weight: bold !important;
-          }
-
-          /* Badge styling */
-          .register-tool-card .badge {
-            font-size: 1.3rem !important;
-            padding: 8px 16px !important;
-            font-weight: bold !important;
-          }
-
-          /* Increase card padding for better readability */
+          /* Keep yellow background but remove border on desktop */
           .register-tool-card {
-            padding: 20px !important;
-            margin-bottom: 12px !important;
+            border: 3px solid green !important;
+            background: yellow !important;
           }
         }
     </style>
