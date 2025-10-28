@@ -648,6 +648,49 @@
         .register-tool-card.calibration { background: #E3F2FD; }
         .register-tool-card.in { background: #E8F5E9; }
         
+        /* Larger text for tool cards on tablets and desktops */
+        @media (min-width: 768px) {
+            .register-tool-card {
+                font-size: 1.2rem !important;
+                padding: 25px !important;
+            }
+
+            .register-tool-card .badge {
+                font-size: 1.1rem !important;
+                padding: 8px 15px !important;
+            }
+
+            .register-tool-card h6,
+            .register-tool-card div {
+                font-size: 1.3rem !important;
+            }
+
+            .register-tool-card span {
+                font-size: 1.15rem !important;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .register-tool-card {
+                font-size: 1.4rem !important;
+                padding: 30px !important;
+            }
+
+            .register-tool-card .badge {
+                font-size: 1.2rem !important;
+                padding: 10px 18px !important;
+            }
+
+            .register-tool-card h6,
+            .register-tool-card div {
+                font-size: 1.5rem !important;
+            }
+
+            .register-tool-card span {
+                font-size: 1.3rem !important;
+            }
+        }
+        
         /* Search Tools Card Styles - matching My Tools alternating colors and floating effect */
         .search-tool-bg1 { background: #fff; }
         .search-tool-bg2 { background: #fff7e6; }
