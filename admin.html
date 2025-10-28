@@ -856,12 +856,27 @@
             z-index: 99999 !important;
         }
 
+        .modal-backdrop.show + #toolHistoryModal {
+            z-index: 99999 !important;
+        }
+
         #toolHistoryModal .modal-backdrop {
             z-index: 99998 !important;
         }
 
         #toolHistoryModal .modal-dialog {
             z-index: 99999 !important;
+            margin: 0 !important;
+            max-width: 100% !important;
+        }
+
+        /* Full screen modal styling */
+        .modal-fullscreen {
+            width: 100vw !important;
+            max-width: 100vw !important;
+            height: 100vh !important;
+            max-height: 100vh !important;
+            margin: 0 !important;
         }
 
             .section-modal-header h3 {
@@ -2627,21 +2642,21 @@
             
             historyHtml += '</div>';
             
-            // Show in Bootstrap modal
+            // Show in Bootstrap modal - full screen
             const modalHtml = `
-                <div class="modal fade" id="toolHistoryModal" tabindex="-1">
-                    <div class="modal-dialog modal-lg">
-                        <div class="modal-content">
-                            <div class="modal-header" style="background: #667eea; color: white;">
+                <div class="modal fade" id="toolHistoryModal" tabindex="-1" style="z-index: 99999 !important;">
+                    <div class="modal-dialog modal-fullscreen">
+                        <div class="modal-content" style="height: 100vh; border-radius: 0; border: none;">
+                            <div class="modal-header" style="background: #667eea; color: white; border-bottom: 2px solid #5a6fd8;">
                                 <h5 class="modal-title">
                                     <i class="fas fa-history"></i> Complete History - ${toolId}
                                 </h5>
                                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                             </div>
-                            <div class="modal-body">
+                            <div class="modal-body" style="overflow-y: auto; max-height: calc(100vh - 120px);">
                                 ${historyHtml}
                             </div>
-                            <div class="modal-footer">
+                            <div class="modal-footer" style="background: #f5f7fa; border-top: 2px solid #dee2e6;">
                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                             </div>
                         </div>
