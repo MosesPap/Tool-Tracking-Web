@@ -1227,42 +1227,44 @@
           }
         }
 
+        /* DEBUGGING: Test if media query is working */
+        @media (min-width: 769px) {
+          /* DEBUG: Add visible background to confirm rules are being applied */
+          .register-tool-card {
+            border: 3px solid red !important;
+          }
+        }
+
         /* Larger fonts for tool cards in modals on desktop and tablets */
         @media (min-width: 769px) {
           /* Force larger fonts - targeting every possible element inside register-tool-card */
-          .modal .modal-body .register-tool-card div,
-          .modal .modal-body .register-tool-card span,
-          .modal .modal-body .register-tool-card p,
-          .modal .modal-body .register-tool-card h6,
-          .modal .modal-body .register-tool-card h5,
-          .modal .modal-body .register-tool-card small,
-          .modal .modal-body .register-tool-card strong {
+          .register-tool-card div,
+          .register-tool-card span,
+          .register-tool-card p,
+          .register-tool-card h6,
+          .register-tool-card h5,
+          .register-tool-card small,
+          .register-tool-card strong {
             font-size: 1.5rem !important;
           }
 
           /* First div is the tool name - make it larger */
-          .modal .modal-body .register-tool-card > div:first-child {
+          .register-tool-card > div:first-child {
             font-size: 1.8rem !important;
             font-weight: bold !important;
           }
 
           /* Badge styling */
-          .modal .modal-body .register-tool-card .badge {
+          .register-tool-card .badge {
             font-size: 1.3rem !important;
             padding: 8px 16px !important;
             font-weight: bold !important;
           }
 
           /* Increase card padding for better readability */
-          .modal .modal-body .register-tool-card {
+          .register-tool-card {
             padding: 20px !important;
             margin-bottom: 12px !important;
-            min-height: auto !important;
-          }
-
-          /* Labels should be bold and larger */
-          .modal .modal-body .register-tool-card span[style*="font-weight: bold"] {
-            font-size: 1.5rem !important;
           }
         }
     </style>
