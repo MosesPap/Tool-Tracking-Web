@@ -576,17 +576,27 @@
             padding: 20px;
             margin-bottom: 15px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             overflow: hidden;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08),
+                        0 1px 3px rgba(0,0,0,0.1);
             position: relative;
             text-align: center;
+            transform: perspective(1000px) rotateX(0deg);
         }
 
         .user-tool-card:hover {
-            transform: translateY(-5px) scale(1.02);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            transform: perspective(1000px) rotateX(-2deg) translateY(-8px) scale(1.02);
+            box-shadow: 0 12px 40px rgba(102, 126, 234, 0.25),
+                        0 6px 20px rgba(0,0,0,0.15),
+                        inset 0 1px 0 rgba(255,255,255,0.9);
             border-color: #667eea;
+        }
+
+        .user-tool-card:active {
+            transform: perspective(1000px) rotateX(0deg) translateY(-2px) scale(0.98);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.2),
+                        0 3px 10px rgba(0,0,0,0.1);
         }
 
         .user-tool-card::before {
@@ -742,6 +752,15 @@
 
             .section-modal-header {
                 border-radius: 20px 20px 0 0;
+            }
+        }
+
+        /* Single vertical row for user cards on very small screens (below 500px) */
+        @media (max-width: 500px) {
+            #toolsUsersList .col-sm-6,
+            #toolsUsersList .col-md-4 {
+                flex: 0 0 100% !important;
+                max-width: 100% !important;
             }
         }
 
@@ -2015,18 +2034,24 @@
                     });
                 });
 
-                // Sort users alphabetically by name
-                users.sort((a, b) => a.name.localeCompare(b.name));
+                // Sort users: OUT tools first, then alphabetically
+                users.sort((a, b) => {
+                    // First sort by OUT count (users with OUT tools first)
+                    if (a.outCount > 0 && b.outCount === 0) return -1;
+                    if (a.outCount === 0 && b.outCount > 0) return 1;
+                    // Then alphabetically within each group
+                    return a.name.localeCompare(b.name);
+                });
 
-                // Display sorted users
-                users.forEach(user => {
+                // Display sorted users with numbering
+                users.forEach((user, index) => {
                     const card = document.createElement('div');
                     card.className = 'col-md-4 col-sm-6';
                     card.innerHTML = `
                         <div class="user-tool-card" onclick="selectToolsUser('${user.id}', '${user.name}')">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
-                                    <h6 class="mb-1"><i class="fas fa-user"></i> ${user.name}</h6>
+                                    <h6 class="mb-1"><i class="fas fa-user"></i> ${index + 1}. ${user.name}</h6>
                                     <small class="text-muted">${user.email}</small>
                                 </div>
                                 ${user.outCount > 0 ? `<span class="out-badge">OUT: ${user.outCount}</span>` : '<span style="color: #28a745; font-size: 0.85rem; white-space: nowrap;"><i class="fas fa-check-circle"></i> All IN</span>'}
