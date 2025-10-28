@@ -1229,63 +1229,40 @@
 
         /* Larger fonts for tool cards in modals on desktop and tablets */
         @media (min-width: 769px) {
-          /* All register-tool-card elements in modals */
-          .modal .register-tool-card * {
+          /* Force larger fonts - targeting every possible element inside register-tool-card */
+          .modal .modal-body .register-tool-card div,
+          .modal .modal-body .register-tool-card span,
+          .modal .modal-body .register-tool-card p,
+          .modal .modal-body .register-tool-card h6,
+          .modal .modal-body .register-tool-card h5,
+          .modal .modal-body .register-tool-card small,
+          .modal .modal-body .register-tool-card strong {
             font-size: 1.5rem !important;
           }
 
-          .modal .register-tool-card h6,
-          .modal .register-tool-card div[style*="font-weight: bold; font-size: 1.1rem"] {
+          /* First div is the tool name - make it larger */
+          .modal .modal-body .register-tool-card > div:first-child {
             font-size: 1.8rem !important;
+            font-weight: bold !important;
           }
 
-          .modal .register-tool-card .badge {
+          /* Badge styling */
+          .modal .modal-body .register-tool-card .badge {
             font-size: 1.3rem !important;
-            padding: 6px 12px !important;
+            padding: 8px 16px !important;
+            font-weight: bold !important;
           }
 
-          .modal .register-tool-card small,
-          .modal .register-tool-card div[style*="color: #666; font-size: 0.9rem"] {
-            font-size: 1.3rem !important;
+          /* Increase card padding for better readability */
+          .modal .modal-body .register-tool-card {
+            padding: 20px !important;
+            margin-bottom: 12px !important;
+            min-height: auto !important;
           }
 
-          /* Specific sections */
-          #collectionDisplaySection .register-tool-card *,
-          #searchResults .register-tool-card *,
-          #previousOutToolsContent .register-tool-card *,
-          #myToolsContent .register-tool-card *,
-          #registerToolsContent .register-tool-card * {
+          /* Labels should be bold and larger */
+          .modal .modal-body .register-tool-card span[style*="font-weight: bold"] {
             font-size: 1.5rem !important;
-          }
-
-          #collectionDisplaySection .register-tool-card h6,
-          #searchResults .register-tool-card h6,
-          #previousOutToolsContent .register-tool-card h6,
-          #myToolsContent .register-tool-card h6,
-          #registerToolsContent .register-tool-card h6,
-          #collectionDisplaySection .register-tool-card div[style*="font-weight: bold; font-size: 1.1rem"],
-          #searchResults .register-tool-card div[style*="font-weight: bold; font-size: 1.1rem"],
-          #previousOutToolsContent .register-tool-card div[style*="font-weight: bold; font-size: 1.1rem"],
-          #myToolsContent .register-tool-card div[style*="font-weight: bold; font-size: 1.1rem"],
-          #registerToolsContent .register-tool-card div[style*="font-weight: bold; font-size: 1.1rem"] {
-            font-size: 1.8rem !important;
-          }
-
-          #collectionDisplaySection .register-tool-card .badge,
-          #searchResults .register-tool-card .badge,
-          #previousOutToolsContent .register-tool-card .badge,
-          #myToolsContent .register-tool-card .badge,
-          #registerToolsContent .register-tool-card .badge {
-            font-size: 1.3rem !important;
-            padding: 6px 12px !important;
-          }
-
-          #collectionDisplaySection .register-tool-card small,
-          #searchResults .register-tool-card small,
-          #previousOutToolsContent .register-tool-card small,
-          #myToolsContent .register-tool-card small,
-          #registerToolsContent .register-tool-card small {
-            font-size: 1.3rem !important;
           }
         }
     </style>

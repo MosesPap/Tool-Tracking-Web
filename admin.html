@@ -770,11 +770,14 @@
             }
 
             /* Larger fonts for tool cards in modals on desktop and tablets */
+            #toolHistoryCards .register-tool-card,
             #toolHistoryCards .register-tool-card * {
                 font-size: 1.5rem !important;
+                line-height: 1.6 !important;
             }
 
-            #toolHistoryCards .register-tool-card h6 {
+            /* Make first div (tool name) larger */
+            #toolHistoryCards .register-tool-card > div:first-child {
                 font-size: 1.8rem !important;
             }
 
@@ -783,8 +786,10 @@
                 padding: 6px 12px !important;
             }
 
-            #toolHistoryCards .register-tool-card small {
-                font-size: 1.3rem !important;
+            /* Increase card padding */
+            #toolHistoryCards .register-tool-card {
+                padding: 24px !important;
+                margin-bottom: 16px !important;
             }
         }
 
