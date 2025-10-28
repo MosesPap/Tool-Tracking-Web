@@ -648,32 +648,6 @@
         .register-tool-card.calibration { background: #E3F2FD; }
         .register-tool-card.in { background: #E8F5E9; }
         
-        /* DEBUG: Add outline to see tool cards better */
-        .modal .register-tool-card {
-            outline: 2px solid red !important;
-            background: rgba(255, 255, 0, 0.3) !important;
-            padding: 20px !important;
-        }
-        
-        /* Make all text larger in tool cards - try universal selector */
-        .modal .register-tool-card,
-        .modal .register-tool-card * {
-            font-size: 2rem !important;
-        }
-        
-        /* Make tool name even larger */
-        .modal .register-tool-card > div:first-child {
-            font-size: 2.5rem !important;
-            font-weight: bold !important;
-            background: rgba(255, 0, 0, 0.2) !important;
-        }
-        
-        /* Badge sizes */
-        .modal .register-tool-card .badge {
-            font-size: 1.8rem !important;
-            padding: 10px 20px !important;
-        }
-        
         /* Search Tools Card Styles - matching My Tools alternating colors and floating effect */
         .search-tool-bg1 { background: #fff; }
         .search-tool-bg2 { background: #fff7e6; }
@@ -1253,43 +1227,32 @@
           }
         }
 
-        /* DEBUGGING: Try multiple selectors to find which works in index.html */
-        .register-tool-card,
-        #collectionDisplaySection .register-tool-card,
-        #searchResults .register-tool-card,
-        #previousOutToolsContent .register-tool-card,
-        #myToolsContent .register-tool-card,
-        #registerToolsContent .register-tool-card,
-        .modal-body .register-tool-card,
-        div .register-tool-card {
-          border: 3px solid red !important;
-          background: yellow !important;
-          padding: 20px !important;
-          margin-bottom: 12px !important;
-        }
+        /* Larger fonts for tool cards in modals on desktop and tablets */
+        @media (min-width: 769px) {
+          #collectionDisplaySection .register-tool-card *,
+          #searchResults .register-tool-card *,
+          #toolList .register-tool-card * {
+            font-size: 1.5rem !important;
+          }
 
-        /* Force larger fonts on ALL elements inside tool cards */
-        .register-tool-card *,
-        #collectionDisplaySection .register-tool-card *,
-        #searchResults .register-tool-card * {
-          font-size: 1.5rem !important;
-        }
+          #collectionDisplaySection .register-tool-card h6,
+          #searchResults .register-tool-card h6,
+          #toolList .register-tool-card > div:first-child {
+            font-size: 1.8rem !important;
+          }
 
-        /* Tool name larger */
-        .register-tool-card > div:first-child,
-        #collectionDisplaySection .register-tool-card > div:first-child,
-        #searchResults .register-tool-card > div:first-child {
-          font-size: 1.8rem !important;
-          font-weight: bold !important;
-        }
+          #collectionDisplaySection .register-tool-card .badge,
+          #searchResults .register-tool-card .badge,
+          #toolList .register-tool-card .badge {
+            font-size: 1.3rem !important;
+            padding: 6px 12px !important;
+          }
 
-        /* Badge styling */
-        .register-tool-card .badge,
-        #collectionDisplaySection .register-tool-card .badge,
-        #searchResults .register-tool-card .badge {
-          font-size: 1.3rem !important;
-          padding: 8px 16px !important;
-          font-weight: bold !important;
+          #collectionDisplaySection .register-tool-card small,
+          #searchResults .register-tool-card small,
+          #toolList .register-tool-card small {
+            font-size: 1.3rem !important;
+          }
         }
     </style>
 </head>
@@ -3260,15 +3223,6 @@ if (!userCredential.user.emailVerified) {
 
                     const card = document.createElement('div');
                     card.className = `register-tool-card ${statusClass}`;
-                    
-                    // Add debug identifier
-                    const toolName = data.toolName || 'Unknown Tool';
-                    card.setAttribute('data-tool-name', toolName);
-                    card.setAttribute('data-tool-id', tool.id);
-                    
-                    // Log to console for debugging
-                    console.log('Creating tool card for:', toolName, 'in section: Register Tools');
-                    
                     if (tool.isOffline) {
                         card.style.border = '2px dashed #ffc107';
                         card.style.background = '#fff3cd';
