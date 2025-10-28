@@ -1229,24 +1229,62 @@
 
         /* Larger fonts for tool cards in modals on desktop and tablets */
         @media (min-width: 769px) {
+          /* All register-tool-card elements in modals */
+          .modal .register-tool-card * {
+            font-size: 1.5rem !important;
+          }
+
+          .modal .register-tool-card h6,
+          .modal .register-tool-card div[style*="font-weight: bold; font-size: 1.1rem"] {
+            font-size: 1.8rem !important;
+          }
+
+          .modal .register-tool-card .badge {
+            font-size: 1.3rem !important;
+            padding: 6px 12px !important;
+          }
+
+          .modal .register-tool-card small,
+          .modal .register-tool-card div[style*="color: #666; font-size: 0.9rem"] {
+            font-size: 1.3rem !important;
+          }
+
+          /* Specific sections */
           #collectionDisplaySection .register-tool-card *,
-          #searchResults .register-tool-card * {
+          #searchResults .register-tool-card *,
+          #previousOutToolsContent .register-tool-card *,
+          #myToolsContent .register-tool-card *,
+          #registerToolsContent .register-tool-card * {
             font-size: 1.5rem !important;
           }
 
           #collectionDisplaySection .register-tool-card h6,
-          #searchResults .register-tool-card h6 {
+          #searchResults .register-tool-card h6,
+          #previousOutToolsContent .register-tool-card h6,
+          #myToolsContent .register-tool-card h6,
+          #registerToolsContent .register-tool-card h6,
+          #collectionDisplaySection .register-tool-card div[style*="font-weight: bold; font-size: 1.1rem"],
+          #searchResults .register-tool-card div[style*="font-weight: bold; font-size: 1.1rem"],
+          #previousOutToolsContent .register-tool-card div[style*="font-weight: bold; font-size: 1.1rem"],
+          #myToolsContent .register-tool-card div[style*="font-weight: bold; font-size: 1.1rem"],
+          #registerToolsContent .register-tool-card div[style*="font-weight: bold; font-size: 1.1rem"] {
             font-size: 1.8rem !important;
           }
 
           #collectionDisplaySection .register-tool-card .badge,
-          #searchResults .register-tool-card .badge {
+          #searchResults .register-tool-card .badge,
+          #previousOutToolsContent .register-tool-card .badge,
+          #myToolsContent .register-tool-card .badge,
+          #registerToolsContent .register-tool-card .badge {
             font-size: 1.3rem !important;
             padding: 6px 12px !important;
           }
 
           #collectionDisplaySection .register-tool-card small,
-          #searchResults .register-tool-card small {
+          #searchResults .register-tool-card small,
+          #previousOutToolsContent .register-tool-card small,
+          #myToolsContent .register-tool-card small,
+          #registerToolsContent .register-tool-card small {
             font-size: 1.3rem !important;
           }
         }
