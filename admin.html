@@ -2034,32 +2034,71 @@
                     });
                 });
 
-                // Sort users: OUT tools first, then alphabetically
-                users.sort((a, b) => {
-                    // First sort by OUT count (users with OUT tools first)
-                    if (a.outCount > 0 && b.outCount === 0) return -1;
-                    if (a.outCount === 0 && b.outCount > 0) return 1;
-                    // Then alphabetically within each group
-                    return a.name.localeCompare(b.name);
-                });
+                // Separate users into two groups
+                const outUsers = users.filter(u => u.outCount > 0).sort((a, b) => a.name.localeCompare(b.name));
+                const allInUsers = users.filter(u => u.outCount === 0).sort((a, b) => a.name.localeCompare(b.name));
 
-                // Display sorted users with numbering
-                users.forEach((user, index) => {
-                    const card = document.createElement('div');
-                    card.className = 'col-md-4 col-sm-6';
-                    card.innerHTML = `
-                        <div class="user-tool-card" onclick="selectToolsUser('${user.id}', '${user.name}')">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <h6 class="mb-1"><i class="fas fa-user"></i> ${index + 1}. ${user.name}</h6>
-                                    <small class="text-muted">${user.email}</small>
-                                </div>
-                                ${user.outCount > 0 ? `<span class="out-badge">OUT: ${user.outCount}</span>` : '<span style="color: #28a745; font-size: 0.85rem; white-space: nowrap;"><i class="fas fa-check-circle"></i> All IN</span>'}
-                            </div>
-                        </div>
+                // Display users with OUT tools first
+                if (outUsers.length > 0) {
+                    // Group header for OUT users
+                    const headerDiv = document.createElement('div');
+                    headerDiv.className = 'col-12';
+                    headerDiv.innerHTML = `
+                        <h5 class="mb-3 mt-3" style="color: #dc3545; font-weight: bold;">
+                            <i class="fas fa-exclamation-triangle"></i> Users with OUT Tools (${outUsers.length})
+                        </h5>
                     `;
-                    usersList.appendChild(card);
-                });
+                    usersList.appendChild(headerDiv);
+
+                    // Display OUT users with numbering
+                    outUsers.forEach((user, index) => {
+                        const card = document.createElement('div');
+                        card.className = 'col-md-4 col-sm-6';
+                        card.innerHTML = `
+                            <div class="user-tool-card" onclick="selectToolsUser('${user.id}', '${user.name}')">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1"><i class="fas fa-user"></i> ${index + 1}. ${user.name}</h6>
+                                        <small class="text-muted">${user.email}</small>
+                                    </div>
+                                    <span class="out-badge">OUT: ${user.outCount}</span>
+                                </div>
+                            </div>
+                        `;
+                        usersList.appendChild(card);
+                    });
+                }
+
+                // Display users with all IN tools
+                if (allInUsers.length > 0) {
+                    // Group header for all IN users
+                    const headerDiv = document.createElement('div');
+                    headerDiv.className = 'col-12';
+                    headerDiv.innerHTML = `
+                        <h5 class="mb-3 mt-3" style="color: #28a745; font-weight: bold;">
+                            <i class="fas fa-check-circle"></i> All Tools IN (${allInUsers.length})
+                        </h5>
+                    `;
+                    usersList.appendChild(headerDiv);
+
+                    // Display all IN users with separate numbering
+                    allInUsers.forEach((user, index) => {
+                        const card = document.createElement('div');
+                        card.className = 'col-md-4 col-sm-6';
+                        card.innerHTML = `
+                            <div class="user-tool-card" onclick="selectToolsUser('${user.id}', '${user.name}')">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1"><i class="fas fa-user"></i> ${index + 1}. ${user.name}</h6>
+                                        <small class="text-muted">${user.email}</small>
+                                    </div>
+                                    <span style="color: #28a745; font-size: 0.85rem; white-space: nowrap;"><i class="fas fa-check-circle"></i> All IN</span>
+                                </div>
+                            </div>
+                        `;
+                        usersList.appendChild(card);
+                    });
+                }
 
                 loading.style.display = 'none';
             } catch (error) {
