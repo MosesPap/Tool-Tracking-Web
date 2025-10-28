@@ -648,28 +648,30 @@
         .register-tool-card.calibration { background: #E3F2FD; }
         .register-tool-card.in { background: #E8F5E9; }
         
-        /* DEBUG: Override with yellow background and red border to test */
+        /* DEBUG: Add outline to see tool cards better */
         .modal .register-tool-card {
-            background: yellow !important;
-            border: 3px solid red !important;
+            outline: 2px solid red !important;
+            background: rgba(255, 255, 0, 0.3) !important;
             padding: 20px !important;
         }
         
-        /* Make all text larger in tool cards */
+        /* Make all text larger in tool cards - try universal selector */
+        .modal .register-tool-card,
         .modal .register-tool-card * {
-            font-size: 1.5rem !important;
+            font-size: 2rem !important;
         }
         
         /* Make tool name even larger */
         .modal .register-tool-card > div:first-child {
-            font-size: 1.8rem !important;
+            font-size: 2.5rem !important;
             font-weight: bold !important;
+            background: rgba(255, 0, 0, 0.2) !important;
         }
         
         /* Badge sizes */
         .modal .register-tool-card .badge {
-            font-size: 1.3rem !important;
-            padding: 8px 16px !important;
+            font-size: 1.8rem !important;
+            padding: 10px 20px !important;
         }
         
         /* Search Tools Card Styles - matching My Tools alternating colors and floating effect */
@@ -3258,6 +3260,15 @@ if (!userCredential.user.emailVerified) {
 
                     const card = document.createElement('div');
                     card.className = `register-tool-card ${statusClass}`;
+                    
+                    // Add debug identifier
+                    const toolName = data.toolName || 'Unknown Tool';
+                    card.setAttribute('data-tool-name', toolName);
+                    card.setAttribute('data-tool-id', tool.id);
+                    
+                    // Log to console for debugging
+                    console.log('Creating tool card for:', toolName, 'in section: Register Tools');
+                    
                     if (tool.isOffline) {
                         card.style.border = '2px dashed #ffc107';
                         card.style.background = '#fff3cd';
