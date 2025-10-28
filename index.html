@@ -648,6 +648,30 @@
         .register-tool-card.calibration { background: #E3F2FD; }
         .register-tool-card.in { background: #E8F5E9; }
         
+        /* DEBUG: Override with yellow background and red border to test */
+        .modal .register-tool-card {
+            background: yellow !important;
+            border: 3px solid red !important;
+            padding: 20px !important;
+        }
+        
+        /* Make all text larger in tool cards */
+        .modal .register-tool-card * {
+            font-size: 1.5rem !important;
+        }
+        
+        /* Make tool name even larger */
+        .modal .register-tool-card > div:first-child {
+            font-size: 1.8rem !important;
+            font-weight: bold !important;
+        }
+        
+        /* Badge sizes */
+        .modal .register-tool-card .badge {
+            font-size: 1.3rem !important;
+            padding: 8px 16px !important;
+        }
+        
         /* Search Tools Card Styles - matching My Tools alternating colors and floating effect */
         .search-tool-bg1 { background: #fff; }
         .search-tool-bg2 { background: #fff7e6; }
@@ -1227,49 +1251,43 @@
           }
         }
 
-        /* DEBUGGING: Test without media query to see if selector works */
-        .register-tool-card {
+        /* DEBUGGING: Try multiple selectors to find which works in index.html */
+        .register-tool-card,
+        #collectionDisplaySection .register-tool-card,
+        #searchResults .register-tool-card,
+        #previousOutToolsContent .register-tool-card,
+        #myToolsContent .register-tool-card,
+        #registerToolsContent .register-tool-card,
+        .modal-body .register-tool-card,
+        div .register-tool-card {
           border: 3px solid red !important;
           background: yellow !important;
+          padding: 20px !important;
+          margin-bottom: 12px !important;
         }
 
-        /* Force larger fonts - testing without media query first */
-        .register-tool-card div,
-        .register-tool-card span,
-        .register-tool-card p,
-        .register-tool-card h6,
-        .register-tool-card h5,
-        .register-tool-card small,
-        .register-tool-card strong {
+        /* Force larger fonts on ALL elements inside tool cards */
+        .register-tool-card *,
+        #collectionDisplaySection .register-tool-card *,
+        #searchResults .register-tool-card * {
           font-size: 1.5rem !important;
         }
 
-        /* First div is the tool name - make it larger */
-        .register-tool-card > div:first-child {
+        /* Tool name larger */
+        .register-tool-card > div:first-child,
+        #collectionDisplaySection .register-tool-card > div:first-child,
+        #searchResults .register-tool-card > div:first-child {
           font-size: 1.8rem !important;
           font-weight: bold !important;
         }
 
         /* Badge styling */
-        .register-tool-card .badge {
+        .register-tool-card .badge,
+        #collectionDisplaySection .register-tool-card .badge,
+        #searchResults .register-tool-card .badge {
           font-size: 1.3rem !important;
           padding: 8px 16px !important;
           font-weight: bold !important;
-        }
-
-        /* Increase card padding for better readability */
-        .register-tool-card {
-          padding: 20px !important;
-          margin-bottom: 12px !important;
-        }
-
-        /* Now add media query for desktop/tablet only */
-        @media (min-width: 769px) {
-          /* Keep yellow background but remove border on desktop */
-          .register-tool-card {
-            border: 3px solid green !important;
-            background: yellow !important;
-          }
         }
     </style>
 </head>
