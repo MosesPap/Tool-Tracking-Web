@@ -758,16 +758,15 @@
         /* Desktop: Centered modal */
         @media (min-width: 769px) {
             .section-modal-content {
-                max-width: 1200px;
-                margin: 40px auto;
-                min-height: auto;
-                border-radius: 20px;
-                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-                animation: slideUp 0.3s ease, fadeIn 0.3s ease;
+                max-width: 100% !important;
+                margin: 0 !important;
+                min-height: 100vh !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
             }
 
             .section-modal-header {
-                border-radius: 20px 20px 0 0;
+                border-radius: 0 !important;
             }
         }
 
