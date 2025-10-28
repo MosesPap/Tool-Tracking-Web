@@ -851,13 +851,17 @@
             padding: 12px;
         }
 
-        /* Fix z-index for tool history modal */
+        /* Fix z-index for tool history modal to appear above all modals */
         #toolHistoryModal {
-            z-index: 15000 !important;
+            z-index: 99999 !important;
+        }
+
+        #toolHistoryModal .modal-backdrop {
+            z-index: 99998 !important;
         }
 
         #toolHistoryModal .modal-dialog {
-            z-index: 15001 !important;
+            z-index: 99999 !important;
         }
 
             .section-modal-header h3 {
