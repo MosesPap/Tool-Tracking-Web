@@ -556,6 +556,77 @@
         .previous-out-tool-column:first-child {
             text-align: left;
         }
+
+        /* Work Location Tool Card Styles */
+        .workloc-collection-header {
+            background: #FF9800;
+            color: white;
+            font-weight: bold;
+            font-size: 1.3rem;
+            border-radius: 6px 6px 0 0;
+            padding: 10px 16px;
+            margin-top: 1.5rem;
+        }
+
+        .workloc-tool-card {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .workloc-tool-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .workloc-tool-card.out {
+            background: #FFCDD2;
+            border-color: #EF9A9A;
+        }
+
+        .workloc-tool-card.in {
+            background: #E8F5E9;
+            border-color: #A5D6A7;
+        }
+
+        .workloc-tool-name {
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: #000;
+            margin-bottom: 8px;
+        }
+
+        .workloc-tool-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 1rem;
+        }
+
+        .workloc-tool-label {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .workloc-tool-value {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .workloc-status-out {
+            color: #d32f2f;
+            font-weight: bold;
+        }
+
+        .workloc-status-in {
+            color: #388E3C;
+            font-weight: bold;
+        }
         
         .previous-out-tool-column:last-child {
             text-align: right;
@@ -1646,6 +1717,7 @@
                 <button class="btn btn-danger" id="menuOutBtn"><i class="fas fa-sign-out-alt"></i> View OUT Tools</button>
                 <button class="btn btn-warning" id="menuMyToolsBtn"><i class="fas fa-toolbox"></i> My Tools</button>
                 <button class="btn btn-primary" id="menuSearchBtn"><i class="fas fa-search"></i> Search for Tools</button>
+                <button class="btn" style="background: #9C27B0; color: white;" id="menuWorkLocationBtn"><i class="fas fa-map-marker-alt"></i> Tools by Work Location</button>
                 <button class="btn btn-info" id="menuAdminBtn" style="display: none;"><i class="fas fa-user-shield"></i> Tool Administrator</button>
                 <button class="btn btn-secondary" id="menuLogoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
             </div>
@@ -1868,6 +1940,67 @@
         
         <!-- Tools List -->
         <div id="previousOutToolsList" style="height: calc(100vh - 200px); overflow-y: auto;"></div>
+      </div>
+    </div>
+
+    <!-- Tools by Work Location Screen -->
+    <div id="toolsByWorkLocationScreen" style="display:none;">
+      <!-- Purple Title Bar -->
+      <div style="background: #9C27B0; color: white; padding: 1rem 0; width: 100%; position: relative;">
+        <div class="container">
+          <h2 style="color: white; font-weight: bold; font-size: 2rem; margin: 0; text-align: center;">Tools by Work Location</h2>
+        </div>
+      </div>
+      
+      <div class="container py-4">
+        <button id="backToMenuFromWorkLocationBtn" class="btn btn-outline-secondary mb-3">
+          <i class="fas fa-arrow-left"></i> Back to Menu
+        </button>
+        
+        <!-- Work Location Selection -->
+        <div id="workLocationSelectionDiv" class="card mb-4">
+          <div class="card-body">
+            <h4 class="mb-3"><i class="fas fa-map-marker-alt"></i> Select Work Location</h4>
+            <select id="workLocationSelect" class="form-select form-select-lg mb-3">
+              <option value="">-- Select a Work Location --</option>
+              <option value="ALL">All Locations</option>
+            </select>
+            <button id="loadToolsByLocationBtn" class="btn btn-primary btn-lg w-100" disabled>
+              <i class="fas fa-search"></i> Load Tools
+            </button>
+          </div>
+        </div>
+
+        <!-- Date Filter Section (hidden initially) -->
+        <div id="dateFilterSection" style="display: none;">
+          <div class="card mb-3">
+            <div class="card-body">
+              <h5 class="mb-3"><i class="fas fa-calendar"></i> Filter by Date</h5>
+              <div class="d-flex gap-2 flex-wrap mb-3">
+                <button class="btn btn-sm btn-primary filter-date-btn active" onclick="filterToolsByDate('today', this)">
+                  <i class="fas fa-calendar-day"></i> Today
+                </button>
+                <button class="btn btn-sm btn-primary filter-date-btn" onclick="filterToolsByDate('week', this)">
+                  <i class="fas fa-calendar-week"></i> Last Week
+                </button>
+                <button class="btn btn-sm btn-primary filter-date-btn" onclick="filterToolsByDate('month', this)">
+                  <i class="fas fa-calendar-alt"></i> Last Month
+                </button>
+                <button class="btn btn-sm btn-primary filter-date-btn" onclick="filterToolsByDate('all', this)">
+                  <i class="fas fa-infinity"></i> All Time
+                </button>
+              </div>
+              <div id="workLocationToolsSummary" class="text-muted">
+                <!-- Summary will be populated here -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Tools List by Collection -->
+          <div id="workLocationToolsList" style="height: calc(100vh - 400px); overflow-y: auto;">
+            <!-- Tools will be populated here -->
+          </div>
+        </div>
       </div>
     </div>
 
@@ -6879,7 +7012,277 @@ if (!userCredential.user.emailVerified) {
         updatePreviousOutToolsCount();
     };
 
+    // Tools by Work Location functionality
+    let workLocationToolsData = [];
+    let currentWorkLocation = '';
+    let currentDateFilter = 'today';
 
+    // Menu button handler
+    document.getElementById('menuWorkLocationBtn').onclick = async function() {
+        document.getElementById('toolScannerMenu').style.display = 'none';
+        document.getElementById('toolsByWorkLocationScreen').style.display = 'block';
+        
+        // Load available work locations
+        await loadWorkLocations();
+    };
+
+    // Back button
+    document.getElementById('backToMenuFromWorkLocationBtn').onclick = function() {
+        document.getElementById('toolsByWorkLocationScreen').style.display = 'none';
+        document.getElementById('toolScannerMenu').style.display = 'block';
+        // Reset screen
+        document.getElementById('workLocationSelect').value = '';
+        document.getElementById('loadToolsByLocationBtn').disabled = true;
+        document.getElementById('dateFilterSection').style.display = 'none';
+    };
+
+    // Load available work locations from tools
+    async function loadWorkLocations() {
+        try {
+            const snapshot = await db.collection('tools').get();
+            const locations = new Set();
+            
+            snapshot.forEach(doc => {
+                const workOn = doc.data().WorkOn;
+                if (workOn && workOn.trim()) {
+                    locations.add(workOn.trim());
+                }
+            });
+            
+            const select = document.getElementById('workLocationSelect');
+            // Keep first two options (empty and ALL)
+            select.innerHTML = '<option value="">-- Select a Work Location --</option><option value="ALL">All Locations</option>';
+            
+            // Add all unique locations alphabetically
+            Array.from(locations).sort().forEach(location => {
+                const option = document.createElement('option');
+                option.value = location;
+                option.textContent = location;
+                select.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error loading work locations:', error);
+            alert('Error loading work locations. Please try again.');
+        }
+    }
+
+    // Enable load button when location is selected
+    document.getElementById('workLocationSelect').onchange = function() {
+        document.getElementById('loadToolsByLocationBtn').disabled = !this.value;
+    };
+
+    // Load tools by location
+    document.getElementById('loadToolsByLocationBtn').onclick = async function() {
+        currentWorkLocation = document.getElementById('workLocationSelect').value;
+        if (!currentWorkLocation) return;
+        
+        document.getElementById('workLocationToolsList').innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><div class="mt-2">Loading tools...</div></div>';
+        document.getElementById('dateFilterSection').style.display = 'block';
+        
+        try {
+            // Query logtoolmovements for all movements
+            let query = db.collection('logtoolmovements');
+            
+            if (currentWorkLocation !== 'ALL') {
+                query = query.where('WorkOn', '==', currentWorkLocation);
+            }
+            
+            const snapshot = await query.orderBy('timestamp', 'desc').get();
+            
+            workLocationToolsData = [];
+            snapshot.forEach(doc => {
+                workLocationToolsData.push({
+                    id: doc.id,
+                    ...doc.data()
+                });
+            });
+            
+            console.log('Loaded', workLocationToolsData.length, 'tool movements');
+            
+            // Apply default date filter (today)
+            filterToolsByDate('today');
+            
+        } catch (error) {
+            console.error('Error loading tools by work location:', error);
+            document.getElementById('workLocationToolsList').innerHTML = '<div class="text-center text-danger">Error loading tools. Please try again.</div>';
+        }
+    };
+
+    // Filter tools by date
+    window.filterToolsByDate = function(period, clickedButton = null) {
+        currentDateFilter = period;
+        
+        // Update button states
+        document.querySelectorAll('.filter-date-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        if (clickedButton) {
+            clickedButton.classList.add('active');
+        }
+        
+        // Calculate date range
+        const now = new Date();
+        let startDate;
+        
+        switch(period) {
+            case 'today':
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                break;
+            case 'week':
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                break;
+            case 'month':
+                startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                break;
+            case 'all':
+                startDate = new Date(0);
+                break;
+        }
+        
+        // Filter data
+        const filtered = workLocationToolsData.filter(entry => {
+            if (!entry.timestamp) return false;
+            const entryDate = entry.timestamp.toDate ? entry.timestamp.toDate() : new Date(entry.timestamp);
+            return entryDate >= startDate;
+        });
+        
+        // Get latest status for each tool
+        const toolsMap = new Map();
+        filtered.forEach(entry => {
+            const toolId = entry.toolId;
+            if (!toolId) return;
+            
+            if (!toolsMap.has(toolId) || 
+                (entry.timestamp && toolsMap.get(toolId).timestamp && 
+                 entry.timestamp.toDate() > toolsMap.get(toolId).timestamp.toDate())) {
+                toolsMap.set(toolId, entry);
+            }
+        });
+        
+        const tools = Array.from(toolsMap.values());
+        
+        // Display tools
+        displayWorkLocationTools(tools);
+    };
+
+    // Display tools grouped by collection
+    function displayWorkLocationTools(tools) {
+        const container = document.getElementById('workLocationToolsList');
+        
+        if (tools.length === 0) {
+            container.innerHTML = '<div class="text-center text-muted">No tools found for the selected date range.</div>';
+            document.getElementById('workLocationToolsSummary').innerHTML = '<strong>Total Tools:</strong> 0';
+            return;
+        }
+        
+        // Group by collection
+        const byCollection = {};
+        tools.forEach(tool => {
+            const collection = tool.collectionCode || 'Unknown Collection';
+            if (!byCollection[collection]) {
+                byCollection[collection] = {
+                    out: [],
+                    in: []
+                };
+            }
+            
+            const status = (tool.status || tool.action || '').toUpperCase();
+            if (status === 'OUT' || status === 'CHECK-OUT') {
+                byCollection[collection].out.push(tool);
+            } else {
+                byCollection[collection].in.push(tool);
+            }
+        });
+        
+        // Count OUT tools
+        const outCount = tools.filter(t => {
+            const status = (t.status || t.action || '').toUpperCase();
+            return status === 'OUT' || status === 'CHECK-OUT';
+        }).length;
+        
+        // Update summary
+        document.getElementById('workLocationToolsSummary').innerHTML = 
+            `<strong>Total Tools:</strong> ${tools.length} | <strong>OUT:</strong> ${outCount} | <strong>IN:</strong> ${tools.length - outCount}`;
+        
+        // Build HTML
+        let html = '';
+        const collections = Object.keys(byCollection).sort();
+        
+        collections.forEach(collection => {
+            const collectionTools = byCollection[collection];
+            const totalInCollection = collectionTools.out.length + collectionTools.in.length;
+            
+            html += `<div class="workloc-collection-header">
+                ${collection} (${totalInCollection} tools - OUT: ${collectionTools.out.length}, IN: ${collectionTools.in.length})
+            </div>`;
+            
+            // Display OUT tools first
+            collectionTools.out.forEach(tool => {
+                html += createWorkLocationToolCard(tool, 'out');
+            });
+            
+            // Then IN tools
+            collectionTools.in.forEach(tool => {
+                html += createWorkLocationToolCard(tool, 'in');
+            });
+        });
+        
+        container.innerHTML = html;
+    }
+
+    // Create tool card HTML
+    function createWorkLocationToolCard(tool, statusClass) {
+        const toolName = tool.toolName || 'Unknown Tool';
+        const toolId = tool.toolId || tool.id || 'N/A';
+        const status = (tool.status || tool.action || 'N/A').toUpperCase();
+        const technician = tool.technician || 'N/A';
+        const calDueDate = tool.calDueDate ? 
+            (tool.calDueDate.toDate ? tool.calDueDate.toDate().toLocaleDateString('en-GB') : tool.calDueDate) : 
+            'N/A';
+        
+        const timestamp = tool.timestamp ? 
+            (tool.timestamp.toDate ? 
+                tool.timestamp.toDate().toLocaleString('en-GB', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                }) : 
+                new Date(tool.timestamp).toLocaleString('en-GB')) : 
+            'N/A';
+        
+        const statusColorClass = statusClass === 'out' ? 'workloc-status-out' : 'workloc-status-in';
+        
+        return `
+            <div class="workloc-tool-card ${statusClass}">
+                <div class="workloc-tool-name">${toolName}</div>
+                <div class="workloc-tool-info">
+                    <span class="workloc-tool-label">TID:</span>
+                    <span class="workloc-tool-value">${toolId}</span>
+                </div>
+                <div class="workloc-tool-info">
+                    <span class="workloc-tool-label">Cal Due Date:</span>
+                    <span class="workloc-tool-value">${calDueDate}</span>
+                </div>
+                <div class="workloc-tool-info">
+                    <span class="workloc-tool-label">Status:</span>
+                    <span class="${statusColorClass}">${status}</span>
+                </div>
+                <div class="workloc-tool-info">
+                    <span class="workloc-tool-label">Last Technician:</span>
+                    <span class="workloc-tool-value">${technician}</span>
+                </div>
+                <div class="workloc-tool-info">
+                    <span class="workloc-tool-label">Time:</span>
+                    <span class="workloc-tool-value">${timestamp}</span>
+                </div>
+            </div>
+        `;
+    }
 
     // Variables for previous OUT tools
     let previousOutToolsCount = 0;
