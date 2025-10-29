@@ -4056,7 +4056,8 @@ if (!userCredential.user.emailVerified) {
                                 const bgClass = idx % 2 === 0 ? 'mytools-tool-bg1' : 'mytools-tool-bg2';
                                 html += `<div class=\"mytools-tool-item ${bgClass}\">`
                                     + `<div style=\"cursor:pointer;\" onclick=\"showToolDetailsFromMyTools(${JSON.stringify(tool).replace(/"/g, '&quot;')})\">`
-                                    + `<span class=\"mytools-tool-name\">${idx + 1}. ${tool.toolName || 'Unknown Tool'}</span> - <span class=\"mytools-tool-tid\">TID: ${tool.id}</span><br>`
+                                    + `<span class=\"mytools-tool-name\">${idx + 1}. ${tool.toolName || 'Unknown Tool'}</span><br>`
+                                    + `<span class=\"mytools-tool-tid\">TID: ${tool.id}</span><br>`
                                     + `<span style="display:flex;align-items:center;justify-content:space-between;">
                                         <span style="font-size:1.01rem;color:#444;">Part #: ${tool.partNumber || ''}</span>
                                         <span style="font-size:1.01rem;font-weight:bold;color:#222;">WorkOn: <span style="color:#888;font-weight:bold;">${(typeof tool.WorkOn === 'string' && tool.WorkOn.trim()) ? tool.WorkOn : 'N/A'}</span></span>
