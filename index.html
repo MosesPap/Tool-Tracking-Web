@@ -2003,7 +2003,7 @@
         <div id="dateFilterSection" style="display: none;">
           <div class="card mb-3">
             <div class="card-body">
-              <h5 class="mb-3"><i class="fas fa-calendar"></i> Filter by Date</h5>
+              <h5 class="mb-3"><i class="fas fa-calendar"></i> Filter History by Date</h5>
               <div class="d-flex gap-2 flex-wrap mb-3">
                 <button class="btn btn-sm btn-primary filter-date-btn active" onclick="filterToolsByDate('today', this)">
                   <i class="fas fa-calendar-day"></i> Today
@@ -2018,15 +2018,38 @@
                   <i class="fas fa-infinity"></i> All Time
                 </button>
               </div>
-              <div id="workLocationToolsSummary" class="text-muted">
+            </div>
+          </div>
+
+          <!-- Currently OUT Tools Section -->
+          <div class="card mb-3">
+            <div class="card-body">
+              <h5 class="mb-3" style="color: #dc3545; font-weight: bold;">
+                <i class="fas fa-exclamation-triangle"></i> Currently OUT Tools
+              </h5>
+              <div id="workLocationCurrentOutSummary" class="text-muted mb-2">
                 <!-- Summary will be populated here -->
+              </div>
+              <div id="workLocationCurrentOutList" style="max-height: 400px; overflow-y: auto;">
+                <!-- Currently OUT tools will be populated here -->
               </div>
             </div>
           </div>
 
-          <!-- Tools List by Collection -->
-          <div id="workLocationToolsList" style="height: calc(100vh - 400px); overflow-y: auto;">
-            <!-- Tools will be populated here -->
+          <!-- Tool History Section -->
+          <div class="card mb-3">
+            <div class="card-body">
+              <h5 class="mb-3" style="color: #667eea; font-weight: bold;">
+                <i class="fas fa-history"></i> Tool Usage History
+              </h5>
+              <div id="workLocationToolsSummary" class="text-muted mb-2">
+                <!-- Summary will be populated here -->
+              </div>
+              <!-- Tools List by Collection -->
+              <div id="workLocationToolsList" style="max-height: 400px; overflow-y: auto;">
+                <!-- Tool history will be populated here -->
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -7042,6 +7065,7 @@ if (!userCredential.user.emailVerified) {
 
     // Tools by Work Location functionality
     let workLocationToolsData = [];
+    let workLocationCurrentOutTools = [];
     let currentWorkLocation = '';
     let currentDateFilter = 'today';
 
@@ -7104,9 +7128,95 @@ if (!userCredential.user.emailVerified) {
         currentWorkLocation = document.getElementById('workLocationSelect').value;
         if (!currentWorkLocation) return;
         
-        document.getElementById('workLocationToolsList').innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><div class="mt-2">Loading tools...</div></div>';
+        document.getElementById('workLocationCurrentOutList').innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><div class="mt-2">Loading currently OUT tools...</div></div>';
+        document.getElementById('workLocationToolsList').innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><div class="mt-2">Loading tool history...</div></div>';
         document.getElementById('dateFilterSection').style.display = 'block';
         
+        try {
+            // Load currently OUT tools from tools collection
+            await loadCurrentOutTools();
+            
+            // Load tool history from logtoolmovements
+            await loadToolHistory();
+            
+            // Apply default date filter (today) to history only
+            filterToolsByDate('today');
+            
+        } catch (error) {
+            console.error('Error loading tools by work location:', error);
+            document.getElementById('workLocationCurrentOutList').innerHTML = '<div class="text-center text-danger">Error loading tools. Please try again.</div>';
+            document.getElementById('workLocationToolsList').innerHTML = '<div class="text-center text-danger">Error loading history. Please try again.</div>';
+        }
+    };
+
+    // Load currently OUT tools from tools collection
+    async function loadCurrentOutTools() {
+        try {
+            let query = db.collection('tools').where('status', '==', 'OUT');
+            
+            if (currentWorkLocation !== 'ALL') {
+                query = query.where('WorkOn', '==', currentWorkLocation);
+            }
+            
+            const snapshot = await query.get();
+            
+            workLocationCurrentOutTools = [];
+            snapshot.forEach(doc => {
+                const toolData = doc.data();
+                workLocationCurrentOutTools.push({
+                    id: doc.id,
+                    toolId: doc.id,
+                    toolName: toolData.toolName || 'Unknown Tool',
+                    serialNumber: toolData.serialNumber || toolData.partNumber || 'N/A',
+                    calDueDate: toolData.calDueDate,
+                    technician: toolData.technician || 'N/A',
+                    WorkOn: toolData.WorkOn || currentWorkLocation,
+                    status: 'OUT',
+                    timestamp: toolData.timestamp,
+                    collectionCode: toolData.collectionCode || 'Unknown Collection',
+                    ...toolData
+                });
+            });
+            
+            console.log('Loaded', workLocationCurrentOutTools.length, 'currently OUT tools');
+            displayCurrentOutTools();
+            
+        } catch (error) {
+            console.error('Error loading currently OUT tools:', error);
+            // Check if index error - try without WorkOn filter for ALL
+            if (currentWorkLocation === 'ALL') {
+                try {
+                    const snapshot = await db.collection('tools').where('status', '==', 'OUT').get();
+                    workLocationCurrentOutTools = [];
+                    snapshot.forEach(doc => {
+                        const toolData = doc.data();
+                        workLocationCurrentOutTools.push({
+                            id: doc.id,
+                            toolId: doc.id,
+                            toolName: toolData.toolName || 'Unknown Tool',
+                            serialNumber: toolData.serialNumber || toolData.partNumber || 'N/A',
+                            calDueDate: toolData.calDueDate,
+                            technician: toolData.technician || 'N/A',
+                            WorkOn: toolData.WorkOn || 'N/A',
+                            status: 'OUT',
+                            timestamp: toolData.timestamp,
+                            collectionCode: toolData.collectionCode || 'Unknown Collection',
+                            ...toolData
+                        });
+                    });
+                    displayCurrentOutTools();
+                } catch (error2) {
+                    console.error('Error loading currently OUT tools (fallback):', error2);
+                    document.getElementById('workLocationCurrentOutList').innerHTML = '<div class="text-center text-danger">Error loading currently OUT tools. Please try again.</div>';
+                }
+            } else {
+                document.getElementById('workLocationCurrentOutList').innerHTML = '<div class="text-center text-danger">Error loading currently OUT tools. Please check Firebase indexes.</div>';
+            }
+        }
+    }
+
+    // Load tool history from logtoolmovements
+    async function loadToolHistory() {
         try {
             // Query logtoolmovements for all movements
             let query = db.collection('logtoolmovements');
@@ -7125,18 +7235,58 @@ if (!userCredential.user.emailVerified) {
                 });
             });
             
-            console.log('Loaded', workLocationToolsData.length, 'tool movements');
-            
-            // Apply default date filter (today)
-            filterToolsByDate('today');
+            console.log('Loaded', workLocationToolsData.length, 'tool history entries');
             
         } catch (error) {
-            console.error('Error loading tools by work location:', error);
-            document.getElementById('workLocationToolsList').innerHTML = '<div class="text-center text-danger">Error loading tools. Please try again.</div>';
+            console.error('Error loading tool history:', error);
+            document.getElementById('workLocationToolsList').innerHTML = '<div class="text-center text-danger">Error loading tool history. Please check Firebase indexes.</div>';
         }
-    };
+    }
 
-    // Filter tools by date
+    // Display currently OUT tools
+    function displayCurrentOutTools() {
+        const container = document.getElementById('workLocationCurrentOutList');
+        const summaryContainer = document.getElementById('workLocationCurrentOutSummary');
+        
+        if (workLocationCurrentOutTools.length === 0) {
+            container.innerHTML = '<div class="text-center text-muted">No tools currently OUT at this work location.</div>';
+            summaryContainer.innerHTML = '<strong>Total OUT Tools:</strong> 0';
+            return;
+        }
+        
+        // Group by collection
+        const byCollection = {};
+        workLocationCurrentOutTools.forEach(tool => {
+            const collection = tool.collectionCode || 'Unknown Collection';
+            if (!byCollection[collection]) {
+                byCollection[collection] = [];
+            }
+            byCollection[collection].push(tool);
+        });
+        
+        // Update summary
+        summaryContainer.innerHTML = `<strong>Total OUT Tools:</strong> ${workLocationCurrentOutTools.length}`;
+        
+        // Build HTML
+        let html = '';
+        const collections = Object.keys(byCollection).sort();
+        
+        collections.forEach(collection => {
+            const collectionTools = byCollection[collection];
+            
+            html += `<div class="workloc-collection-header">
+                ${collection} (${collectionTools.length} tools)
+            </div>`;
+            
+            collectionTools.forEach(tool => {
+                html += createWorkLocationToolCard(tool, 'out');
+            });
+        });
+        
+        container.innerHTML = html;
+    }
+
+    // Filter tools by date (only applies to history, not current OUT tools)
     window.filterToolsByDate = function(period, clickedButton = null) {
         currentDateFilter = period;
         
@@ -7168,14 +7318,14 @@ if (!userCredential.user.emailVerified) {
                 break;
         }
         
-        // Filter data
+        // Filter history data only (not current OUT tools)
         const filtered = workLocationToolsData.filter(entry => {
             if (!entry.timestamp) return false;
             const entryDate = entry.timestamp.toDate ? entry.timestamp.toDate() : new Date(entry.timestamp);
             return entryDate >= startDate;
         });
         
-        // Get latest status for each tool
+        // Get latest status for each tool from history
         const toolsMap = new Map();
         filtered.forEach(entry => {
             const toolId = entry.toolId;
@@ -7190,7 +7340,7 @@ if (!userCredential.user.emailVerified) {
         
         const tools = Array.from(toolsMap.values());
         
-        // Display tools
+        // Display history tools
         displayWorkLocationTools(tools);
     };
 
@@ -7199,8 +7349,8 @@ if (!userCredential.user.emailVerified) {
         const container = document.getElementById('workLocationToolsList');
         
         if (tools.length === 0) {
-            container.innerHTML = '<div class="text-center text-muted">No tools found for the selected date range.</div>';
-            document.getElementById('workLocationToolsSummary').innerHTML = '<strong>Total Tools:</strong> 0';
+            container.innerHTML = '<div class="text-center text-muted">No tool history found for the selected date range.</div>';
+            document.getElementById('workLocationToolsSummary').innerHTML = '<strong>Total History Entries:</strong> 0';
             return;
         }
         
@@ -7223,15 +7373,15 @@ if (!userCredential.user.emailVerified) {
             }
         });
         
-        // Count OUT tools
+        // Count OUT tools in history
         const outCount = tools.filter(t => {
             const status = (t.status || t.action || '').toUpperCase();
             return status === 'OUT' || status === 'CHECK-OUT';
         }).length;
         
-        // Update summary
+        // Update summary for history
         document.getElementById('workLocationToolsSummary').innerHTML = 
-            `<strong>Total Tools:</strong> ${tools.length} | <strong>OUT:</strong> ${outCount} | <strong>IN:</strong> ${tools.length - outCount}`;
+            `<strong>Total History Entries:</strong> ${tools.length} | <strong>OUT:</strong> ${outCount} | <strong>IN:</strong> ${tools.length - outCount}`;
         
         // Build HTML
         let html = '';
