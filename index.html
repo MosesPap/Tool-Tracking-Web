@@ -1712,15 +1712,15 @@
                                     <div style="position: relative;">
                                         <div class="input-group mb-2">
                                             <input type="text" id="toolCode" class="form-control" placeholder="Enter Tool Code, Name, or Part Number" autocomplete="off">
-                                            <button onclick="submitCode()" class="btn btn-primary">
-                                                <i class="fas fa-check"></i> Submit
-                                            </button>
+                                        <button onclick="submitCode()" class="btn btn-primary">
+                                            <i class="fas fa-check"></i> Register
+                                        </button>
                                         </div>
                                         <!-- Dropdown for tool suggestions -->
                                         <div id="toolCodeDropdown" class="tool-code-dropdown"></div>
                                     </div>
                                     <small class="text-muted" style="display: block; margin-top: -8px; margin-bottom: 8px;">Case-insensitive search - searches Tool ID, Tool Name, and Part Number</small>
-                                    <button id="toolDetailsBtn" class="btn btn-info w-100 mb-1" disabled onclick="showLastScannedToolDetails()">Tool Details</button>
+                                    <button id="toolDetailsBtn" class="btn btn-info w-100 mb-1" disabled onclick="showLastScannedToolDetails()">Search Tool Details</button>
                                     </div>
                                 </div>
                                 <!-- Overlay for expanded scanner -->
@@ -4966,7 +4966,7 @@ if (!userCredential.user.emailVerified) {
                 const partDisplay = tool.partNumber ? `P/N: ${tool.partNumber}` : '';
                 return `
                     <div class="tool-code-dropdown-item" onclick="selectToolFromCodeDropdown('${tool.id.replace(/'/g, "\\'")}')">
-                        <div class="tool-id">${tool.id}</div>
+                        <div class="tool-id"><span style="font-weight: normal; color: #666;">TID:</span> ${tool.id}</div>
                         <div class="tool-name">${tool.toolName || 'Unknown Tool'}</div>
                         <div class="tool-part">
                             ${partDisplay ? partDisplay + ' | ' : ''}Status: <span style="color: ${statusColor}; font-weight: bold;">${tool.status}</span>
