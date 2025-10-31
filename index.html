@@ -7263,7 +7263,7 @@ if (!userCredential.user.emailVerified) {
                                 toolName: toolData.toolName,
                                 serialNumber: toolData.serialNumber || toolData.partNumber,
                                 calDueDate: toolData.calDueDate,
-                                technician: toolData.technician || 'N/A'
+                                owner: toolData.owner || 'N/A'
                             });
                         }
                     } catch (err) {
@@ -7283,7 +7283,7 @@ if (!userCredential.user.emailVerified) {
                     toolName: toolInfo?.toolName || entry.toolName || 'Unknown Tool',
                     serialNumber: toolInfo?.serialNumber || entry.serialNumber || entry.partNumber || 'N/A',
                     calDueDate: toolInfo?.calDueDate || entry.calDueDate,
-                    owner: toolInfo?.technician || entry.technician || 'N/A'
+                    owner: toolInfo?.owner || entry.owner || 'N/A'
                 };
             });
             
@@ -7310,7 +7310,7 @@ if (!userCredential.user.emailVerified) {
         const byCollection = {};
         workLocationCurrentOutTools.forEach(tool => {
             const collection = tool.collectionCode || 'Unknown Collection';
-            const owner = tool.technician || 'N/A';
+            const owner = tool.owner || 'N/A';
             
             if (!byCollection[collection]) {
                 byCollection[collection] = {
