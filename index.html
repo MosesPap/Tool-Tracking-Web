@@ -308,6 +308,18 @@
             box-shadow: 0 6px 12px rgba(108, 117, 125, 0.4);
         }
         
+        .btn-info {
+            background-color: #17a2b8 !important;
+            border-color: #17a2b8 !important;
+            color: white !important;
+            font-weight: bold;
+            border-radius: 24px !important;
+            padding: 12px 24px !important;
+            box-shadow: 0 4px 8px rgba(23, 162, 184, 0.3);
+            transition: all 0.3s ease;
+            border: none;
+        }
+        
         .btn-info:hover {
             background-color: #17a2b8 !important;
             border-color: #17a2b8 !important;
@@ -319,6 +331,32 @@
         .btn-info:active {
             transform: translateY(-1px);
             box-shadow: 0 6px 12px rgba(23, 162, 184, 0.4);
+        }
+        
+        /* Purple button styles for Tools by Work Location */
+        #menuWorkLocationBtn {
+            background-color: #9C27B0 !important;
+            border-color: #9C27B0 !important;
+            color: white !important;
+            font-weight: bold;
+            border-radius: 24px !important;
+            padding: 12px 24px !important;
+            box-shadow: 0 4px 8px rgba(156, 39, 176, 0.3) !important;
+            transition: all 0.3s ease;
+            border: none !important;
+        }
+        
+        #menuWorkLocationBtn:hover {
+            background-color: #7B1FA2 !important;
+            border-color: #7B1FA2 !important;
+            color: white !important;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(156, 39, 176, 0.4) !important;
+        }
+        
+        #menuWorkLocationBtn:active {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(156, 39, 176, 0.4) !important;
         }
         
         /* Google Sign-In Button Styles */
@@ -1769,7 +1807,7 @@
                 <button class="btn btn-danger" id="menuOutBtn"><i class="fas fa-sign-out-alt"></i> View OUT Tools</button>
                 <button class="btn btn-warning" id="menuMyToolsBtn"><i class="fas fa-toolbox"></i> My Tools</button>
                 <button class="btn btn-primary" id="menuSearchBtn"><i class="fas fa-search"></i> Search for Tools</button>
-                <button class="btn" style="background: #9C27B0; color: white;" id="menuWorkLocationBtn"><i class="fas fa-map-marker-alt"></i> Tools by Work Location</button>
+                <button class="btn" id="menuWorkLocationBtn"><i class="fas fa-map-marker-alt"></i> Tools by Work Location</button>
                 <button class="btn btn-info" id="menuAdminBtn" style="display: none;"><i class="fas fa-user-shield"></i> Tool Administrator</button>
                 <button class="btn btn-secondary" id="menuLogoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
             </div>
