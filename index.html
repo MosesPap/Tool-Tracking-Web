@@ -4871,7 +4871,7 @@ if (!userCredential.user.emailVerified) {
         let lastToolCacheTime = 0;
         const TOOL_CACHE_DURATION = 60000; // 1 minute
 
-        // Cache all tools for fast searching
+        // Cache all tools for fast searching (with pagination to get ALL tools)
         async function refreshToolCache() {
             const now = Date.now();
             if (now - lastToolCacheTime < TOOL_CACHE_DURATION && allToolsCache.length > 0) {
@@ -4879,20 +4879,49 @@ if (!userCredential.user.emailVerified) {
             }
             
             try {
-                const snapshot = await db.collection('tools').limit(500).get();
+                // Load ALL tools using pagination to handle large collections
                 allToolsCache = [];
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    allToolsCache.push({
-                        id: doc.id,
-                        toolName: data.toolName || '',
-                        partNumber: data.partNumber || '',
-                        serialNumber: data.serialNumber || '',
-                        status: data.status || 'IN',
-                        owner: data.owner || 'N/A'
+                let lastDoc = null;
+                let hasMore = true;
+                
+                while (hasMore) {
+                    let query = db.collection('tools');
+                    
+                    // Use pagination with last document
+                    if (lastDoc) {
+                        query = query.startAfter(lastDoc);
+                    }
+                    
+                    // Get batch (Firestore returns up to ~1MB of data per batch)
+                    const snapshot = await query.limit(1000).get();
+                    
+                    if (snapshot.empty) {
+                        hasMore = false;
+                        break;
+                    }
+                    
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        allToolsCache.push({
+                            id: doc.id,
+                            toolName: data.toolName || '',
+                            partNumber: data.partNumber || '',
+                            serialNumber: data.serialNumber || '',
+                            status: data.status || 'IN',
+                            owner: data.owner || 'N/A'
+                        });
                     });
-                });
+                    
+                    // Check if there are more documents
+                    if (snapshot.size < 1000) {
+                        hasMore = false;
+                    } else {
+                        lastDoc = snapshot.docs[snapshot.docs.length - 1];
+                    }
+                }
+                
                 lastToolCacheTime = now;
+                console.log(`Loaded ${allToolsCache.length} tools into cache for searching`);
             } catch (error) {
                 console.error('Error refreshing tool cache:', error);
             }
