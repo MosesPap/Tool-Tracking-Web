@@ -1298,8 +1298,36 @@
           }
         }
 
-        /* Larger fonts for tool cards in modals on desktop and tablets */
-        @media (min-width: 769px) {
+        /* Medium fonts for tool cards on tablets (between mobile and desktop) */
+        @media (min-width: 769px) and (max-width: 1024px) {
+          #collectionDisplaySection .register-tool-card *,
+          #searchResults .register-tool-card *,
+          #toolList .register-tool-card *,
+          #previousOutToolsList .previous-out-tool-card *,
+          #myToolsScreenBody .mytools-tool-item * {
+            font-size: 1.1rem !important;
+          }
+
+          #collectionDisplaySection .register-tool-card h6,
+          #searchResults .register-tool-card h6,
+          #toolList .register-tool-card > div:first-child,
+          #previousOutToolsList .previous-out-tool-card .previous-out-tool-name,
+          #myToolsScreenBody .mytools-tool-item .mytools-tool-name {
+            font-size: 1.3rem !important;
+          }
+
+          #collectionDisplaySection .register-tool-card .badge,
+          #searchResults .register-tool-card .badge,
+          #toolList .register-tool-card .badge,
+          #previousOutToolsList .previous-out-tool-card .previous-out-tool-status,
+          #myToolsScreenBody .mytools-tool-item [class*="mytools-status-"] {
+            font-size: 1.0rem !important;
+            padding: 5px 10px !important;
+          }
+        }
+
+        /* Larger fonts for tool cards in modals on desktop screens */
+        @media (min-width: 1025px) {
           #collectionDisplaySection .register-tool-card *,
           #searchResults .register-tool-card *,
           #toolList .register-tool-card *,
