@@ -382,54 +382,6 @@
             }
         }
         
-        /* Autocomplete dropdown styles */
-        .autocomplete-dropdown {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            z-index: 1000;
-            max-height: 300px;
-            overflow-y: auto;
-            margin-top: 4px;
-        }
-        
-        .autocomplete-item {
-            padding: 10px 12px;
-            cursor: pointer;
-            border-bottom: 1px solid #f0f0f0;
-            transition: background-color 0.2s;
-        }
-        
-        .autocomplete-item:hover {
-            background-color: #f8f9fa;
-        }
-        
-        .autocomplete-item:last-child {
-            border-bottom: none;
-        }
-        
-        .autocomplete-item .tool-name {
-            font-weight: 600;
-            font-size: 0.95rem;
-            color: #333;
-            margin-bottom: 4px;
-        }
-        
-        .autocomplete-item .tool-info {
-            font-size: 0.85rem;
-            color: #666;
-        }
-        
-        .autocomplete-item .tool-badge {
-            float: right;
-            margin-top: -20px;
-        }
-        
         /* Google Sign-In Button Styles */
         .btn-outline-dark {
             background-color: white !important;
@@ -752,6 +704,63 @@
         .workloc-status-in {
             color: #388E3C;
             font-weight: bold;
+        }
+
+        /* Tool Code Search Dropdown Styles */
+        .tool-code-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 2px solid #FF9800;
+            border-top: none;
+            border-radius: 0 0 10px 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .tool-code-dropdown-item {
+            padding: 12px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.2s ease;
+        }
+
+        .tool-code-dropdown-item:hover {
+            background: #fff3e0;
+        }
+
+        .tool-code-dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .tool-code-dropdown-item .tool-id {
+            font-weight: bold;
+            color: #FF9800;
+            font-size: 1rem;
+        }
+
+        .tool-code-dropdown-item .tool-name {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 3px;
+        }
+
+        .tool-code-dropdown-item .tool-part {
+            color: #999;
+            font-size: 0.85rem;
+            margin-top: 2px;
+        }
+
+        .tool-code-dropdown-empty {
+            padding: 15px;
+            text-align: center;
+            color: #999;
+            font-style: italic;
         }
 
         /* Filter date button styles */
@@ -1700,28 +1709,17 @@
                                     </div>
                                     <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-2" style="display:none;">Stop Scanner</button>
                                     <div id="reader" style="display:none;"></div>
-                                    <div class="input-group mb-2" style="position: relative;">
-                                        <input type="text" id="toolCode" class="form-control" placeholder="Enter Tool Code" oninput="searchToolCodeAutocomplete()" onfocus="searchToolCodeAutocomplete()" autocomplete="off">
-                                        <button onclick="submitCode()" class="btn btn-primary">
-                                            <i class="fas fa-check"></i> Submit
-                                        </button>
-                                        <div id="toolCodeAutocomplete" class="autocomplete-dropdown" style="display: none;"></div>
-                                    </div>
-                                    <!-- Search Tools Section -->
-                                    <div class="mb-2">
-                                        <label class="form-label" style="font-size: 0.9rem; font-weight: 600; margin-bottom: 4px;">Search Tools</label>
-                                        <div class="d-flex gap-2 mb-2">
-                                            <button id="searchTypeToolName" class="btn btn-success flex-fill btn-sm" onclick="setSearchType('toolName', this)">Tool Name</button>
-                                            <button id="searchTypePartNumber" class="btn btn-outline-secondary flex-fill btn-sm" onclick="setSearchType('partNumber', this)">Part Number</button>
-                                        </div>
-                                        <div class="input-group">
-                                            <input type="text" id="searchToolInput" class="form-control" placeholder="Search by tool name..." oninput="searchToolsInRegister()">
-                                            <button class="btn btn-outline-secondary" onclick="clearToolSearch()" type="button">
-                                                <i class="fas fa-times"></i>
+                                    <div style="position: relative;">
+                                        <div class="input-group mb-2">
+                                            <input type="text" id="toolCode" class="form-control" placeholder="Enter Tool Code, Name, or Part Number" autocomplete="off">
+                                            <button onclick="submitCode()" class="btn btn-primary">
+                                                <i class="fas fa-check"></i> Submit
                                             </button>
                                         </div>
-                                        <div id="toolSearchResults" class="mt-2" style="max-height: 200px; overflow-y: auto;"></div>
+                                        <!-- Dropdown for tool suggestions -->
+                                        <div id="toolCodeDropdown" class="tool-code-dropdown"></div>
                                     </div>
+                                    <small class="text-muted" style="display: block; margin-top: -8px; margin-bottom: 8px;">Case-insensitive search - searches Tool ID, Tool Name, and Part Number</small>
                                     <button id="toolDetailsBtn" class="btn btn-info w-100 mb-1" disabled onclick="showLastScannedToolDetails()">Tool Details</button>
                                     </div>
                                 </div>
@@ -3187,240 +3185,6 @@ if (!userCredential.user.emailVerified) {
         let checkupLocationStats = {};
 
         // Submit tool code
-        // Search type variable
-        let currentSearchType = 'toolName';
-        
-        // Set search type function
-        window.setSearchType = function(type, buttonElement) {
-            currentSearchType = type;
-            const toolNameBtn = document.getElementById('searchTypeToolName');
-            const partNumberBtn = document.getElementById('searchTypePartNumber');
-            
-            if (type === 'toolName') {
-                toolNameBtn.className = 'btn btn-success flex-fill btn-sm';
-                partNumberBtn.className = 'btn btn-outline-secondary flex-fill btn-sm';
-                document.getElementById('searchToolInput').placeholder = 'Search by tool name...';
-            } else {
-                partNumberBtn.className = 'btn btn-success flex-fill btn-sm';
-                toolNameBtn.className = 'btn btn-outline-secondary flex-fill btn-sm';
-                document.getElementById('searchToolInput').placeholder = 'Search by part number...';
-            }
-            
-            // Clear results when switching types
-            document.getElementById('toolSearchResults').innerHTML = '';
-        };
-        
-        // Search tools function
-        window.searchToolsInRegister = async function() {
-            const query = document.getElementById('searchToolInput').value.trim();
-            const resultsContainer = document.getElementById('toolSearchResults');
-            
-            if (query.length < 2) {
-                resultsContainer.innerHTML = '';
-                return;
-            }
-            
-            try {
-                resultsContainer.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm" role="status"></div><small class="d-block mt-1">Searching...</small></div>';
-                
-                // Get all tools and filter client-side
-                const snapshot = await db.collection('tools').limit(500).get();
-                const lowerQuery = query.toLowerCase();
-                
-                const filteredDocs = snapshot.docs.filter(doc => {
-                    const data = doc.data();
-                    
-                    if (currentSearchType === 'toolName') {
-                        const toolName = (data.toolName || '').toLowerCase();
-                        return toolName.includes(lowerQuery);
-                    } else {
-                        const partNumber = (data.partNumber || doc.id || '').toLowerCase();
-                        return partNumber.includes(lowerQuery);
-                    }
-                });
-                
-                if (filteredDocs.length === 0) {
-                    resultsContainer.innerHTML = '<div class="alert alert-info py-2 mb-0"><small>No tools found matching your search.</small></div>';
-                    return;
-                }
-                
-                // Limit to 20 results for display
-                const limitedDocs = filteredDocs.slice(0, 20);
-                
-                let html = '<div class="list-group">';
-                limitedDocs.forEach((doc) => {
-                    const data = doc.data();
-                    const status = (data.status || '').toUpperCase();
-                    let statusClass = 'in';
-                    if (status === 'OUT') statusClass = 'out';
-                    else if (status === 'BROKEN') statusClass = 'broken';
-                    else if (status === 'LOST') statusClass = 'lost';
-                    else if (status === 'CALIBRATION') statusClass = 'calibration';
-                    
-                    html += `
-                        <a href="#" class="list-group-item list-group-item-action" onclick="selectToolFromSearch('${doc.id}'); return false;" style="padding: 8px 12px; border-left: 4px solid ${statusClass === 'out' ? '#f44336' : statusClass === 'in' ? '#4CAF50' : '#FF9800'};">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1" style="font-size: 0.95rem;">${data.toolName || 'Unknown Tool'}</h6>
-                                <small class="badge bg-${statusClass === 'out' ? 'danger' : statusClass === 'in' ? 'success' : 'warning'}">${status}</small>
-                            </div>
-                            <p class="mb-1" style="font-size: 0.85rem; color: #666;">
-                                <strong>Part #:</strong> ${data.partNumber || doc.id}<br>
-                                <strong>Collection:</strong> ${data.collectionCode || 'N/A'}
-                            </p>
-                        </a>
-                    `;
-                });
-                html += '</div>';
-                if (filteredDocs.length > 20) {
-                    html += `<small class="text-muted d-block mt-2">Showing 20 of ${filteredDocs.length} results</small>`;
-                }
-                resultsContainer.innerHTML = html;
-                
-            } catch (error) {
-                console.error('Search error:', error);
-                resultsContainer.innerHTML = '<div class="alert alert-danger py-2 mb-0"><small>Error performing search. Please try again.</small></div>';
-            }
-        };
-        
-        // Clear search function
-        window.clearToolSearch = function() {
-            document.getElementById('searchToolInput').value = '';
-            document.getElementById('toolSearchResults').innerHTML = '';
-        };
-        
-        // Select tool from search results
-        window.selectToolFromSearch = function(toolId) {
-            // Set the tool code input field
-            document.getElementById('toolCode').value = toolId;
-            // Clear search results
-            document.getElementById('searchToolInput').value = '';
-            document.getElementById('toolSearchResults').innerHTML = '';
-            // Submit the code
-            submitCode();
-        };
-        
-        // Autocomplete for tool code input
-        let autocompleteTimeout = null;
-        let allToolsCache = null;
-        let lastAutocompleteQuery = '';
-        
-        window.searchToolCodeAutocomplete = async function() {
-            const query = document.getElementById('toolCode').value.trim();
-            const dropdown = document.getElementById('toolCodeAutocomplete');
-            
-            // Clear previous timeout
-            if (autocompleteTimeout) {
-                clearTimeout(autocompleteTimeout);
-            }
-            
-            // If query is empty or too short, hide dropdown
-            if (query.length < 1) {
-                dropdown.style.display = 'none';
-                return;
-            }
-            
-            // If same query, don't search again
-            if (query === lastAutocompleteQuery && query.length < 3) {
-                return;
-            }
-            
-            lastAutocompleteQuery = query;
-            
-            // Debounce the search
-            autocompleteTimeout = setTimeout(async () => {
-                try {
-                    // Load tools cache if not already loaded
-                    if (!allToolsCache) {
-                        const snapshot = await db.collection('tools').limit(500).get();
-                        allToolsCache = snapshot.docs.map(doc => ({
-                            id: doc.id,
-                            ...doc.data()
-                        }));
-                    }
-                    
-                    const lowerQuery = query.toLowerCase();
-                    
-                    // Search in both tool name and part number
-                    const filtered = allToolsCache.filter(tool => {
-                        const toolName = (tool.toolName || '').toLowerCase();
-                        const partNumber = (tool.partNumber || tool.id || '').toLowerCase();
-                        return toolName.includes(lowerQuery) || partNumber.includes(lowerQuery);
-                    });
-                    
-                    // Limit to 10 results for dropdown
-                    const limited = filtered.slice(0, 10);
-                    
-                    if (limited.length === 0) {
-                        dropdown.innerHTML = '<div class="autocomplete-item" style="text-align: center; color: #666; padding: 12px;">No tools found</div>';
-                        dropdown.style.display = 'block';
-                        return;
-                    }
-                    
-                    let html = '';
-                    limited.forEach((tool) => {
-                        const status = (tool.status || '').toUpperCase();
-                        let statusClass = 'in';
-                        let badgeClass = 'success';
-                        if (status === 'OUT') {
-                            statusClass = 'out';
-                            badgeClass = 'danger';
-                        } else if (status === 'BROKEN') {
-                            statusClass = 'broken';
-                            badgeClass = 'warning';
-                        } else if (status === 'LOST') {
-                            statusClass = 'lost';
-                            badgeClass = 'warning';
-                        } else if (status === 'CALIBRATION') {
-                            statusClass = 'calibration';
-                            badgeClass = 'info';
-                        }
-                        
-                        html += `
-                            <div class="autocomplete-item" onclick="selectToolFromAutocomplete('${tool.id}')">
-                                <div class="tool-name">
-                                    ${tool.toolName || 'Unknown Tool'}
-                                    <span class="tool-badge">
-                                        <span class="badge bg-${badgeClass}">${status}</span>
-                                    </span>
-                                </div>
-                                <div class="tool-info">
-                                    <strong>Part #:</strong> ${tool.partNumber || tool.id} | 
-                                    <strong>Collection:</strong> ${tool.collectionCode || 'N/A'}
-                                </div>
-                            </div>
-                        `;
-                    });
-                    
-                    dropdown.innerHTML = html;
-                    dropdown.style.display = 'block';
-                    
-                } catch (error) {
-                    console.error('Autocomplete error:', error);
-                    dropdown.style.display = 'none';
-                }
-            }, 300); // 300ms debounce
-        };
-        
-        // Select tool from autocomplete dropdown
-        window.selectToolFromAutocomplete = function(toolId) {
-            document.getElementById('toolCode').value = toolId;
-            document.getElementById('toolCodeAutocomplete').style.display = 'none';
-            // Optionally auto-submit or just fill the field
-            // submitCode();
-        };
-        
-        // Hide autocomplete when clicking outside
-        document.addEventListener('click', function(event) {
-            const toolCodeInput = document.getElementById('toolCode');
-            const dropdown = document.getElementById('toolCodeAutocomplete');
-            
-            if (toolCodeInput && dropdown && 
-                !toolCodeInput.contains(event.target) && 
-                !dropdown.contains(event.target)) {
-                dropdown.style.display = 'none';
-            }
-        });
-
         async function submitCode() {
             const code = document.getElementById('toolCode').value.trim();
     console.log('Submit button pressed. Tool code:', code);
@@ -4047,7 +3811,14 @@ if (!userCredential.user.emailVerified) {
                 { facingMode: "environment" },
                 config,
                 (decodedText) => {
-                    document.getElementById('toolCode').value = decodedText;
+                    const toolCodeInput = document.getElementById('toolCode');
+                    const dropdown = document.getElementById('toolCodeDropdown');
+                    if (toolCodeInput) {
+                        toolCodeInput.value = decodedText;
+                    }
+                    if (dropdown) {
+                        dropdown.style.display = 'none';
+                    }
                     document.getElementById('toolDetailsBtn').disabled = false;
                     stopCamera();
                 },
@@ -4060,7 +3831,14 @@ if (!userCredential.user.emailVerified) {
                     { facingMode: "user" },
                     config,
                     (decodedText) => {
-                        document.getElementById('toolCode').value = decodedText;
+                        const toolCodeInput = document.getElementById('toolCode');
+                        const dropdown = document.getElementById('toolCodeDropdown');
+                        if (toolCodeInput) {
+                            toolCodeInput.value = decodedText;
+                        }
+                        if (dropdown) {
+                            dropdown.style.display = 'none';
+                        }
                         document.getElementById('toolDetailsBtn').disabled = false;
                         stopCamera();
                     },
@@ -4231,7 +4009,14 @@ if (!userCredential.user.emailVerified) {
                 { facingMode: "environment" },
                 config,
                 (decodedText) => {
-                    document.getElementById('toolCode').value = decodedText;
+                    const toolCodeInput = document.getElementById('toolCode');
+                    const dropdown = document.getElementById('toolCodeDropdown');
+                    if (toolCodeInput) {
+                        toolCodeInput.value = decodedText;
+                    }
+                    if (dropdown) {
+                        dropdown.style.display = 'none';
+                    }
                     document.getElementById('toolDetailsBtn').disabled = false;
                     closeEnhancedScanner();
                 },
@@ -4245,7 +4030,14 @@ if (!userCredential.user.emailVerified) {
                     { facingMode: "user" },
                     config,
                     (decodedText) => {
-                        document.getElementById('toolCode').value = decodedText;
+                        const toolCodeInput = document.getElementById('toolCode');
+                        const dropdown = document.getElementById('toolCodeDropdown');
+                        if (toolCodeInput) {
+                            toolCodeInput.value = decodedText;
+                        }
+                        if (dropdown) {
+                            dropdown.style.display = 'none';
+                        }
                         document.getElementById('toolDetailsBtn').disabled = false;
                         closeEnhancedScanner();
                     },
@@ -4543,11 +4335,7 @@ if (!userCredential.user.emailVerified) {
             modal.show();
         }
 
-        // Enable/disable Tool Details button based on input
-        document.getElementById('toolCode').addEventListener('input', function() {
-            const btn = document.getElementById('toolDetailsBtn');
-            btn.disabled = !this.value.trim();
-        });
+        // Tool Details button enable/disable is now handled in the DOMContentLoaded event listener above
 
         // My Tools Screen with app-like formatting (full page)
         async function showMyTools() {
@@ -5077,16 +4865,171 @@ if (!userCredential.user.emailVerified) {
             }
         }
 
-        // Add event listener to toolCode input to trigger flash
+        // Tool code search functionality
+        let toolSearchTimeout = null;
+        let allToolsCache = [];
+        let lastToolCacheTime = 0;
+        const TOOL_CACHE_DURATION = 60000; // 1 minute
+
+        // Cache all tools for fast searching
+        async function refreshToolCache() {
+            const now = Date.now();
+            if (now - lastToolCacheTime < TOOL_CACHE_DURATION && allToolsCache.length > 0) {
+                return; // Use cached data
+            }
+            
+            try {
+                const snapshot = await db.collection('tools').limit(500).get();
+                allToolsCache = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    allToolsCache.push({
+                        id: doc.id,
+                        toolName: data.toolName || '',
+                        partNumber: data.partNumber || '',
+                        serialNumber: data.serialNumber || '',
+                        status: data.status || 'IN',
+                        owner: data.owner || 'N/A'
+                    });
+                });
+                lastToolCacheTime = now;
+            } catch (error) {
+                console.error('Error refreshing tool cache:', error);
+            }
+        }
+
+        // Search tools and show dropdown
+        async function searchToolsForDropdown(searchTerm) {
+            const dropdown = document.getElementById('toolCodeDropdown');
+            if (!dropdown) return;
+
+            if (!searchTerm || searchTerm.length < 1) {
+                dropdown.style.display = 'none';
+                return;
+            }
+
+            // Refresh cache if needed
+            await refreshToolCache();
+
+            // Case-insensitive search
+            const lowerSearch = searchTerm.toLowerCase();
+            const matches = allToolsCache.filter(tool => {
+                const toolId = tool.id.toLowerCase();
+                const toolName = (tool.toolName || '').toLowerCase();
+                const partNumber = (tool.partNumber || '').toLowerCase();
+                const serialNumber = (tool.serialNumber || '').toLowerCase();
+                
+                return toolId.includes(lowerSearch) || 
+                       toolName.includes(lowerSearch) || 
+                       partNumber.includes(lowerSearch) ||
+                       serialNumber.includes(lowerSearch);
+            }).slice(0, 10); // Limit to 10 results
+
+            if (matches.length === 0) {
+                dropdown.innerHTML = '<div class="tool-code-dropdown-empty">No tools found matching "' + searchTerm + '"</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+
+            // Build dropdown HTML
+            dropdown.innerHTML = matches.map(tool => {
+                const statusColor = tool.status === 'IN' ? '#28a745' : tool.status === 'OUT' ? '#dc3545' : '#6c757d';
+                const partDisplay = tool.partNumber ? `P/N: ${tool.partNumber}` : '';
+                return `
+                    <div class="tool-code-dropdown-item" onclick="selectToolFromCodeDropdown('${tool.id.replace(/'/g, "\\'")}')">
+                        <div class="tool-id">${tool.id}</div>
+                        <div class="tool-name">${tool.toolName || 'Unknown Tool'}</div>
+                        <div class="tool-part">
+                            ${partDisplay ? partDisplay + ' | ' : ''}Status: <span style="color: ${statusColor}; font-weight: bold;">${tool.status}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            dropdown.style.display = 'block';
+        }
+
+        // Select tool from dropdown
+        window.selectToolFromCodeDropdown = function(toolId) {
+            const toolCodeInput = document.getElementById('toolCode');
+            const dropdown = document.getElementById('toolCodeDropdown');
+            
+            if (toolCodeInput) {
+                toolCodeInput.value = toolId;
+            }
+            
+            if (dropdown) {
+                dropdown.style.display = 'none';
+            }
+            
+            // Trigger work location flash
+            if (toolCodeInput && toolCodeInput.value.trim().length > 0) {
+                startWorkLocationFlash();
+            }
+        };
+
+        // Add event listener to toolCode input for search and flash
         document.addEventListener('DOMContentLoaded', function() {
             const toolCodeInput = document.getElementById('toolCode');
             if (toolCodeInput) {
                 toolCodeInput.addEventListener('input', function() {
-                    if (this.value.trim().length > 0) {
+                    const value = this.value.trim();
+                    
+                    // Enable/disable tool details button
+                    const toolDetailsBtn = document.getElementById('toolDetailsBtn');
+                    if (toolDetailsBtn) {
+                        toolDetailsBtn.disabled = !value;
+                    }
+                    
+                    // Trigger work location flash
+                    if (value.length > 0) {
                         startWorkLocationFlash();
+                    }
+                    
+                    // Search for tools as user types
+                    clearTimeout(toolSearchTimeout);
+                    toolSearchTimeout = setTimeout(() => {
+                        searchToolsForDropdown(value);
+                    }, 300); // Debounce search by 300ms
+                });
+
+                // Handle Enter key
+                toolCodeInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        submitCode();
+                    } else if (e.key === 'Escape') {
+                        const dropdown = document.getElementById('toolCodeDropdown');
+                        if (dropdown) {
+                            dropdown.style.display = 'none';
+                        }
+                    }
+                });
+
+                // Focus handler
+                toolCodeInput.addEventListener('focus', function() {
+                    const value = this.value.trim();
+                    if (value.length > 0) {
+                        searchToolsForDropdown(value);
                     }
                 });
             }
+
+            // Hide dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                const toolCodeInput = document.getElementById('toolCode');
+                const dropdown = document.getElementById('toolCodeDropdown');
+                
+                if (toolCodeInput && dropdown && 
+                    e.target !== toolCodeInput && 
+                    !toolCodeInput.parentElement.contains(e.target) &&
+                    !dropdown.contains(e.target)) {
+                    dropdown.style.display = 'none';
+                }
+            });
+
+            // Initial cache refresh
+            refreshToolCache();
         });
 
         document.getElementById('changeWorkLocationBtn').onclick = function() {
