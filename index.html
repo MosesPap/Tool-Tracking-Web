@@ -359,6 +359,29 @@
             box-shadow: 0 6px 12px rgba(156, 39, 176, 0.4) !important;
         }
         
+        /* Tablet styles for ToolScanner menu buttons */
+        @media (min-width: 768px) and (max-width: 1024px) {
+            /* Make button container wider on tablets */
+            #toolScannerMenu .d-grid.col-6 {
+                max-width: 85% !important;
+                width: 85% !important;
+                flex: 0 0 85% !important;
+            }
+            
+            /* Increase font size and padding for all menu buttons */
+            #toolScannerMenu .btn {
+                font-size: 1.5rem !important;
+                padding: 16px 32px !important;
+                min-height: 60px !important;
+            }
+            
+            /* Increase icon size */
+            #toolScannerMenu .btn i {
+                font-size: 1.3rem !important;
+                margin-right: 8px !important;
+            }
+        }
+        
         /* Google Sign-In Button Styles */
         .btn-outline-dark {
             background-color: white !important;
@@ -1806,7 +1829,6 @@
                 <button class="btn btn-success" id="menuRegisterBtn"><i class="fas fa-plus"></i> Register Tools</button>
                 <button class="btn btn-danger" id="menuOutBtn"><i class="fas fa-sign-out-alt"></i> View OUT Tools</button>
                 <button class="btn btn-warning" id="menuMyToolsBtn"><i class="fas fa-toolbox"></i> My Tools</button>
-                <button class="btn btn-primary" id="menuSearchBtn"><i class="fas fa-search"></i> Search for Tools</button>
                 <button class="btn" id="menuWorkLocationBtn"><i class="fas fa-map-marker-alt"></i> Tools by Work Location</button>
                 <button class="btn btn-info" id="menuAdminBtn" style="display: none;"><i class="fas fa-user-shield"></i> Tool Administrator</button>
                 <button class="btn btn-secondary" id="menuLogoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
@@ -2391,31 +2413,6 @@
       </div>
     </div>
   </div>
-  <!--Search Tools Screen -->
-    <div id="searchToolsScreen" style="display:none;">
-      <!-- Orange Title Bar -->
-      <div style="background: #FF9800; color: white; padding: 1rem 0; width: 100%; position: relative;">
-        <div class="container">
-          <h2 style="color: white; font-weight: bold; font-size: 2rem; margin: 0; text-align: center;">Search Tools</h2>
-        </div>
-      </div>
-      
-      <div class="container py-4">
-        <button id="searchToolsBackBtn" class="btn btn-outline-secondary mb-3"><i class="fas fa-arrow-left"></i> Back to Menu</button>
-        <div class="d-flex mb-3" style="gap:8px;">
-          <button id="searchTypePartNumber" class="btn btn-success flex-fill">Part Number</button>
-          <button id="searchTypePartName" class="btn btn-outline-secondary flex-fill">Part Name</button>
-        </div>
-        <div class="input-group mb-3">
-          <span class="input-group-text"><i class="fas fa-search"></i></span>
-          <input type="text" id="searchToolsInput" class="form-control" placeholder="Search by Part Number">
-          <button class="btn btn-outline-secondary" id="searchToolsClearBtn" type="button"><i class="fas fa-times"></i></button>
-        </div>
-        <div id="searchToolsSuggestions" class="mb-2"></div>
-        <div id="searchToolsResults"></div>
-      </div>
-    </div>
-    
     <!-- Enhanced Scanner Modal -->
     <div class="enhanced-scanner-modal" id="enhancedScannerModal" style="display: none;">
         <div class="enhanced-scanner-content">
@@ -4810,139 +4807,6 @@ if (!userCredential.user.emailVerified) {
             }
         }
 
-        function showSearchTools() {
-            document.getElementById('toolScannerMenu').style.display = 'none';
-            document.getElementById('searchToolsScreen').style.display = 'block';
-            
-            // Set up search functionality
-            setupSearchTools();
-        }
-
-        function setupSearchTools() {
-            const searchInput = document.getElementById('searchToolsInput');
-            const searchResults = document.getElementById('searchToolsResults');
-            const searchTypePartNumber = document.getElementById('searchTypePartNumber');
-            const searchTypePartName = document.getElementById('searchTypePartName');
-            const searchToolsClearBtn = document.getElementById('searchToolsClearBtn');
-            const searchToolsBackBtn = document.getElementById('searchToolsBackBtn');
-            
-            let currentSearchType = 'partNumber';
-            
-            // Set up search type buttons
-            searchTypePartNumber.onclick = function() {
-                currentSearchType = 'partNumber';
-                searchTypePartNumber.className = 'btn btn-success flex-fill';
-                searchTypePartName.className = 'btn btn-outline-secondary flex-fill';
-                searchInput.placeholder = 'Search by Part Number';
-                searchInput.value = '';
-                searchResults.innerHTML = '';
-            };
-            
-            searchTypePartName.onclick = function() {
-                currentSearchType = 'partName';
-                searchTypePartName.className = 'btn btn-success flex-fill';
-                searchTypePartNumber.className = 'btn btn-outline-secondary flex-fill';
-                searchInput.placeholder = 'Search by Part Name';
-                searchInput.value = '';
-                searchResults.innerHTML = '';
-            };
-            
-            // Set up search input
-            searchInput.oninput = function() {
-                const query = this.value.trim();
-                if (query.length >= 2) {
-                    performSearch(query, currentSearchType);
-                } else {
-                    searchResults.innerHTML = '';
-                }
-            };
-            
-            // Set up clear button
-            searchToolsClearBtn.onclick = function() {
-                searchInput.value = '';
-                searchResults.innerHTML = '';
-            };
-            
-            // Set up back button
-            searchToolsBackBtn.onclick = function() {
-                document.getElementById('searchToolsScreen').style.display = 'none';
-                document.getElementById('toolScannerMenu').style.display = 'block';
-            };
-        }
-
-        async function performSearch(query, searchType) {
-            const searchResults = document.getElementById('searchToolsResults');
-            searchResults.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><br>Searching...</div>';
-            
-            try {
-                // Convert query to lowercase for case-insensitive search
-                const lowerQuery = query.toLowerCase();
-                
-                // Get all tools and filter client-side for case-insensitive search
-                const snapshot = await db.collection('tools').limit(500).get();
-                
-                if (snapshot.empty) {
-                    searchResults.innerHTML = '<div class="alert alert-info">No tools found.</div>';
-                    return;
-                }
-                
-                // Filter results based on search type and query (case-insensitive)
-                const filteredDocs = snapshot.docs.filter(doc => {
-                    const data = doc.data();
-                    
-                    if (searchType === 'partNumber') {
-                        // Search in part number (case-insensitive)
-                        const partNumber = (data.partNumber || doc.id || '').toLowerCase();
-                        return partNumber.includes(lowerQuery);
-                    } else {
-                        // Search in tool name (case-insensitive)
-                        const toolName = (data.toolName || '').toLowerCase();
-                        return toolName.includes(lowerQuery);
-                    }
-                });
-                
-                if (filteredDocs.length === 0) {
-                    searchResults.innerHTML = '<div class="alert alert-info">No tools found matching your search.</div>';
-                    return;
-                }
-                
-                // Limit results to 50 for performance
-                const limitedDocs = filteredDocs.slice(0, 50);
-                
-                let html = '<div class="row">';
-                limitedDocs.forEach((doc, index) => {
-                    const data = doc.data();
-                    const status = (data.status || '').toUpperCase();
-                    let statusClass = 'in';
-                    if (status === 'OUT') statusClass = 'out';
-                    else if (status === 'BROKEN') statusClass = 'broken';
-                    else if (status === 'LOST') statusClass = 'lost';
-                    else if (status === 'CALIBRATION') statusClass = 'calibration';
-                    
-                    html += `
-                        <div class="col-md-6 mb-3">
-                            <div class="card register-tool-card ${statusClass}" onclick="showToolDetails(${JSON.stringify({id: doc.id, ...data})}, 'searchTools')">
-                                <div class="card-body">
-                                    <h6 class="card-title">${data.toolName || 'Unknown Tool'}</h6>
-                                    <p class="card-text">
-                                        <strong>Part Number:</strong> ${data.partNumber || doc.id}<br>
-                                        <strong>Status:</strong> <span class="badge bg-${statusClass === 'out' ? 'danger' : statusClass === 'in' ? 'success' : 'warning'}">${status}</span><br>
-                                        <strong>Location:</strong> ${data.WorkOn || 'Unknown'}<br>
-                                        <strong>Technician:</strong> ${data.technician || 'Unknown'}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                });
-                html += '</div>';
-                searchResults.innerHTML = html;
-                
-            } catch (error) {
-                console.error('Search error:', error);
-                searchResults.innerHTML = '<div class="alert alert-danger">Error performing search. Please try again.</div>';
-            }
-        }
 
         function showLocationSelectionModalForRegisterTools() {
             // Show helicopter model selection first
@@ -5168,7 +5032,6 @@ if (!userCredential.user.emailVerified) {
             
             // Set up menu button event handlers
             const menuRegisterBtn = document.getElementById('menuRegisterBtn');
-            const menuSearchBtn = document.getElementById('menuSearchBtn');
             const menuLogoutBtn = document.getElementById('menuLogoutBtn');
             const menuAdminBtn = document.getElementById('menuAdminBtn');
             
@@ -5176,13 +5039,6 @@ if (!userCredential.user.emailVerified) {
                 menuRegisterBtn.addEventListener('click', function() {
                     console.log('Register Tools button clicked');
                     showRegisterTools();
-                });
-            }
-            
-            if (menuSearchBtn) {
-                menuSearchBtn.addEventListener('click', function() {
-                    console.log('Search for Tools button clicked');
-                    showSearchTools();
                 });
             }
             
@@ -9475,21 +9331,6 @@ if (!userCredential.user.emailVerified) {
 
     
 
-    // Add Search Tools button to main menu
-    
-      document.addEventListener('DOMContentLoaded', function() {
-        // Add Search Tools button if not present
-        if (!document.getElementById('menuSearchBtn')) {
-          const menu = document.querySelector('#toolScannerMenu .d-grid');
-          if (menu) {
-            const btn = document.createElement('button');
-            btn.className = 'btn btn-primary';
-            btn.id = 'menuSearchBtn';
-            btn.innerHTML = '<i class="fas fa-search"></i> Search for Tools';
-            menu.appendChild(btn);
-          }
-        }
-      });
     </script>
 
     <script>
