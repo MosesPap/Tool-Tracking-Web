@@ -42,11 +42,28 @@
           #splashVideo {
             max-width: 430px;
             max-height: 932px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
             left: 50%;
             top: 50%;
             transform: translate(-50%, -50%);
             border-radius: 24px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+          }
+        }
+        
+        @media (min-width: 768px) and (max-width: 1024px) {
+          #splashVideo {
+            width: 100vw;
+            height: 100vh;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            left: 0;
+            top: 0;
+            transform: none;
+            border-radius: 0;
           }
         }
         
@@ -1377,7 +1394,7 @@
 <body>
     <div id="orangeOverlay"></div>
     <div id="splashScreen">
-        <video id="splashVideo" autoplay muted playsinline webkit-playsinline preload="auto" loop>
+        <video id="splashVideo" autoplay muted playsinline webkit-playsinline preload="auto">
             <source src="src/main/res/raw/helicopter_animation.mp4" type="video/mp4">
             <source src="src/helicopter_animation.mp4" type="video/mp4">
         </video>
@@ -3463,7 +3480,7 @@ if (!userCredential.user.emailVerified) {
                                 <span style="color: black; font-weight: bold;">WorkOn:</span> 
                                 <span style="color: #666; font-weight: bold;">${workOnValue}</span>
                             </div>
-                        </div>
+                            </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                             <div style="text-align: left;">
                                 <span style="color: black; font-weight: bold; text-decoration: underline;">TID</span>
@@ -4750,8 +4767,8 @@ if (!userCredential.user.emailVerified) {
                 document.getElementById('appSection').style.display = 'block';
                 refreshRegisterToolsScreen();
             } else {
-                // Show location selection dialog first, before entering register tools screen
-                showLocationSelectionModalForRegisterTools();
+            // Show location selection dialog first, before entering register tools screen
+            showLocationSelectionModalForRegisterTools();
             }
         }
 
@@ -5219,17 +5236,38 @@ if (!userCredential.user.emailVerified) {
                     
                     // Listen for video events
                     splashVideo.addEventListener('ended', hideSplashScreen);
+                    
+                    // One-time event listeners (only log once)
+                    let videoEventsLogged = {
+                        canplaythrough: false,
+                        canplay: false,
+                        loadeddata: false,
+                        loadstart: false
+                    };
+                    
                     splashVideo.addEventListener('canplaythrough', () => {
-                        console.log('Video can play through');
+                        if (!videoEventsLogged.canplaythrough) {
+                            console.log('Video can play through');
+                            videoEventsLogged.canplaythrough = true;
+                        }
                     });
                     splashVideo.addEventListener('canplay', () => {
-                        console.log('Video can play');
+                        if (!videoEventsLogged.canplay) {
+                            console.log('Video can play');
+                            videoEventsLogged.canplay = true;
+                        }
                     });
                     splashVideo.addEventListener('loadeddata', () => {
-                        console.log('Video loaded data');
+                        if (!videoEventsLogged.loadeddata) {
+                            console.log('Video loaded data');
+                            videoEventsLogged.loadeddata = true;
+                        }
                     });
                     splashVideo.addEventListener('loadstart', () => {
-                        console.log('Video load started');
+                        if (!videoEventsLogged.loadstart) {
+                            console.log('Video load started');
+                            videoEventsLogged.loadstart = true;
+                        }
                     });
                     splashVideo.addEventListener('error', (e) => {
                         console.log('Video error:', e);
@@ -7871,7 +7909,7 @@ if (!userCredential.user.emailVerified) {
                 // Create new owner div only if it doesn't exist
                 ownerDiv = document.createElement('div');
                 ownerDiv.id = 'collectionOwnerDiv';
-                backButton.parentNode.insertBefore(ownerDiv, backButton.nextSibling);
+            backButton.parentNode.insertBefore(ownerDiv, backButton.nextSibling);
             }
             
             // Update the content (whether new or existing)
@@ -8025,12 +8063,12 @@ if (!userCredential.user.emailVerified) {
         // Delete photo function
         async function deletePhoto(toolId, partNumber, photoIndex, photoUrl) {
             return new Promise(async (resolve, reject) => {
-                try {
-                    console.log('=== PHOTO DELETE STARTED ===');
-                    console.log('Tool ID:', toolId);
-                    console.log('Part Number:', partNumber);
-                    console.log('Photo Index:', photoIndex);
-                    console.log('Photo URL:', photoUrl);
+            try {
+                console.log('=== PHOTO DELETE STARTED ===');
+                console.log('Tool ID:', toolId);
+                console.log('Part Number:', partNumber);
+                console.log('Photo Index:', photoIndex);
+                console.log('Photo URL:', photoUrl);
 
                     // Find all tools with the same part number to show owners
                     const toolsWithSamePart = await db.collection('tools')
@@ -8123,44 +8161,44 @@ if (!userCredential.user.emailVerified) {
                 await db.collection('tools').doc(toolId).update({
                     photoUrls: updatedPhotoUrls
                 });
-                
+
                 let affectedToolsCount = 1;
 
                 if (deleteFromAll) {
                     // Delete from all tools with the same part number
-                    const updatePromises = toolsWithSamePart.docs.map(async (doc) => {
-                        if (doc.id !== toolId) { // Don't update the original tool again
-                            const existingPhotoUrls = doc.data().photoUrls || [];
-                            const updatedUrls = existingPhotoUrls.filter(url => url !== photoUrl);
-                            await doc.ref.update({
-                                photoUrls: updatedUrls
-                            });
-                            console.log('Updated tool', doc.id, 'removed same photo');
-                        }
-                    });
+                const updatePromises = toolsWithSamePart.docs.map(async (doc) => {
+                    if (doc.id !== toolId) { // Don't update the original tool again
+                        const existingPhotoUrls = doc.data().photoUrls || [];
+                        const updatedUrls = existingPhotoUrls.filter(url => url !== photoUrl);
+                        await doc.ref.update({
+                            photoUrls: updatedUrls
+                        });
+                        console.log('Updated tool', doc.id, 'removed same photo');
+                    }
+                });
 
-                    await Promise.all(updatePromises);
+                await Promise.all(updatePromises);
                     affectedToolsCount = toolsWithSamePart.docs.length;
-                    
+
                     // Try to delete from Firebase Storage
-                    try {
-                        console.log('Original photo URL:', photoUrl);
-                        
-                        // Extract the full path from the Firebase Storage URL
-                        const urlParts = photoUrl.split('/');
+                try {
+                    console.log('Original photo URL:', photoUrl);
+                    
+                    // Extract the full path from the Firebase Storage URL
+                    const urlParts = photoUrl.split('/');
                         const encodedPath = urlParts[urlParts.length - 1].split('?')[0];
                         const decodedPath = decodeURIComponent(encodedPath);
-                        console.log('Attempting to delete from storage path:', decodedPath);
-                        
-                        const photoRef = storage.ref().child(decodedPath);
-                        console.log('Storage reference:', photoRef.toString());
-                        
-                        await photoRef.delete();
-                        console.log('Photo deleted from storage successfully:', decodedPath);
-                    } catch (storageError) {
-                        console.warn('Could not delete from storage (file may not exist):', storageError);
-                        console.warn('Storage error details:', storageError.message);
-                        console.warn('Storage error code:', storageError.code);
+                    console.log('Attempting to delete from storage path:', decodedPath);
+                    
+                    const photoRef = storage.ref().child(decodedPath);
+                    console.log('Storage reference:', photoRef.toString());
+                    
+                    await photoRef.delete();
+                    console.log('Photo deleted from storage successfully:', decodedPath);
+                } catch (storageError) {
+                    console.warn('Could not delete from storage (file may not exist):', storageError);
+                    console.warn('Storage error details:', storageError.message);
+                    console.warn('Storage error code:', storageError.code);
                     }
                 }
 
@@ -8187,17 +8225,17 @@ if (!userCredential.user.emailVerified) {
                 }
                 
                         resolve();
-                    }
-
-                } catch (error) {
-                    console.error('=== PHOTO DELETE FAILED ===', error);
-                    const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
-                    if (loadingModal) loadingModal.hide();
-                    alert('Delete failed: ' + error.message);
-                    reject(error);
                 }
+
+            } catch (error) {
+                console.error('=== PHOTO DELETE FAILED ===', error);
+                const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
+                if (loadingModal) loadingModal.hide();
+                alert('Delete failed: ' + error.message);
+                    reject(error);
+            }
             });
-        }
+    }
 
     // Settings button logic
     const settingsBtn = document.getElementById('settingsBtn');
@@ -8499,27 +8537,27 @@ if (!userCredential.user.emailVerified) {
                             
                             // Only share with other tools if this is NOT a forced individual upload
                             if (!forceUpload) {
-                                // Find all tools with the same part number and add the same photo
-                                const toolsWithSamePart = await db.collection('tools')
-                                    .where('partNumber', '==', partNumber)
-                                    .get();
-                                
-                                const updatePromises = toolsWithSamePart.docs.map(async (doc) => {
-                                    if (doc.id !== toolId) { // Don't update the original tool again
-                                        const existingPhotoUrls = doc.data().photoUrls || [];
-                                        const updatedPhotoUrls = [...existingPhotoUrls, downloadURL];
-                                        await doc.ref.update({
-                                            photoUrls: updatedPhotoUrls
-                                        });
-                                        console.log('Updated tool', doc.id, 'with same photo');
-                                    }
-                                });
-                                
-                                await Promise.all(updatePromises);
-                                
-                                console.log('=== PHOTO UPLOAD COMPLETED ===');
-                                loadingModal.hide();
-                                alert('Photo uploaded successfully! Added to ' + (toolsWithSamePart.docs.length) + ' tools with the same part number.');
+                            // Find all tools with the same part number and add the same photo
+                            const toolsWithSamePart = await db.collection('tools')
+                                .where('partNumber', '==', partNumber)
+                                .get();
+                            
+                            const updatePromises = toolsWithSamePart.docs.map(async (doc) => {
+                                if (doc.id !== toolId) { // Don't update the original tool again
+                                    const existingPhotoUrls = doc.data().photoUrls || [];
+                                    const updatedPhotoUrls = [...existingPhotoUrls, downloadURL];
+                                    await doc.ref.update({
+                                        photoUrls: updatedPhotoUrls
+                                    });
+                                    console.log('Updated tool', doc.id, 'with same photo');
+                                }
+                            });
+                            
+                            await Promise.all(updatePromises);
+                            
+                            console.log('=== PHOTO UPLOAD COMPLETED ===');
+                            loadingModal.hide();
+                            alert('Photo uploaded successfully! Added to ' + (toolsWithSamePart.docs.length) + ' tools with the same part number.');
                             } else {
                                 console.log('=== PHOTO UPLOAD COMPLETED (INDIVIDUAL) ===');
                                 loadingModal.hide();
