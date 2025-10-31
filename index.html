@@ -1999,8 +1999,24 @@
           </div>
         </div>
 
-        <!-- Date Filter Section (hidden initially) -->
+        <!-- Currently OUT Tools Section (hidden initially) -->
         <div id="dateFilterSection" style="display: none;">
+          <!-- Currently OUT Tools Section -->
+          <div class="card mb-3">
+            <div class="card-body">
+              <h5 class="mb-3" style="color: #dc3545; font-weight: bold;">
+                <i class="fas fa-exclamation-triangle"></i> Currently OUT Tools
+              </h5>
+              <div id="workLocationCurrentOutSummary" class="text-muted mb-2">
+                <!-- Summary will be populated here -->
+              </div>
+              <div id="workLocationCurrentOutList" style="max-height: 400px; overflow-y: auto;">
+                <!-- Currently OUT tools will be populated here -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Date Filter Section -->
           <div class="card mb-3">
             <div class="card-body">
               <h5 class="mb-3"><i class="fas fa-calendar"></i> Filter History by Date</h5>
@@ -2017,21 +2033,6 @@
                 <button class="btn btn-sm btn-primary filter-date-btn" onclick="filterToolsByDate('all', this)">
                   <i class="fas fa-infinity"></i> All Time
                 </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Currently OUT Tools Section -->
-          <div class="card mb-3">
-            <div class="card-body">
-              <h5 class="mb-3" style="color: #dc3545; font-weight: bold;">
-                <i class="fas fa-exclamation-triangle"></i> Currently OUT Tools
-              </h5>
-              <div id="workLocationCurrentOutSummary" class="text-muted mb-2">
-                <!-- Summary will be populated here -->
-              </div>
-              <div id="workLocationCurrentOutList" style="max-height: 400px; overflow-y: auto;">
-                <!-- Currently OUT tools will be populated here -->
               </div>
             </div>
           </div>
@@ -7218,7 +7219,7 @@ if (!userCredential.user.emailVerified) {
     // Load tool history from logtoolmovements
     async function loadToolHistory() {
         try {
-            // Query logtoolmovements for all movements
+            // Query logtoolmovements for all movements (both CHECK-IN and CHECK-OUT)
             let query = db.collection('logtoolmovements');
             
             if (currentWorkLocation !== 'ALL') {
@@ -7227,15 +7228,57 @@ if (!userCredential.user.emailVerified) {
             
             const snapshot = await query.orderBy('timestamp', 'desc').get();
             
-            workLocationToolsData = [];
+            // Get all unique tool IDs from history
+            const toolIds = new Set();
+            const historyEntries = [];
+            
             snapshot.forEach(doc => {
-                workLocationToolsData.push({
+                const data = doc.data();
+                historyEntries.push({
                     id: doc.id,
-                    ...doc.data()
+                    ...data
                 });
+                if (data.toolId) {
+                    toolIds.add(data.toolId);
+                }
             });
             
-            console.log('Loaded', workLocationToolsData.length, 'tool history entries');
+            // Fetch collection names from tools collection
+            const toolsMap = new Map();
+            if (toolIds.size > 0) {
+                const toolPromises = Array.from(toolIds).map(async (toolId) => {
+                    try {
+                        const toolDoc = await db.collection('tools').doc(toolId).get();
+                        if (toolDoc.exists) {
+                            const toolData = toolDoc.data();
+                            toolsMap.set(toolId, {
+                                collectionCode: toolData.collectionCode || 'Unknown Collection',
+                                toolName: toolData.toolName,
+                                serialNumber: toolData.serialNumber || toolData.partNumber,
+                                calDueDate: toolData.calDueDate
+                            });
+                        }
+                    } catch (err) {
+                        console.warn(`Error fetching tool ${toolId}:`, err);
+                    }
+                });
+                
+                await Promise.all(toolPromises);
+            }
+            
+            // Enrich history entries with collection information
+            workLocationToolsData = historyEntries.map(entry => {
+                const toolInfo = toolsMap.get(entry.toolId);
+                return {
+                    ...entry,
+                    collectionCode: toolInfo?.collectionCode || entry.collectionCode || 'Unknown Collection',
+                    toolName: toolInfo?.toolName || entry.toolName || 'Unknown Tool',
+                    serialNumber: toolInfo?.serialNumber || entry.serialNumber || entry.partNumber || 'N/A',
+                    calDueDate: toolInfo?.calDueDate || entry.calDueDate
+                };
+            });
+            
+            console.log('Loaded', workLocationToolsData.length, 'tool history entries (including checked-in tools)');
             
         } catch (error) {
             console.error('Error loading tool history:', error);
@@ -7318,30 +7361,22 @@ if (!userCredential.user.emailVerified) {
                 break;
         }
         
-        // Filter history data only (not current OUT tools)
+        // Filter history data by date - show all entries (both check-in and check-out)
         const filtered = workLocationToolsData.filter(entry => {
             if (!entry.timestamp) return false;
             const entryDate = entry.timestamp.toDate ? entry.timestamp.toDate() : new Date(entry.timestamp);
             return entryDate >= startDate;
         });
         
-        // Get latest status for each tool from history
-        const toolsMap = new Map();
-        filtered.forEach(entry => {
-            const toolId = entry.toolId;
-            if (!toolId) return;
-            
-            if (!toolsMap.has(toolId) || 
-                (entry.timestamp && toolsMap.get(toolId).timestamp && 
-                 entry.timestamp.toDate() > toolsMap.get(toolId).timestamp.toDate())) {
-                toolsMap.set(toolId, entry);
-            }
+        // Sort by timestamp (newest first)
+        filtered.sort((a, b) => {
+            const aTime = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp || 0);
+            const bTime = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp || 0);
+            return bTime - aTime;
         });
         
-        const tools = Array.from(toolsMap.values());
-        
-        // Display history tools
-        displayWorkLocationTools(tools);
+        // Display all history entries (both check-in and check-out)
+        displayWorkLocationTools(filtered);
     };
 
     // Display tools grouped by collection
@@ -7392,7 +7427,7 @@ if (!userCredential.user.emailVerified) {
             const totalInCollection = collectionTools.out.length + collectionTools.in.length;
             
             html += `<div class="workloc-collection-header">
-                ${collection} (${totalInCollection} tools - OUT: ${collectionTools.out.length}, IN: ${collectionTools.in.length})
+                ${collection} (${totalInCollection} entries - OUT: ${collectionTools.out.length}, IN: ${collectionTools.in.length})
             </div>`;
             
             // Display OUT tools first
