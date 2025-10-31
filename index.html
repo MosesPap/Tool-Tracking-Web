@@ -627,6 +627,13 @@
             color: #388E3C;
             font-weight: bold;
         }
+
+        /* Filter date button styles */
+        .filter-date-btn.active {
+            background-color: #dc3545 !important;
+            border-color: #dc3545 !important;
+            color: white !important;
+        }
         
         .previous-out-tool-column:last-child {
             text-align: right;
@@ -2021,7 +2028,7 @@
             <div class="card-body">
               <h5 class="mb-3"><i class="fas fa-calendar"></i> Filter History by Date</h5>
               <div class="d-flex gap-2 flex-wrap mb-3">
-                <button class="btn btn-sm btn-primary filter-date-btn active" onclick="filterToolsByDate('today', this)">
+                <button class="btn btn-sm btn-primary filter-date-btn" onclick="filterToolsByDate('today', this)">
                   <i class="fas fa-calendar-day"></i> Today
                 </button>
                 <button class="btn btn-sm btn-primary filter-date-btn" onclick="filterToolsByDate('week', this)">
@@ -2030,7 +2037,7 @@
                 <button class="btn btn-sm btn-primary filter-date-btn" onclick="filterToolsByDate('month', this)">
                   <i class="fas fa-calendar-alt"></i> Last Month
                 </button>
-                <button class="btn btn-sm btn-primary filter-date-btn" onclick="filterToolsByDate('all', this)">
+                <button class="btn btn-sm btn-primary filter-date-btn active" onclick="filterToolsByDate('all', this)">
                   <i class="fas fa-infinity"></i> All Time
                 </button>
               </div>
@@ -7068,7 +7075,7 @@ if (!userCredential.user.emailVerified) {
     let workLocationToolsData = [];
     let workLocationCurrentOutTools = [];
     let currentWorkLocation = '';
-    let currentDateFilter = 'today';
+    let currentDateFilter = 'all';
 
     // Menu button handler
     document.getElementById('menuWorkLocationBtn').onclick = async function() {
@@ -7140,8 +7147,8 @@ if (!userCredential.user.emailVerified) {
             // Load tool history from logtoolmovements
             await loadToolHistory();
             
-            // Apply default date filter (today) to history only
-            filterToolsByDate('today');
+            // Apply default date filter (all time) to history only
+            filterToolsByDate('all');
             
         } catch (error) {
             console.error('Error loading tools by work location:', error);
@@ -7243,7 +7250,7 @@ if (!userCredential.user.emailVerified) {
                 }
             });
             
-            // Fetch collection names from tools collection
+            // Fetch collection names and owner from tools collection
             const toolsMap = new Map();
             if (toolIds.size > 0) {
                 const toolPromises = Array.from(toolIds).map(async (toolId) => {
@@ -7255,7 +7262,8 @@ if (!userCredential.user.emailVerified) {
                                 collectionCode: toolData.collectionCode || 'Unknown Collection',
                                 toolName: toolData.toolName,
                                 serialNumber: toolData.serialNumber || toolData.partNumber,
-                                calDueDate: toolData.calDueDate
+                                calDueDate: toolData.calDueDate,
+                                technician: toolData.technician || 'N/A'
                             });
                         }
                     } catch (err) {
@@ -7266,7 +7274,7 @@ if (!userCredential.user.emailVerified) {
                 await Promise.all(toolPromises);
             }
             
-            // Enrich history entries with collection information
+            // Enrich history entries with collection and owner information
             workLocationToolsData = historyEntries.map(entry => {
                 const toolInfo = toolsMap.get(entry.toolId);
                 return {
@@ -7274,7 +7282,8 @@ if (!userCredential.user.emailVerified) {
                     collectionCode: toolInfo?.collectionCode || entry.collectionCode || 'Unknown Collection',
                     toolName: toolInfo?.toolName || entry.toolName || 'Unknown Tool',
                     serialNumber: toolInfo?.serialNumber || entry.serialNumber || entry.partNumber || 'N/A',
-                    calDueDate: toolInfo?.calDueDate || entry.calDueDate
+                    calDueDate: toolInfo?.calDueDate || entry.calDueDate,
+                    owner: toolInfo?.technician || entry.technician || 'N/A'
                 };
             });
             
@@ -7297,14 +7306,19 @@ if (!userCredential.user.emailVerified) {
             return;
         }
         
-        // Group by collection
+        // Group by collection and owner
         const byCollection = {};
         workLocationCurrentOutTools.forEach(tool => {
             const collection = tool.collectionCode || 'Unknown Collection';
+            const owner = tool.technician || 'N/A';
+            
             if (!byCollection[collection]) {
-                byCollection[collection] = [];
+                byCollection[collection] = {
+                    owner: owner,
+                    tools: []
+                };
             }
-            byCollection[collection].push(tool);
+            byCollection[collection].tools.push(tool);
         });
         
         // Update summary
@@ -7315,13 +7329,14 @@ if (!userCredential.user.emailVerified) {
         const collections = Object.keys(byCollection).sort();
         
         collections.forEach(collection => {
-            const collectionTools = byCollection[collection];
+            const collectionData = byCollection[collection];
+            const owner = collectionData.owner || 'N/A';
             
             html += `<div class="workloc-collection-header">
-                ${collection} (${collectionTools.length} tools)
+                ${collection} - Owner: ${owner} (${collectionData.tools.length} tools)
             </div>`;
             
-            collectionTools.forEach(tool => {
+            collectionData.tools.forEach(tool => {
                 html += createWorkLocationToolCard(tool, 'out');
             });
         });
@@ -7333,13 +7348,23 @@ if (!userCredential.user.emailVerified) {
     window.filterToolsByDate = function(period, clickedButton = null) {
         currentDateFilter = period;
         
-        // Update button states
+        // Update button states - remove active class from all buttons
         document.querySelectorAll('.filter-date-btn').forEach(btn => {
             btn.classList.remove('active');
         });
         
+        // Set the clicked button as active with red color
         if (clickedButton) {
             clickedButton.classList.add('active');
+        } else {
+            // If no button was clicked (programmatic call), find and activate the correct button
+            const buttons = document.querySelectorAll('.filter-date-btn');
+            buttons.forEach(btn => {
+                const onclickAttr = btn.getAttribute('onclick');
+                if (onclickAttr && onclickAttr.includes(`'${period}'`)) {
+                    btn.classList.add('active');
+                }
+            });
         }
         
         // Calculate date range
@@ -7389,12 +7414,15 @@ if (!userCredential.user.emailVerified) {
             return;
         }
         
-        // Group by collection
+        // Group by collection and owner
         const byCollection = {};
         tools.forEach(tool => {
             const collection = tool.collectionCode || 'Unknown Collection';
+            const owner = tool.owner || tool.technician || 'N/A';
+            
             if (!byCollection[collection]) {
                 byCollection[collection] = {
+                    owner: owner,
                     out: [],
                     in: []
                 };
@@ -7425,9 +7453,10 @@ if (!userCredential.user.emailVerified) {
         collections.forEach(collection => {
             const collectionTools = byCollection[collection];
             const totalInCollection = collectionTools.out.length + collectionTools.in.length;
+            const owner = collectionTools.owner || 'N/A';
             
             html += `<div class="workloc-collection-header">
-                ${collection} (${totalInCollection} entries - OUT: ${collectionTools.out.length}, IN: ${collectionTools.in.length})
+                ${collection} - Owner: ${owner} (${totalInCollection} entries - OUT: ${collectionTools.out.length}, IN: ${collectionTools.in.length})
             </div>`;
             
             // Display OUT tools first
@@ -7448,6 +7477,7 @@ if (!userCredential.user.emailVerified) {
     function createWorkLocationToolCard(tool, statusClass) {
         const toolName = tool.toolName || 'Unknown Tool';
         const toolId = tool.toolId || tool.id || 'N/A';
+        const partNumber = tool.serialNumber || tool.partNumber || 'N/A';
         const status = (tool.status || tool.action || 'N/A').toUpperCase();
         const technician = tool.technician || 'N/A';
         const calDueDate = tool.calDueDate ? 
@@ -7472,26 +7502,20 @@ if (!userCredential.user.emailVerified) {
         
         return `
             <div class="workloc-tool-card ${statusClass}">
-                <div class="workloc-tool-name">${toolName}</div>
-                <div class="workloc-tool-info">
-                    <span class="workloc-tool-label">TID:</span>
-                    <span class="workloc-tool-value">${toolId}</span>
+                <div class="workloc-tool-name" style="font-weight: bold; margin-bottom: 8px;">${toolName}</div>
+                <div class="workloc-tool-info" style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span><span class="workloc-tool-label">Tid:</span> <span class="workloc-tool-value">${toolId}</span></span>
+                    <span><span class="workloc-tool-label">P/N:</span> <span class="workloc-tool-value">${partNumber}</span></span>
+                </div>
+                <div class="workloc-tool-info" style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span><span class="workloc-tool-label">Cal Due Date:</span> <span class="workloc-tool-value">${calDueDate}</span></span>
+                    <span><span class="workloc-tool-label">Status:</span> <span class="${statusColorClass}">${status}</span></span>
+                </div>
+                <div class="workloc-tool-info" style="margin-bottom: 6px;">
+                    <span class="workloc-tool-label">Last Technician:</span> <span class="workloc-tool-value">${technician}</span>
                 </div>
                 <div class="workloc-tool-info">
-                    <span class="workloc-tool-label">Cal Due Date:</span>
-                    <span class="workloc-tool-value">${calDueDate}</span>
-                </div>
-                <div class="workloc-tool-info">
-                    <span class="workloc-tool-label">Status:</span>
-                    <span class="${statusColorClass}">${status}</span>
-                </div>
-                <div class="workloc-tool-info">
-                    <span class="workloc-tool-label">Last Technician:</span>
-                    <span class="workloc-tool-value">${technician}</span>
-                </div>
-                <div class="workloc-tool-info">
-                    <span class="workloc-tool-label">Time:</span>
-                    <span class="workloc-tool-value">${timestamp}</span>
+                    <span class="workloc-tool-label">Time:</span> <span class="workloc-tool-value">${timestamp}</span>
                 </div>
             </div>
         `;
