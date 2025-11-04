@@ -2642,19 +2642,6 @@
         // Ensure user stays logged in across refreshes and browser restarts
         auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
-        // Check URL parameter for skipLogin and hide login screen if user is authenticated
-        const urlParams = new URLSearchParams(window.location.search);
-        const skipLogin = urlParams.get('skipLogin') === 'true';
-        if (skipLogin) {
-            // Immediately hide login screen if coming from admin
-            const loginSection = document.getElementById('loginSection');
-            const signUpSection = document.getElementById('signUpSection');
-            const headerBranding = document.getElementById('headerBranding');
-            if (loginSection) loginSection.style.display = 'none';
-            if (signUpSection) signUpSection.classList.add('d-none');
-            if (headerBranding) headerBranding.style.display = 'none';
-        }
-
         // QR Scanner
         let html5QrCode;
         
@@ -4708,10 +4695,6 @@ if (!userCredential.user.emailVerified) {
 
         // On auth state change, show menu after login (not register tools)
         auth.onAuthStateChanged(function(user) {
-            // Check URL parameter for skipLogin
-            const urlParams = new URLSearchParams(window.location.search);
-            const skipLogin = urlParams.get('skipLogin') === 'true';
-            
             if (user) {
                 loginSection.style.display = 'none';
                 signUpSection.classList.add('d-none');
@@ -4758,19 +4741,8 @@ if (!userCredential.user.emailVerified) {
                 hideAllMainScreens();
                 document.getElementById('toolScannerMenu').style.display = 'block';
                 updateLoggedInTechnician();
-                
-                // Clean up URL parameter if skipLogin was used
-                if (skipLogin) {
-                    window.history.replaceState({}, '', 'index.html');
-                }
             } else {
-                // Only show login screen if not skipping login
-                if (!skipLogin) {
-                    loginSection.style.display = 'block';
-                } else {
-                    // If skipLogin is true but user is not authenticated, redirect to login
-                    loginSection.style.display = 'block';
-                }
+                loginSection.style.display = 'block';
                 appSection.style.display = 'none';
                 adminSection.style.display = 'none';
                 const adminButton = document.getElementById('adminButton');
@@ -4968,19 +4940,34 @@ if (!userCredential.user.emailVerified) {
             // Refresh cache if needed
             await refreshToolCache();
 
-            // Case-insensitive search
-            const lowerSearch = searchTerm.toLowerCase();
+            // Case-insensitive search - convert search term to string and lowercase
+            const searchStr = String(searchTerm).toLowerCase().trim();
+            
+            // Debug: Log search info
+            if (searchStr.length <= 2) {
+                console.log(`Searching for: "${searchStr}" in ${allToolsCache.length} tools`);
+            }
+            
             const matches = allToolsCache.filter(tool => {
-                const toolId = tool.id.toLowerCase();
-                const toolName = (tool.toolName || '').toLowerCase();
-                const partNumber = (tool.partNumber || '').toLowerCase();
-                const serialNumber = (tool.serialNumber || '').toLowerCase();
+                // Ensure all fields are strings before searching
+                const toolId = String(tool.id || '').toLowerCase();
+                const toolName = String(tool.toolName || '').toLowerCase();
+                const partNumber = String(tool.partNumber || '').toLowerCase();
+                const serialNumber = String(tool.serialNumber || '').toLowerCase();
                 
-                return toolId.includes(lowerSearch) || 
-                       toolName.includes(lowerSearch) || 
-                       partNumber.includes(lowerSearch) ||
-                       serialNumber.includes(lowerSearch);
+                // Check if search string appears in any field
+                const matchesId = toolId.includes(searchStr);
+                const matchesName = toolName.includes(searchStr);
+                const matchesPart = partNumber.includes(searchStr);
+                const matchesSerial = serialNumber.includes(searchStr);
+                
+                return matchesId || matchesName || matchesPart || matchesSerial;
             }).slice(0, 10); // Limit to 10 results
+            
+            // Debug: Log results for short searches
+            if (searchStr.length <= 2 && matches.length > 0) {
+                console.log(`Found ${matches.length} matches for "${searchStr}":`, matches.map(t => t.id));
+            }
 
             if (matches.length === 0) {
                 dropdown.innerHTML = '<div class="tool-code-dropdown-empty">No tools found matching "' + searchTerm + '"</div>';
