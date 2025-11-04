@@ -5391,15 +5391,19 @@ if (!userCredential.user.emailVerified) {
                 }, 3000);
             }
             
-            // Check if user is already logged in - skip splash if they are
-            auth.currentUser ? skipSplashAndShowApp() : showSplashVideo();
-            
-            function skipSplashAndShowApp() {
-                // Hide splash immediately
-                orangeOverlay.classList.add('hidden');
-                splashScreen.style.display = 'none';
-                console.log('User already logged in - skipping splash video');
-            }
+            // Check auth state first, then decide whether to show splash
+            auth.onAuthStateChanged(function(checkUser) {
+                if (checkUser) {
+                    // User is logged in - skip splash immediately
+                    console.log('User already logged in - skipping splash');
+                    orangeOverlay.classList.add('hidden');
+                    splashScreen.style.display = 'none';
+                } else {
+                    // Not logged in - show splash video
+                    console.log('No user - showing splash video');
+                    showSplashVideo();
+                }
+            }, { once: true });
             
             function showSplashVideo() {
                 // Show orange overlay for 0.5s, then attempt video splash
