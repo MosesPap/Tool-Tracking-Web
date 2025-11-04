@@ -1665,18 +1665,15 @@
         // DOM Elements
         const loginSection = document.getElementById('loginSection');
         const adminDashboard = document.getElementById('adminDashboard');
-        const loginAlert = document.getElementById('loginAlert');
-        const loginForm = document.getElementById('loginForm');
-        const googleSignInBtn = document.getElementById('googleSignInBtn');
+        // Note: Login form elements removed since admin.html no longer has login UI
+        // const loginAlert = document.getElementById('loginAlert');
+        // const loginForm = document.getElementById('loginForm');
+        // const googleSignInBtn = document.getElementById('googleSignInBtn');
 
-        // Show alert message
+        // Show alert message (kept for compatibility but won't be used)
         function showAlert(message, type = 'danger') {
-            loginAlert.className = `alert alert-custom alert-${type}`;
-            loginAlert.textContent = message;
-            loginAlert.style.display = 'block';
-            setTimeout(() => {
-                loginAlert.style.display = 'none';
-            }, 5000);
+            console.log(`Alert (${type}): ${message}`);
+            // Alert UI removed - alerts now shown via browser alert() or console
         }
 
         // Check if user is admin
@@ -1707,66 +1704,9 @@
             }
         }
 
-        // Email/Password Login
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('adminEmail').value.trim();
-            const password = document.getElementById('adminPassword').value;
-
-            try {
-                showAlert('Signing in...', 'info');
-                const userCredential = await auth.signInWithEmailAndPassword(email, password);
-                const user = userCredential.user;
-
-                // Check if user is admin
-                const { isAdmin, name } = await checkAdminStatus(user);
-                if (isAdmin) {
-                    showAlert('Success! Loading admin dashboard...', 'success');
-                    loadAdminDashboard(name);
-                } else {
-                    await auth.signOut();
-                    showAlert('Access Denied: You do not have administrator privileges.', 'danger');
-                }
-            } catch (error) {
-                console.error('Login error:', error);
-                if (error.code === 'auth/user-not-found') {
-                    showAlert('User not found. Please check your email.', 'danger');
-                } else if (error.code === 'auth/wrong-password') {
-                    showAlert('Incorrect password. Please try again.', 'danger');
-                } else if (error.code === 'auth/invalid-email') {
-                    showAlert('Invalid email address.', 'danger');
-                } else {
-                    showAlert('Login failed: ' + error.message, 'danger');
-                }
-            }
-        });
-
-        // Google Sign-In
-        googleSignInBtn.addEventListener('click', async () => {
-            try {
-                showAlert('Opening Google Sign-In...', 'info');
-                const provider = new firebase.auth.GoogleAuthProvider();
-                const userCredential = await auth.signInWithPopup(provider);
-                const user = userCredential.user;
-
-                // Check if user is admin
-                const { isAdmin, name } = await checkAdminStatus(user);
-                if (isAdmin) {
-                    showAlert('Success! Loading admin dashboard...', 'success');
-                    loadAdminDashboard(name);
-                } else {
-                    await auth.signOut();
-                    showAlert('Access Denied: You do not have administrator privileges.', 'danger');
-                }
-            } catch (error) {
-                console.error('Google Sign-In error:', error);
-                if (error.code === 'auth/popup-closed-by-user') {
-                    showAlert('Sign-in cancelled.', 'warning');
-                } else {
-                    showAlert('Google Sign-In failed: ' + error.message, 'danger');
-                }
-            }
-        });
+        // Email/Password Login and Google Sign-In removed
+        // Admin page no longer has login UI - users must login via index.html
+        // Authentication is handled by onAuthStateChanged below
 
         // Load Admin Dashboard
         function loadAdminDashboard(adminName) {
