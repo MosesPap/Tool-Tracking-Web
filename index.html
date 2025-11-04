@@ -5396,10 +5396,24 @@ if (!userCredential.user.emailVerified) {
             sessionStorage.removeItem('fromAdmin'); // Clear flag
             
             if (fromAdmin === 'true') {
-                // Coming from admin - skip splash immediately
-                console.log('Navigating from admin - skipping splash');
+                // Coming from admin - wait for auth to resolve, then hide splash
+                console.log('Navigating from admin - waiting for auth...');
                 orangeOverlay.classList.add('hidden');
-                splashScreen.style.display = 'none';
+                
+                // Wait for auth state to resolve before hiding splash
+                const hideWhenReady = setInterval(() => {
+                    if (authStateResolved) {
+                        console.log('Auth resolved - hiding splash');
+                        clearInterval(hideWhenReady);
+                        splashScreen.style.display = 'none';
+                    }
+                }, 50);
+                
+                // Fallback: hide after 2 seconds even if auth hasn't resolved
+                setTimeout(() => {
+                    clearInterval(hideWhenReady);
+                    splashScreen.style.display = 'none';
+                }, 2000);
             } else {
                 // Fresh load or refresh - show splash video
                 console.log('Fresh load - showing splash video');
