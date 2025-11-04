@@ -5393,12 +5393,17 @@ if (!userCredential.user.emailVerified) {
             
             // Check if coming from admin.html (navigation vs fresh load)
             const fromAdmin = sessionStorage.getItem('fromAdmin');
-            sessionStorage.removeItem('fromAdmin'); // Clear flag
             
             if (fromAdmin === 'true') {
-                // Coming from admin - wait for auth to resolve, then hide splash
-                console.log('Navigating from admin - waiting for auth...');
+                sessionStorage.removeItem('fromAdmin'); // Clear flag
+                
+                // Coming from admin - hide login section immediately and wait for auth
+                console.log('Navigating from admin - hiding login, waiting for auth...');
                 orangeOverlay.classList.add('hidden');
+                
+                // Hide login section immediately
+                const loginSec = document.getElementById('loginSection');
+                if (loginSec) loginSec.style.display = 'none';
                 
                 // Wait for auth state to resolve before hiding splash
                 const hideWhenReady = setInterval(() => {
@@ -5415,6 +5420,8 @@ if (!userCredential.user.emailVerified) {
                     splashScreen.style.display = 'none';
                 }, 2000);
             } else {
+                sessionStorage.removeItem('fromAdmin'); // Clear flag if exists
+                
                 // Fresh load or refresh - show splash video
                 console.log('Fresh load - showing splash video');
                 showSplashVideo();
