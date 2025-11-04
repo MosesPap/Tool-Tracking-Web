@@ -2628,9 +2628,20 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
+        // Track auth state resolution for splash screen
+        let authStateResolved = false;
+
         // Configure Firebase Auth to require email verification
         auth.useDeviceLanguage();
         
+        // Set custom error messages for unverified emails
+        auth.onAuthStateChanged(function(user) {
+            if (user && !user.emailVerified) {
+                // Force sign out if user is not verified
+                auth.signOut();
+            }
+        });
+
         // Ensure user stays logged in across refreshes and browser restarts
         auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
@@ -4685,89 +4696,75 @@ if (!userCredential.user.emailVerified) {
         // Tab change handler
         // (removed previous-tab event listener as the tab is no longer present)
 
-        // Function to handle authenticated user state
-        function handleAuthenticatedUser(user) {
-            // User is logged in - show main menu immediately for seamless navigation
-            loginSection.style.display = 'none';
-            signUpSection.classList.add('d-none');
-            adminSection.style.display = 'none';
-            const adminButton = document.getElementById('adminButton');
-            if (adminButton) {
-                adminButton.style.display = 'none';
-            }
-            document.getElementById('headerBranding').style.display = 'none';
-            // Always fetch fresh data from Firestore
-            db.collection('technicians').doc(user.uid)
-                .get()
-                .then(doc => {
-                    if (doc.exists) {
-                        const technicianData = doc.data();
-                        const name = technicianData.fullName || user.email;
-                        // Store the document ID
-                        localStorage.setItem('techniciansId', doc.id);
-                        localStorage.setItem('fullName', name);
-                        document.getElementById('fullName').textContent = name;
-                        
-                        // Check if user is admin
-                        if (technicianData.isAdmin) {
-                            const adminButton = document.getElementById('adminButton');
-                            if (adminButton) {
-                                adminButton.style.display = 'inline-block';
-                            }
-                            // Show Tool Administrator button in menu
-                            const menuAdminBtn = document.getElementById('menuAdminBtn');
-                            if (menuAdminBtn) {
-                                menuAdminBtn.style.display = 'block';
-                            }
-                        }
-                    } else {
-                        document.getElementById('fullName').textContent = user.email;
-                    }
-                    updatePreviousToolsTabCount();
-                }).catch(error => {
-                    console.error('Error fetching technician data:', error);
-                    document.getElementById('fullName').textContent = user.email;
-                    updatePreviousToolsTabCount();
-                });
-            // Always show only the main menu after login or refresh
-            hideAllMainScreens();
-            document.getElementById('toolScannerMenu').style.display = 'block';
-            updateLoggedInTechnician();
-        }
-
-        // Function to handle unauthenticated state
-        function handleUnauthenticatedState() {
-            // User is not logged in
-            loginSection.style.display = 'block';
-            appSection.style.display = 'none';
-            adminSection.style.display = 'none';
-            const adminButton = document.getElementById('adminButton');
-            if (adminButton) {
-                adminButton.style.display = 'none';
-            }
-            document.getElementById('headerBranding').style.display = 'block';
-            localStorage.removeItem('fullName');
-        }
-
         // On auth state change, show menu after login (not register tools)
-        // Note: Email verification is checked during login attempts, not here
-        // This allows seamless navigation between admin and main app
         auth.onAuthStateChanged(function(user) {
             if (user) {
-                handleAuthenticatedUser(user);
+                loginSection.style.display = 'none';
+                signUpSection.classList.add('d-none');
+                adminSection.style.display = 'none';
+                const adminButton = document.getElementById('adminButton');
+                if (adminButton) {
+                    adminButton.style.display = 'none';
+                }
+                document.getElementById('headerBranding').style.display = 'none';
+                // Always fetch fresh data from Firestore
+                db.collection('technicians').doc(user.uid)
+                    .get()
+                    .then(doc => {
+                        if (doc.exists) {
+                            const technicianData = doc.data();
+                            const name = technicianData.fullName || user.email;
+                            // Store the document ID
+                            localStorage.setItem('techniciansId', doc.id);
+                            localStorage.setItem('fullName', name);
+                            document.getElementById('fullName').textContent = name;
+                            
+                            // Check if user is admin
+                            if (technicianData.isAdmin) {
+                                const adminButton = document.getElementById('adminButton');
+                                if (adminButton) {
+                                    adminButton.style.display = 'inline-block';
+                                }
+                                // Show Tool Administrator button in menu
+                                const menuAdminBtn = document.getElementById('menuAdminBtn');
+                                if (menuAdminBtn) {
+                                    menuAdminBtn.style.display = 'block';
+                                }
+                            }
+                        } else {
+                            document.getElementById('fullName').textContent = user.email;
+                        }
+                        updatePreviousToolsTabCount();
+                        // Mark auth state as resolved
+                        authStateResolved = true;
+                    }).catch(error => {
+                        console.error('Error fetching technician data:', error);
+                        document.getElementById('fullName').textContent = user.email;
+                        updatePreviousToolsTabCount();
+                        // Mark auth state as resolved even on error
+                        authStateResolved = true;
+                    });
+                // Always show only the main menu after login or refresh
+                hideAllMainScreens();
+                document.getElementById('toolScannerMenu').style.display = 'block';
+                updateLoggedInTechnician();
             } else {
-                handleUnauthenticatedState();
+                loginSection.style.display = 'block';
+                appSection.style.display = 'none';
+                adminSection.style.display = 'none';
+                const adminButton = document.getElementById('adminButton');
+                if (adminButton) {
+                    adminButton.style.display = 'none';
+                }
+                document.getElementById('headerBranding').style.display = 'block';
+                localStorage.removeItem('fullName');
+                // Mark auth state as resolved
+                authStateResolved = true;
             }
+            
+            // Log auth state for debugging
+            console.log('Auth state resolved:', user ? 'Logged in' : 'Not logged in');
         });
-
-        // Double-check auth state immediately after a short delay to catch any timing issues
-        // This ensures seamless navigation works even if onAuthStateChanged hasn't fired yet
-        setTimeout(() => {
-            if (auth.currentUser && loginSection && loginSection.style.display !== 'none') {
-                console.log('Checking current user after delay:', auth.currentUser.email);
-                handleAuthenticatedUser(auth.currentUser);
-            }
-        }, 100);
 
         // Navigation logic for ToolScanner Menu
         function toolScannerMenu() {
@@ -5400,8 +5397,10 @@ if (!userCredential.user.emailVerified) {
                 
                 if (splashVideo) {
                     let splashHidden = false;
+                    let videoEnded = false;
+                    
                     function hideSplashScreen() {
-                        if (!splashHidden) {
+                        if (!splashHidden && videoEnded && authStateResolved) {
                             splashScreen.classList.add('splash-hidden');
                             setTimeout(() => {
                                 splashScreen.style.display = 'none';
@@ -5414,7 +5413,24 @@ if (!userCredential.user.emailVerified) {
                     attemptVideoPlay();
                     
                     // Listen for video events
-                    splashVideo.addEventListener('ended', hideSplashScreen);
+                    splashVideo.addEventListener('ended', function() {
+                        videoEnded = true;
+                        // Wait for auth state to resolve before hiding splash
+                        const checkAuthInterval = setInterval(() => {
+                            if (authStateResolved) {
+                                clearInterval(checkAuthInterval);
+                                hideSplashScreen();
+                            }
+                        }, 50); // Check every 50ms
+                        
+                        // Fallback: hide after 3 seconds even if auth hasn't resolved
+                        setTimeout(() => {
+                            if (!splashHidden) {
+                                clearInterval(checkAuthInterval);
+                                hideSplashScreen();
+                            }
+                        }, 3000);
+                    });
                     
                     // One-time event listeners (only log once)
                     let videoEventsLogged = {

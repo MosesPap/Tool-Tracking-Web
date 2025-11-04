@@ -1690,6 +1690,9 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
+        // Ensure user stays logged in across refreshes and browser restarts
+        auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
         // DOM Elements
         const loginSection = document.getElementById('loginSection');
         const adminDashboard = document.getElementById('adminDashboard');
