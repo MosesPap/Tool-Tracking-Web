@@ -988,16 +988,47 @@
     </style>
 </head>
 <body>
-    <!-- Loading Screen (shown while checking auth) -->
-    <div id="loginSection" class="login-container" style="display: flex;">
-        <div class="login-card" style="text-align: center;">
+    <!-- Login Screen (hidden - redirects to index.html for login) -->
+    <div id="loginSection" class="login-container" style="display: none;">
+        <div class="login-card">
             <div class="login-header">
                 <i class="fas fa-user-shield"></i>
                 <h2>Tool Administrator</h2>
-                <p>Verifying access...</p>
+                <p>AMS Tool Tracking System</p>
             </div>
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
+
+            <div id="loginAlert" class="alert alert-custom" style="display: none;"></div>
+
+            <form id="loginForm">
+                <div class="mb-3">
+                    <label for="adminEmail" class="form-label">
+                        <i class="fas fa-envelope"></i> Email Address
+                    </label>
+                    <input type="email" class="form-control" id="adminEmail" placeholder="admin@example.com" required>
+                </div>
+                <div class="mb-3">
+                    <label for="adminPassword" class="form-label">
+                        <i class="fas fa-lock"></i> Password
+                    </label>
+                    <input type="password" class="form-control" id="adminPassword" placeholder="Enter your password" required>
+                </div>
+                <button type="submit" class="btn btn-login w-100 mb-3">
+                    <i class="fas fa-sign-in-alt"></i> Sign In
+                </button>
+            </form>
+
+            <div class="divider">
+                <span>OR</span>
+            </div>
+
+            <button id="googleSignInBtn" class="btn btn-google w-100">
+                <i class="fab fa-google"></i> Sign in with Google
+            </button>
+
+            <div class="text-center mt-4">
+                <a href="index.html" class="text-decoration-none" style="color: #667eea;">
+                    <i class="fas fa-arrow-left"></i> Back to Main App
+                </a>
             </div>
         </div>
     </div>
@@ -1011,7 +1042,7 @@
                     <h1><i class="fas fa-user-shield"></i> Tool Administrator</h1>
                     <p class="admin-welcome mb-2">Welcome, <span id="adminName">Admin</span></p>
                     <div class="d-flex gap-2">
-                        <button class="btn btn-light btn-admin-action" onclick="sessionStorage.setItem('fromAdmin', 'true'); location.href='index.html'">
+                        <button class="btn btn-light btn-admin-action" onclick="location.href='index.html'">
                             <i class="fas fa-home"></i> Main App
                         </button>
                         <button class="btn btn-danger btn-admin-action" id="logoutBtn">
@@ -1659,43 +1690,32 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
-        // Ensure user stays logged in across refreshes and browser restarts
-        auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-
         // DOM Elements
         const loginSection = document.getElementById('loginSection');
         const adminDashboard = document.getElementById('adminDashboard');
-        // Note: Login form elements removed since admin.html no longer has login UI
-        // const loginAlert = document.getElementById('loginAlert');
-        // const loginForm = document.getElementById('loginForm');
-        // const googleSignInBtn = document.getElementById('googleSignInBtn');
+        const loginAlert = document.getElementById('loginAlert');
+        const loginForm = document.getElementById('loginForm');
+        const googleSignInBtn = document.getElementById('googleSignInBtn');
 
-        // Show alert message (kept for compatibility but won't be used)
+        // Show alert message
         function showAlert(message, type = 'danger') {
-            console.log(`Alert (${type}): ${message}`);
-            // Alert UI removed - alerts now shown via browser alert() or console
+            loginAlert.className = `alert alert-custom alert-${type}`;
+            loginAlert.textContent = message;
+            loginAlert.style.display = 'block';
+            setTimeout(() => {
+                loginAlert.style.display = 'none';
+            }, 5000);
         }
 
         // Check if user is admin
         async function checkAdminStatus(user) {
             try {
-                console.log('Fetching user document for UID:', user.uid);
                 const doc = await db.collection('technicians').doc(user.uid).get();
-                console.log('Document exists:', doc.exists);
-                
                 if (doc.exists) {
                     const userData = doc.data();
-                    console.log('User data:', userData);
-                    console.log('isAdmin field:', userData.isAdmin);
-                    
                     if (userData.isAdmin === true) {
-                        console.log('User is admin!');
                         return { isAdmin: true, name: userData.fullName || user.email };
-                    } else {
-                        console.log('User is not admin (isAdmin field is not true)');
                     }
-                } else {
-                    console.log('User document does not exist in technicians collection');
                 }
                 return { isAdmin: false, name: null };
             } catch (error) {
@@ -1704,9 +1724,66 @@
             }
         }
 
-        // Email/Password Login and Google Sign-In removed
-        // Admin page no longer has login UI - users must login via index.html
-        // Authentication is handled by onAuthStateChanged below
+        // Email/Password Login
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('adminEmail').value.trim();
+            const password = document.getElementById('adminPassword').value;
+
+            try {
+                showAlert('Signing in...', 'info');
+                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+
+                // Check if user is admin
+                const { isAdmin, name } = await checkAdminStatus(user);
+                if (isAdmin) {
+                    showAlert('Success! Loading admin dashboard...', 'success');
+                    loadAdminDashboard(name);
+                } else {
+                    await auth.signOut();
+                    showAlert('Access Denied: You do not have administrator privileges.', 'danger');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                if (error.code === 'auth/user-not-found') {
+                    showAlert('User not found. Please check your email.', 'danger');
+                } else if (error.code === 'auth/wrong-password') {
+                    showAlert('Incorrect password. Please try again.', 'danger');
+                } else if (error.code === 'auth/invalid-email') {
+                    showAlert('Invalid email address.', 'danger');
+                } else {
+                    showAlert('Login failed: ' + error.message, 'danger');
+                }
+            }
+        });
+
+        // Google Sign-In
+        googleSignInBtn.addEventListener('click', async () => {
+            try {
+                showAlert('Opening Google Sign-In...', 'info');
+                const provider = new firebase.auth.GoogleAuthProvider();
+                const userCredential = await auth.signInWithPopup(provider);
+                const user = userCredential.user;
+
+                // Check if user is admin
+                const { isAdmin, name } = await checkAdminStatus(user);
+                if (isAdmin) {
+                    showAlert('Success! Loading admin dashboard...', 'success');
+                    loadAdminDashboard(name);
+                } else {
+                    await auth.signOut();
+                    showAlert('Access Denied: You do not have administrator privileges.', 'danger');
+                }
+            } catch (error) {
+                console.error('Google Sign-In error:', error);
+                if (error.code === 'auth/popup-closed-by-user') {
+                    showAlert('Sign-in cancelled.', 'warning');
+                } else {
+                    showAlert('Google Sign-In failed: ' + error.message, 'danger');
+                }
+            }
+        });
 
         // Load Admin Dashboard
         function loadAdminDashboard(adminName) {
@@ -2751,6 +2828,7 @@
             if (confirm('Are you sure you want to logout?')) {
                 try {
                     await auth.signOut();
+                    // Redirect to index.html after logout
                     window.location.href = 'index.html';
                 } catch (error) {
                     console.error('Logout error:', error);
@@ -2761,32 +2839,18 @@
 
         // Check auth state on page load
         auth.onAuthStateChanged(async (user) => {
-            console.log('Auth state changed:', user ? user.email : 'No user');
-            
             if (user) {
-                try {
-                    console.log('Checking admin status for:', user.email);
-                    const { isAdmin, name } = await checkAdminStatus(user);
-                    console.log('Admin status result:', { isAdmin, name });
-                    
-                    if (isAdmin) {
-                        console.log('User is admin, loading dashboard');
-                        loadAdminDashboard(name);
-                    } else {
-                        // Not an admin - redirect to main app
-                        console.log('User is not admin, redirecting to index.html');
-                        await auth.signOut();
-                        alert('Access Denied: Admin privileges required.');
-                        window.location.href = 'index.html';
-                    }
-                } catch (error) {
-                    console.error('Error in auth state check:', error);
-                    alert('Error checking admin status: ' + error.message);
+                const { isAdmin, name } = await checkAdminStatus(user);
+                if (isAdmin) {
+                    loginSection.style.display = 'none';
+                    loadAdminDashboard(name);
+                } else {
+                    await auth.signOut();
+                    // Redirect to index.html for login
                     window.location.href = 'index.html';
                 }
             } else {
-                // Not logged in - redirect to main app for login
-                console.log('No user logged in, redirecting to index.html');
+                // If not authenticated, redirect to index.html for login
                 window.location.href = 'index.html';
             }
         });
@@ -2799,7 +2863,6 @@
                 if (auth.currentUser) {
                     alert('Session expired due to inactivity. Please login again.');
                     await auth.signOut();
-                    window.location.href = 'index.html';
                 }
             }, 30 * 60 * 1000); // 30 minutes
         }

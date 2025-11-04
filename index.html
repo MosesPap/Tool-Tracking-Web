@@ -2628,9 +2628,6 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
-        // Track auth state resolution for splash screen
-        let authStateResolved = false;
-
         // Configure Firebase Auth to require email verification
         auth.useDeviceLanguage();
         
@@ -4735,14 +4732,10 @@ if (!userCredential.user.emailVerified) {
                             document.getElementById('fullName').textContent = user.email;
                         }
                         updatePreviousToolsTabCount();
-                        // Mark auth state as resolved
-                        authStateResolved = true;
                     }).catch(error => {
                         console.error('Error fetching technician data:', error);
                         document.getElementById('fullName').textContent = user.email;
                         updatePreviousToolsTabCount();
-                        // Mark auth state as resolved even on error
-                        authStateResolved = true;
                     });
                 // Always show only the main menu after login or refresh
                 hideAllMainScreens();
@@ -4758,12 +4751,7 @@ if (!userCredential.user.emailVerified) {
                 }
                 document.getElementById('headerBranding').style.display = 'block';
                 localStorage.removeItem('fullName');
-                // Mark auth state as resolved
-                authStateResolved = true;
             }
-            
-            // Log auth state for debugging
-            console.log('Auth state resolved:', user ? 'Logged in' : 'Not logged in');
         });
 
         // Navigation logic for ToolScanner Menu
@@ -5391,74 +5379,27 @@ if (!userCredential.user.emailVerified) {
                 }, 3000);
             }
             
-            // Check if coming from admin.html (navigation vs fresh load)
-            const fromAdmin = sessionStorage.getItem('fromAdmin');
-            
-            if (fromAdmin === 'true') {
-                sessionStorage.removeItem('fromAdmin'); // Clear flag
+            // Show orange overlay for 0.5s, then attempt video splash
+            setTimeout(() => {
+                orangeOverlay.classList.add('hidden');
                 
-                // Coming from admin - hide everything immediately and wait for auth
-                console.log('Navigating from admin - skipping splash entirely');
-                
-                // Hide all splash elements immediately
-                orangeOverlay.style.display = 'none';
-                splashScreen.style.display = 'none';
-                if (splashVideo) splashVideo.pause(); // Stop video if it started
-                
-                // Hide login section immediately
-                const loginSec = document.getElementById('loginSection');
-                if (loginSec) loginSec.style.display = 'none';
-                
-                console.log('Skipped splash - waiting for auth to show menu');
-            } else {
-                sessionStorage.removeItem('fromAdmin'); // Clear flag if exists
-                
-                // Fresh load or refresh - show splash video
-                console.log('Fresh load - showing splash video');
-                showSplashVideo();
-            }
-            
-            function showSplashVideo() {
-                // Show orange overlay for 0.5s, then attempt video splash
-                setTimeout(() => {
-                    orangeOverlay.classList.add('hidden');
-                    
-                    if (splashVideo) {
-                        let splashHidden = false;
-                        let videoEnded = false;
-                        
-                        function hideSplashScreen() {
-                            if (!splashHidden && videoEnded && authStateResolved) {
-                                splashScreen.classList.add('splash-hidden');
-                                setTimeout(() => {
-                                    splashScreen.style.display = 'none';
-                                }, 500);
-                                splashHidden = true;
-                            }
-                        }
-                        
-                        // Try to play video
-                        attemptVideoPlay();
-                        
-                        // Listen for video events
-                        splashVideo.addEventListener('ended', function() {
-                            videoEnded = true;
-                            // Wait for auth state to resolve before hiding splash
-                            const checkAuthInterval = setInterval(() => {
-                                if (authStateResolved) {
-                                    clearInterval(checkAuthInterval);
-                                    hideSplashScreen();
-                                }
-                            }, 50); // Check every 50ms
-                            
-                            // Fallback: hide after 3 seconds even if auth hasn't resolved
+                if (splashVideo) {
+                    let splashHidden = false;
+                    function hideSplashScreen() {
+                        if (!splashHidden) {
+                            splashScreen.classList.add('splash-hidden');
                             setTimeout(() => {
-                                if (!splashHidden) {
-                                    clearInterval(checkAuthInterval);
-                                    hideSplashScreen();
-                                }
-                            }, 3000);
-                        });
+                                splashScreen.style.display = 'none';
+                            }, 500);
+                            splashHidden = true;
+                        }
+                    }
+                    
+                    // Try to play video
+                    attemptVideoPlay();
+                    
+                    // Listen for video events
+                    splashVideo.addEventListener('ended', hideSplashScreen);
                     
                     // One-time event listeners (only log once)
                     let videoEventsLogged = {
@@ -5498,13 +5439,12 @@ if (!userCredential.user.emailVerified) {
                         showFallbackSplash();
                     });
                     
-                        // Fallback: hide after 6 seconds if video doesn't end
-                        setTimeout(hideSplashScreen, 6000);
-                    } else {
-                        showFallbackSplash();
-                    }
-                }, 500); // 0.5 seconds orange overlay
-            }
+                    // Fallback: hide after 6 seconds if video doesn't end
+                    setTimeout(hideSplashScreen, 6000);
+                } else {
+                    showFallbackSplash();
+                }
+            }, 500); // 0.5 seconds orange overlay
             
             // iOS Safari: Add user interaction handler to trigger video playback
             let userInteracted = false;
