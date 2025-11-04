@@ -5397,28 +5397,19 @@ if (!userCredential.user.emailVerified) {
             if (fromAdmin === 'true') {
                 sessionStorage.removeItem('fromAdmin'); // Clear flag
                 
-                // Coming from admin - hide login section immediately and wait for auth
-                console.log('Navigating from admin - hiding login, waiting for auth...');
-                orangeOverlay.classList.add('hidden');
+                // Coming from admin - hide everything immediately and wait for auth
+                console.log('Navigating from admin - skipping splash entirely');
+                
+                // Hide all splash elements immediately
+                orangeOverlay.style.display = 'none';
+                splashScreen.style.display = 'none';
+                if (splashVideo) splashVideo.pause(); // Stop video if it started
                 
                 // Hide login section immediately
                 const loginSec = document.getElementById('loginSection');
                 if (loginSec) loginSec.style.display = 'none';
                 
-                // Wait for auth state to resolve before hiding splash
-                const hideWhenReady = setInterval(() => {
-                    if (authStateResolved) {
-                        console.log('Auth resolved - hiding splash');
-                        clearInterval(hideWhenReady);
-                        splashScreen.style.display = 'none';
-                    }
-                }, 50);
-                
-                // Fallback: hide after 2 seconds even if auth hasn't resolved
-                setTimeout(() => {
-                    clearInterval(hideWhenReady);
-                    splashScreen.style.display = 'none';
-                }, 2000);
+                console.log('Skipped splash - waiting for auth to show menu');
             } else {
                 sessionStorage.removeItem('fromAdmin'); // Clear flag if exists
                 
