@@ -1710,12 +1710,12 @@
                                     <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-2" style="display:none;">Stop Scanner</button>
                                     <div id="reader" style="display:none;"></div>
                                     <div style="position: relative;">
-                                        <div class="input-group mb-2">
+                                    <div class="input-group mb-2">
                                             <input type="text" id="toolCode" class="form-control" placeholder="Enter Tool Code, Name, or Part Number" autocomplete="off">
                                         <button onclick="submitCode()" class="btn btn-primary">
                                             <i class="fas fa-check"></i> Register
                                         </button>
-                                        </div>
+                                    </div>
                                         <!-- Dropdown for tool suggestions -->
                                         <div id="toolCodeDropdown" class="tool-code-dropdown"></div>
                                     </div>
@@ -2642,15 +2642,16 @@
         // Ensure user stays logged in across refreshes and browser restarts
         auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
         
-        // Immediately check auth state on page load (before listener fires)
-        // This ensures authenticated users see the menu immediately when navigating from admin.html
+        // Keep login hidden initially - wait for auth state to be determined
+        // This prevents showing login screen when navigating from admin.html
         const loginSection = document.getElementById('loginSection');
-        if (auth.currentUser) {
-            // User is already authenticated, hide login immediately
-            if (loginSection) {
-                loginSection.style.display = 'none';
-            }
+        const toolScannerMenu = document.getElementById('toolScannerMenu');
+        if (loginSection) {
+            loginSection.style.display = 'none';
         }
+        
+        // Flag to track if we've checked auth state
+        let authStateChecked = false;
 
         // QR Scanner
         let html5QrCode;
@@ -4705,13 +4706,16 @@ if (!userCredential.user.emailVerified) {
 
         // On auth state change, show menu after login (not register tools)
         auth.onAuthStateChanged(function(user) {
+            authStateChecked = true;
             const loginSection = document.getElementById('loginSection');
             const signUpSection = document.getElementById('signUpSection');
             const adminSection = document.getElementById('adminSection');
             const appSection = document.getElementById('appSection');
+            const toolScannerMenu = document.getElementById('toolScannerMenu');
             
             if (user) {
                 // User is authenticated - hide login and show menu
+                console.log('User authenticated, showing toolScanner menu');
                 if (loginSection) {
                     loginSection.style.display = 'none';
                 }
@@ -4761,10 +4765,16 @@ if (!userCredential.user.emailVerified) {
                     });
                 // Always show only the main menu after login or refresh
                 hideAllMainScreens();
-                document.getElementById('toolScannerMenu').style.display = 'block';
+                if (toolScannerMenu) {
+                    toolScannerMenu.style.display = 'block';
+                }
                 updateLoggedInTechnician();
+                
+                // Clear the fromAdmin flag since we've successfully navigated
+                sessionStorage.removeItem('fromAdmin');
             } else {
                 // User is not authenticated - show login screen
+                console.log('User not authenticated, showing login screen');
                 if (loginSection) {
                     loginSection.style.display = 'block';
                 }
@@ -4782,6 +4792,18 @@ if (!userCredential.user.emailVerified) {
                 localStorage.removeItem('fullName');
             }
         });
+        
+        // Fallback: If auth state check takes too long (5 seconds), show login
+        // This handles edge cases where Firebase might be slow
+        setTimeout(function() {
+            if (!authStateChecked && auth.currentUser === null) {
+                const loginSection = document.getElementById('loginSection');
+                if (loginSection && loginSection.style.display === 'none') {
+                    console.log('Auth state check timeout - showing login screen');
+                    loginSection.style.display = 'block';
+                }
+            }
+        }, 5000);
 
         // Navigation logic for ToolScanner Menu
         function toolScannerMenu() {
@@ -4923,14 +4945,14 @@ if (!userCredential.user.emailVerified) {
                     
                     // Get batch (Firestore returns up to ~1MB of data per batch)
                     const snapshot = await query.limit(1000).get();
-                    
-                    if (snapshot.empty) {
+                
+                if (snapshot.empty) {
                         hasMore = false;
                         break;
-                    }
-                    
+                }
+                
                     snapshot.forEach(doc => {
-                        const data = doc.data();
+                    const data = doc.data();
                         allToolsCache.push({
                             id: doc.id,
                             toolName: data.toolName || '',
@@ -4963,9 +4985,9 @@ if (!userCredential.user.emailVerified) {
 
             if (!searchTerm || searchTerm.length < 1) {
                 dropdown.style.display = 'none';
-                return;
-            }
-
+                    return;
+                }
+                
             // Refresh cache if needed
             await refreshToolCache();
 
@@ -4999,9 +5021,9 @@ if (!userCredential.user.emailVerified) {
                         <div class="tool-name">${tool.toolName || 'Unknown Tool'}</div>
                         <div class="tool-part">
                             ${partDisplay ? partDisplay + ' | ' : ''}Status: <span style="color: ${statusColor}; font-weight: bold;">${tool.status}</span>
+                            </div>
                         </div>
-                    </div>
-                `;
+                    `;
             }).join('');
 
             dropdown.style.display = 'block';
@@ -5440,25 +5462,25 @@ if (!userCredential.user.emailVerified) {
                     
                     splashVideo.addEventListener('canplaythrough', () => {
                         if (!videoEventsLogged.canplaythrough) {
-                            console.log('Video can play through');
+                        console.log('Video can play through');
                             videoEventsLogged.canplaythrough = true;
                         }
                     });
                     splashVideo.addEventListener('canplay', () => {
                         if (!videoEventsLogged.canplay) {
-                            console.log('Video can play');
+                        console.log('Video can play');
                             videoEventsLogged.canplay = true;
                         }
                     });
                     splashVideo.addEventListener('loadeddata', () => {
                         if (!videoEventsLogged.loadeddata) {
-                            console.log('Video loaded data');
+                        console.log('Video loaded data');
                             videoEventsLogged.loadeddata = true;
                         }
                     });
                     splashVideo.addEventListener('loadstart', () => {
                         if (!videoEventsLogged.loadstart) {
-                            console.log('Video load started');
+                        console.log('Video load started');
                             videoEventsLogged.loadstart = true;
                         }
                     });
