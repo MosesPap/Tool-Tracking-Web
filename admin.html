@@ -1682,12 +1682,23 @@
         // Check if user is admin
         async function checkAdminStatus(user) {
             try {
+                console.log('Fetching user document for UID:', user.uid);
                 const doc = await db.collection('technicians').doc(user.uid).get();
+                console.log('Document exists:', doc.exists);
+                
                 if (doc.exists) {
                     const userData = doc.data();
+                    console.log('User data:', userData);
+                    console.log('isAdmin field:', userData.isAdmin);
+                    
                     if (userData.isAdmin === true) {
+                        console.log('User is admin!');
                         return { isAdmin: true, name: userData.fullName || user.email };
+                    } else {
+                        console.log('User is not admin (isAdmin field is not true)');
                     }
+                } else {
+                    console.log('User document does not exist in technicians collection');
                 }
                 return { isAdmin: false, name: null };
             } catch (error) {
@@ -2810,18 +2821,32 @@
 
         // Check auth state on page load
         auth.onAuthStateChanged(async (user) => {
+            console.log('Auth state changed:', user ? user.email : 'No user');
+            
             if (user) {
-                const { isAdmin, name } = await checkAdminStatus(user);
-                if (isAdmin) {
-                    loadAdminDashboard(name);
-                } else {
-                    // Not an admin - redirect to main app
-                    await auth.signOut();
-                    alert('Access Denied: Admin privileges required.');
+                try {
+                    console.log('Checking admin status for:', user.email);
+                    const { isAdmin, name } = await checkAdminStatus(user);
+                    console.log('Admin status result:', { isAdmin, name });
+                    
+                    if (isAdmin) {
+                        console.log('User is admin, loading dashboard');
+                        loadAdminDashboard(name);
+                    } else {
+                        // Not an admin - redirect to main app
+                        console.log('User is not admin, redirecting to index.html');
+                        await auth.signOut();
+                        alert('Access Denied: Admin privileges required.');
+                        window.location.href = 'index.html';
+                    }
+                } catch (error) {
+                    console.error('Error in auth state check:', error);
+                    alert('Error checking admin status: ' + error.message);
                     window.location.href = 'index.html';
                 }
             } else {
                 // Not logged in - redirect to main app for login
+                console.log('No user logged in, redirecting to index.html');
                 window.location.href = 'index.html';
             }
         });
