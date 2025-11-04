@@ -988,8 +988,8 @@
     </style>
 </head>
 <body>
-    <!-- Login Screen (hidden - redirects to index.html for login) -->
-    <div id="loginSection" class="login-container" style="display: none;">
+    <!-- Login Screen -->
+    <div id="loginSection" class="login-container">
         <div class="login-card">
             <div class="login-header">
                 <i class="fas fa-user-shield"></i>
@@ -1042,7 +1042,7 @@
                     <h1><i class="fas fa-user-shield"></i> Tool Administrator</h1>
                     <p class="admin-welcome mb-2">Welcome, <span id="adminName">Admin</span></p>
                     <div class="d-flex gap-2">
-                        <button class="btn btn-light btn-admin-action" onclick="sessionStorage.setItem('fromAdmin', 'true'); location.href='index.html';">
+                        <button class="btn btn-light btn-admin-action" onclick="location.href='index.html?skipLogin=true'">
                             <i class="fas fa-home"></i> Main App
                         </button>
                         <button class="btn btn-danger btn-admin-action" id="logoutBtn">
@@ -2828,8 +2828,11 @@
             if (confirm('Are you sure you want to logout?')) {
                 try {
                     await auth.signOut();
-                    // Redirect to index.html after logout
-                    window.location.href = 'index.html';
+                    loginSection.style.display = 'flex';
+                    adminDashboard.style.display = 'none';
+                    document.getElementById('adminEmail').value = '';
+                    document.getElementById('adminPassword').value = '';
+                    showAlert('Logged out successfully', 'success');
                 } catch (error) {
                     console.error('Logout error:', error);
                     alert('Logout failed: ' + error.message);
@@ -2842,16 +2845,14 @@
             if (user) {
                 const { isAdmin, name } = await checkAdminStatus(user);
                 if (isAdmin) {
-                    loginSection.style.display = 'none';
                     loadAdminDashboard(name);
                 } else {
                     await auth.signOut();
-                    // Redirect to index.html for login
-                    window.location.href = 'index.html';
+                    showAlert('Access Denied: Admin privileges required.', 'danger');
                 }
             } else {
-                // If not authenticated, redirect to index.html for login
-                window.location.href = 'index.html';
+                loginSection.style.display = 'flex';
+                adminDashboard.style.display = 'none';
             }
         });
 
