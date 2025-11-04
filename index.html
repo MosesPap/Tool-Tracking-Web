@@ -1533,8 +1533,8 @@
         <img src="ams_logo.png" alt="AMS Squadron Logo" class="ams-logo">
     </div>
     <div class="container">
-        <!-- Login Section -->
-        <div id="loginSection" class="auth-container">
+        <!-- Login Section (hidden initially until auth state is checked) -->
+        <div id="loginSection" class="auth-container" style="display: none;">
             <div class="card auth-card">
                 <div class="card-body">
                     <div id="loginAlert" class="alert alert-danger d-none" role="alert"></div>
@@ -2641,47 +2641,16 @@
 
         // Ensure user stays logged in across refreshes and browser restarts
         auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-
-        // Get DOM elements early
+        
+        // Immediately check auth state on page load (before listener fires)
+        // This ensures authenticated users see the menu immediately when navigating from admin.html
         const loginSection = document.getElementById('loginSection');
-        const signUpSection = document.getElementById('signUpSection');
-        const adminSection = document.getElementById('adminSection');
-        const toolScannerMenu = document.getElementById('toolScannerMenu');
-        const appSection = document.getElementById('appSection');
-
-        // Check authentication state immediately on page load
-        // This prevents showing login screen if user is already authenticated
-        function checkAuthStateImmediately() {
-            // Wait for DOM to be ready
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', checkAuthStateImmediately);
-                return;
-            }
-            
-            const currentUser = auth.currentUser;
-            if (currentUser) {
-                // User is authenticated, hide login immediately
-                if (loginSection) loginSection.style.display = 'none';
-                if (signUpSection) signUpSection.classList.add('d-none');
-                if (adminSection) adminSection.style.display = 'none';
-                if (toolScannerMenu) toolScannerMenu.style.display = 'block';
-                if (appSection) appSection.style.display = 'none';
-                const headerBranding = document.getElementById('headerBranding');
-                if (headerBranding) headerBranding.style.display = 'none';
+        if (auth.currentUser) {
+            // User is already authenticated, hide login immediately
+            if (loginSection) {
+                loginSection.style.display = 'none';
             }
         }
-        
-        // Check immediately (will wait for DOM if needed)
-        checkAuthStateImmediately();
-        
-        // Also check after a short delay to ensure Firebase auth is initialized
-        setTimeout(() => {
-            const currentUser = auth.currentUser;
-            if (currentUser && loginSection && loginSection.style.display !== 'none') {
-                // User is authenticated but login is still showing, hide it
-                checkAuthStateImmediately();
-            }
-        }, 100);
 
         // QR Scanner
         let html5QrCode;
@@ -4735,24 +4704,28 @@ if (!userCredential.user.emailVerified) {
         // (removed previous-tab event listener as the tab is no longer present)
 
         // On auth state change, show menu after login (not register tools)
-        // This is the main auth state listener that handles UI updates
         auth.onAuthStateChanged(function(user) {
-            // Skip if email is not verified (handled by the other listener)
-            if (user && !user.emailVerified) {
-                return;
-            }
+            const loginSection = document.getElementById('loginSection');
+            const signUpSection = document.getElementById('signUpSection');
+            const adminSection = document.getElementById('adminSection');
+            const appSection = document.getElementById('appSection');
             
             if (user) {
-                // User is authenticated
-                if (loginSection) loginSection.style.display = 'none';
-                if (signUpSection) signUpSection.classList.add('d-none');
-                if (adminSection) adminSection.style.display = 'none';
+                // User is authenticated - hide login and show menu
+                if (loginSection) {
+                    loginSection.style.display = 'none';
+                }
+                if (signUpSection) {
+                    signUpSection.classList.add('d-none');
+                }
+                if (adminSection) {
+                    adminSection.style.display = 'none';
+                }
                 const adminButton = document.getElementById('adminButton');
                 if (adminButton) {
                     adminButton.style.display = 'none';
                 }
                 document.getElementById('headerBranding').style.display = 'none';
-                
                 // Always fetch fresh data from Firestore
                 db.collection('technicians').doc(user.uid)
                     .get()
@@ -4788,14 +4761,19 @@ if (!userCredential.user.emailVerified) {
                     });
                 // Always show only the main menu after login or refresh
                 hideAllMainScreens();
-                if (toolScannerMenu) toolScannerMenu.style.display = 'block';
-                if (appSection) appSection.style.display = 'none';
+                document.getElementById('toolScannerMenu').style.display = 'block';
                 updateLoggedInTechnician();
             } else {
-                // User is not authenticated
-                if (loginSection) loginSection.style.display = 'block';
-                if (appSection) appSection.style.display = 'none';
-                if (adminSection) adminSection.style.display = 'none';
+                // User is not authenticated - show login screen
+                if (loginSection) {
+                    loginSection.style.display = 'block';
+                }
+                if (appSection) {
+                    appSection.style.display = 'none';
+                }
+                if (adminSection) {
+                    adminSection.style.display = 'none';
+                }
                 const adminButton = document.getElementById('adminButton');
                 if (adminButton) {
                     adminButton.style.display = 'none';
@@ -9797,40 +9775,20 @@ if (!userCredential.user.emailVerified) {
 
     async function initIndexedDB() {
         return new Promise((resolve, reject) => {
-            // Check if IndexedDB is available
-            if (!window.indexedDB) {
-                console.warn('IndexedDB is not available in this environment. Offline features will be disabled.');
-                resolve(null);
-                return;
-            }
+            const request = window.indexedDB.open('ToolTrackingDB', 1);
             
-            try {
-                const request = window.indexedDB.open('ToolTrackingDB', 1);
-                
-                request.onerror = () => {
-                    console.warn('IndexedDB initialization failed. Offline features will be disabled:', request.error);
-                    resolve(null); // Resolve with null instead of rejecting to allow app to continue
-                };
-                
-                request.onsuccess = () => {
-                    indexedDB = request.result;
-                    resolve(indexedDB);
-                };
-                
-                request.onupgradeneeded = (event) => {
-                    try {
-                        const db = event.target.result;
-                        if (!db.objectStoreNames.contains('offlineTools')) {
-                            db.createObjectStore('offlineTools', { keyPath: 'id' });
-                        }
-                    } catch (error) {
-                        console.warn('Error setting up IndexedDB:', error);
-                    }
-                };
-            } catch (error) {
-                console.warn('IndexedDB initialization error. Offline features will be disabled:', error);
-                resolve(null); // Resolve with null instead of rejecting
-            }
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => {
+                indexedDB = request.result;
+                resolve(indexedDB);
+            };
+            
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains('offlineTools')) {
+                    db.createObjectStore('offlineTools', { keyPath: 'id' });
+                }
+            };
         });
     }
 
@@ -9884,12 +9842,8 @@ if (!userCredential.user.emailVerified) {
 
     // Initialize offline functionality
     document.addEventListener('DOMContentLoaded', async function() {
-        // Initialize IndexedDB (with error handling - app will work without it)
-        try {
-            await initIndexedDB();
-        } catch (error) {
-            console.warn('IndexedDB initialization failed. App will continue without offline features:', error);
-        }
+        // Initialize IndexedDB
+        await initIndexedDB();
         
         // Set up online/offline event listeners
         window.addEventListener('online', updateOnlineStatus);
