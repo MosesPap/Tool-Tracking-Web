@@ -5391,46 +5391,57 @@ if (!userCredential.user.emailVerified) {
                 }, 3000);
             }
             
-            // Show orange overlay for 0.5s, then attempt video splash
-            setTimeout(() => {
+            // Check if user is already logged in - skip splash if they are
+            auth.currentUser ? skipSplashAndShowApp() : showSplashVideo();
+            
+            function skipSplashAndShowApp() {
+                // Hide splash immediately
                 orangeOverlay.classList.add('hidden');
-                
-                if (splashVideo) {
-                    let splashHidden = false;
-                    let videoEnded = false;
+                splashScreen.style.display = 'none';
+                console.log('User already logged in - skipping splash video');
+            }
+            
+            function showSplashVideo() {
+                // Show orange overlay for 0.5s, then attempt video splash
+                setTimeout(() => {
+                    orangeOverlay.classList.add('hidden');
                     
-                    function hideSplashScreen() {
-                        if (!splashHidden && videoEnded && authStateResolved) {
-                            splashScreen.classList.add('splash-hidden');
-                            setTimeout(() => {
-                                splashScreen.style.display = 'none';
-                            }, 500);
-                            splashHidden = true;
-                        }
-                    }
-                    
-                    // Try to play video
-                    attemptVideoPlay();
-                    
-                    // Listen for video events
-                    splashVideo.addEventListener('ended', function() {
-                        videoEnded = true;
-                        // Wait for auth state to resolve before hiding splash
-                        const checkAuthInterval = setInterval(() => {
-                            if (authStateResolved) {
-                                clearInterval(checkAuthInterval);
-                                hideSplashScreen();
-                            }
-                        }, 50); // Check every 50ms
+                    if (splashVideo) {
+                        let splashHidden = false;
+                        let videoEnded = false;
                         
-                        // Fallback: hide after 3 seconds even if auth hasn't resolved
-                        setTimeout(() => {
-                            if (!splashHidden) {
-                                clearInterval(checkAuthInterval);
-                                hideSplashScreen();
+                        function hideSplashScreen() {
+                            if (!splashHidden && videoEnded && authStateResolved) {
+                                splashScreen.classList.add('splash-hidden');
+                                setTimeout(() => {
+                                    splashScreen.style.display = 'none';
+                                }, 500);
+                                splashHidden = true;
                             }
-                        }, 3000);
-                    });
+                        }
+                        
+                        // Try to play video
+                        attemptVideoPlay();
+                        
+                        // Listen for video events
+                        splashVideo.addEventListener('ended', function() {
+                            videoEnded = true;
+                            // Wait for auth state to resolve before hiding splash
+                            const checkAuthInterval = setInterval(() => {
+                                if (authStateResolved) {
+                                    clearInterval(checkAuthInterval);
+                                    hideSplashScreen();
+                                }
+                            }, 50); // Check every 50ms
+                            
+                            // Fallback: hide after 3 seconds even if auth hasn't resolved
+                            setTimeout(() => {
+                                if (!splashHidden) {
+                                    clearInterval(checkAuthInterval);
+                                    hideSplashScreen();
+                                }
+                            }, 3000);
+                        });
                     
                     // One-time event listeners (only log once)
                     let videoEventsLogged = {
@@ -5470,12 +5481,13 @@ if (!userCredential.user.emailVerified) {
                         showFallbackSplash();
                     });
                     
-                    // Fallback: hide after 6 seconds if video doesn't end
-                    setTimeout(hideSplashScreen, 6000);
-                } else {
-                    showFallbackSplash();
-                }
-            }, 500); // 0.5 seconds orange overlay
+                        // Fallback: hide after 6 seconds if video doesn't end
+                        setTimeout(hideSplashScreen, 6000);
+                    } else {
+                        showFallbackSplash();
+                    }
+                }, 500); // 0.5 seconds orange overlay
+            }
             
             // iOS Safari: Add user interaction handler to trigger video playback
             let userInteracted = false;

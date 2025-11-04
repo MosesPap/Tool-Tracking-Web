@@ -988,47 +988,16 @@
     </style>
 </head>
 <body>
-    <!-- Login Screen -->
-    <div id="loginSection" class="login-container">
-        <div class="login-card">
+    <!-- Loading Screen (shown while checking auth) -->
+    <div id="loginSection" class="login-container" style="display: flex;">
+        <div class="login-card" style="text-align: center;">
             <div class="login-header">
                 <i class="fas fa-user-shield"></i>
                 <h2>Tool Administrator</h2>
-                <p>AMS Tool Tracking System</p>
+                <p>Verifying access...</p>
             </div>
-
-            <div id="loginAlert" class="alert alert-custom" style="display: none;"></div>
-
-            <form id="loginForm">
-                <div class="mb-3">
-                    <label for="adminEmail" class="form-label">
-                        <i class="fas fa-envelope"></i> Email Address
-                    </label>
-                    <input type="email" class="form-control" id="adminEmail" placeholder="admin@example.com" required>
-                </div>
-                <div class="mb-3">
-                    <label for="adminPassword" class="form-label">
-                        <i class="fas fa-lock"></i> Password
-                    </label>
-                    <input type="password" class="form-control" id="adminPassword" placeholder="Enter your password" required>
-                </div>
-                <button type="submit" class="btn btn-login w-100 mb-3">
-                    <i class="fas fa-sign-in-alt"></i> Sign In
-                </button>
-            </form>
-
-            <div class="divider">
-                <span>OR</span>
-            </div>
-
-            <button id="googleSignInBtn" class="btn btn-google w-100">
-                <i class="fab fa-google"></i> Sign in with Google
-            </button>
-
-            <div class="text-center mt-4">
-                <a href="index.html" class="text-decoration-none" style="color: #667eea;">
-                    <i class="fas fa-arrow-left"></i> Back to Main App
-                </a>
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
             </div>
         </div>
     </div>
@@ -2831,11 +2800,7 @@
             if (confirm('Are you sure you want to logout?')) {
                 try {
                     await auth.signOut();
-                    loginSection.style.display = 'flex';
-                    adminDashboard.style.display = 'none';
-                    document.getElementById('adminEmail').value = '';
-                    document.getElementById('adminPassword').value = '';
-                    showAlert('Logged out successfully', 'success');
+                    window.location.href = 'index.html';
                 } catch (error) {
                     console.error('Logout error:', error);
                     alert('Logout failed: ' + error.message);
@@ -2850,12 +2815,14 @@
                 if (isAdmin) {
                     loadAdminDashboard(name);
                 } else {
+                    // Not an admin - redirect to main app
                     await auth.signOut();
-                    showAlert('Access Denied: Admin privileges required.', 'danger');
+                    alert('Access Denied: Admin privileges required.');
+                    window.location.href = 'index.html';
                 }
             } else {
-                loginSection.style.display = 'flex';
-                adminDashboard.style.display = 'none';
+                // Not logged in - redirect to main app for login
+                window.location.href = 'index.html';
             }
         });
 
@@ -2867,6 +2834,7 @@
                 if (auth.currentUser) {
                     alert('Session expired due to inactivity. Please login again.');
                     await auth.signOut();
+                    window.location.href = 'index.html';
                 }
             }, 30 * 60 * 1000); // 30 minutes
         }
