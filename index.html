@@ -451,11 +451,51 @@
             margin-bottom: 20px;
         }
         
-        /* Larger tab titles */
+        /* Larger tab titles with 3D interactive display */
         .nav-tabs .nav-link {
             font-size: 1.2rem !important;
             font-weight: 600 !important;
             padding: 12px 20px !important;
+            border-radius: 12px 12px 0 0 !important;
+            transition: all 0.3s ease !important;
+            border: 2px solid transparent !important;
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%) !important;
+            color: #666 !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+            transform: perspective(1000px) rotateX(0deg) !important;
+        }
+        
+        .nav-tabs .nav-link:hover:not(.active) {
+            background: linear-gradient(135deg, #d0d0d0 0%, #a0a0a0 100%) !important;
+            transform: translateY(-2px) perspective(1000px) rotateX(3deg) !important;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+            color: #333 !important;
+        }
+        
+        .nav-tabs .nav-link.active {
+            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%) !important;
+            color: white !important;
+            border-color: #FF9800 !important;
+            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4), 
+                        0 2px 4px rgba(0, 0, 0, 0.2) !important;
+            transform: translateY(-2px) perspective(1000px) rotateX(5deg) !important;
+        }
+        
+        .nav-tabs .nav-link.active:hover {
+            transform: translateY(-3px) perspective(1000px) rotateX(8deg) !important;
+            box-shadow: 0 6px 16px rgba(255, 152, 0, 0.5), 
+                        0 4px 8px rgba(0, 0, 0, 0.3) !important;
+        }
+        
+        .nav-tabs .nav-link:active:not(.active) {
+            transform: translateY(0) perspective(1000px) rotateX(0deg) !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+        }
+        
+        .nav-tabs .nav-link:active.active {
+            transform: translateY(-1px) perspective(1000px) rotateX(3deg) !important;
+            box-shadow: 0 4px 10px rgba(255, 152, 0, 0.4), 
+                        0 2px 4px rgba(0, 0, 0, 0.2) !important;
         }
         
         /* Search type buttons styling */
@@ -510,6 +550,54 @@
             box-shadow: 0 4px 10px rgba(255, 152, 0, 0.4), 
                         0 2px 4px rgba(0, 0, 0, 0.2);
         }
+        
+        /* Search dropdown list styling */
+        .search-dropdown-list {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            margin-top: 4px;
+        }
+        
+        .search-dropdown-item {
+            padding: 12px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.2s ease;
+        }
+        
+        .search-dropdown-item:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .search-dropdown-item:last-child {
+            border-bottom: none;
+        }
+        
+        .search-dropdown-item.selected {
+            background-color: #e3f2fd;
+        }
+        
+        .search-dropdown-item .tool-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 1rem;
+        }
+        
+        .search-dropdown-item .tool-part {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 4px;
+        }
+        
         #scannerView {
             text-align: center;
         }
@@ -1768,11 +1856,11 @@
                                             </button>
                                         </div>
                                     </div>
-                                    <div class="input-group mb-2">
-                                        <input type="text" id="searchToolInput" class="form-control" placeholder="Enter search term..." onkeyup="handleSearchInputKeyup(event)">
-                                        <button onclick="performToolSearch()" class="btn btn-primary">
-                                            <i class="fas fa-search"></i> Search
-                                        </button>
+                                    <div class="mb-2 position-relative">
+                                        <input type="text" id="searchToolInput" class="form-control" placeholder="Start typing to search..." onkeyup="handleSearchInputKeyup(event)" onfocus="handleSearchInputFocus()" onblur="handleSearchInputBlur()" autocomplete="off">
+                                        <div id="searchDropdownList" class="search-dropdown-list" style="display: none;">
+                                            <!-- Dropdown items will be populated here -->
+                                        </div>
                                     </div>
                                     <div id="searchResultsContainer" style="display: none;">
                                         <label for="searchResultsDropdown" class="form-label mt-2">Search Results:</label>
@@ -4244,6 +4332,9 @@ if (!userCredential.user.emailVerified) {
         // Search Tools functionality
         let searchResultsData = [];
         let currentSearchType = 'toolName'; // Default to tool name
+        let searchTimeout = null;
+        let allToolsCache = [];
+        let dropdownSelectedIndex = -1;
         
         function setSearchType(type) {
             currentSearchType = type;
@@ -4259,122 +4350,243 @@ if (!userCredential.user.emailVerified) {
                 partNumberBtn.classList.add('active');
                 toolNameBtn.classList.remove('active');
             }
-        }
-        
-        function handleSearchInputKeyup(event) {
-            if (event.key === 'Enter') {
-                performToolSearch();
+            
+            // Trigger search again if there's text in the input
+            const searchInput = document.getElementById('searchToolInput');
+            if (searchInput && searchInput.value.trim()) {
+                performRealTimeSearch(searchInput.value.trim());
             }
         }
         
+        function handleSearchInputKeyup(event) {
+            const searchInput = document.getElementById('searchToolInput');
+            const searchTerm = searchInput.value.trim();
+            const dropdown = document.getElementById('searchDropdownList');
+            
+            // Handle arrow keys for dropdown navigation
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                navigateDropdown(1);
+                return;
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                navigateDropdown(-1);
+                return;
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+                if (dropdownSelectedIndex >= 0 && searchResultsData[dropdownSelectedIndex]) {
+                    selectToolFromDropdown(searchResultsData[dropdownSelectedIndex].id);
+                }
+                return;
+            } else if (event.key === 'Escape') {
+                dropdown.style.display = 'none';
+                return;
+            }
+            
+            // Clear previous timeout
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
+            }
+            
+            // Debounce search - wait 300ms after user stops typing
+            searchTimeout = setTimeout(() => {
+                if (searchTerm.length >= 1) {
+                    performRealTimeSearch(searchTerm);
+                } else {
+                    dropdown.style.display = 'none';
+                    searchResultsData = [];
+                }
+            }, 300);
+        }
+        
+        function handleSearchInputFocus() {
+            const searchInput = document.getElementById('searchToolInput');
+            const searchTerm = searchInput.value.trim();
+            if (searchTerm.length >= 1) {
+                performRealTimeSearch(searchTerm);
+            }
+        }
+        
+        function handleSearchInputBlur() {
+            // Delay hiding dropdown to allow click events
+            setTimeout(() => {
+                const dropdown = document.getElementById('searchDropdownList');
+                dropdown.style.display = 'none';
+            }, 200);
+        }
+        
+        function navigateDropdown(direction) {
+            const dropdown = document.getElementById('searchDropdownList');
+            const items = dropdown.querySelectorAll('.search-dropdown-item');
+            
+            if (items.length === 0) return;
+            
+            // Remove previous selection
+            if (dropdownSelectedIndex >= 0 && items[dropdownSelectedIndex]) {
+                items[dropdownSelectedIndex].classList.remove('selected');
+            }
+            
+            // Update index
+            dropdownSelectedIndex += direction;
+            if (dropdownSelectedIndex < 0) {
+                dropdownSelectedIndex = items.length - 1;
+            } else if (dropdownSelectedIndex >= items.length) {
+                dropdownSelectedIndex = 0;
+            }
+            
+            // Add selection
+            if (items[dropdownSelectedIndex]) {
+                items[dropdownSelectedIndex].classList.add('selected');
+                items[dropdownSelectedIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+        }
+        
+        async function performRealTimeSearch(searchTerm) {
+            const dropdown = document.getElementById('searchDropdownList');
+            dropdown.style.display = 'block';
+            dropdown.innerHTML = '<div class="search-dropdown-item" style="text-align: center; color: #999;">Loading...</div>';
+            dropdownSelectedIndex = -1;
+            
+            try {
+                // Fetch all tools if cache is empty
+                if (allToolsCache.length === 0) {
+                    const snapshot = await db.collection('tools').get();
+                    allToolsCache = [];
+                    snapshot.forEach((doc) => {
+                        const data = doc.data();
+                        allToolsCache.push({
+                            id: doc.id,
+                            toolName: (data.toolName || '').toString(),
+                            partNumber: (data.partNumber || doc.id).toString()
+                        });
+                    });
+                }
+                
+                // Case-insensitive search through all tools
+                const searchTermLower = searchTerm.toLowerCase();
+                const filtered = allToolsCache.filter(tool => {
+                    if (currentSearchType === 'toolName') {
+                        return tool.toolName.toLowerCase().includes(searchTermLower);
+                    } else {
+                        return tool.partNumber.toLowerCase().includes(searchTermLower);
+                    }
+                }).slice(0, 20); // Limit to 20 results for performance
+                
+                // Store results for selection
+                searchResultsData = filtered;
+                
+                // Display results
+                if (filtered.length === 0) {
+                    dropdown.innerHTML = '<div class="search-dropdown-item" style="text-align: center; color: #999;">No tools found</div>';
+                    return;
+                }
+                
+                dropdown.innerHTML = '';
+                filtered.forEach((tool, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'search-dropdown-item';
+                    item.onclick = () => selectToolFromDropdown(tool.id);
+                    item.onmouseenter = () => {
+                        // Remove previous selection
+                        dropdown.querySelectorAll('.search-dropdown-item').forEach(el => el.classList.remove('selected'));
+                        item.classList.add('selected');
+                        dropdownSelectedIndex = index;
+                    };
+                    
+                    item.innerHTML = `
+                        <div class="tool-name">${tool.toolName || 'Unknown Tool'}</div>
+                        <div class="tool-part">Part #: ${tool.partNumber}</div>
+                    `;
+                    
+                    dropdown.appendChild(item);
+                });
+                
+            } catch (error) {
+                console.error('Error searching tools:', error);
+                dropdown.innerHTML = '<div class="search-dropdown-item" style="text-align: center; color: #f00;">Error loading results</div>';
+            }
+        }
+        
+        async function selectToolFromDropdown(toolId) {
+            const searchInput = document.getElementById('searchToolInput');
+            const dropdown = document.getElementById('searchDropdownList');
+            const selectedToolDetails = document.getElementById('selectedToolDetails');
+            
+            // Hide dropdown
+            dropdown.style.display = 'none';
+            
+            try {
+                // Fetch full tool data
+                const toolRef = db.collection('tools').doc(toolId);
+                const doc = await toolRef.get();
+                
+                if (doc.exists) {
+                    const data = doc.data();
+                    const tool = {
+                        id: doc.id,
+                        ...data
+                    };
+                    
+                    // Set input value
+                    searchInput.value = currentSearchType === 'toolName' ? tool.toolName : tool.partNumber;
+                    
+                    // Show tool details
+                    selectedToolDetails.style.display = 'block';
+                    
+                    // Format tool details
+                    const toolName = tool.toolName || 'Unknown Tool';
+                    const partNumber = tool.partNumber || toolId;
+                    const collectionCode = tool.collectionCode || 'N/A';
+                    const location = tool.location || 'N/A';
+                    const status = tool.status || 'N/A';
+                    const owner = tool.owner || 'N/A';
+                    const technician = tool.technician || 'N/A';
+                    const calDueDate = tool.calDueDate ? (tool.calDueDate.toDate ? tool.calDueDate.toDate().toLocaleDateString() : tool.calDueDate) : 'N/A';
+                    
+                    selectedToolDetails.innerHTML = `
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0">Tool Details</h5>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Tool Name:</strong> ${toolName}</p>
+                                <p><strong>Part Number:</strong> ${partNumber}</p>
+                                <p><strong>Collection Code:</strong> ${collectionCode}</p>
+                                <p><strong>Location:</strong> ${location}</p>
+                                <p><strong>Status:</strong> <span class="badge ${status === 'OUT' ? 'bg-danger' : 'bg-success'}">${status}</span></p>
+                                <p><strong>Owner:</strong> ${owner}</p>
+                                <p><strong>Technician:</strong> ${technician}</p>
+                                <p><strong>Cal Due Date:</strong> ${calDueDate}</p>
+                                <button onclick="useSelectedTool('${toolId}')" class="btn btn-primary mt-2">
+                                    <i class="fas fa-check"></i> Use This Tool
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error fetching tool details:', error);
+                alert('Error fetching tool details. Please try again.');
+            }
+        }
+        
+        // Legacy function for compatibility
         async function performToolSearch() {
             const searchInput = document.getElementById('searchToolInput');
             const searchTerm = searchInput.value.trim();
-            const resultsContainer = document.getElementById('searchResultsContainer');
-            const resultsDropdown = document.getElementById('searchResultsDropdown');
-            const selectedToolDetails = document.getElementById('selectedToolDetails');
             
             if (!searchTerm) {
                 alert('Please enter a search term');
                 return;
             }
             
-            try {
-                resultsDropdown.innerHTML = '<option value="">Loading...</option>';
-                resultsContainer.style.display = 'block';
-                selectedToolDetails.style.display = 'none';
-                
-                let query;
-                const searchTermUpper = searchTerm.toUpperCase();
-                
-                if (currentSearchType === 'toolName') {
-                    query = db.collection('tools')
-                        .where('toolName', '>=', searchTermUpper)
-                        .where('toolName', '<=', searchTermUpper + '\uf8ff')
-                        .limit(50);
-                } else if (currentSearchType === 'partNumber') {
-                    query = db.collection('tools')
-                        .where('partNumber', '>=', searchTermUpper)
-                        .where('partNumber', '<=', searchTermUpper + '\uf8ff')
-                        .limit(50);
-                }
-                
-                const snapshot = await query.get();
-                searchResultsData = [];
-                
-                if (snapshot.empty) {
-                    resultsDropdown.innerHTML = '<option value="">No tools found</option>';
-                    return;
-                }
-                
-                resultsDropdown.innerHTML = '<option value="">-- Select a tool --</option>';
-                
-                snapshot.forEach((doc) => {
-                    const data = doc.data();
-                    searchResultsData.push({
-                        id: doc.id,
-                        ...data
-                    });
-                    
-                    const toolName = data.toolName || 'Unknown Tool';
-                    const partNumber = data.partNumber || doc.id;
-                    const displayText = `${toolName} (${partNumber})`;
-                    
-                    const option = document.createElement('option');
-                    option.value = doc.id;
-                    option.textContent = displayText;
-                    resultsDropdown.appendChild(option);
-                });
-                
-            } catch (error) {
-                console.error('Error searching tools:', error);
-                alert('Error performing search. Please try again.');
-                resultsDropdown.innerHTML = '<option value="">Error loading results</option>';
-            }
+            // Use the real-time search function
+            await performRealTimeSearch(searchTerm);
         }
         
         function selectToolFromSearch(toolId) {
-            if (!toolId) {
-                document.getElementById('selectedToolDetails').style.display = 'none';
-                return;
-            }
-            
-            const tool = searchResultsData.find(t => t.id === toolId);
-            if (!tool) return;
-            
-            const selectedToolDetails = document.getElementById('selectedToolDetails');
-            selectedToolDetails.style.display = 'block';
-            
-            // Format tool details
-            const toolName = tool.toolName || 'Unknown Tool';
-            const partNumber = tool.partNumber || toolId;
-            const collectionCode = tool.collectionCode || 'N/A';
-            const location = tool.location || 'N/A';
-            const status = tool.status || 'N/A';
-            const owner = tool.owner || 'N/A';
-            const technician = tool.technician || 'N/A';
-            const calDueDate = tool.calDueDate ? (tool.calDueDate.toDate ? tool.calDueDate.toDate().toLocaleDateString() : tool.calDueDate) : 'N/A';
-            
-            selectedToolDetails.innerHTML = `
-                <div class="card">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">Tool Details</h5>
-                    </div>
-                    <div class="card-body">
-                        <p><strong>Tool Name:</strong> ${toolName}</p>
-                        <p><strong>Part Number:</strong> ${partNumber}</p>
-                        <p><strong>Collection Code:</strong> ${collectionCode}</p>
-                        <p><strong>Location:</strong> ${location}</p>
-                        <p><strong>Status:</strong> <span class="badge ${status === 'OUT' ? 'bg-danger' : 'bg-success'}">${status}</span></p>
-                        <p><strong>Owner:</strong> ${owner}</p>
-                        <p><strong>Technician:</strong> ${technician}</p>
-                        <p><strong>Cal Due Date:</strong> ${calDueDate}</p>
-                        <button onclick="useSelectedTool('${toolId}')" class="btn btn-primary mt-2">
-                            <i class="fas fa-check"></i> Use This Tool
-                        </button>
-                    </div>
-                </div>
-            `;
+            // This function is kept for compatibility with the old dropdown
+            selectToolFromDropdown(toolId);
         }
         
         function useSelectedTool(toolId) {
