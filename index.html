@@ -450,6 +450,66 @@
         .nav-tabs {
             margin-bottom: 20px;
         }
+        
+        /* Larger tab titles */
+        .nav-tabs .nav-link {
+            font-size: 1.2rem !important;
+            font-weight: 600 !important;
+            padding: 12px 20px !important;
+        }
+        
+        /* Search type buttons styling */
+        .search-type-btn {
+            flex: 1;
+            padding: 12px 20px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 12px;
+            border: 2px solid #2196F3;
+            background-color: #2196F3;
+            color: white;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(33, 150, 243, 0.3);
+        }
+        
+        .search-type-btn:not(.active) {
+            background-color: #2196F3;
+            border-color: #2196F3;
+            color: white;
+        }
+        
+        .search-type-btn.active {
+            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+            border-color: #FF9800;
+            color: white;
+            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4), 
+                        0 2px 4px rgba(0, 0, 0, 0.2);
+            transform: translateY(-2px) perspective(1000px) rotateX(5deg);
+        }
+        
+        .search-type-btn:hover:not(.active) {
+            background-color: #1976D2;
+            border-color: #1976D2;
+            transform: translateY(-1px);
+            box-shadow: 0 3px 6px rgba(33, 150, 243, 0.4);
+        }
+        
+        .search-type-btn:hover.active {
+            transform: translateY(-3px) perspective(1000px) rotateX(8deg);
+            box-shadow: 0 6px 16px rgba(255, 152, 0, 0.5), 
+                        0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        .search-type-btn:active:not(.active) {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(33, 150, 243, 0.3);
+        }
+        
+        .search-type-btn:active.active {
+            transform: translateY(-1px) perspective(1000px) rotateX(3deg);
+            box-shadow: 0 4px 10px rgba(255, 152, 0, 0.4), 
+                        0 2px 4px rgba(0, 0, 0, 0.2);
+        }
         #scannerView {
             text-align: center;
         }
@@ -1698,11 +1758,15 @@
                                 <div class="card-body" style="padding-bottom: 10px; padding-top: 12px;">
                                     <h4 style="font-size: 1.1rem; margin-bottom: 10px;">Search Tools</h4>
                                     <div class="mb-3">
-                                        <label for="searchType" class="form-label">Search By:</label>
-                                        <select id="searchType" class="form-select mb-2">
-                                            <option value="toolName">Tool Name</option>
-                                            <option value="partNumber">Part Number</option>
-                                        </select>
+                                        <label class="form-label mb-2 d-block">Search By:</label>
+                                        <div class="d-flex gap-2">
+                                            <button id="searchTypeToolName" onclick="setSearchType('toolName')" class="btn search-type-btn active">
+                                                Tool Name
+                                            </button>
+                                            <button id="searchTypePartNumber" onclick="setSearchType('partNumber')" class="btn search-type-btn">
+                                                Part Number
+                                            </button>
+                                        </div>
                                     </div>
                                     <div class="input-group mb-2">
                                         <input type="text" id="searchToolInput" class="form-control" placeholder="Enter search term..." onkeyup="handleSearchInputKeyup(event)">
@@ -4179,6 +4243,23 @@ if (!userCredential.user.emailVerified) {
 
         // Search Tools functionality
         let searchResultsData = [];
+        let currentSearchType = 'toolName'; // Default to tool name
+        
+        function setSearchType(type) {
+            currentSearchType = type;
+            
+            // Update button states
+            const toolNameBtn = document.getElementById('searchTypeToolName');
+            const partNumberBtn = document.getElementById('searchTypePartNumber');
+            
+            if (type === 'toolName') {
+                toolNameBtn.classList.add('active');
+                partNumberBtn.classList.remove('active');
+            } else {
+                partNumberBtn.classList.add('active');
+                toolNameBtn.classList.remove('active');
+            }
+        }
         
         function handleSearchInputKeyup(event) {
             if (event.key === 'Enter') {
@@ -4188,7 +4269,6 @@ if (!userCredential.user.emailVerified) {
         
         async function performToolSearch() {
             const searchInput = document.getElementById('searchToolInput');
-            const searchType = document.getElementById('searchType').value;
             const searchTerm = searchInput.value.trim();
             const resultsContainer = document.getElementById('searchResultsContainer');
             const resultsDropdown = document.getElementById('searchResultsDropdown');
@@ -4207,12 +4287,12 @@ if (!userCredential.user.emailVerified) {
                 let query;
                 const searchTermUpper = searchTerm.toUpperCase();
                 
-                if (searchType === 'toolName') {
+                if (currentSearchType === 'toolName') {
                     query = db.collection('tools')
                         .where('toolName', '>=', searchTermUpper)
                         .where('toolName', '<=', searchTermUpper + '\uf8ff')
                         .limit(50);
-                } else if (searchType === 'partNumber') {
+                } else if (currentSearchType === 'partNumber') {
                     query = db.collection('tools')
                         .where('partNumber', '>=', searchTermUpper)
                         .where('partNumber', '<=', searchTermUpper + '\uf8ff')
