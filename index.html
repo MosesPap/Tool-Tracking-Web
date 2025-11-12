@@ -4902,8 +4902,12 @@ if (!userCredential.user.emailVerified) {
                     
                     snapshot.forEach(doc => {
                         const data = doc.data();
+                        // Get tool ID from document ID or from document data fields
+                        const toolId = doc.id || data.documentId || data.toolId || '';
                         allToolsCache.push({
-                            id: doc.id,
+                            id: toolId,
+                            documentId: data.documentId || toolId,
+                            toolId: data.toolId || toolId,
                             toolName: data.toolName || '',
                             partNumber: data.partNumber || '',
                             serialNumber: data.serialNumber || '',
@@ -4951,17 +4955,21 @@ if (!userCredential.user.emailVerified) {
             const matches = allToolsCache.filter(tool => {
                 // Ensure all fields are strings before searching
                 const toolId = String(tool.id || '').toLowerCase();
+                const documentId = String(tool.documentId || tool.id || '').toLowerCase();
+                const toolIdField = String(tool.toolId || tool.id || '').toLowerCase();
                 const toolName = String(tool.toolName || '').toLowerCase();
                 const partNumber = String(tool.partNumber || '').toLowerCase();
                 const serialNumber = String(tool.serialNumber || '').toLowerCase();
                 
                 // Check if search string appears in any field
                 const matchesId = toolId.includes(searchStr);
+                const matchesDocumentId = documentId.includes(searchStr);
+                const matchesToolIdField = toolIdField.includes(searchStr);
                 const matchesName = toolName.includes(searchStr);
                 const matchesPart = partNumber.includes(searchStr);
                 const matchesSerial = serialNumber.includes(searchStr);
                 
-                return matchesId || matchesName || matchesPart || matchesSerial;
+                return matchesId || matchesDocumentId || matchesToolIdField || matchesName || matchesPart || matchesSerial;
             }).slice(0, 10); // Limit to 10 results
             
             // Debug: Log results for short searches
