@@ -53,7 +53,7 @@ exports.sendDailyToolNotifications = functions.pubsub
       const currentHour = now.getHours();
       const currentMinute = now.getMinutes();
       
-      if (currentHour !== notificationHour || Math.abs(currentMinute - notificationMinute) > 5) {
+      if (currentHour !== notificationHour || Math.abs(currentMinute - notificationMinute) >1 ) {
         console.log(`Scheduled time is ${emailNotificationTime}, current time is ${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}. Skipping.`);
         return null;
       }
