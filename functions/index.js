@@ -23,7 +23,7 @@ const transporter = nodemailer.createTransport({
  * Example: "0 * * * *" = Every hour at minute 0
  */
 exports.sendDailyToolNotifications = functions.pubsub
-  .schedule('0 * * * *') // Run every hour at minute 0
+  .schedule('* * * * *') // Run every hour at minute 0
   .timeZone('Asia/Nicosia') // Nicosia, Cyprus timezone (EET/EEST)
   .onRun(async (context) => {
     console.log('Checking if it\'s time to send daily tool notification emails...');
