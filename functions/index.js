@@ -132,7 +132,7 @@ exports.sendDailyToolNotifications = functions.pubsub
         .get();
 
       const technicianEmailMap = new Map();
-      const adminEmails = [];
+      const allAdminEmails = [];
       
       techniciansSnapshot.forEach(doc => {
         const techData = doc.data();
@@ -143,29 +143,38 @@ exports.sendDailyToolNotifications = functions.pubsub
         if (fullName && email) {
           technicianEmailMap.set(fullName, email);
           
-          // Collect admin emails
+          // Collect all admin emails
           if (isAdmin) {
-            adminEmails.push(email);
+            allAdminEmails.push({ email, fullName });
           }
         }
       });
 
-      console.log(`Found ${adminEmails.length} administrator(s) for summary email`);
-
       // Send emails to users with OUT tools
       const emailPromises = [];
+      const usersWithOutTools = new Set();
+      
       for (const [technicianName, tools] of userToolsMap.entries()) {
         const userEmail = technicianEmailMap.get(technicianName);
         if (userEmail) {
           emailPromises.push(sendUserNotificationEmail(userEmail, technicianName, tools));
+          usersWithOutTools.add(userEmail); // Track users who got tool notifications
         } else {
           console.log(`No email found for technician: ${technicianName}`);
         }
       }
 
-      // Send summary email to administrators
-      if (adminEmails.length > 0) {
-        emailPromises.push(sendAdminSummaryEmail(adminEmails, outTools));
+      // Filter admin emails: exclude admins who have tools OUT (they already got user email)
+      const adminEmailsForSummary = allAdminEmails
+        .filter(admin => !usersWithOutTools.has(admin.email))
+        .map(admin => admin.email);
+
+      console.log(`Found ${allAdminEmails.length} total administrator(s)`);
+      console.log(`Sending summary to ${adminEmailsForSummary.length} administrator(s) (excluding those with OUT tools)`);
+
+      // Send summary email to administrators (excluding those who have OUT tools)
+      if (adminEmailsForSummary.length > 0) {
+        emailPromises.push(sendAdminSummaryEmail(adminEmailsForSummary, outTools));
       }
 
       // Wait for all emails to be sent
