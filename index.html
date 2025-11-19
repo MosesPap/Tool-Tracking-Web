@@ -4554,13 +4554,51 @@ if (!userCredential.user.emailVerified) {
             }
         }
         
+        // Helper function to get collection photo count
+        async function getCollectionPhotoCount(collectionCode) {
+            if (!collectionCode || collectionCode === 'N/A') return 0;
+            try {
+                const collectionQuery = await db.collection('collections')
+                    .where('collectionName', '==', collectionCode)
+                    .get();
+                
+                if (!collectionQuery.empty) {
+                    const collectionDoc = collectionQuery.docs[0];
+                    const photoUrls = collectionDoc.data().photoUrls || [];
+                    return photoUrls.length;
+                }
+            } catch (error) {
+                console.error('Error getting collection photo count:', error);
+            }
+            return 0;
+        }
+        
+        // Helper function to get location photo count
+        async function getLocationPhotoCount(collectionCode, location) {
+            if (!collectionCode || collectionCode === 'N/A' || !location || location === 'N/A') return 0;
+            try {
+                const documentId = `${collectionCode}_${location}`;
+                const locationDoc = await db.collection('locationPhotos').doc(documentId).get();
+                
+                if (locationDoc.exists) {
+                    const data = locationDoc.data();
+                    const photoUrls = data.photoUrls || [];
+                    return photoUrls.length;
+                }
+            } catch (error) {
+                console.error('Error getting location photo count:', error);
+            }
+            return 0;
+        }
+        
         async function selectToolFromDropdown(toolId) {
             const searchInput = document.getElementById('searchToolInput');
             const dropdown = document.getElementById('searchDropdownList');
             const selectedToolDetails = document.getElementById('selectedToolDetails');
             
-            // Hide dropdown
+            // Hide dropdown and clear search field
             dropdown.style.display = 'none';
+            searchInput.value = '';
             
             try {
                 // Fetch full tool data
@@ -4573,9 +4611,6 @@ if (!userCredential.user.emailVerified) {
                         id: doc.id,
                         ...data
                     };
-                    
-                    // Set input value
-                    searchInput.value = currentSearchType === 'toolName' ? tool.toolName : tool.partNumber;
                     
                     // Show tool details
                     selectedToolDetails.style.display = 'block';
@@ -4590,6 +4625,26 @@ if (!userCredential.user.emailVerified) {
                     const technician = tool.technician || 'N/A';
                     const calDueDate = tool.calDueDate ? (tool.calDueDate.toDate ? tool.calDueDate.toDate().toLocaleDateString() : tool.calDueDate) : 'N/A';
                     
+                    // Get photo counts
+                    const collectionPhotoCount = await getCollectionPhotoCount(collectionCode);
+                    const locationPhotoCount = await getLocationPhotoCount(collectionCode, location);
+                    
+                    // Create collection link with photo count
+                    let collectionDisplay = collectionCode;
+                    if (collectionCode !== 'N/A' && collectionPhotoCount > 0) {
+                        collectionDisplay = `<a href="#" onclick="viewCollectionPhotos('${collectionCode}'); return false;" style="color: #2196F3; text-decoration: underline; cursor: pointer;">${collectionCode}</a> (${collectionPhotoCount} photos)`;
+                    } else if (collectionCode !== 'N/A') {
+                        collectionDisplay = `${collectionCode} (0 photos)`;
+                    }
+                    
+                    // Create location link with photo count
+                    let locationDisplay = location;
+                    if (location !== 'N/A' && locationPhotoCount > 0) {
+                        locationDisplay = `<a href="#" onclick="viewLocationPhotos('${collectionCode}', '${location}'); return false;" style="color: #2196F3; text-decoration: underline; cursor: pointer;">${location}</a> (${locationPhotoCount} photos)`;
+                    } else if (location !== 'N/A') {
+                        locationDisplay = `${location} (0 photos)`;
+                    }
+                    
                     selectedToolDetails.innerHTML = `
                         <div class="card">
                             <div class="card-header bg-primary text-white">
@@ -4598,8 +4653,8 @@ if (!userCredential.user.emailVerified) {
                             <div class="card-body">
                                 <p><strong>Tool Name:</strong> ${toolName}</p>
                                 <p><strong>Part Number:</strong> ${partNumber}</p>
-                                <p><strong>Collection Code:</strong> ${collectionCode}</p>
-                                <p><strong>Location:</strong> ${location}</p>
+                                <p><strong>Collection Code:</strong> ${collectionDisplay}</p>
+                                <p><strong>Location:</strong> ${locationDisplay}</p>
                                 <p><strong>Status:</strong> <span class="badge ${status === 'OUT' ? 'bg-danger' : 'bg-success'}">${status}</span></p>
                                 <p><strong>Owner:</strong> ${owner}</p>
                                 <p><strong>Technician:</strong> ${technician}</p>
@@ -4615,6 +4670,128 @@ if (!userCredential.user.emailVerified) {
                 console.error('Error fetching tool details:', error);
                 alert('Error fetching tool details. Please try again.');
             }
+        }
+        
+        // Function to view collection photos
+        async function viewCollectionPhotos(collectionCode) {
+            try {
+                const collectionQuery = await db.collection('collections')
+                    .where('collectionName', '==', collectionCode)
+                    .get();
+                
+                if (!collectionQuery.empty) {
+                    const collectionDoc = collectionQuery.docs[0];
+                    const photoUrls = collectionDoc.data().photoUrls || [];
+                    
+                    if (photoUrls.length === 0) {
+                        alert('No photos available for this collection.');
+                        return;
+                    }
+                    
+                    // Show photos in a modal or gallery
+                    showPhotoGallery(photoUrls, `Collection: ${collectionCode}`);
+                } else {
+                    alert('Collection not found.');
+                }
+            } catch (error) {
+                console.error('Error viewing collection photos:', error);
+                alert('Error loading collection photos.');
+            }
+        }
+        
+        // Function to view location photos
+        async function viewLocationPhotos(collectionCode, location) {
+            try {
+                const documentId = `${collectionCode}_${location}`;
+                const locationDoc = await db.collection('locationPhotos').doc(documentId).get();
+                
+                if (locationDoc.exists) {
+                    const data = locationDoc.data();
+                    const photoUrls = data.photoUrls || [];
+                    
+                    if (photoUrls.length === 0) {
+                        alert('No photos available for this location.');
+                        return;
+                    }
+                    
+                    // Show photos in a modal or gallery
+                    showPhotoGallery(photoUrls, `Location: ${location} (${collectionCode})`);
+                } else {
+                    alert('No photos found for this location.');
+                }
+            } catch (error) {
+                console.error('Error viewing location photos:', error);
+                alert('Error loading location photos.');
+            }
+        }
+        
+        // Function to show photo gallery
+        function showPhotoGallery(photoUrls, title) {
+            // Create or get modal for photo gallery
+            let modal = document.getElementById('photoGalleryModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.className = 'modal fade';
+                modal.id = 'photoGalleryModal';
+                modal.setAttribute('tabindex', '-1');
+                modal.innerHTML = `
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">${title}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <div id="photoGalleryContent"></div>
+                                <div class="mt-3">
+                                    <button type="button" class="btn btn-secondary" id="photoGalleryPrev">Previous</button>
+                                    <span id="photoGalleryCounter" class="mx-3"></span>
+                                    <button type="button" class="btn btn-secondary" id="photoGalleryNext">Next</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }
+            
+            let currentPhotoIndex = 0;
+            const photoGalleryContent = modal.querySelector('#photoGalleryContent');
+            const photoGalleryCounter = modal.querySelector('#photoGalleryCounter');
+            const photoGalleryPrev = modal.querySelector('#photoGalleryPrev');
+            const photoGalleryNext = modal.querySelector('#photoGalleryNext');
+            
+            function updatePhoto() {
+                if (photoUrls.length === 0) return;
+                photoGalleryContent.innerHTML = `<img src="${photoUrls[currentPhotoIndex]}" class="img-fluid" style="max-height: 500px; border-radius: 8px;">`;
+                photoGalleryCounter.textContent = `${currentPhotoIndex + 1} / ${photoUrls.length}`;
+                photoGalleryPrev.disabled = currentPhotoIndex === 0;
+                photoGalleryNext.disabled = currentPhotoIndex === photoUrls.length - 1;
+            }
+            
+            photoGalleryPrev.onclick = () => {
+                if (currentPhotoIndex > 0) {
+                    currentPhotoIndex--;
+                    updatePhoto();
+                }
+            };
+            
+            photoGalleryNext.onclick = () => {
+                if (currentPhotoIndex < photoUrls.length - 1) {
+                    currentPhotoIndex++;
+                    updatePhoto();
+                }
+            };
+            
+            // Update modal title
+            modal.querySelector('.modal-title').textContent = title;
+            
+            // Show modal
+            const bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+            
+            // Initialize
+            updatePhoto();
         }
         
         // Legacy function for compatibility
