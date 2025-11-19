@@ -46,15 +46,17 @@ exports.sendDailyToolNotifications = functions.pubsub
       // Check if we should send emails at this time
       const now = new Date();
       
-      // Convert to Nicosia timezone
-      const nicosiaTime = now.toLocaleString('en-US', { 
+      // Convert to Nicosia timezone - get hours and minutes separately to avoid "24:XX" bug
+      const currentHour = parseInt(now.toLocaleString('en-US', { 
         timeZone: 'Asia/Nicosia',
-        hour: '2-digit',
-        minute: '2-digit',
+        hour: 'numeric',
         hour12: false
-      });
+      }));
       
-      const [currentHour, currentMinute] = nicosiaTime.split(':').map(num => parseInt(num));
+      const currentMinute = parseInt(now.toLocaleString('en-US', { 
+        timeZone: 'Asia/Nicosia',
+        minute: 'numeric'
+      }));
       
       const [hours, minutes] = emailNotificationTime.split(':');
       const notificationHour = parseInt(hours);
