@@ -1193,6 +1193,23 @@
                             </div>
 
                             <div class="settings-group">
+                                <label for="emailToleranceWindow">Email Time Tolerance Window (Minutes)</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="emailToleranceWindow" placeholder="1" min="0" max="60" value="1">
+                                    <button class="btn btn-primary" id="updateEmailToleranceBtn">
+                                        <i class="fas fa-save"></i> Update
+                                    </button>
+                                </div>
+                                <small class="text-muted">
+                                    How many minutes before/after the notification time should emails be sent? 
+                                    <br>
+                                    Example: If notification time is 09:00 and tolerance is 2 minutes, emails will be sent if the function runs between 08:58 and 09:02.
+                                    <br>
+                                    <strong>Recommended:</strong> 1-5 minutes (default: 1 minute)
+                                </small>
+                            </div>
+
+                            <div class="settings-group">
                                 <label><i class="fas fa-clock"></i> Email Check Frequency</label>
                                 <div class="card" style="margin-top: 10px;">
                                     <div class="card-body">
@@ -2059,6 +2076,13 @@
                         document.getElementById('emailNotificationTime').value = data.emailNotificationTime;
                     }
                     
+                    // Load email tolerance window
+                    if (data.emailToleranceWindow !== undefined) {
+                        document.getElementById('emailToleranceWindow').value = data.emailToleranceWindow;
+                    } else {
+                        document.getElementById('emailToleranceWindow').value = 1; // Default
+                    }
+                    
                     // Load email check frequency
                     if (data.emailCheckFrequency) {
                         document.getElementById('emailCheckFrequency').value = data.emailCheckFrequency;
@@ -2209,6 +2233,31 @@
                 } catch (error) {
                     console.error('Error updating email notification time:', error);
                     alert('Failed to update email notification time: ' + error.message);
+                }
+            });
+        }
+
+        // Update Email Tolerance Window
+        const updateEmailToleranceBtn = document.getElementById('updateEmailToleranceBtn');
+        if (updateEmailToleranceBtn) {
+            updateEmailToleranceBtn.addEventListener('click', async () => {
+                const toleranceWindow = parseInt(document.getElementById('emailToleranceWindow').value);
+                
+                if (isNaN(toleranceWindow) || toleranceWindow < 0 || toleranceWindow > 60) {
+                    alert('Please enter a valid number between 0 and 60 minutes');
+                    return;
+                }
+
+                try {
+                    await db.collection('settings').doc('admin').set({
+                        emailToleranceWindow: toleranceWindow,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                    
+                    alert(`✅ Email tolerance window updated successfully!\n\nEmails will now be sent if the function runs within ${toleranceWindow} minute(s) of the notification time.`);
+                } catch (error) {
+                    console.error('Error updating email tolerance window:', error);
+                    alert('Failed to update email tolerance window: ' + error.message);
                 }
             });
         }
