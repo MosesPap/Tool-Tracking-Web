@@ -1126,9 +1126,9 @@
                             <h4><i class="fas fa-cog"></i> System Settings</h4>
                             
                             <div class="settings-group">
-                                <label for="adminPassword">Admin Password</label>
+                                <label for="adminPassword">Admin Code</label>
                                 <div class="input-group">
-                                    <input type="text" class="form-control" id="adminPasswordInput" placeholder="Enter new admin password">
+                                    <input type="text" class="form-control" id="adminPasswordInput" placeholder="Enter new admin code">
                                     <button class="btn btn-primary" id="updatePasswordBtn">
                                         <i class="fas fa-save"></i> Update
                                     </button>
@@ -1850,7 +1850,7 @@
                 const doc = await db.collection('settings').doc('admin').get();
                 if (doc.exists) {
                     const data = doc.data();
-                    document.getElementById('adminPasswordInput').placeholder = data.AdminPassword ? '••••••••' : 'Not set';
+                    document.getElementById('adminPasswordInput').placeholder = data.adminCode ? '••••••••' : 'Not set';
                     document.getElementById('cooldownMinutes').value = data.CheckINCooldownMinutes || 15;
                     
                     // Load email notification time
@@ -1877,22 +1877,22 @@
             updatePasswordBtn.addEventListener('click', async () => {
             const newPassword = document.getElementById('adminPasswordInput').value.trim();
             if (!newPassword) {
-                alert('Please enter a password');
+                alert('Please enter an admin code');
                 return;
             }
 
             try {
                 await db.collection('settings').doc('admin').set({
-                    AdminPassword: newPassword,
+                    adminCode: newPassword,
                     lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
                 
-                alert('✅ Admin password updated successfully!');
+                alert('✅ Admin code updated successfully!');
                 document.getElementById('adminPasswordInput').value = '';
                 document.getElementById('adminPasswordInput').placeholder = '••••••••';
             } catch (error) {
-                console.error('Error updating password:', error);
-                alert('Failed to update password: ' + error.message);
+                console.error('Error updating admin code:', error);
+                alert('Failed to update admin code: ' + error.message);
             }
         });
         }

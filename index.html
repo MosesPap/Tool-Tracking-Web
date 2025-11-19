@@ -8733,25 +8733,25 @@ if (!userCredential.user.emailVerified) {
                     document.getElementById('deleteFromAllToolsBtn').onclick = async function() {
                         choiceModal.hide();
                         
-                        // Fetch admin password from Firestore
+                        // Fetch admin code from Firestore
                         const settingsDoc = await db.collection('settings').doc('admin').get();
-                        const adminPassword = settingsDoc.exists ? settingsDoc.data().adminPassword : null;
+                        const adminCode = settingsDoc.exists ? settingsDoc.data().adminCode : null;
                         
-                        if (!adminPassword) {
-                            alert('Admin password not configured. Please contact system administrator.');
+                        if (!adminCode) {
+                            alert('Admin code not configured. Please contact system administrator.');
                             return;
                         }
                         
-                        // Prompt for admin password
-                        const enteredPassword = prompt('🔐 Enter admin password to delete photo from ALL tools:');
+                        // Prompt for admin code
+                        const enteredCode = prompt('🔐 Enter admin code to delete photo from ALL tools:');
                         
-                        if (enteredPassword === null) {
+                        if (enteredCode === null) {
                             // User cancelled
                             return;
                         }
                         
-                        if (enteredPassword !== adminPassword) {
-                            alert('❌ Incorrect admin password. Photo deletion cancelled.');
+                        if (enteredCode !== adminCode) {
+                            alert('❌ Incorrect admin code. Photo deletion cancelled.');
                             return;
                         }
                         
