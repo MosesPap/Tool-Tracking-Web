@@ -1148,6 +1148,24 @@
                             </div>
 
                             <div class="settings-group">
+                                <label for="emailNotificationTime">Daily Email Notification Time</label>
+                                <div class="input-group">
+                                    <input type="time" class="form-control" id="emailNotificationTime" placeholder="09:00">
+                                    <button class="btn btn-primary" id="updateEmailTimeBtn">
+                                        <i class="fas fa-save"></i> Update
+                                    </button>
+                                </div>
+                                <small class="text-muted">Time to send daily emails to users with OUT tools and administrators (24-hour format)</small>
+                            </div>
+
+                            <div class="settings-group">
+                                <label>Administrator Notifications</label>
+                                <div class="alert alert-info" role="alert">
+                                    <i class="fas fa-info-circle"></i> Administrator emails are automatically detected from technicians with <code>isAdmin = true</code> in the database. No manual configuration needed!
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
                                 <label>System Information</label>
                                 <table class="table table-sm">
                                     <tbody>
@@ -1835,6 +1853,11 @@
                     document.getElementById('adminPasswordInput').placeholder = data.AdminPassword ? '••••••••' : 'Not set';
                     document.getElementById('cooldownMinutes').value = data.CheckINCooldownMinutes || 15;
                     
+                    // Load email notification time
+                    if (data.emailNotificationTime) {
+                        document.getElementById('emailNotificationTime').value = data.emailNotificationTime;
+                    }
+                    
                     if (data.lastUpdated) {
                         const date = data.lastUpdated.toDate();
                         document.getElementById('lastUpdate').textContent = date.toLocaleString();
@@ -1897,6 +1920,31 @@
             }
         });
         }
+
+        // Update Email Notification Time
+        const updateEmailTimeBtn = document.getElementById('updateEmailTimeBtn');
+        if (updateEmailTimeBtn) {
+            updateEmailTimeBtn.addEventListener('click', async () => {
+                const emailTime = document.getElementById('emailNotificationTime').value;
+                if (!emailTime) {
+                    alert('Please enter a time for email notifications');
+                    return;
+                }
+
+                try {
+                    await db.collection('settings').doc('admin').set({
+                        emailNotificationTime: emailTime,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                    
+                    alert('✅ Email notification time updated successfully!');
+                } catch (error) {
+                    console.error('Error updating email notification time:', error);
+                    alert('Failed to update email notification time: ' + error.message);
+                }
+            });
+        }
+
 
         // Load Users
         async function loadUsers() {
