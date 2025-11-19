@@ -4686,9 +4686,11 @@ if (!userCredential.user.emailVerified) {
                     
                     // Create collection display with photos as hyperlink
                     let collectionDisplay = collectionCode;
+                    let collectionPhotoLinkId = null;
                     if (collectionCode !== 'N/A') {
                         if (collectionPhotoCount > 0) {
-                            collectionDisplay = `${collectionCode} (<a href="#" onclick="event.preventDefault(); viewCollectionPhotos('${collectionCode}'); return false;" style="color: #2196F3; text-decoration: underline; cursor: pointer; font-weight: bold;">${collectionPhotoCount} photos</a>)`;
+                            collectionPhotoLinkId = `collection-photo-${toolId}-${Date.now()}`;
+                            collectionDisplay = `${collectionCode} (<a href="#" id="${collectionPhotoLinkId}" data-collection="${collectionCode}" class="photo-link" style="color: #2196F3; text-decoration: underline; cursor: pointer; font-weight: bold;">${collectionPhotoCount} photos</a>)`;
                         } else {
                             collectionDisplay = `${collectionCode} (0 photos)`;
                         }
@@ -4696,9 +4698,11 @@ if (!userCredential.user.emailVerified) {
                     
                     // Create location display with photos as hyperlink
                     let locationDisplay = location;
+                    let locationPhotoLinkId = null;
                     if (location !== 'N/A') {
                         if (locationPhotoCount > 0) {
-                            locationDisplay = `${location} (<a href="#" onclick="event.preventDefault(); viewLocationPhotos('${collectionCode}', '${location}'); return false;" style="color: #2196F3; text-decoration: underline; cursor: pointer; font-weight: bold;">${locationPhotoCount} photos</a>)`;
+                            locationPhotoLinkId = `location-photo-${toolId}-${Date.now()}`;
+                            locationDisplay = `${location} (<a href="#" id="${locationPhotoLinkId}" data-collection="${collectionCode}" data-location="${location}" class="photo-link" style="color: #2196F3; text-decoration: underline; cursor: pointer; font-weight: bold;">${locationPhotoCount} photos</a>)`;
                         } else {
                             locationDisplay = `${location} (0 photos)`;
                         }
@@ -4724,6 +4728,34 @@ if (!userCredential.user.emailVerified) {
                             </div>
                         </div>
                     `;
+                    
+                    // Attach event handlers to photo links after DOM is updated
+                    if (collectionPhotoLinkId) {
+                        const collectionLink = document.getElementById(collectionPhotoLinkId);
+                        if (collectionLink) {
+                            collectionLink.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const collection = this.getAttribute('data-collection');
+                                viewCollectionPhotos(collection);
+                                return false;
+                            });
+                        }
+                    }
+                    
+                    if (locationPhotoLinkId) {
+                        const locationLink = document.getElementById(locationPhotoLinkId);
+                        if (locationLink) {
+                            locationLink.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const collection = this.getAttribute('data-collection');
+                                const location = this.getAttribute('data-location');
+                                viewLocationPhotos(collection, location);
+                                return false;
+                            });
+                        }
+                    }
                 }
             } catch (error) {
                 console.error('Error fetching tool details:', error);
@@ -4910,7 +4942,18 @@ if (!userCredential.user.emailVerified) {
         
         function useSelectedTool(toolId) {
             // Set the tool code in the scanner input and switch to Scan Tool tab
-            document.getElementById('toolCode').value = toolId;
+            const toolCodeInput = document.getElementById('toolCode');
+            toolCodeInput.value = toolId;
+            
+            // Manually trigger input event to enable Tool Details button
+            const inputEvent = new Event('input', { bubbles: true });
+            toolCodeInput.dispatchEvent(inputEvent);
+            
+            // Also directly enable the button as a backup
+            const toolDetailsBtn = document.getElementById('toolDetailsBtn');
+            if (toolDetailsBtn) {
+                toolDetailsBtn.disabled = false;
+            }
             
             // Switch to Scan Tool tab
             const scanToolTab = document.getElementById('scanToolTab');
