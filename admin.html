@@ -1148,6 +1148,40 @@
                             </div>
 
                             <div class="settings-group">
+                                <label><i class="fas fa-envelope"></i> Email Notification Configuration</label>
+                                <div class="card" style="margin-top: 10px;">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Gmail Account Settings</h6>
+                                        
+                                        <div class="mb-3">
+                                            <label for="emailAccount" class="form-label">Gmail Address</label>
+                                            <input type="email" class="form-control" id="emailAccount" placeholder="your-email@gmail.com">
+                                            <small class="text-muted">The Gmail account used to send notification emails</small>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="emailAppPassword" class="form-label">Gmail App Password</label>
+                                            <input type="password" class="form-control" id="emailAppPassword" placeholder="Enter app password">
+                                            <small class="text-muted">
+                                                <a href="https://myaccount.google.com/apppasswords" target="_blank">Get App Password</a> - 
+                                                Not your regular Gmail password. Generate an app-specific password from Google Account settings.
+                                            </small>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="emailFrom" class="form-label">From Email Address</label>
+                                            <input type="text" class="form-control" id="emailFrom" placeholder="noreply@tooltracking.com">
+                                            <small class="text-muted">The "From" address shown in email headers</small>
+                                        </div>
+                                        
+                                        <button class="btn btn-primary" id="updateEmailConfigBtn">
+                                            <i class="fas fa-save"></i> Update Email Configuration
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
                                 <label for="emailNotificationTime">Daily Email Notification Time</label>
                                 <div class="input-group">
                                     <input type="time" class="form-control" id="emailNotificationTime" placeholder="09:00">
@@ -1155,7 +1189,130 @@
                                         <i class="fas fa-save"></i> Update
                                     </button>
                                 </div>
-                                <small class="text-muted">Time to send daily emails to users with OUT tools and administrators (24-hour format)</small>
+                                <small class="text-muted">Time to send daily emails to users with OUT tools and administrators (24-hour format, Nicosia timezone)</small>
+                            </div>
+
+                            <div class="settings-group">
+                                <label><i class="fas fa-edit"></i> Email Template Customization</label>
+                                <div class="card" style="margin-top: 10px;">
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label for="emailSubjectUser" class="form-label">User Email Subject</label>
+                                            <input type="text" class="form-control" id="emailSubjectUser" placeholder="Tool Tracking Reminder: {count} Tool(s) Checked Out">
+                                            <small class="text-muted">Use {count} to insert the number of tools</small>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="emailSubjectAdmin" class="form-label">Admin Email Subject</label>
+                                            <input type="text" class="form-control" id="emailSubjectAdmin" placeholder="Daily Tool Status Report: {count} Tool(s) Currently OUT">
+                                            <small class="text-muted">Use {count} to insert the number of tools</small>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="emailBodyUser" class="form-label">User Email Body (HTML)</label>
+                                            <textarea class="form-control" id="emailBodyUser" rows="6" placeholder="Hello {userName},&#10;&#10;This is a reminder that you currently have {count} tool(s) checked out:&#10;&#10;{toolList}&#10;&#10;Please remember to check in these tools when you're done using them.&#10;&#10;Thank you!"></textarea>
+                                            <small class="text-muted">
+                                                Available variables: {userName}, {count}, {toolList}<br>
+                                                {toolList} will be replaced with a formatted table of tools
+                                            </small>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="emailBodyAdmin" class="form-label">Admin Email Body (HTML)</label>
+                                            <textarea class="form-control" id="emailBodyAdmin" rows="6" placeholder="Hello Administrators,&#10;&#10;This is the daily summary of tools currently checked out:&#10;&#10;Total Tools OUT: {count}&#10;&#10;{toolList}&#10;&#10;Thank you!"></textarea>
+                                            <small class="text-muted">
+                                                Available variables: {count}, {toolList}<br>
+                                                {toolList} will be replaced with a formatted table of tools
+                                            </small>
+                                        </div>
+                                        
+                                        <button class="btn btn-primary" id="updateEmailTemplateBtn">
+                                            <i class="fas fa-save"></i> Update Email Templates
+                                        </button>
+                                        <button class="btn btn-secondary" id="resetEmailTemplateBtn" style="margin-left: 10px;">
+                                            <i class="fas fa-undo"></i> Reset to Default
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
+                                <label><i class="fas fa-table"></i> Email Table Customization</label>
+                                <div class="card" style="margin-top: 10px;">
+                                    <div class="card-body">
+                                        <h6 class="card-title">User Email Table Columns</h6>
+                                        <div class="mb-3">
+                                            <label class="form-label">Select columns to show:</label>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="tableColToolName" checked>
+                                                <label class="form-check-label" for="tableColToolName">Tool Name</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="tableColPartNumber" checked>
+                                                <label class="form-check-label" for="tableColPartNumber">Part Number</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="tableColCheckoutDate" checked>
+                                                <label class="form-check-label" for="tableColCheckoutDate">Checkout Date</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="tableColLocation">
+                                                <label class="form-check-label" for="tableColLocation">Location</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="tableColOwner">
+                                                <label class="form-check-label" for="tableColOwner">Owner</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="tableColCalDueDate">
+                                                <label class="form-check-label" for="tableColCalDueDate">Cal Due Date</label>
+                                            </div>
+                                        </div>
+                                        
+                                        <h6 class="card-title mt-4">Admin Email Table Columns</h6>
+                                        <div class="mb-3">
+                                            <label class="form-label">Select columns to show:</label>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="adminTableColToolName" checked>
+                                                <label class="form-check-label" for="adminTableColToolName">Tool Name</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="adminTableColPartNumber" checked>
+                                                <label class="form-check-label" for="adminTableColPartNumber">Part Number</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="adminTableColTechnician" checked>
+                                                <label class="form-check-label" for="adminTableColTechnician">Technician</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="adminTableColCheckoutDate" checked>
+                                                <label class="form-check-label" for="adminTableColCheckoutDate">Checkout Date</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="adminTableColLocation">
+                                                <label class="form-check-label" for="adminTableColLocation">Location</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="adminTableColOwner">
+                                                <label class="form-check-label" for="adminTableColOwner">Owner</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="adminTableColCalDueDate">
+                                                <label class="form-check-label" for="adminTableColCalDueDate">Cal Due Date</label>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="tableHeaderColor" class="form-label">Table Header Background Color</label>
+                                            <input type="color" class="form-control form-control-color" id="tableHeaderColor" value="#FF9800" title="Choose header color">
+                                            <small class="text-muted">Color for table header background</small>
+                                        </div>
+                                        
+                                        <button class="btn btn-primary" id="updateTableConfigBtn">
+                                            <i class="fas fa-save"></i> Update Table Configuration
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="settings-group">
@@ -1858,6 +2015,68 @@
                         document.getElementById('emailNotificationTime').value = data.emailNotificationTime;
                     }
                     
+                    // Load email configuration
+                    if (data.emailAccount) {
+                        document.getElementById('emailAccount').value = data.emailAccount;
+                    }
+                    if (data.emailAppPassword) {
+                        document.getElementById('emailAppPassword').placeholder = '••••••••';
+                    }
+                    if (data.emailFrom) {
+                        document.getElementById('emailFrom').value = data.emailFrom;
+                    }
+                    
+                    // Load email templates
+                    if (data.emailSubjectUser) {
+                        document.getElementById('emailSubjectUser').value = data.emailSubjectUser;
+                    }
+                    if (data.emailSubjectAdmin) {
+                        document.getElementById('emailSubjectAdmin').value = data.emailSubjectAdmin;
+                    }
+                    if (data.emailBodyUser) {
+                        document.getElementById('emailBodyUser').value = data.emailBodyUser;
+                    }
+                    if (data.emailBodyAdmin) {
+                        document.getElementById('emailBodyAdmin').value = data.emailBodyAdmin;
+                    }
+                    
+                    // Load table configuration
+                    const userTableCols = data.userTableColumns || {
+                        toolName: true,
+                        partNumber: true,
+                        checkoutDate: true,
+                        location: false,
+                        owner: false,
+                        calDueDate: false
+                    };
+                    document.getElementById('tableColToolName').checked = userTableCols.toolName !== false;
+                    document.getElementById('tableColPartNumber').checked = userTableCols.partNumber !== false;
+                    document.getElementById('tableColCheckoutDate').checked = userTableCols.checkoutDate !== false;
+                    document.getElementById('tableColLocation').checked = userTableCols.location === true;
+                    document.getElementById('tableColOwner').checked = userTableCols.owner === true;
+                    document.getElementById('tableColCalDueDate').checked = userTableCols.calDueDate === true;
+                    
+                    const adminTableCols = data.adminTableColumns || {
+                        toolName: true,
+                        partNumber: true,
+                        technician: true,
+                        checkoutDate: true,
+                        location: false,
+                        owner: false,
+                        calDueDate: false
+                    };
+                    document.getElementById('adminTableColToolName').checked = adminTableCols.toolName !== false;
+                    document.getElementById('adminTableColPartNumber').checked = adminTableCols.partNumber !== false;
+                    document.getElementById('adminTableColTechnician').checked = adminTableCols.technician !== false;
+                    document.getElementById('adminTableColCheckoutDate').checked = adminTableCols.checkoutDate !== false;
+                    document.getElementById('adminTableColLocation').checked = adminTableCols.location === true;
+                    document.getElementById('adminTableColOwner').checked = adminTableCols.owner === true;
+                    document.getElementById('adminTableColCalDueDate').checked = adminTableCols.calDueDate === true;
+                    
+                    if (data.tableHeaderColor) {
+                        document.getElementById('tableHeaderColor').value = data.tableHeaderColor;
+                    }
+                    
                     if (data.lastUpdated) {
                         const date = data.lastUpdated.toDate();
                         document.getElementById('lastUpdate').textContent = date.toLocaleString();
@@ -1945,6 +2164,180 @@
             });
         }
 
+        // Update Email Configuration
+        const updateEmailConfigBtn = document.getElementById('updateEmailConfigBtn');
+        if (updateEmailConfigBtn) {
+            updateEmailConfigBtn.addEventListener('click', async () => {
+                const emailAccount = document.getElementById('emailAccount').value.trim();
+                const emailAppPassword = document.getElementById('emailAppPassword').value.trim();
+                const emailFrom = document.getElementById('emailFrom').value.trim();
+
+                if (!emailAccount) {
+                    alert('Please enter a Gmail address');
+                    return;
+                }
+
+                if (!emailAppPassword && !document.getElementById('emailAppPassword').placeholder.includes('••••')) {
+                    alert('Please enter a Gmail app password');
+                    return;
+                }
+
+                if (!emailFrom) {
+                    alert('Please enter a "From" email address');
+                    return;
+                }
+
+                try {
+                    const updateData = {
+                        emailAccount: emailAccount,
+                        emailFrom: emailFrom,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+
+                    // Only update password if a new one was entered
+                    if (emailAppPassword) {
+                        updateData.emailAppPassword = emailAppPassword;
+                    }
+
+                    await db.collection('settings').doc('admin').set(updateData, { merge: true });
+                    
+                    // Clear password field and show placeholder
+                    document.getElementById('emailAppPassword').value = '';
+                    document.getElementById('emailAppPassword').placeholder = '••••••••';
+                    
+                    alert('✅ Email configuration updated successfully!\n\nNote: You may need to update Firebase Functions config manually using:\nfirebase functions:config:set email.user="' + emailAccount + '"\nfirebase functions:config:set email.password="your-app-password"\nfirebase functions:config:set email.from="' + emailFrom + '"');
+                } catch (error) {
+                    console.error('Error updating email configuration:', error);
+                    alert('Failed to update email configuration: ' + error.message);
+                }
+            });
+        }
+
+        // Update Email Templates
+        const updateEmailTemplateBtn = document.getElementById('updateEmailTemplateBtn');
+        if (updateEmailTemplateBtn) {
+            updateEmailTemplateBtn.addEventListener('click', async () => {
+                const emailSubjectUser = document.getElementById('emailSubjectUser').value.trim();
+                const emailSubjectAdmin = document.getElementById('emailSubjectAdmin').value.trim();
+                const emailBodyUser = document.getElementById('emailBodyUser').value.trim();
+                const emailBodyAdmin = document.getElementById('emailBodyAdmin').value.trim();
+
+                if (!emailSubjectUser || !emailSubjectAdmin || !emailBodyUser || !emailBodyAdmin) {
+                    alert('Please fill in all email template fields');
+                    return;
+                }
+
+                try {
+                    await db.collection('settings').doc('admin').set({
+                        emailSubjectUser: emailSubjectUser,
+                        emailSubjectAdmin: emailSubjectAdmin,
+                        emailBodyUser: emailBodyUser,
+                        emailBodyAdmin: emailBodyAdmin,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                    
+                    alert('✅ Email templates updated successfully!');
+                } catch (error) {
+                    console.error('Error updating email templates:', error);
+                    alert('Failed to update email templates: ' + error.message);
+                }
+            });
+        }
+
+        // Reset Email Templates to Default
+        const resetEmailTemplateBtn = document.getElementById('resetEmailTemplateBtn');
+        if (resetEmailTemplateBtn) {
+            resetEmailTemplateBtn.addEventListener('click', async () => {
+                if (!confirm('Are you sure you want to reset email templates to default values?')) {
+                    return;
+                }
+
+                const defaultSubjectUser = 'Tool Tracking Reminder: {count} Tool(s) Checked Out';
+                const defaultSubjectAdmin = 'Daily Tool Status Report: {count} Tool(s) Currently OUT';
+                const defaultBodyUser = `Hello {userName},
+
+This is a reminder that you currently have <strong>{count}</strong> tool(s) checked out:
+
+{toolList}
+
+Please remember to check in these tools when you're done using them.
+
+Thank you!`;
+                const defaultBodyAdmin = `Hello Administrators,
+
+This is the daily summary of tools currently checked out:
+
+<strong>Total Tools OUT: {count}</strong>
+
+{toolList}
+
+Thank you!`;
+
+                document.getElementById('emailSubjectUser').value = defaultSubjectUser;
+                document.getElementById('emailSubjectAdmin').value = defaultSubjectAdmin;
+                document.getElementById('emailBodyUser').value = defaultBodyUser;
+                document.getElementById('emailBodyAdmin').value = defaultBodyAdmin;
+
+                try {
+                    await db.collection('settings').doc('admin').set({
+                        emailSubjectUser: defaultSubjectUser,
+                        emailSubjectAdmin: defaultSubjectAdmin,
+                        emailBodyUser: defaultBodyUser,
+                        emailBodyAdmin: defaultBodyAdmin,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                    
+                    alert('✅ Email templates reset to default values!');
+                } catch (error) {
+                    console.error('Error resetting email templates:', error);
+                    alert('Failed to reset email templates: ' + error.message);
+                }
+            });
+        }
+
+        // Update Table Configuration
+        const updateTableConfigBtn = document.getElementById('updateTableConfigBtn');
+        if (updateTableConfigBtn) {
+            updateTableConfigBtn.addEventListener('click', async () => {
+                try {
+                    // Get user table columns
+                    const userTableColumns = {
+                        toolName: document.getElementById('tableColToolName').checked,
+                        partNumber: document.getElementById('tableColPartNumber').checked,
+                        checkoutDate: document.getElementById('tableColCheckoutDate').checked,
+                        location: document.getElementById('tableColLocation').checked,
+                        owner: document.getElementById('tableColOwner').checked,
+                        calDueDate: document.getElementById('tableColCalDueDate').checked
+                    };
+                    
+                    // Get admin table columns
+                    const adminTableColumns = {
+                        toolName: document.getElementById('adminTableColToolName').checked,
+                        partNumber: document.getElementById('adminTableColPartNumber').checked,
+                        technician: document.getElementById('adminTableColTechnician').checked,
+                        checkoutDate: document.getElementById('adminTableColCheckoutDate').checked,
+                        location: document.getElementById('adminTableColLocation').checked,
+                        owner: document.getElementById('adminTableColOwner').checked,
+                        calDueDate: document.getElementById('adminTableColCalDueDate').checked
+                    };
+                    
+                    // Get table header color
+                    const tableHeaderColor = document.getElementById('tableHeaderColor').value;
+                    
+                    await db.collection('settings').doc('admin').set({
+                        userTableColumns: userTableColumns,
+                        adminTableColumns: adminTableColumns,
+                        tableHeaderColor: tableHeaderColor,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                    
+                    alert('✅ Table configuration updated successfully!');
+                } catch (error) {
+                    console.error('Error updating table configuration:', error);
+                    alert('Failed to update table configuration: ' + error.message);
+                }
+            });
+        }
 
         // Load Users
         async function loadUsers() {
