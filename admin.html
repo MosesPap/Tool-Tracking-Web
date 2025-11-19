@@ -1193,6 +1193,50 @@
                             </div>
 
                             <div class="settings-group">
+                                <label><i class="fas fa-clock"></i> Email Check Frequency</label>
+                                <div class="card" style="margin-top: 10px;">
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label for="emailCheckFrequency" class="form-label">How often should the system check if it's time to send emails?</label>
+                                            <select class="form-select" id="emailCheckFrequency">
+                                                <option value="* * * * *">Every minute (Recommended for precise timing)</option>
+                                                <option value="*/5 * * * *">Every 5 minutes</option>
+                                                <option value="*/10 * * * *">Every 10 minutes</option>
+                                                <option value="*/15 * * * *">Every 15 minutes</option>
+                                                <option value="*/30 * * * *">Every 30 minutes</option>
+                                                <option value="0 * * * *">Every hour</option>
+                                                <option value="0 */2 * * *">Every 2 hours</option>
+                                                <option value="0 */6 * * *">Every 6 hours</option>
+                                                <option value="0 9 * * *">Once daily at 9:00 AM</option>
+                                            </select>
+                                            <small class="text-muted">
+                                                This controls how often the Cloud Function runs to check if it's time to send emails.
+                                                <br>
+                                                <strong>Note:</strong> The actual schedule is managed by Google Cloud Scheduler. 
+                                                After updating here, you'll need to update it in Google Cloud Console.
+                                            </small>
+                                        </div>
+                                        
+                                        <div class="alert alert-info" role="alert">
+                                            <i class="fas fa-info-circle"></i> 
+                                            <strong>How to update Google Cloud Scheduler:</strong>
+                                            <ol style="margin-top: 10px; margin-bottom: 0; padding-left: 20px;">
+                                                <li>Go to <a href="https://console.cloud.google.com/cloudscheduler" target="_blank">Google Cloud Scheduler</a></li>
+                                                <li>Find: <code>firebase-schedule-sendDailyToolNotifications-us-central1</code></li>
+                                                <li>Click "Edit"</li>
+                                                <li>Update the "Frequency" field with the cron expression shown above</li>
+                                                <li>Click "Update"</li>
+                                            </ol>
+                                        </div>
+                                        
+                                        <button class="btn btn-primary" id="updateEmailFrequencyBtn">
+                                            <i class="fas fa-save"></i> Save Frequency Preference
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
                                 <label><i class="fas fa-edit"></i> Email Template Customization</label>
                                 <div class="card" style="margin-top: 10px;">
                                     <div class="card-body">
@@ -2015,6 +2059,11 @@
                         document.getElementById('emailNotificationTime').value = data.emailNotificationTime;
                     }
                     
+                    // Load email check frequency
+                    if (data.emailCheckFrequency) {
+                        document.getElementById('emailCheckFrequency').value = data.emailCheckFrequency;
+                    }
+                    
                     // Load email configuration
                     if (data.emailAccount) {
                         document.getElementById('emailAccount').value = data.emailAccount;
@@ -2160,6 +2209,31 @@
                 } catch (error) {
                     console.error('Error updating email notification time:', error);
                     alert('Failed to update email notification time: ' + error.message);
+                }
+            });
+        }
+
+        // Update Email Check Frequency
+        const updateEmailFrequencyBtn = document.getElementById('updateEmailFrequencyBtn');
+        if (updateEmailFrequencyBtn) {
+            updateEmailFrequencyBtn.addEventListener('click', async () => {
+                const emailCheckFrequency = document.getElementById('emailCheckFrequency').value;
+                
+                if (!emailCheckFrequency) {
+                    alert('Please select a frequency');
+                    return;
+                }
+
+                try {
+                    await db.collection('settings').doc('admin').set({
+                        emailCheckFrequency: emailCheckFrequency,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                    
+                    alert('✅ Email check frequency preference saved!\n\n⚠️ Remember to update Google Cloud Scheduler with the same frequency for the change to take effect.\n\nSee instructions in the info box below.');
+                } catch (error) {
+                    console.error('Error updating email check frequency:', error);
+                    alert('Failed to update email check frequency: ' + error.message);
                 }
             });
         }
