@@ -23,7 +23,7 @@ const transporter = nodemailer.createTransport({
  * Example: "0 * * * *" = Every hour at minute 0
  */
 exports.sendDailyToolNotifications = functions.pubsub
-  .schedule('0 * * * *') // Run every hour at minute 0
+  .schedule('* * * * *') // Run every hour at minute 0
   .timeZone('Asia/Nicosia') // Nicosia, Cyprus timezone (EET/EEST)
   .onRun(async (context) => {
     console.log('Checking if it\'s time to send daily tool notification emails...');
@@ -45,15 +45,26 @@ exports.sendDailyToolNotifications = functions.pubsub
 
       // Check if we should send emails at this time
       const now = new Date();
+      
+      // Convert to Nicosia timezone - get hours and minutes separately to avoid "24:XX" bug
+      const currentHour = parseInt(now.toLocaleString('en-US', { 
+        timeZone: 'Asia/Nicosia',
+        hour: 'numeric',
+        hour12: false
+      }));
+      
+      const currentMinute = parseInt(now.toLocaleString('en-US', { 
+        timeZone: 'Asia/Nicosia',
+        minute: 'numeric'
+      }));
+      
       const [hours, minutes] = emailNotificationTime.split(':');
       const notificationHour = parseInt(hours);
       const notificationMinute = parseInt(minutes);
 
-      // Only send if current time matches (within 5 minutes tolerance)
-      const currentHour = now.getHours();
-      const currentMinute = now.getMinutes();
+      // Only send if current time matches (within tolerance)
       
-      if (currentHour !== notificationHour || Math.abs(currentMinute - notificationMinute) > 5) {
+      if (currentHour !== notificationHour || Math.abs(currentMinute - notificationMinute) >1 ) {
         console.log(`Scheduled time is ${emailNotificationTime}, current time is ${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}. Skipping.`);
         return null;
       }
@@ -121,7 +132,7 @@ exports.sendDailyToolNotifications = functions.pubsub
         .get();
 
       const technicianEmailMap = new Map();
-      const adminEmails = [];
+      const allAdminEmails = [];
       
       techniciansSnapshot.forEach(doc => {
         const techData = doc.data();
@@ -132,29 +143,38 @@ exports.sendDailyToolNotifications = functions.pubsub
         if (fullName && email) {
           technicianEmailMap.set(fullName, email);
           
-          // Collect admin emails
+          // Collect all admin emails
           if (isAdmin) {
-            adminEmails.push(email);
+            allAdminEmails.push({ email, fullName });
           }
         }
       });
 
-      console.log(`Found ${adminEmails.length} administrator(s) for summary email`);
-
       // Send emails to users with OUT tools
       const emailPromises = [];
+      const usersWithOutTools = new Set();
+      
       for (const [technicianName, tools] of userToolsMap.entries()) {
         const userEmail = technicianEmailMap.get(technicianName);
         if (userEmail) {
           emailPromises.push(sendUserNotificationEmail(userEmail, technicianName, tools));
+          usersWithOutTools.add(userEmail); // Track users who got tool notifications
         } else {
           console.log(`No email found for technician: ${technicianName}`);
         }
       }
 
-      // Send summary email to administrators
-      if (adminEmails.length > 0) {
-        emailPromises.push(sendAdminSummaryEmail(adminEmails, outTools));
+      // Filter admin emails: exclude admins who have tools OUT (they already got user email)
+      const adminEmailsForSummary = allAdminEmails
+        .filter(admin => !usersWithOutTools.has(admin.email))
+        .map(admin => admin.email);
+
+      console.log(`Found ${allAdminEmails.length} total administrator(s)`);
+      console.log(`Sending summary to ${adminEmailsForSummary.length} administrator(s) (excluding those with OUT tools)`);
+
+      // Send summary email to administrators (excluding those who have OUT tools)
+      if (adminEmailsForSummary.length > 0) {
+        emailPromises.push(sendAdminSummaryEmail(adminEmailsForSummary, outTools));
       }
 
       // Wait for all emails to be sent
