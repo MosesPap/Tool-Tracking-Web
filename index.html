@@ -4514,13 +4514,29 @@ if (!userCredential.user.emailVerified) {
                 
                 // Case-insensitive search through all tools
                 const searchTermLower = searchTerm.toLowerCase();
-                const filtered = allToolsCache.filter(tool => {
+                let filtered = allToolsCache.filter(tool => {
                     if (currentSearchType === 'toolName') {
                         return tool.toolName.toLowerCase().includes(searchTermLower);
                     } else {
                         return tool.partNumber.toLowerCase().includes(searchTermLower);
                     }
-                }).slice(0, 20); // Limit to 20 results for performance
+                });
+                
+                // Sort alphabetically based on search type
+                filtered.sort((a, b) => {
+                    if (currentSearchType === 'toolName') {
+                        const nameA = (a.toolName || '').toLowerCase();
+                        const nameB = (b.toolName || '').toLowerCase();
+                        return nameA.localeCompare(nameB);
+                    } else {
+                        const partA = (a.partNumber || a.id).toLowerCase();
+                        const partB = (b.partNumber || b.id).toLowerCase();
+                        return partA.localeCompare(partB);
+                    }
+                });
+                
+                // Limit to 20 results for performance
+                filtered = filtered.slice(0, 20);
                 
                 // Store results for selection
                 searchResultsData = filtered;
@@ -4565,12 +4581,24 @@ if (!userCredential.user.emailVerified) {
                         highlightedPart = highlightText(partNumber, searchTerm);
                     }
                     
-                    item.innerHTML = `
-                        <div class="tool-name">${highlightedName}</div>
-                        <div class="tool-part"><span class="label">Part #:</span> <span class="value">${highlightedPart}</span></div>
-                        <div class="tool-collection"><span class="label">Collection:</span> <span class="value">${collectionCode}</span></div>
-                        <div class="tool-owner"><span class="label">Owner:</span> <span class="value">${owner}</span></div>
-                    `;
+                    // When searching by part number, swap the display order
+                    if (currentSearchType === 'partNumber') {
+                        // Part number goes in tool-name position, tool name goes in tool-part position
+                        item.innerHTML = `
+                            <div class="tool-name">${highlightedPart}</div>
+                            <div class="tool-part"><span class="label">Tool Name:</span> <span class="value">${toolName}</span></div>
+                            <div class="tool-collection"><span class="label">Collection:</span> <span class="value">${collectionCode}</span></div>
+                            <div class="tool-owner"><span class="label">Owner:</span> <span class="value">${owner}</span></div>
+                        `;
+                    } else {
+                        // Normal order: tool name first, part number second
+                        item.innerHTML = `
+                            <div class="tool-name">${highlightedName}</div>
+                            <div class="tool-part"><span class="label">Part #:</span> <span class="value">${highlightedPart}</span></div>
+                            <div class="tool-collection"><span class="label">Collection:</span> <span class="value">${collectionCode}</span></div>
+                            <div class="tool-owner"><span class="label">Owner:</span> <span class="value">${owner}</span></div>
+                        `;
+                    }
                     
                     dropdown.appendChild(item);
                 });
