@@ -4680,6 +4680,10 @@ if (!userCredential.user.emailVerified) {
                     const technician = tool.technician || 'N/A';
                     const calDueDate = tool.calDueDate ? (tool.calDueDate.toDate ? tool.calDueDate.toDate().toLocaleDateString() : tool.calDueDate) : 'N/A';
                     
+                    // Get tool photo URLs
+                    const toolPhotoUrls = tool.photoUrls || [];
+                    const toolPhotoCount = toolPhotoUrls.length;
+                    
                     // Get photo counts
                     const collectionPhotoCount = await getCollectionPhotoCount(collectionCode);
                     const locationPhotoCount = await getLocationPhotoCount(collectionCode, location);
@@ -4713,6 +4717,15 @@ if (!userCredential.user.emailVerified) {
                         }
                     }
                     
+                    // Create tool name display with photos as hyperlink
+                    let toolNameDisplay = toolName;
+                    if (toolPhotoCount > 0) {
+                        const toolPhotoUrlsJson = JSON.stringify(toolPhotoUrls).replace(/'/g, "&#39;");
+                        toolNameDisplay = `${toolName} (<a href="#" onclick="showToolPhotoGallery(this); return false;" data-photo-urls='${toolPhotoUrlsJson}' data-tool-id='${toolId}' data-part-number='${partNumber}' style="color: #2196F3; text-decoration: underline; cursor: pointer; font-weight: bold;">${toolPhotoCount} photos</a>)`;
+                    } else {
+                        toolNameDisplay = `${toolName} (<span style="color: #888; text-decoration: none; cursor: not-allowed; font-weight: bold;">0 photos</span>)`;
+                    }
+                    
                     // Create collection display with photos as hyperlink
                     let collectionDisplay = collectionCode;
                     if (collectionCode !== 'N/A') {
@@ -4741,7 +4754,7 @@ if (!userCredential.user.emailVerified) {
                                 <h5 class="mb-0">Tool Details</h5>
                             </div>
                             <div class="card-body">
-                                <p><strong>Tool Name:</strong> ${toolName}</p>
+                                <p><strong>Tool Name:</strong> ${toolNameDisplay}</p>
                                 <p><strong>Part Number:</strong> ${partNumber}</p>
                                 <p><strong>Collection Code:</strong> ${collectionDisplay}</p>
                                 <p><strong>Location:</strong> ${locationDisplay}</p>
