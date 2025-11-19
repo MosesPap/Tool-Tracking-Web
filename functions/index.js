@@ -45,13 +45,22 @@ exports.sendDailyToolNotifications = functions.pubsub
 
       // Check if we should send emails at this time
       const now = new Date();
+      
+      // Convert to Nicosia timezone
+      const nicosiaTime = now.toLocaleString('en-US', { 
+        timeZone: 'Asia/Nicosia',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      
+      const [currentHour, currentMinute] = nicosiaTime.split(':').map(num => parseInt(num));
+      
       const [hours, minutes] = emailNotificationTime.split(':');
       const notificationHour = parseInt(hours);
       const notificationMinute = parseInt(minutes);
 
-      // Only send if current time matches (within 5 minutes tolerance)
-      const currentHour = now.getHours();
-      const currentMinute = now.getMinutes();
+      // Only send if current time matches (within tolerance)
       
       if (currentHour !== notificationHour || Math.abs(currentMinute - notificationMinute) >1 ) {
         console.log(`Scheduled time is ${emailNotificationTime}, current time is ${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}. Skipping.`);
