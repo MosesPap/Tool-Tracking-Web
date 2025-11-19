@@ -596,20 +596,47 @@
         
         .search-dropdown-item .tool-part {
             font-size: 0.9rem;
-            color: #666;
             margin-top: 4px;
+        }
+        
+        .search-dropdown-item .tool-part .label {
+            color: #0000FF;
+            font-weight: bold;
+        }
+        
+        .search-dropdown-item .tool-part .value {
+            color: #87CEEB;
+            font-weight: bold;
         }
         
         .search-dropdown-item .tool-collection {
             font-size: 0.85rem;
-            color: #888;
             margin-top: 2px;
+        }
+        
+        .search-dropdown-item .tool-collection .label {
+            color: #0000FF;
+            font-weight: bold;
+        }
+        
+        .search-dropdown-item .tool-collection .value {
+            color: #87CEEB;
+            font-weight: bold;
         }
         
         .search-dropdown-item .tool-owner {
             font-size: 0.85rem;
-            color: #888;
             margin-top: 2px;
+        }
+        
+        .search-dropdown-item .tool-owner .label {
+            color: #0000FF;
+            font-weight: bold;
+        }
+        
+        .search-dropdown-item .tool-owner .value {
+            color: #87CEEB;
+            font-weight: bold;
         }
         
         .highlight-match {
@@ -4540,9 +4567,9 @@ if (!userCredential.user.emailVerified) {
                     
                     item.innerHTML = `
                         <div class="tool-name">${highlightedName}</div>
-                        <div class="tool-part">Part #: ${highlightedPart}</div>
-                        <div class="tool-collection">Collection: ${collectionCode}</div>
-                        <div class="tool-owner">Owner: ${owner}</div>
+                        <div class="tool-part"><span class="label">Part #:</span> <span class="value">${highlightedPart}</span></div>
+                        <div class="tool-collection"><span class="label">Collection:</span> <span class="value">${collectionCode}</span></div>
+                        <div class="tool-owner"><span class="label">Owner:</span> <span class="value">${owner}</span></div>
                     `;
                     
                     dropdown.appendChild(item);
@@ -4629,20 +4656,24 @@ if (!userCredential.user.emailVerified) {
                     const collectionPhotoCount = await getCollectionPhotoCount(collectionCode);
                     const locationPhotoCount = await getLocationPhotoCount(collectionCode, location);
                     
-                    // Create collection link with photo count
+                    // Create collection display with photos as hyperlink
                     let collectionDisplay = collectionCode;
-                    if (collectionCode !== 'N/A' && collectionPhotoCount > 0) {
-                        collectionDisplay = `<a href="#" onclick="viewCollectionPhotos('${collectionCode}'); return false;" style="color: #2196F3; text-decoration: underline; cursor: pointer;">${collectionCode}</a> (${collectionPhotoCount} photos)`;
-                    } else if (collectionCode !== 'N/A') {
-                        collectionDisplay = `${collectionCode} (0 photos)`;
+                    if (collectionCode !== 'N/A') {
+                        if (collectionPhotoCount > 0) {
+                            collectionDisplay = `${collectionCode} (<a href="#" onclick="event.preventDefault(); viewCollectionPhotos('${collectionCode}'); return false;" style="color: #2196F3; text-decoration: underline; cursor: pointer; font-weight: bold;">${collectionPhotoCount} photos</a>)`;
+                        } else {
+                            collectionDisplay = `${collectionCode} (0 photos)`;
+                        }
                     }
                     
-                    // Create location link with photo count
+                    // Create location display with photos as hyperlink
                     let locationDisplay = location;
-                    if (location !== 'N/A' && locationPhotoCount > 0) {
-                        locationDisplay = `<a href="#" onclick="viewLocationPhotos('${collectionCode}', '${location}'); return false;" style="color: #2196F3; text-decoration: underline; cursor: pointer;">${location}</a> (${locationPhotoCount} photos)`;
-                    } else if (location !== 'N/A') {
-                        locationDisplay = `${location} (0 photos)`;
+                    if (location !== 'N/A') {
+                        if (locationPhotoCount > 0) {
+                            locationDisplay = `${location} (<a href="#" onclick="event.preventDefault(); viewLocationPhotos('${collectionCode}', '${location}'); return false;" style="color: #2196F3; text-decoration: underline; cursor: pointer; font-weight: bold;">${locationPhotoCount} photos</a>)`;
+                        } else {
+                            locationDisplay = `${location} (0 photos)`;
+                        }
                     }
                     
                     selectedToolDetails.innerHTML = `
@@ -4727,71 +4758,107 @@ if (!userCredential.user.emailVerified) {
         
         // Function to show photo gallery
         function showPhotoGallery(photoUrls, title) {
-            // Create or get modal for photo gallery
-            let modal = document.getElementById('photoGalleryModal');
-            if (!modal) {
-                modal = document.createElement('div');
-                modal.className = 'modal fade';
-                modal.id = 'photoGalleryModal';
-                modal.setAttribute('tabindex', '-1');
-                modal.innerHTML = `
-                    <div class="modal-dialog modal-lg">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">${title}</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                            </div>
-                            <div class="modal-body text-center">
-                                <div id="photoGalleryContent"></div>
-                                <div class="mt-3">
-                                    <button type="button" class="btn btn-secondary" id="photoGalleryPrev">Previous</button>
-                                    <span id="photoGalleryCounter" class="mx-3"></span>
-                                    <button type="button" class="btn btn-secondary" id="photoGalleryNext">Next</button>
+            if (!photoUrls || photoUrls.length === 0) {
+                alert('No photos available.');
+                return;
+            }
+            
+            // Remove existing modal if present
+            const existingModal = document.getElementById('photoGalleryModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            // Create new modal
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.id = 'photoGalleryModal';
+            modal.setAttribute('tabindex', '-1');
+            modal.setAttribute('aria-labelledby', 'photoGalleryModalLabel');
+            modal.setAttribute('aria-hidden', 'true');
+            modal.innerHTML = `
+                <div class="modal-dialog modal-lg modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="photoGalleryModalLabel">${title}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body text-center">
+                            <div id="photoGalleryContent" style="min-height: 300px; display: flex; align-items: center; justify-content: center;">
+                                <div class="spinner-border" role="status">
+                                    <span class="visually-hidden">Loading...</span>
                                 </div>
+                            </div>
+                            <div class="mt-3">
+                                <button type="button" class="btn btn-secondary" id="photoGalleryPrev">Previous</button>
+                                <span id="photoGalleryCounter" class="mx-3"></span>
+                                <button type="button" class="btn btn-secondary" id="photoGalleryNext">Next</button>
                             </div>
                         </div>
                     </div>
-                `;
-                document.body.appendChild(modal);
-            }
+                </div>
+            `;
+            document.body.appendChild(modal);
             
             let currentPhotoIndex = 0;
-            const photoGalleryContent = modal.querySelector('#photoGalleryContent');
-            const photoGalleryCounter = modal.querySelector('#photoGalleryCounter');
-            const photoGalleryPrev = modal.querySelector('#photoGalleryPrev');
-            const photoGalleryNext = modal.querySelector('#photoGalleryNext');
             
             function updatePhoto() {
+                const photoGalleryContent = document.getElementById('photoGalleryContent');
+                const photoGalleryCounter = document.getElementById('photoGalleryCounter');
+                const photoGalleryPrev = document.getElementById('photoGalleryPrev');
+                const photoGalleryNext = document.getElementById('photoGalleryNext');
+                
                 if (photoUrls.length === 0) return;
-                photoGalleryContent.innerHTML = `<img src="${photoUrls[currentPhotoIndex]}" class="img-fluid" style="max-height: 500px; border-radius: 8px;">`;
+                
+                photoGalleryContent.innerHTML = `<img src="${photoUrls[currentPhotoIndex]}" class="img-fluid" style="max-height: 500px; border-radius: 8px; max-width: 100%;" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'400\' height=\'300\'%3E%3Crect fill=\'%23ddd\' width=\'400\' height=\'300\'/%3E%3Ctext fill=\'%23999\' font-family=\'sans-serif\' font-size=\'18\' x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' dy=\'.3em\'%3EImage not found%3C/text%3E%3C/svg%3E';">`;
                 photoGalleryCounter.textContent = `${currentPhotoIndex + 1} / ${photoUrls.length}`;
-                photoGalleryPrev.disabled = currentPhotoIndex === 0;
-                photoGalleryNext.disabled = currentPhotoIndex === photoUrls.length - 1;
+                
+                if (photoGalleryPrev) {
+                    photoGalleryPrev.disabled = currentPhotoIndex === 0;
+                }
+                if (photoGalleryNext) {
+                    photoGalleryNext.disabled = currentPhotoIndex === photoUrls.length - 1;
+                }
             }
             
-            photoGalleryPrev.onclick = () => {
-                if (currentPhotoIndex > 0) {
-                    currentPhotoIndex--;
-                    updatePhoto();
+            // Set up event handlers after modal is added to DOM
+            setTimeout(() => {
+                const photoGalleryPrev = document.getElementById('photoGalleryPrev');
+                const photoGalleryNext = document.getElementById('photoGalleryNext');
+                
+                if (photoGalleryPrev) {
+                    photoGalleryPrev.onclick = () => {
+                        if (currentPhotoIndex > 0) {
+                            currentPhotoIndex--;
+                            updatePhoto();
+                        }
+                    };
                 }
-            };
-            
-            photoGalleryNext.onclick = () => {
-                if (currentPhotoIndex < photoUrls.length - 1) {
-                    currentPhotoIndex++;
-                    updatePhoto();
+                
+                if (photoGalleryNext) {
+                    photoGalleryNext.onclick = () => {
+                        if (currentPhotoIndex < photoUrls.length - 1) {
+                            currentPhotoIndex++;
+                            updatePhoto();
+                        }
+                    };
                 }
-            };
+                
+                // Initialize photo display
+                updatePhoto();
+            }, 100);
             
-            // Update modal title
-            modal.querySelector('.modal-title').textContent = title;
-            
-            // Show modal
-            const bsModal = new bootstrap.Modal(modal);
+            // Show modal using Bootstrap
+            const bsModal = new bootstrap.Modal(modal, {
+                backdrop: true,
+                keyboard: true
+            });
             bsModal.show();
             
-            // Initialize
-            updatePhoto();
+            // Clean up when modal is hidden
+            modal.addEventListener('hidden.bs.modal', function () {
+                modal.remove();
+            });
         }
         
         // Legacy function for compatibility
