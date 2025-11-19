@@ -2614,6 +2614,38 @@
       </div>
     </div>
 
+    <!-- Photo Upload Choice Modal -->
+    <div class="modal fade" id="photoUploadChoiceModal" tabindex="-1" aria-labelledby="photoUploadChoiceModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+          <div class="modal-header" style="background: #FF9800; color: white; border-radius: 16px 16px 0 0; border: none; padding: 20px;">
+            <h5 class="modal-title" id="photoUploadChoiceModalLabel" style="font-weight: bold; font-size: 1.3rem;">
+              <i class="fas fa-camera"></i> Add Photo
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" style="padding: 24px;">
+            <div style="margin-bottom: 16px;">
+              <strong style="font-size: 1.1rem; color: #333;">Other tools with this part number that have photos:</strong>
+              <div id="photoUploadToolsList" style="margin-top: 8px; padding: 12px; background: #f5f5f5; border-radius: 8px;"></div>
+            </div>
+            <p style="color: #666; margin-bottom: 20px;">Choose where you want to add this photo:</p>
+            <div class="d-grid gap-2">
+              <button type="button" class="btn" id="addToMyToolOnlyBtn" style="background: #2196F3; color: white; font-weight: bold; border-radius: 12px; padding: 12px; font-size: 1rem;">
+                <i class="fas fa-user"></i> Add to MY Tool Only
+              </button>
+              <button type="button" class="btn" id="addToAllToolsBtn" style="background: #FF9800; color: white; font-weight: bold; border-radius: 12px; padding: 12px; font-size: 1rem;">
+                <i class="fas fa-users"></i> Add to ALL Tools 🔐
+              </button>
+            </div>
+            <div style="margin-top: 12px; text-align: center; font-size: 0.9rem; color: #999;">
+              <i class="fas fa-info-circle"></i> Adding to all tools requires admin code
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="checkupHistoryScreen" style="display:none;">
       <!-- Orange Title Bar -->
       <div style="background: #FF9800; color: white; padding: 1rem 0; width: 100%; position: relative;">
@@ -8755,7 +8787,7 @@ if (!userCredential.user.emailVerified) {
                             return;
                         }
                         
-                        // After successful password, ask for final confirmation
+                        // After successful admin code verification, ask for final confirmation
                         if (!confirm(`⚠️ Are you sure you want to delete this photo from ALL ${toolsWithSamePart.docs.length} tools?\n\nThis will permanently remove the photo from:\n${owners.join('\n')}\n\nThis action CANNOT be undone!`)) {
                             return;
                         }
@@ -9034,8 +9066,11 @@ if (!userCredential.user.emailVerified) {
                 console.log('File:', file.name, file.size, 'bytes');
                 console.log('Force Upload:', forceUpload);
                 
-                // Check if other tools with same part number have photos (unless forceUpload is true)
-                if (!forceUpload) {
+                // Check if other tools with same part number have photos (unless forceUpload is true or user already made a choice)
+                // Skip this check if user already went through the choice modal
+                const userAlreadyChose = currentPhotoUploadToolId === toolId && currentPhotoUploadPartNumber === partNumber;
+                
+                if (!forceUpload && !userAlreadyChose) {
                     const toolsWithSamePart = await db.collection('tools')
                         .where('partNumber', '==', partNumber)
                         .get();
@@ -9156,34 +9191,42 @@ if (!userCredential.user.emailVerified) {
                                 photoUrls: newPhotoUrls
                             });
                             
-                            // Only share with other tools if this is NOT a forced individual upload
-                            if (!forceUpload) {
-                            // Find all tools with the same part number and add the same photo
-                            const toolsWithSamePart = await db.collection('tools')
-                                .where('partNumber', '==', partNumber)
-                                .get();
+                            // Share with other tools if user chose "Add to ALL Tools"
+                            // Check if this is the same tool/partNumber from the choice modal
+                            const shouldAddToAll = photoUploadToAllTools && currentPhotoUploadToolId === toolId && currentPhotoUploadPartNumber === partNumber;
                             
-                            const updatePromises = toolsWithSamePart.docs.map(async (doc) => {
-                                if (doc.id !== toolId) { // Don't update the original tool again
-                                    const existingPhotoUrls = doc.data().photoUrls || [];
-                                    const updatedPhotoUrls = [...existingPhotoUrls, downloadURL];
-                                    await doc.ref.update({
-                                        photoUrls: updatedPhotoUrls
-                                    });
-                                    console.log('Updated tool', doc.id, 'with same photo');
-                                }
-                            });
-                            
-                            await Promise.all(updatePromises);
-                            
-                            console.log('=== PHOTO UPLOAD COMPLETED ===');
-                            loadingModal.hide();
-                            alert('Photo uploaded successfully! Added to ' + (toolsWithSamePart.docs.length) + ' tools with the same part number.');
+                            if (shouldAddToAll) {
+                                // Find all tools with the same part number and add the same photo
+                                const toolsWithSamePart = await db.collection('tools')
+                                    .where('partNumber', '==', partNumber)
+                                    .get();
+                                
+                                const updatePromises = toolsWithSamePart.docs.map(async (doc) => {
+                                    if (doc.id !== toolId) { // Don't update the original tool again
+                                        const existingPhotoUrls = doc.data().photoUrls || [];
+                                        const updatedPhotoUrls = [...existingPhotoUrls, downloadURL];
+                                        await doc.ref.update({
+                                            photoUrls: updatedPhotoUrls
+                                        });
+                                        console.log('Updated tool', doc.id, 'with same photo');
+                                    }
+                                });
+                                
+                                await Promise.all(updatePromises);
+                                
+                                console.log('=== PHOTO UPLOAD COMPLETED ===');
+                                loadingModal.hide();
+                                alert('Photo uploaded successfully! Added to ' + (toolsWithSamePart.docs.length) + ' tools with the same part number.');
                             } else {
                                 console.log('=== PHOTO UPLOAD COMPLETED (INDIVIDUAL) ===');
                                 loadingModal.hide();
                                 alert('✅ Photo uploaded successfully! Added to YOUR tool only.');
                             }
+                            
+                            // Reset the global variables
+                            photoUploadToAllTools = false;
+                            currentPhotoUploadToolId = null;
+                            currentPhotoUploadPartNumber = null;
                             
                             // Refresh the current view
                             if (lastViewedCollectionName) {
@@ -9273,8 +9316,105 @@ if (!userCredential.user.emailVerified) {
             });
         }
 
+        // Global variable to store photo upload choice
+        let photoUploadToAllTools = false;
+        let currentPhotoUploadToolId = null;
+        let currentPhotoUploadPartNumber = null;
+
         // Create photo upload options (camera or gallery)
-        function createPhotoUploadInput(toolId, partNumber) {
+        async function createPhotoUploadInput(toolId, partNumber) {
+            currentPhotoUploadToolId = toolId;
+            currentPhotoUploadPartNumber = partNumber;
+            photoUploadToAllTools = false; // Reset choice
+
+            try {
+                // Check if there are other tools with the same part number that have photos
+                const toolsWithSamePart = await db.collection('tools')
+                    .where('partNumber', '==', partNumber)
+                    .get();
+
+                // Filter tools that have photos (excluding current tool)
+                const toolsWithPhotos = toolsWithSamePart.docs
+                    .filter(doc => doc.id !== toolId && doc.data().photoUrls && doc.data().photoUrls.length > 0)
+                    .map(doc => ({
+                        id: doc.id,
+                        toolName: doc.data().toolName || 'Unknown Tool',
+                        owner: doc.data().owner || 'Unknown',
+                        photoCount: (doc.data().photoUrls || []).length
+                    }));
+
+                // If other tools with photos exist, show choice modal
+                if (toolsWithPhotos.length > 0) {
+                    // Format tools list
+                    let toolsListHTML = '';
+                    toolsListHTML = toolsWithPhotos.map((tool, index) => 
+                        `<div style="font-size: 1.15rem; font-weight: bold; color: #333; margin-bottom: 6px;">
+                            ${index + 1}. ${tool.toolName} (Owner: ${tool.owner}) - ${tool.photoCount} photo(s)
+                        </div>`
+                    ).join('');
+
+                    // Show choice modal
+                    document.getElementById('photoUploadToolsList').innerHTML = toolsListHTML;
+                    const choiceModal = new bootstrap.Modal(document.getElementById('photoUploadChoiceModal'));
+                    choiceModal.show();
+
+                    // Handle "Add to MY Tool Only" button
+                    document.getElementById('addToMyToolOnlyBtn').onclick = function() {
+                        choiceModal.hide();
+                        photoUploadToAllTools = false;
+                        showPhotoSourceModal(toolId, partNumber);
+                    };
+
+                    // Handle "Add to ALL Tools" button
+                    document.getElementById('addToAllToolsBtn').onclick = async function() {
+                        choiceModal.hide();
+                        
+                        // Fetch admin code from Firestore
+                        const settingsDoc = await db.collection('settings').doc('admin').get();
+                        const adminCode = settingsDoc.exists ? settingsDoc.data().adminCode : null;
+                        
+                        if (!adminCode) {
+                            alert('Admin code not configured. Please contact system administrator.');
+                            return;
+                        }
+                        
+                        // Prompt for admin code
+                        const enteredCode = prompt('🔐 Enter admin code to add photo to ALL tools:');
+                        
+                        if (enteredCode === null) {
+                            // User cancelled
+                            return;
+                        }
+                        
+                        if (enteredCode !== adminCode) {
+                            alert('❌ Incorrect admin code. Photo upload cancelled.');
+                            return;
+                        }
+                        
+                        // After successful admin code verification, ask for final confirmation
+                        const owners = [...new Set(toolsWithSamePart.docs.map(doc => doc.data().owner))].filter(Boolean);
+                        if (!confirm(`⚠️ Are you sure you want to add this photo to ALL ${toolsWithSamePart.docs.length} tools?\n\nThis will add the photo to:\n${owners.join('\n')}\n\nContinue?`)) {
+                            return;
+                        }
+                        
+                        photoUploadToAllTools = true;
+                        showPhotoSourceModal(toolId, partNumber);
+                    };
+                } else {
+                    // No other tools with photos, proceed directly to source selection
+                    photoUploadToAllTools = false;
+                    showPhotoSourceModal(toolId, partNumber);
+                }
+            } catch (error) {
+                console.error('Error checking tools with same part number:', error);
+                // On error, proceed with normal flow (add to my tool only)
+                photoUploadToAllTools = false;
+                showPhotoSourceModal(toolId, partNumber);
+            }
+        }
+
+        // Show photo source selection modal
+        function showPhotoSourceModal(toolId, partNumber) {
             // Create modal for photo source selection
             const modalHtml = `
                 <div class="modal fade" id="photoSourceModal" tabindex="-1" aria-labelledby="photoSourceModalLabel" aria-hidden="true">
