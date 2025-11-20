@@ -1284,6 +1284,17 @@
                                                 </div>
                                             </div>
                                         </div>
+
+                                        <div class="mt-3">
+                                            <label class="form-label">Generated cron expression (copy &amp; paste into Cloud Scheduler)</label>
+                                            <div class="input-group">
+                                                <input type="text" class="form-control" id="emailFrequencyCron" readonly value="* * * * *">
+                                                <button type="button" class="btn btn-outline-secondary" id="copyCronBtn" title="Copy cron expression">
+                                                    <i class="fas fa-copy"></i>
+                                                </button>
+                                            </div>
+                                            <small class="text-muted">Matches your selection above. Use this when editing the Cloud Scheduler job.</small>
+                                        </div>
                                         
                                         <div class="alert alert-info" role="alert">
                                             <i class="fas fa-info-circle"></i> 
@@ -2096,6 +2107,8 @@
         const customScheduleTimeInput = document.getElementById('customScheduleTime');
         const customScheduleSummary = document.getElementById('customScheduleSummary');
         const customDayCheckboxes = document.querySelectorAll('.custom-day-checkbox');
+        const cronPreviewInput = document.getElementById('emailFrequencyCron');
+        const copyCronBtn = document.getElementById('copyCronBtn');
 
         function padNumber(num) {
             return String(num).padStart(2, '0');
@@ -2108,6 +2121,7 @@
             if (!show && customScheduleSummary) {
                 customScheduleSummary.style.display = 'none';
             }
+            updateCronPreview();
         }
 
         function updateCustomScheduleSummary() {
@@ -2126,9 +2140,15 @@
             customScheduleSummary.textContent = `Will run on ${selectedDays.join(', ')} at ${timeValue} (Asia/Nicosia)`;
         }
 
-        customDayCheckboxes.forEach(cb => cb.addEventListener('change', updateCustomScheduleSummary));
+        customDayCheckboxes.forEach(cb => cb.addEventListener('change', () => {
+            updateCustomScheduleSummary();
+            updateCronPreview();
+        }));
         if (customScheduleTimeInput) {
-            customScheduleTimeInput.addEventListener('input', updateCustomScheduleSummary);
+            customScheduleTimeInput.addEventListener('input', () => {
+                updateCustomScheduleSummary();
+                updateCronPreview();
+            });
         }
 
         if (emailCheckFrequencySelect) {
@@ -2138,6 +2158,7 @@
                 if (isCustom) {
                     updateCustomScheduleSummary();
                 }
+                updateCronPreview();
             });
         }
 
@@ -2162,9 +2183,10 @@
                 cb.checked = dayValues.includes(cb.value);
             });
             updateCustomScheduleSummary();
+            updateCronPreview();
         }
 
-        function buildCronFromCustomFields() {
+        function getCustomCronExpression(showAlerts = false) {
             if (!customScheduleTimeInput) return null;
             const timeValue = customScheduleTimeInput.value;
             const selectedDays = Array.from(customDayCheckboxes)
@@ -2172,18 +2194,29 @@
                 .map(cb => cb.value);
 
             if (!timeValue) {
-                alert('Please select a time for the custom schedule.');
+                if (showAlerts) alert('Please select a time for the custom schedule.');
                 return null;
             }
 
             if (selectedDays.length === 0) {
-                alert('Please select at least one day for the custom schedule.');
+                if (showAlerts) alert('Please select at least one day for the custom schedule.');
                 return null;
             }
 
             const [hours, minutes] = timeValue.split(':');
             const dayPart = selectedDays.length === 7 ? '*' : selectedDays.join(',');
             return `${parseInt(minutes, 10)} ${parseInt(hours, 10)} * * ${dayPart}`;
+        }
+
+        function updateCronPreview() {
+            if (!cronPreviewInput || !emailCheckFrequencySelect) return;
+            let cronValue = '';
+            if (emailCheckFrequencySelect.value === 'custom') {
+                cronValue = getCustomCronExpression(false) || '';
+            } else {
+                cronValue = emailCheckFrequencySelect.value || '';
+            }
+            cronPreviewInput.value = cronValue;
         }
 
         function isPresetFrequency(value) {
@@ -2253,6 +2286,7 @@
                             toggleCustomSchedule(true);
                             setCustomFieldsFromCron(savedFrequency);
                         }
+                        updateCronPreview();
                     }
                     
                     // Load email configuration
@@ -2441,7 +2475,7 @@
                 let frequencyValue = emailCheckFrequencySelect.value;
 
                 if (frequencyValue === 'custom') {
-                    const cronExpression = buildCronFromCustomFields();
+                    const cronExpression = getCustomCronExpression(true);
                     if (!cronExpression) {
                         return;
                     }
@@ -2455,9 +2489,30 @@
                     }, { merge: true });
                     
                     alert('✅ Email check frequency updated!\n\nYour Cloud Scheduler job should continue pointing to the HTTP function. The function now uses this preference to decide when to send notifications.');
+                    updateCronPreview();
                 } catch (error) {
                     console.error('Error updating email check frequency:', error);
                     alert('Failed to update email check frequency: ' + error.message);
+                }
+            });
+        }
+
+        if (copyCronBtn && cronPreviewInput) {
+            copyCronBtn.addEventListener('click', async () => {
+                const value = cronPreviewInput.value.trim();
+                if (!value) {
+                    alert('No cron expression to copy yet.');
+                    return;
+                }
+                try {
+                    await navigator.clipboard.writeText(value);
+                    copyCronBtn.innerHTML = '<i class="fas fa-check"></i>';
+                    setTimeout(() => {
+                        copyCronBtn.innerHTML = '<i class="fas fa-copy"></i>';
+                    }, 1500);
+                } catch (err) {
+                    console.error('Clipboard write failed:', err);
+                    alert('Unable to copy. Please copy manually.');
                 }
             });
         }
