@@ -24,271 +24,293 @@ function createTransporter(emailAccount, emailAppPassword) {
   });
 }
 
-/**
- * Scheduled function to send daily email notifications
- * This runs every hour and checks if it's time to send emails based on settings
- * To change the frequency, update the cron expression below
- * Format: minute hour day month dayOfWeek
- * Example: "0 * * * *" = Every hour at minute 0
- */
-exports.sendDailyToolNotifications = functions.pubsub
-  .schedule('* * * * *') // Run every hour at minute 0
-  .timeZone('Asia/Nicosia') // Nicosia, Cyprus timezone (EET/EEST)
-  .onRun(async (context) => {
-    console.log('Checking if it\'s time to send daily tool notification emails...');
+const CRON_TO_MINUTES = {
+  '* * * * *': 1,
+  '*/5 * * * *': 5,
+  '*/10 * * * *': 10,
+  '*/15 * * * *': 15,
+  '*/30 * * * *': 30,
+  '0 * * * *': 60,
+  '0 */2 * * *': 120,
+  '0 */6 * * *': 360,
+  '0 9 * * *': 1440
+};
 
-    try {
-      // Get settings from Firestore
-      const settingsDoc = await admin.firestore()
-        .collection('settings')
-        .doc('admin')
-        .get();
+function getFrequencyMinutes(cronExpression = '* * * * *') {
+  return CRON_TO_MINUTES[cronExpression] || 1;
+}
 
-      if (!settingsDoc.exists) {
-        console.log('Settings document not found. Skipping email notifications.');
-        return null;
+function getCurrentNicosiaDate() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Nicosia' }));
+}
+
+async function processDailyToolNotifications(triggerSource = 'http') {
+  console.log(`[${triggerSource}] Checking if it's time to send daily tool notification emails...`);
+
+  // Get settings from Firestore
+  const settingsDoc = await admin.firestore()
+    .collection('settings')
+    .doc('admin')
+    .get();
+
+  if (!settingsDoc.exists) {
+    console.log('Settings document not found. Skipping email notifications.');
+    return { status: 'no-settings' };
+  }
+
+  const settings = settingsDoc.data();
+  const emailNotificationTime = settings.emailNotificationTime || '09:00';
+  const emailToleranceWindow = settings.emailToleranceWindow !== undefined ? settings.emailToleranceWindow : 1;
+  const emailCheckFrequencyCron = settings.emailCheckFrequency || '* * * * *';
+  const frequencyMinutes = getFrequencyMinutes(emailCheckFrequencyCron);
+
+  const now = getCurrentNicosiaDate();
+
+  // Frequency gate: only perform check if enough minutes passed
+  if (frequencyMinutes > 1 && settings.lastEmailCheckTime) {
+    const lastCheckDate = settings.lastEmailCheckTime.toDate();
+    const diffMinutes = (now.getTime() - lastCheckDate.getTime()) / 60000;
+
+    if (diffMinutes < frequencyMinutes) {
+      console.log(`Frequency is ${frequencyMinutes} minute(s). Last check was ${diffMinutes.toFixed(2)} minute(s) ago. Skipping.`);
+      return { status: 'skipped-frequency', diffMinutes };
+    }
+  }
+
+  // Update last check timestamp so future invocations respect the interval
+  await settingsDoc.ref.update({
+    lastEmailCheckTime: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  // Get email configuration from Firestore
+  const emailAccount = settings.emailAccount;
+  const emailAppPassword = settings.emailAppPassword;
+  const emailFrom = settings.emailFrom || 'noreply@tooltracking.com';
+  
+  // Get email templates from Firestore (with defaults)
+  const emailSubjectUser = settings.emailSubjectUser || 'Tool Tracking Reminder: {count} Tool(s) Checked Out';
+  const emailSubjectAdmin = settings.emailSubjectAdmin || 'Daily Tool Status Report: {count} Tool(s) Currently OUT';
+  const emailBodyUser = settings.emailBodyUser || null; // Will use default if null
+  const emailBodyAdmin = settings.emailBodyAdmin || null; // Will use default if null;
+  
+  // Get table configuration from Firestore (with defaults)
+  const userTableColumns = settings.userTableColumns || {
+    toolName: true,
+    partNumber: true,
+    checkoutDate: true,
+    location: false,
+    owner: false,
+    calDueDate: false
+  };
+  const adminTableColumns = settings.adminTableColumns || {
+    toolName: true,
+    partNumber: true,
+    technician: true,
+    checkoutDate: true,
+    location: false,
+    owner: false,
+    calDueDate: false
+  };
+  const tableHeaderColor = settings.tableHeaderColor || '#FF9800';
+  
+  // Create transporter with Firestore settings
+  let transporter;
+  try {
+    transporter = createTransporter(emailAccount, emailAppPassword);
+  } catch (error) {
+    console.error('Error creating email transporter:', error);
+    console.log('Skipping email notifications due to configuration error.');
+    return { status: 'config-error', error: error.message };
+  }
+
+  // Convert to Nicosia timezone - get hours and minutes separately to avoid "24:XX" bug
+  const currentHour = parseInt(now.toLocaleString('en-US', { 
+    hour: 'numeric',
+    hour12: false
+  }));
+  
+  const currentMinute = parseInt(now.toLocaleString('en-US', { 
+    minute: 'numeric'
+  }));
+  
+  const [hours, minutes] = emailNotificationTime.split(':');
+  const notificationHour = parseInt(hours);
+  const notificationMinute = parseInt(minutes);
+
+  // Only send if current time matches (within tolerance window)
+  if (currentHour !== notificationHour) {
+    console.log(`Scheduled hour is ${notificationHour}, current hour is ${currentHour}. Skipping.`);
+    return { status: 'skipped-hour' };
+  }
+
+  const minuteDifference = Math.abs(currentMinute - notificationMinute);
+  if (minuteDifference > emailToleranceWindow) {
+    console.log(`Scheduled time is ${emailNotificationTime}, current time is ${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}. Difference ${minuteDifference} minute(s) exceeds tolerance (${emailToleranceWindow}). Skipping.`);
+    return { status: 'skipped-minute', minuteDifference };
+  }
+
+  console.log(`Time matches! Sending email notifications at ${emailNotificationTime}...`);
+
+  // Get all tools with status "OUT"
+  const outToolsSnapshot = await admin.firestore()
+    .collection('tools')
+    .where('status', '==', 'OUT')
+    .get();
+
+  if (outToolsSnapshot.empty) {
+    console.log('No tools with OUT status found.');
+    
+    // Get admin emails from technicians collection
+    const techniciansSnapshot = await admin.firestore()
+      .collection('technicians')
+      .get();
+    
+    const adminEmails = [];
+    techniciansSnapshot.forEach(doc => {
+      const techData = doc.data();
+      const email = techData.email || '';
+      const isAdmin = techData.isAdmin || false;
+      
+      if (email && isAdmin) {
+        adminEmails.push(email);
       }
-
-      const settings = settingsDoc.data();
-      const emailNotificationTime = settings.emailNotificationTime || '09:00';
-      const emailToleranceWindow = settings.emailToleranceWindow !== undefined ? settings.emailToleranceWindow : 1; // Default: 1 minute
-      
-      // Get email configuration from Firestore
-      const emailAccount = settings.emailAccount;
-      const emailAppPassword = settings.emailAppPassword;
-      const emailFrom = settings.emailFrom || 'noreply@tooltracking.com';
-      
-      // Get email templates from Firestore (with defaults)
-      const emailSubjectUser = settings.emailSubjectUser || 'Tool Tracking Reminder: {count} Tool(s) Checked Out';
-      const emailSubjectAdmin = settings.emailSubjectAdmin || 'Daily Tool Status Report: {count} Tool(s) Currently OUT';
-      const emailBodyUser = settings.emailBodyUser || null; // Will use default if null
-      const emailBodyAdmin = settings.emailBodyAdmin || null; // Will use default if null;
-      
-      // Get table configuration from Firestore (with defaults)
-      const userTableColumns = settings.userTableColumns || {
-        toolName: true,
-        partNumber: true,
-        checkoutDate: true,
-        location: false,
-        owner: false,
-        calDueDate: false
-      };
-      const adminTableColumns = settings.adminTableColumns || {
-        toolName: true,
-        partNumber: true,
-        technician: true,
-        checkoutDate: true,
-        location: false,
-        owner: false,
-        calDueDate: false
-      };
-      const tableHeaderColor = settings.tableHeaderColor || '#FF9800';
-      
-      // Create transporter with Firestore settings
-      let transporter;
+    });
+    
+    // Still send summary to admins (with empty tools list)
+    if (adminEmails.length > 0) {
       try {
-        transporter = createTransporter(emailAccount, emailAppPassword);
-      } catch (error) {
-        console.error('Error creating email transporter:', error);
-        console.log('Skipping email notifications due to configuration error.');
-        return null;
-      }
-
-      // Check if we should send emails at this time
-      const now = new Date();
-      
-      // Convert to Nicosia timezone - get hours and minutes separately to avoid "24:XX" bug
-      const currentHour = parseInt(now.toLocaleString('en-US', { 
-        timeZone: 'Asia/Nicosia',
-        hour: 'numeric',
-        hour12: false
-      }));
-      
-      const currentMinute = parseInt(now.toLocaleString('en-US', { 
-        timeZone: 'Asia/Nicosia',
-        minute: 'numeric'
-      }));
-      
-      const [hours, minutes] = emailNotificationTime.split(':');
-      const notificationHour = parseInt(hours);
-      const notificationMinute = parseInt(minutes);
-
-      // Only send if current time matches (within tolerance window)
-      
-      // Check if hours match
-      if (currentHour !== notificationHour) {
-        console.log(`Scheduled time is ${emailNotificationTime}, current time is ${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}. Hours don't match. Skipping.`);
-        return null;
-      }
-      
-      // Check if minutes are within tolerance window
-      const minuteDifference = Math.abs(currentMinute - notificationMinute);
-      if (minuteDifference > emailToleranceWindow) {
-        console.log(`Scheduled time is ${emailNotificationTime}, current time is ${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}. Difference: ${minuteDifference} minutes (tolerance: ${emailToleranceWindow} minutes). Skipping.`);
-        return null;
-      }
-
-      console.log(`Time matches! Sending email notifications at ${emailNotificationTime}...`);
-
-      // Get all tools with status "OUT"
-      const outToolsSnapshot = await admin.firestore()
-        .collection('tools')
-        .where('status', '==', 'OUT')
-        .get();
-
-      if (outToolsSnapshot.empty) {
-        console.log('No tools with OUT status found.');
-        
-        // Get admin emails from technicians collection
-        const techniciansSnapshot = await admin.firestore()
-          .collection('technicians')
-          .get();
-        
-        const adminEmails = [];
-        techniciansSnapshot.forEach(doc => {
-          const techData = doc.data();
-          const email = techData.email || '';
-          const isAdmin = techData.isAdmin || false;
-          
-          if (email && isAdmin) {
-            adminEmails.push(email);
-          }
-        });
-        
-        // Still send summary to admins (with empty tools list)
-        if (adminEmails.length > 0) {
-          // Get email config
-          const emailAccount = settings.emailAccount;
-          const emailAppPassword = settings.emailAppPassword;
-          const emailFrom = settings.emailFrom || 'noreply@tooltracking.com';
-          const emailSubjectAdmin = settings.emailSubjectAdmin || 'Daily Tool Status Report: {count} Tool(s) Currently OUT';
-          const emailBodyAdmin = settings.emailBodyAdmin || null;
-          const adminTableColumns = settings.adminTableColumns || {
-            toolName: true,
-            partNumber: true,
-            technician: true,
-            checkoutDate: true,
-            location: false,
-            owner: false,
-            calDueDate: false
-          };
-          const tableHeaderColor = settings.tableHeaderColor || '#FF9800';
-          
-          // Create transporter
-          let transporter;
-          try {
-            transporter = createTransporter(emailAccount, emailAppPassword);
-            await sendAdminSummaryEmail(transporter, emailFrom, adminEmails, [], emailSubjectAdmin, emailBodyAdmin, adminTableColumns, tableHeaderColor);
-          } catch (error) {
-            console.error('Error sending admin summary email:', error);
-          }
-        }
-        return null;
-      }
-
-      const outTools = [];
-      const userToolsMap = new Map(); // Map of user email -> array of tools
-
-      outToolsSnapshot.forEach(doc => {
-        const tool = {
-          id: doc.id,
-          ...doc.data(),
-        };
-        outTools.push(tool);
-
-        // Get technician email (user who has the tool)
-        const technician = tool.technician || '';
-        if (technician) {
-          if (!userToolsMap.has(technician)) {
-            userToolsMap.set(technician, []);
-          }
-          userToolsMap.get(technician).push(tool);
-        }
-      });
-
-      console.log(`Found ${outTools.length} tools with OUT status`);
-      console.log(`Found ${userToolsMap.size} unique users with OUT tools`);
-
-      // Get user emails and admin emails from technicians collection
-      const techniciansSnapshot = await admin.firestore()
-        .collection('technicians')
-        .get();
-
-      const technicianEmailMap = new Map();
-      const allAdminEmails = [];
-      
-      techniciansSnapshot.forEach(doc => {
-        const techData = doc.data();
-        const fullName = techData.fullName || '';
-        const email = techData.email || '';
-        const isAdmin = techData.isAdmin || false;
-        
-        if (fullName && email) {
-          technicianEmailMap.set(fullName, email);
-          
-          // Collect all admin emails
-          if (isAdmin) {
-            allAdminEmails.push({ email, fullName });
-          }
-        }
-      });
-
-      // Send emails to users with OUT tools
-      const emailPromises = [];
-      const usersWithOutTools = new Set();
-      
-      for (const [technicianName, tools] of userToolsMap.entries()) {
-        const userEmail = technicianEmailMap.get(technicianName);
-        if (userEmail) {
-          emailPromises.push(sendUserNotificationEmail(
-            transporter,
-            emailFrom,
-            userEmail,
-            technicianName,
-            tools,
-            emailSubjectUser,
-            emailBodyUser,
-            userTableColumns,
-            tableHeaderColor
-          ));
-          usersWithOutTools.add(userEmail); // Track users who got tool notifications
-        } else {
-          console.log(`No email found for technician: ${technicianName}`);
-        }
-      }
-
-      // Filter admin emails: exclude admins who have tools OUT (they already got user email)
-      const adminEmailsForSummary = allAdminEmails
-        .filter(admin => !usersWithOutTools.has(admin.email))
-        .map(admin => admin.email);
-
-      console.log(`Found ${allAdminEmails.length} total administrator(s)`);
-      console.log(`Sending summary to ${adminEmailsForSummary.length} administrator(s) (excluding those with OUT tools)`);
-
-      // Send summary email to administrators (excluding those who have OUT tools)
-      if (adminEmailsForSummary.length > 0) {
-        emailPromises.push(sendAdminSummaryEmail(
+        await sendAdminSummaryEmail(
           transporter,
           emailFrom,
-          adminEmailsForSummary,
-          outTools,
+          adminEmails,
+          [],
           emailSubjectAdmin,
           emailBodyAdmin,
           adminTableColumns,
           tableHeaderColor
-        ));
+        );
+      } catch (error) {
+        console.error('Error sending admin summary email:', error);
       }
+    }
+    return { status: 'no-out-tools' };
+  }
 
-      // Wait for all emails to be sent
-      await Promise.all(emailPromises);
+  const outTools = [];
+  const userToolsMap = new Map(); // Map of user email -> array of tools
 
-      console.log('Daily tool notification emails sent successfully!');
-      return null;
-    } catch (error) {
-      console.error('Error sending daily tool notifications:', error);
-      throw error;
+  outToolsSnapshot.forEach(doc => {
+    const tool = {
+      id: doc.id,
+      ...doc.data(),
+    };
+    outTools.push(tool);
+
+    // Get technician email (user who has the tool)
+    const technician = tool.technician || '';
+    if (technician) {
+      if (!userToolsMap.has(technician)) {
+        userToolsMap.set(technician, []);
+      }
+      userToolsMap.get(technician).push(tool);
     }
   });
+
+  console.log(`Found ${outTools.length} tools with OUT status`);
+  console.log(`Found ${userToolsMap.size} unique users with OUT tools`);
+
+  // Get user emails and admin emails from technicians collection
+  const techniciansSnapshot = await admin.firestore()
+    .collection('technicians')
+    .get();
+
+  const technicianEmailMap = new Map();
+  const allAdminEmails = [];
+  
+  techniciansSnapshot.forEach(doc => {
+    const techData = doc.data();
+    const fullName = techData.fullName || '';
+    const email = techData.email || '';
+    const isAdmin = techData.isAdmin || false;
+    
+    if (fullName && email) {
+      technicianEmailMap.set(fullName, email);
+      
+      // Collect all admin emails
+      if (isAdmin) {
+        allAdminEmails.push({ email, fullName });
+      }
+    }
+  });
+
+  // Send emails to users with OUT tools
+  const emailPromises = [];
+  const usersWithOutTools = new Set();
+  
+  for (const [technicianName, tools] of userToolsMap.entries()) {
+    const userEmail = technicianEmailMap.get(technicianName);
+    if (userEmail) {
+      emailPromises.push(sendUserNotificationEmail(
+        transporter,
+        emailFrom,
+        userEmail,
+        technicianName,
+        tools,
+        emailSubjectUser,
+        emailBodyUser,
+        userTableColumns,
+        tableHeaderColor
+      ));
+      usersWithOutTools.add(userEmail); // Track users who got tool notifications
+    } else {
+      console.log(`No email found for technician: ${technicianName}`);
+    }
+  }
+
+  // Filter admin emails: exclude admins who have tools OUT (they already got user email)
+  const adminEmailsForSummary = allAdminEmails
+    .filter(admin => !usersWithOutTools.has(admin.email))
+    .map(admin => admin.email);
+
+  console.log(`Found ${allAdminEmails.length} total administrator(s)`);
+  console.log(`Sending summary to ${adminEmailsForSummary.length} administrator(s) (excluding those with OUT tools)`);
+
+  // Send summary email to administrators (excluding those who have OUT tools)
+  if (adminEmailsForSummary.length > 0) {
+    emailPromises.push(sendAdminSummaryEmail(
+      transporter,
+      emailFrom,
+      adminEmailsForSummary,
+      outTools,
+      emailSubjectAdmin,
+      emailBodyAdmin,
+      adminTableColumns,
+      tableHeaderColor
+    ));
+  }
+
+  // Wait for all emails to be sent
+  await Promise.all(emailPromises);
+
+  console.log('Daily tool notification emails sent successfully!');
+  return { status: 'sent', usersNotified: userToolsMap.size, adminsNotified: adminEmailsForSummary.length };
+}
+
+exports.sendDailyToolNotifications = functions.https.onRequest(async (req, res) => {
+  try {
+    const result = await processDailyToolNotifications('https');
+    res.status(200).json({
+      success: true,
+      result
+    });
+  } catch (error) {
+    console.error('Error sending daily tool notifications:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
 
 /**
  * Send email notification to a user about their OUT tools
@@ -300,7 +322,6 @@ async function sendUserNotificationEmail(transporter, emailFrom, userEmail, user
   if (tableColumns.partNumber) headers.push('<th style="background-color: ' + headerColor + '; color: white; padding: 12px; text-align: left;">Part Number</th>');
   if (tableColumns.checkoutDate) headers.push('<th style="background-color: ' + headerColor + '; color: white; padding: 12px; text-align: left;">Checkout Date</th>');
   if (tableColumns.location) headers.push('<th style="background-color: ' + headerColor + '; color: white; padding: 12px; text-align: left;">Location</th>');
-  if (tableColumns.owner) headers.push('<th style="background-color: ' + headerColor + '; color: white; padding: 12px; text-align: left;">Owner</th>');
   if (tableColumns.calDueDate) headers.push('<th style="background-color: ' + headerColor + '; color: white; padding: 12px; text-align: left;">Cal Due Date</th>');
   
   const toolList = tools.map(tool => {
@@ -310,7 +331,6 @@ async function sendUserNotificationEmail(transporter, emailFrom, userEmail, user
       ? tool.timestamp.toDate().toLocaleDateString() 
       : 'N/A';
     const location = tool.location || 'N/A';
-    const owner = tool.owner || 'N/A';
     const calDueDate = tool.calDueDate?.toDate 
       ? tool.calDueDate.toDate().toLocaleDateString() 
       : (tool.calDueDate || 'N/A');
@@ -320,7 +340,6 @@ async function sendUserNotificationEmail(transporter, emailFrom, userEmail, user
     if (tableColumns.partNumber) cells.push(`<td style="padding: 8px; border-bottom: 1px solid #ddd;">${partNumber}</td>`);
     if (tableColumns.checkoutDate) cells.push(`<td style="padding: 8px; border-bottom: 1px solid #ddd;">${checkoutDate}</td>`);
     if (tableColumns.location) cells.push(`<td style="padding: 8px; border-bottom: 1px solid #ddd;">${location}</td>`);
-    if (tableColumns.owner) cells.push(`<td style="padding: 8px; border-bottom: 1px solid #ddd;">${owner}</td>`);
     if (tableColumns.calDueDate) cells.push(`<td style="padding: 8px; border-bottom: 1px solid #ddd;">${calDueDate}</td>`);
     
     return `<tr>${cells.join('')}</tr>`;
