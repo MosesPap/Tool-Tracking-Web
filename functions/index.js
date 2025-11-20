@@ -138,14 +138,17 @@ async function processDailyToolNotifications(triggerSource = 'http') {
   const notificationMinute = parseInt(minutes);
 
   // Only send if current time matches (within tolerance window)
+  const formattedNotificationTime = `${String(notificationHour).padStart(2, '0')}:${String(notificationMinute).padStart(2, '0')}`;
+  const formattedCurrentTime = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
+
   if (currentHour !== notificationHour) {
-    console.log(`Scheduled hour is ${notificationHour}, current hour is ${currentHour}. Skipping.`);
+    console.log(`Scheduled time is ${formattedNotificationTime}, current time is ${formattedCurrentTime}. Hours don't match. Skipping.`);
     return { status: 'skipped-hour' };
   }
 
   const minuteDifference = Math.abs(currentMinute - notificationMinute);
   if (minuteDifference > emailToleranceWindow) {
-    console.log(`Scheduled time is ${emailNotificationTime}, current time is ${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}. Difference ${minuteDifference} minute(s) exceeds tolerance (${emailToleranceWindow}). Skipping.`);
+    console.log(`Scheduled time is ${formattedNotificationTime}, current time is ${formattedCurrentTime}. Difference ${minuteDifference} minute(s) exceeds tolerance (${emailToleranceWindow}). Skipping.`);
     return { status: 'skipped-minute', minuteDifference };
   }
 
