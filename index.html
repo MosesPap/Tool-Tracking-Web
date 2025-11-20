@@ -3282,6 +3282,9 @@ if (!userCredential.user.emailVerified) {
                 const pendingDocs = await db.collection('pendingRegistrations')
                     .where('createdAt', '<', cutoffTime)
                     .get();
+
+                const currentToolDoc = await db.collection('tools').doc(toolId).get();
+                const currentToolPhotoUrls = currentToolDoc.exists ? (currentToolDoc.data().photoUrls || []) : [];
                 
                 const batch = db.batch();
                 
@@ -4902,7 +4905,7 @@ if (!userCredential.user.emailVerified) {
             document.getElementById('searchResultsContainer').style.display = 'none';
             document.getElementById('selectedToolDetails').style.display = 'none';
         }
-        
+
         // Show tool details for the code in the input field, even if not submitted
         async function showLastScannedToolDetails() {
             const code = document.getElementById('toolCode').value.trim();
@@ -5916,25 +5919,25 @@ if (!userCredential.user.emailVerified) {
                     
                     splashVideo.addEventListener('canplaythrough', () => {
                         if (!videoEventsLogged.canplaythrough) {
-                            console.log('Video can play through');
+                        console.log('Video can play through');
                             videoEventsLogged.canplaythrough = true;
                         }
                     });
                     splashVideo.addEventListener('canplay', () => {
                         if (!videoEventsLogged.canplay) {
-                            console.log('Video can play');
+                        console.log('Video can play');
                             videoEventsLogged.canplay = true;
                         }
                     });
                     splashVideo.addEventListener('loadeddata', () => {
                         if (!videoEventsLogged.loadeddata) {
-                            console.log('Video loaded data');
+                        console.log('Video loaded data');
                             videoEventsLogged.loadeddata = true;
                         }
                     });
                     splashVideo.addEventListener('loadstart', () => {
                         if (!videoEventsLogged.loadstart) {
-                            console.log('Video load started');
+                        console.log('Video load started');
                             videoEventsLogged.loadstart = true;
                         }
                     });
@@ -9212,27 +9215,27 @@ if (!userCredential.user.emailVerified) {
                             const shouldAddToAll = photoUploadToAllTools && currentPhotoUploadToolId === toolId && currentPhotoUploadPartNumber === partNumber;
                             
                             if (shouldAddToAll) {
-                                // Find all tools with the same part number and add the same photo
-                                const toolsWithSamePart = await db.collection('tools')
-                                    .where('partNumber', '==', partNumber)
-                                    .get();
-                                
-                                const updatePromises = toolsWithSamePart.docs.map(async (doc) => {
-                                    if (doc.id !== toolId) { // Don't update the original tool again
-                                        const existingPhotoUrls = doc.data().photoUrls || [];
-                                        const updatedPhotoUrls = [...existingPhotoUrls, downloadURL];
-                                        await doc.ref.update({
-                                            photoUrls: updatedPhotoUrls
-                                        });
-                                        console.log('Updated tool', doc.id, 'with same photo');
-                                    }
-                                });
-                                
-                                await Promise.all(updatePromises);
-                                
-                                console.log('=== PHOTO UPLOAD COMPLETED ===');
-                                loadingModal.hide();
-                                alert('Photo uploaded successfully! Added to ' + (toolsWithSamePart.docs.length) + ' tools with the same part number.');
+                            // Find all tools with the same part number and add the same photo
+                            const toolsWithSamePart = await db.collection('tools')
+                                .where('partNumber', '==', partNumber)
+                                .get();
+                            
+                            const updatePromises = toolsWithSamePart.docs.map(async (doc) => {
+                                if (doc.id !== toolId) { // Don't update the original tool again
+                                    const existingPhotoUrls = doc.data().photoUrls || [];
+                                    const updatedPhotoUrls = [...existingPhotoUrls, downloadURL];
+                                    await doc.ref.update({
+                                        photoUrls: updatedPhotoUrls
+                                    });
+                                    console.log('Updated tool', doc.id, 'with same photo');
+                                }
+                            });
+                            
+                            await Promise.all(updatePromises);
+                            
+                            console.log('=== PHOTO UPLOAD COMPLETED ===');
+                            loadingModal.hide();
+                            alert('Photo uploaded successfully! Added to ' + (toolsWithSamePart.docs.length) + ' tools with the same part number.');
                             } else if (photoUploadAutoShareTargets.length > 0) {
                                 const sharePromises = photoUploadAutoShareTargets.map(async (target) => {
                                     const existingPhotoUrls = target.photoUrls || [];
@@ -9423,7 +9426,7 @@ if (!userCredential.user.emailVerified) {
                     const allPhotoUrls = [];
                     toolsWithPhotos.forEach(tool => {
                         tool.photoUrls.forEach(url => {
-                            if (!allPhotoUrls.includes(url)) {
+                            if (!allPhotoUrls.includes(url) && !currentToolPhotoUrls.includes(url)) {
                                 allPhotoUrls.push(url);
                             }
                         });
@@ -9446,13 +9449,13 @@ if (!userCredential.user.emailVerified) {
                                      onmouseover="this.style.transform='scale(1.05)';"
                                      onmouseout="if(!this.classList.contains('selected')) { this.style.transform='scale(1)'; }"
                                      title="Click to select/deselect">
-                                <div class="photo-selected-indicator" style="display: none; position: absolute; top: -5px; right: -5px; background: #4CAF50; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                                <div class="photo-selected-indicator" style="display: none; position: absolute; top: -5px; right: -5px; background: #4CAF50; color: white; border-radius: 50%; width: 24px; height: 24px; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
                                     <i class="fas fa-check"></i>
                                 </div>
                             </div>`
                         ).join('');
                     } else {
-                        thumbnailsHTML = '<div style="color: #999; font-style: italic;">No photos found</div>';
+                        thumbnailsHTML = '<div style="color: #999; font-style: italic;">No new shared photos available (your tool already has all of them).</div>';
                     }
 
                     // Show choice modal
@@ -9474,7 +9477,8 @@ if (!userCredential.user.emailVerified) {
                         partNumber: partNumber,
                         toolsWithSamePart: toolsWithSamePart,
                         toolsWithPhotos: toolsWithPhotos,
-                        allPhotoUrls: allPhotoUrls
+                        allPhotoUrls: allPhotoUrls,
+                        currentToolPhotoUrls: currentToolPhotoUrls
                     };
 
                     if (addSelectedMyBtn) {
