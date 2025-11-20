@@ -3206,8 +3206,11 @@ if (!userCredential.user.emailVerified) {
             const alertBox = document.getElementById('loginAlert');
             alertBox.classList.add('d-none');
             try {
-                // Create Google Auth Provider
+                // Create Google Auth Provider and force account selection every time
                 const provider = new firebase.auth.GoogleAuthProvider();
+                provider.setCustomParameters({
+                    prompt: 'select_account'
+                });
                 // Sign in with Google
                 const result = await auth.signInWithPopup(provider);
                 const user = result.user;
