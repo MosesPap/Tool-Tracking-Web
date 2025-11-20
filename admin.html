@@ -1236,14 +1236,18 @@
                                         
                                         <div class="alert alert-info" role="alert">
                                             <i class="fas fa-info-circle"></i> 
-                                            <strong>How to update Google Cloud Scheduler:</strong>
+                                            <strong>How to point Google Cloud Scheduler to the new HTTP function:</strong>
                                             <ol style="margin-top: 10px; margin-bottom: 0; padding-left: 20px;">
                                                 <li>Go to <a href="https://console.cloud.google.com/cloudscheduler" target="_blank">Google Cloud Scheduler</a></li>
-                                                <li>Find: <code>firebase-schedule-sendDailyToolNotifications-us-central1</code></li>
-                                                <li>Click "Edit"</li>
-                                                <li>Update the "Frequency" field with the cron expression shown above</li>
-                                                <li>Click "Update"</li>
+                                                <li>Create (or edit) a job for email notifications</li>
+                                                <li>Set <strong>Target type</strong> to <strong>HTTP</strong> and use:<br><code>https://us-central1-tool-tracking-system-15e84.cloudfunctions.net/sendDailyToolNotifications</code></li>
+                                                <li>Choose <strong>POST</strong> (empty body) and enable <strong>OIDC authentication</strong> using the App Engine default service account (<code>tool-tracking-system-15e84@appspot.gserviceaccount.com</code>)</li>
+                                                <li>Set the <strong>Frequency</strong> cron expression (e.g., <code>* * * * *</code>) and <strong>Timezone</strong> to Asia/Nicosia or Eastern European Time</li>
+                                                <li>Save the job. Future Firebase deployments will not overwrite this schedule.</li>
                                             </ol>
+                                            <p class="mt-3 mb-0" style="font-size: 0.9rem;">
+                                                Tip: Keep the scheduler frequency at "Every minute" for best accuracy. The setting you choose above still controls how often the function actually runs, even if the scheduler triggers more often.
+                                            </p>
                                         </div>
                                         
                                         <button class="btn btn-primary" id="updateEmailFrequencyBtn">
