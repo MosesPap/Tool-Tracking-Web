@@ -1225,6 +1225,7 @@
                                                 <option value="0 */2 * * *">Every 2 hours</option>
                                                 <option value="0 */6 * * *">Every 6 hours</option>
                                                 <option value="0 9 * * *">Once daily at 9:00 AM</option>
+                                                <option value="custom">Custom schedule (choose days/time below)</option>
                                             </select>
                                             <small class="text-muted">
                                                 This controls how often the Cloud Function runs to check if it's time to send emails.
@@ -1232,6 +1233,56 @@
                                                 <strong>Note:</strong> The actual schedule is managed by Google Cloud Scheduler. 
                                                 After updating here, you'll need to update it in Google Cloud Console.
                                             </small>
+                                        </div>
+
+                                        <div id="customScheduleContainer" class="mt-3" style="display:none;">
+                                            <div class="card border-primary">
+                                                <div class="card-body">
+                                                    <h6 class="card-title"><i class="fas fa-calendar-alt me-2"></i>Custom schedule</h6>
+                                                    <p class="text-muted mb-2">Select the days of the week and the exact time (Asia/Nicosia) when the system should run. We'll convert it to the correct cron expression automatically.</p>
+                                                    
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Days of the week</label>
+                                                        <div class="d-flex flex-wrap gap-2">
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input custom-day-checkbox" type="checkbox" id="daySun" value="0">
+                                                                <label class="form-check-label" for="daySun">Sun</label>
+                                                            </div>
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input custom-day-checkbox" type="checkbox" id="dayMon" value="1">
+                                                                <label class="form-check-label" for="dayMon">Mon</label>
+                                                            </div>
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input custom-day-checkbox" type="checkbox" id="dayTue" value="2">
+                                                                <label class="form-check-label" for="dayTue">Tue</label>
+                                                            </div>
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input custom-day-checkbox" type="checkbox" id="dayWed" value="3">
+                                                                <label class="form-check-label" for="dayWed">Wed</label>
+                                                            </div>
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input custom-day-checkbox" type="checkbox" id="dayThu" value="4">
+                                                                <label class="form-check-label" for="dayThu">Thu</label>
+                                                            </div>
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input custom-day-checkbox" type="checkbox" id="dayFri" value="5">
+                                                                <label class="form-check-label" for="dayFri">Fri</label>
+                                                            </div>
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input custom-day-checkbox" type="checkbox" id="daySat" value="6">
+                                                                <label class="form-check-label" for="daySat">Sat</label>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="mb-3">
+                                                        <label for="customScheduleTime" class="form-label">Run at time</label>
+                                                        <input type="time" class="form-control" id="customScheduleTime" value="09:00">
+                                                    </div>
+
+                                                    <div class="alert alert-secondary mb-0" id="customScheduleSummary" style="display:none;"></div>
+                                                </div>
+                                            </div>
                                         </div>
                                         
                                         <div class="alert alert-info" role="alert">
@@ -2039,6 +2090,109 @@
             loadAnalytics();
         }
 
+        // Custom schedule helpers for email frequency
+        const emailCheckFrequencySelect = document.getElementById('emailCheckFrequency');
+        const customScheduleContainer = document.getElementById('customScheduleContainer');
+        const customScheduleTimeInput = document.getElementById('customScheduleTime');
+        const customScheduleSummary = document.getElementById('customScheduleSummary');
+        const customDayCheckboxes = document.querySelectorAll('.custom-day-checkbox');
+
+        function padNumber(num) {
+            return String(num).padStart(2, '0');
+        }
+
+        function toggleCustomSchedule(show) {
+            if (customScheduleContainer) {
+                customScheduleContainer.style.display = show ? 'block' : 'none';
+            }
+            if (!show && customScheduleSummary) {
+                customScheduleSummary.style.display = 'none';
+            }
+        }
+
+        function updateCustomScheduleSummary() {
+            if (!customScheduleSummary) return;
+            const selectedDays = Array.from(customDayCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.nextElementSibling ? cb.nextElementSibling.textContent : cb.value);
+            const timeValue = customScheduleTimeInput?.value || '';
+
+            if (selectedDays.length === 0 || !timeValue) {
+                customScheduleSummary.style.display = 'none';
+                return;
+            }
+
+            customScheduleSummary.style.display = 'block';
+            customScheduleSummary.textContent = `Will run on ${selectedDays.join(', ')} at ${timeValue} (Asia/Nicosia)`;
+        }
+
+        customDayCheckboxes.forEach(cb => cb.addEventListener('change', updateCustomScheduleSummary));
+        if (customScheduleTimeInput) {
+            customScheduleTimeInput.addEventListener('input', updateCustomScheduleSummary);
+        }
+
+        if (emailCheckFrequencySelect) {
+            emailCheckFrequencySelect.addEventListener('change', () => {
+                const isCustom = emailCheckFrequencySelect.value === 'custom';
+                toggleCustomSchedule(isCustom);
+                if (isCustom) {
+                    updateCustomScheduleSummary();
+                }
+            });
+        }
+
+        function parseCustomCron(cronExpression) {
+            if (!cronExpression) return null;
+            const parts = cronExpression.trim().split(/\s+/);
+            if (parts.length !== 5) return null;
+            const [minute, hour, , , dayOfWeek] = parts;
+            return { minute, hour, dayOfWeek };
+        }
+
+        function setCustomFieldsFromCron(cronExpression) {
+            const parsed = parseCustomCron(cronExpression);
+            if (!parsed || !customScheduleTimeInput) return;
+
+            const hour = padNumber(parsed.hour);
+            const minute = padNumber(parsed.minute);
+            customScheduleTimeInput.value = `${hour}:${minute}`;
+
+            const dayValues = parsed.dayOfWeek === '*' ? ['0','1','2','3','4','5','6'] : parsed.dayOfWeek.split(',');
+            customDayCheckboxes.forEach(cb => {
+                cb.checked = dayValues.includes(cb.value);
+            });
+            updateCustomScheduleSummary();
+        }
+
+        function buildCronFromCustomFields() {
+            if (!customScheduleTimeInput) return null;
+            const timeValue = customScheduleTimeInput.value;
+            const selectedDays = Array.from(customDayCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+
+            if (!timeValue) {
+                alert('Please select a time for the custom schedule.');
+                return null;
+            }
+
+            if (selectedDays.length === 0) {
+                alert('Please select at least one day for the custom schedule.');
+                return null;
+            }
+
+            const [hours, minutes] = timeValue.split(':');
+            const dayPart = selectedDays.length === 7 ? '*' : selectedDays.join(',');
+            return `${parseInt(minutes, 10)} ${parseInt(hours, 10)} * * ${dayPart}`;
+        }
+
+        function isPresetFrequency(value) {
+            if (!emailCheckFrequencySelect) return false;
+            return Array.from(emailCheckFrequencySelect.options)
+                .filter(option => option.value !== 'custom')
+                .some(option => option.value === value);
+        }
+
         // Load Statistics
         async function loadStatistics() {
             try {
@@ -2088,8 +2242,17 @@
                     }
                     
                     // Load email check frequency
-                    if (data.emailCheckFrequency) {
-                        document.getElementById('emailCheckFrequency').value = data.emailCheckFrequency;
+                    const frequencySelect = document.getElementById('emailCheckFrequency');
+                    const savedFrequency = data.emailCheckFrequency || '* * * * *';
+                    if (frequencySelect) {
+                        if (isPresetFrequency(savedFrequency)) {
+                            frequencySelect.value = savedFrequency;
+                            toggleCustomSchedule(false);
+                        } else {
+                            frequencySelect.value = 'custom';
+                            toggleCustomSchedule(true);
+                            setCustomFieldsFromCron(savedFrequency);
+                        }
                     }
                     
                     // Load email configuration
@@ -2270,20 +2433,28 @@
         const updateEmailFrequencyBtn = document.getElementById('updateEmailFrequencyBtn');
         if (updateEmailFrequencyBtn) {
             updateEmailFrequencyBtn.addEventListener('click', async () => {
-                const emailCheckFrequency = document.getElementById('emailCheckFrequency').value;
-                
-                if (!emailCheckFrequency) {
-                    alert('Please select a frequency');
+                if (!emailCheckFrequencySelect) {
+                    alert('Frequency selector not found');
                     return;
+                }
+
+                let frequencyValue = emailCheckFrequencySelect.value;
+
+                if (frequencyValue === 'custom') {
+                    const cronExpression = buildCronFromCustomFields();
+                    if (!cronExpression) {
+                        return;
+                    }
+                    frequencyValue = cronExpression;
                 }
 
                 try {
                     await db.collection('settings').doc('admin').set({
-                        emailCheckFrequency: emailCheckFrequency,
+                        emailCheckFrequency: frequencyValue,
                         lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
                     }, { merge: true });
                     
-                    alert('✅ Email check frequency preference saved!\n\n⚠️ Remember to update Google Cloud Scheduler with the same frequency for the change to take effect.\n\nSee instructions in the info box below.');
+                    alert('✅ Email check frequency updated!\n\nYour Cloud Scheduler job should continue pointing to the HTTP function. The function now uses this preference to decide when to send notifications.');
                 } catch (error) {
                     console.error('Error updating email check frequency:', error);
                     alert('Failed to update email check frequency: ' + error.message);
