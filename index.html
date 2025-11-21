@@ -2312,14 +2312,8 @@
                                                 <div id="bulkScanList"></div>
                                             </div>
                                             <div class="card-footer" style="display: flex; gap: 10px; justify-content: space-between;">
-                                                <button id="bulkCheckInBtn" onclick="processBulkCheckIn()" class="btn btn-success" style="flex: 1;" disabled>
-                                                    <i class="fas fa-check-circle"></i> Check In All
-                                                </button>
-                                                <button id="bulkCheckOutBtn" onclick="processBulkCheckOut()" class="btn btn-danger" style="flex: 1;" disabled>
-                                                    <i class="fas fa-sign-out-alt"></i> Check Out All
-                                                </button>
-                                                <button onclick="clearBulkScanList()" class="btn btn-secondary" style="flex: 0 0 auto;">
-                                                    <i class="fas fa-trash"></i>
+                                                <button onclick="clearBulkScanList()" class="btn btn-secondary" style="margin-left: auto;">
+                                                    <i class="fas fa-trash"></i> Clear History
                                                 </button>
                                             </div>
                                         </div>
@@ -3899,7 +3893,8 @@ if (!userCredential.user.emailVerified) {
 
     // Check if bulk scan mode is enabled
     if (bulkScanMode) {
-        await addToBulkScanList(code);
+        // Process immediately and add to history list
+        await processToolInBulkMode(code);
         document.getElementById('toolCode').value = ''; // Clear input for next scan
         return;
     }
@@ -3937,44 +3932,136 @@ if (!userCredential.user.emailVerified) {
             }
         }
         
-        async function addToBulkScanList(code) {
-            // Check if already in list
-            if (bulkScannedTools.some(t => t.code === code)) {
-                // Show brief feedback
-                const toolCodeInput = document.getElementById('toolCode');
-                toolCodeInput.style.border = '2px solid #ff9800';
-                setTimeout(() => {
-                    toolCodeInput.style.border = '';
-                }, 500);
-                return;
-            }
-            
+        async function processToolInBulkMode(code) {
             try {
+                const user = auth.currentUser;
+                if (!user) {
+                    alert('Not authenticated');
+                    return;
+                }
+                
+                // Check if already processed in this session
+                if (bulkScannedTools.some(t => t.code === code)) {
+                    // Show brief feedback
+                    const toolCodeInput = document.getElementById('toolCode');
+                    toolCodeInput.style.border = '2px solid #ff9800';
+                    setTimeout(() => {
+                        toolCodeInput.style.border = '';
+                    }, 500);
+                    return;
+                }
+                
                 const toolRef = db.collection('tools').doc(code);
                 const doc = await toolRef.get();
                 
-                if (doc.exists) {
-                    const data = doc.data();
-                    bulkScannedTools.push({
-                        code: code,
-                        toolName: data.toolName || 'Unknown',
-                        partNumber: data.partNumber || code,
-                        status: data.status || 'IN',
-                        data: data
-                    });
-                    updateBulkScanList();
-                    
-                    // Visual feedback
-                    const toolCodeInput = document.getElementById('toolCode');
-                    toolCodeInput.style.border = '2px solid #4CAF50';
-                    setTimeout(() => {
-                        toolCodeInput.style.border = '';
-                    }, 300);
-                } else {
+                if (!doc.exists) {
                     alert('Tool not found: ' + code);
+                    return;
                 }
+                
+                const data = doc.data();
+                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+                
+                // Validation checks (same as normal mode)
+                if (data.status === 'OUT' && data.technician !== technicianName) {
+                    alert(`Tool checked out by ${data.technician}`);
+                    return;
+                }
+                
+                // Prevent returning previous OUT tools
+                if (data.status === 'OUT' && data.timestamp && data.timestamp.toDate) {
+                    const toolDate = data.timestamp.toDate();
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    if (toolDate < today) {
+                        alert('This tool was checked out on a previous day and cannot be returned.');
+                        return;
+                    }
+                }
+                
+                // Determine new status (toggle)
+                const newStatus = data.status === 'OUT' ? 'IN' : 'OUT';
+                
+                // Check cooldown for check-in
+                if (newStatus === 'IN' && data.status === 'OUT' && data.timestamp && data.timestamp.toDate) {
+                    const outTime = data.timestamp.toDate();
+                    const now = new Date();
+                    const diffMs = now - outTime;
+                    const settingsDoc = await db.collection('settings').doc('admin').get();
+                    let cooldownMinutes = 5;
+                    if (settingsDoc.exists && settingsDoc.data().CheckINCooldownMinutes) {
+                        cooldownMinutes = settingsDoc.data().CheckINCooldownMinutes;
+                    }
+                    const cooldownMs = cooldownMinutes * 60 * 1000;
+                    
+                    if (diffMs < cooldownMs) {
+                        const remainingMinutes = Math.ceil((cooldownMs - diffMs) / 60000);
+                        alert(`Cooldown: Wait ${remainingMinutes} more minute(s)`);
+                        return;
+                    }
+                }
+                
+                // Check if station is selected (required for checkout)
+                if (newStatus === 'OUT' && !selectedWorkLocation) {
+                    alert('Please select a Station first');
+                    return;
+                }
+                
+                // Update tool
+                const updateData = {
+                    status: newStatus,
+                    technician: technicianName,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                if (newStatus === 'OUT' && selectedWorkLocation) {
+                    updateData.WorkOn = selectedWorkLocation;
+                }
+                
+                await toolRef.update(updateData);
+                
+                // Log movement
+                const logData = {
+                    toolId: code,
+                    toolName: data.toolName || 'Unknown',
+                    partNumber: data.partNumber || code,
+                    location: data.location || '',
+                    status: newStatus,
+                    technician: technicianName,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                if (newStatus === 'OUT' && selectedWorkLocation) {
+                    logData.WorkOn = selectedWorkLocation;
+                }
+                
+                await db.collection('logtoolmovements').add(logData);
+                
+                // Add to history list (for reference)
+                bulkScannedTools.push({
+                    code: code,
+                    toolName: data.toolName || 'Unknown',
+                    partNumber: data.partNumber || code,
+                    oldStatus: data.status,
+                    newStatus: newStatus,
+                    timestamp: new Date()
+                });
+                
+                updateBulkScanList();
+                
+                // Visual feedback
+                const toolCodeInput = document.getElementById('toolCode');
+                toolCodeInput.style.border = '2px solid #4CAF50';
+                setTimeout(() => {
+                    toolCodeInput.style.border = '';
+                }, 300);
+                
+                // Refresh tools list
+                loadTools();
+                
             } catch (error) {
-                console.error('Error adding tool to bulk list:', error);
+                console.error('Error processing tool in bulk mode:', error);
                 alert('Error: ' + error.message);
             }
         }
@@ -3982,202 +4069,41 @@ if (!userCredential.user.emailVerified) {
         function updateBulkScanList() {
             const listDiv = document.getElementById('bulkScanList');
             const countSpan = document.getElementById('bulkScanCount');
-            const checkInBtn = document.getElementById('bulkCheckInBtn');
-            const checkOutBtn = document.getElementById('bulkCheckOutBtn');
             
             countSpan.textContent = bulkScannedTools.length;
             
             if (bulkScannedTools.length === 0) {
-                listDiv.innerHTML = '<p class="text-muted text-center mb-0">No tools scanned yet</p>';
-                checkInBtn.disabled = true;
-                checkOutBtn.disabled = true;
+                listDiv.innerHTML = '<p class="text-muted text-center mb-0">No tools processed yet</p>';
                 return;
             }
             
             listDiv.innerHTML = bulkScannedTools.map((tool, index) => {
-                const statusBadge = tool.status === 'OUT' 
-                    ? '<span class="badge bg-danger">OUT</span>' 
-                    : '<span class="badge bg-success">IN</span>';
+                const actionBadge = tool.newStatus === 'OUT' 
+                    ? '<span class="badge bg-danger">Checked OUT</span>' 
+                    : '<span class="badge bg-success">Checked IN</span>';
+                const timeStr = tool.timestamp.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 return `
                     <div class="d-flex justify-content-between align-items-center p-2 mb-2" style="border: 1px solid #ddd; border-radius: 6px; background: #f9f9f9;">
                         <div style="flex: 1;">
                             <div style="font-weight: bold;">${tool.toolName}</div>
                             <div style="font-size: 0.9rem; color: #666;">${tool.partNumber} (${tool.code})</div>
+                            <div style="font-size: 0.8rem; color: #999;">${timeStr}</div>
                         </div>
                         <div class="d-flex align-items-center gap-2">
-                            ${statusBadge}
-                            <button onclick="removeFromBulkList(${index})" class="btn btn-sm btn-outline-danger" style="padding: 2px 8px;">
-                                <i class="fas fa-times"></i>
-                            </button>
+                            ${actionBadge}
                         </div>
                     </div>
                 `;
             }).join('');
-            
-            // Enable buttons if we have tools
-            checkInBtn.disabled = false;
-            checkOutBtn.disabled = false;
-        }
-        
-        function removeFromBulkList(index) {
-            bulkScannedTools.splice(index, 1);
-            updateBulkScanList();
         }
         
         function clearBulkScanList() {
-            if (confirm('Clear all scanned tools?')) {
+            if (confirm('Clear processing history?')) {
                 bulkScannedTools = [];
                 updateBulkScanList();
             }
         }
         
-        async function processBulkCheckIn() {
-            if (!selectedWorkLocation) {
-                alert('Please select a Station first');
-                return;
-            }
-            
-            if (bulkScannedTools.length === 0) return;
-            
-            const user = auth.currentUser;
-            const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-            const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
-            
-            const toolsToCheckIn = bulkScannedTools.filter(t => t.status === 'OUT');
-            
-            if (toolsToCheckIn.length === 0) {
-                alert('No tools are currently OUT to check in');
-                return;
-            }
-            
-            if (!confirm(`Check in ${toolsToCheckIn.length} tool(s)?`)) return;
-            
-            let successCount = 0;
-            let errorCount = 0;
-            
-            for (const tool of toolsToCheckIn) {
-                try {
-                    const toolRef = db.collection('tools').doc(tool.code);
-                    const doc = await toolRef.get();
-                    
-                    if (doc.exists) {
-                        const data = doc.data();
-                        // Check cooldown
-                        if (data.status === 'OUT' && data.timestamp && data.timestamp.toDate) {
-                            const outTime = data.timestamp.toDate();
-                            const now = new Date();
-                            const diffMs = now - outTime;
-                            const settingsDoc = await db.collection('settings').doc('admin').get();
-                            let cooldownMinutes = 5;
-                            if (settingsDoc.exists && settingsDoc.data().CheckINCooldownMinutes) {
-                                cooldownMinutes = settingsDoc.data().CheckINCooldownMinutes;
-                            }
-                            const cooldownMs = cooldownMinutes * 60 * 1000;
-                            
-                            if (diffMs < cooldownMs) {
-                                errorCount++;
-                                continue;
-                            }
-                        }
-                        
-                        await toolRef.update({
-                            status: 'IN',
-                            technician: technicianName,
-                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                        
-                        await db.collection('logtoolmovements').add({
-                            toolId: tool.code,
-                            toolName: tool.toolName,
-                            partNumber: tool.partNumber,
-                            location: tool.data.location || '',
-                            status: 'IN',
-                            technician: technicianName,
-                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                        
-                        successCount++;
-                    }
-                } catch (error) {
-                    console.error('Error checking in tool:', tool.code, error);
-                    errorCount++;
-                }
-            }
-            
-            alert(`Checked in: ${successCount}\nErrors: ${errorCount}`);
-            bulkScannedTools = [];
-            updateBulkScanList();
-            loadTools();
-        }
-        
-        async function processBulkCheckOut() {
-            if (!selectedWorkLocation) {
-                alert('Please select a Station first');
-                return;
-            }
-            
-            if (bulkScannedTools.length === 0) return;
-            
-            const user = auth.currentUser;
-            const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-            const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
-            
-            const toolsToCheckOut = bulkScannedTools.filter(t => t.status === 'IN');
-            
-            if (toolsToCheckOut.length === 0) {
-                alert('No tools are currently IN to check out');
-                return;
-            }
-            
-            if (!confirm(`Check out ${toolsToCheckOut.length} tool(s) to ${selectedWorkLocation}?`)) return;
-            
-            let successCount = 0;
-            let errorCount = 0;
-            
-            for (const tool of toolsToCheckOut) {
-                try {
-                    const toolRef = db.collection('tools').doc(tool.code);
-                    const doc = await toolRef.get();
-                    
-                    if (doc.exists) {
-                        const data = doc.data();
-                        // Check if already checked out by someone else
-                        if (data.status === 'OUT' && data.technician !== technicianName) {
-                            errorCount++;
-                            continue;
-                        }
-                        
-                        await toolRef.update({
-                            status: 'OUT',
-                            technician: technicianName,
-                            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                            WorkOn: selectedWorkLocation
-                        });
-                        
-                        await db.collection('logtoolmovements').add({
-                            toolId: tool.code,
-                            toolName: tool.toolName,
-                            partNumber: tool.partNumber,
-                            location: tool.data.location || '',
-                            status: 'OUT',
-                            technician: technicianName,
-                            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                            WorkOn: selectedWorkLocation
-                        });
-                        
-                        successCount++;
-                    }
-                } catch (error) {
-                    console.error('Error checking out tool:', tool.code, error);
-                    errorCount++;
-                }
-            }
-            
-            alert(`Checked out: ${successCount}\nErrors: ${errorCount}`);
-            bulkScannedTools = [];
-            updateBulkScanList();
-            loadTools();
-        }
 
         // Function to handle tool submission after location selection
         async function processToolSubmission(code) {
