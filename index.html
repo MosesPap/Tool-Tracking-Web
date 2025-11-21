@@ -14,6 +14,20 @@
     <meta name="theme-color" content="#FF9800">
     <link rel="apple-touch-icon" href="icons/icon-192x192.png">
     <style>
+        /* Reset body and html margins for full-width title bars */
+        body, html {
+            margin: 0;
+            padding: 0;
+        }
+        
+        /* Full-width title bar styles */
+        .full-width-title-bar {
+            width: 100vw !important;
+            margin-left: calc(50% - 50vw) !important;
+            margin-right: calc(50% - 50vw) !important;
+            margin-top: 0 !important;
+        }
+        
         /* Splash Screen Styles */
         #splashScreen {
             position: fixed;
@@ -2194,7 +2208,7 @@
         <!-- Main App Section -->
         <div id="appSection" style="display: none;">
             <!-- Orange Top Bar with Title -->
-            <div style="background: #FF9800; color: white; width: 100%; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
+            <div class="full-width-title-bar" style="background: #FF9800; color: white; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
                 <h2 style="margin: 0 0 0 20px; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px; padding-right: 160px;">Register Tools</h2>
                 <button id="backToMenuBtn" title="Back to Menu">
                     <i class="fas fa-arrow-left"></i> Back to Menu
@@ -2461,7 +2475,7 @@
     <!-- ToolScanner Menu Section -->
     <div id="toolScannerMenu" style="display:none;">
         <!-- Orange Top Bar with Title and Settings (now outside container) -->
-        <div style="background: #FF9800; color: white; width: 100vw; min-width: 100vw; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
+        <div class="full-width-title-bar" style="background: #FF9800; color: white; min-width: 100vw; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
             <h2 style="margin: 0 0 0 20px; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px;">ToolScanner Menu</h2>
             <button id="settingsBtn" class="btn btn-link p-0" style="position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-size: 2rem; color: white; z-index: 2;" title="Settings">
                 <i class="fas fa-cog" style="color: white;"></i>
