@@ -4088,7 +4088,7 @@ if (!userCredential.user.emailVerified) {
         }
         
         // Show bulk scan message (warning or success)
-        function showBulkScanMessage(message, isSuccess = false) {
+        function showBulkScanMessage(message, isSuccess = false, isCheckOut = false) {
             const messageDiv = document.getElementById('bulkScanMessage');
             if (!messageDiv) {
                 console.log('bulkScanMessage div not found');
@@ -4099,16 +4099,29 @@ if (!userCredential.user.emailVerified) {
             messageDiv.style.display = 'block';
             messageDiv.style.visibility = 'visible';
             messageDiv.style.opacity = '1';
-            messageDiv.textContent = message;
+            
+            // Set message with tick icon for success messages
+            if (isSuccess) {
+                messageDiv.innerHTML = `<i class="fas fa-check-circle" style="margin-right: 8px;"></i>${message}`;
+            } else {
+                messageDiv.textContent = message;
+            }
             
             if (isSuccess) {
-                messageDiv.style.background = '#4CAF50';
-                messageDiv.style.color = 'white';
-                messageDiv.style.border = '2px solid #45a049';
-                // Show for 1 second
+                // Green for check-in, red for check-out
+                if (isCheckOut) {
+                    messageDiv.style.background = '#f44336'; // Red
+                    messageDiv.style.color = 'white';
+                    messageDiv.style.border = '2px solid #d32f2f';
+                } else {
+                    messageDiv.style.background = '#4CAF50'; // Green
+                    messageDiv.style.color = 'white';
+                    messageDiv.style.border = '2px solid #45a049';
+                }
+                // Show for 2 seconds
                 setTimeout(() => {
                     messageDiv.style.display = 'none';
-                }, 1000);
+                }, 2000);
             } else {
                 messageDiv.style.background = '#ff9800';
                 messageDiv.style.color = 'white';
@@ -6251,9 +6264,7 @@ if (!userCredential.user.emailVerified) {
             myToolsScreenBody.innerHTML = '<div class="text-center">Loading...</div>';
 
             // Hide all other main screens
-            document.getElementById('toolScannerMenu').style.display = 'none';
-            document.getElementById('appSection').style.display = 'none';
-            document.getElementById('myToolsScreen').style.display = 'block';
+            navigateToScreen(SCREENS.MY_TOOLS);
 
             // Update collection photo button counts
             await updateCollectionPhotoButtonCounts();
@@ -6803,8 +6814,7 @@ if (!userCredential.user.emailVerified) {
         function showRegisterTools(skipModal = false) {
             if (skipModal) {
                 // If coming back from another screen, just refresh
-                document.getElementById('toolScannerMenu').style.display = 'none';
-                document.getElementById('appSection').style.display = 'block';
+                navigateToScreen(SCREENS.REGISTER);
                 refreshRegisterToolsScreen();
             } else {
             // Show location selection dialog first, before entering register tools screen
@@ -7016,8 +7026,7 @@ if (!userCredential.user.emailVerified) {
 
         function enterRegisterToolsScreen() {
             // Hide the menu and show the register tools screen
-            document.getElementById('toolScannerMenu').style.display = 'none';
-            document.getElementById('appSection').style.display = 'block';
+            navigateToScreen(SCREENS.REGISTER);
             
             // Refresh the screen
             refreshRegisterToolsScreen();
@@ -7026,14 +7035,116 @@ if (!userCredential.user.emailVerified) {
         // Track scanner controls box visibility state
         let scannerControlsVisible = true;
         
+        // Navigation history for back button support
+        let navigationHistory = [];
+        const SCREENS = {
+            MENU: 'toolScannerMenu',
+            REGISTER: 'appSection',
+            MY_TOOLS: 'myToolsScreen'
+        };
+        
+        // Track current screen
+        function getCurrentScreen() {
+            const menu = document.getElementById('toolScannerMenu');
+            const register = document.getElementById('appSection');
+            const myTools = document.getElementById('myToolsScreen');
+            
+            if (menu && menu.style.display !== 'none') return SCREENS.MENU;
+            if (register && register.style.display !== 'none') return SCREENS.REGISTER;
+            if (myTools && myTools.style.display !== 'none') return SCREENS.MY_TOOLS;
+            return SCREENS.MENU; // Default
+        }
+        
+        // Navigate to a screen and track history
+        function navigateToScreen(targetScreen, addToHistory = true) {
+            const currentScreen = getCurrentScreen();
+            
+            // Hide all screens
+            document.getElementById('toolScannerMenu').style.display = 'none';
+            document.getElementById('appSection').style.display = 'none';
+            document.getElementById('myToolsScreen').style.display = 'none';
+            
+            // Show target screen
+            document.getElementById(targetScreen).style.display = 'block';
+            
+            // Add to history if navigating forward (not going back)
+            if (addToHistory && currentScreen !== targetScreen) {
+                navigationHistory.push(currentScreen);
+                // Limit history to prevent memory issues
+                if (navigationHistory.length > 10) {
+                    navigationHistory.shift();
+                }
+            }
+        }
+        
+        // Go back to previous screen
+        function goBack() {
+            if (navigationHistory.length > 0) {
+                const previousScreen = navigationHistory.pop();
+                navigateToScreen(previousScreen, false);
+                
+                // Special handling for different screens
+                if (previousScreen === SCREENS.MENU) {
+                    updatePreviousOutToolsCount();
+                } else if (previousScreen === SCREENS.REGISTER) {
+                    refreshRegisterToolsScreen();
+                }
+                
+                // Stop camera if going back from register tools
+                if (getCurrentScreen() !== SCREENS.REGISTER) {
+                    stopCamera();
+                }
+                
+                return true; // Successfully went back
+            }
+            return false; // No history to go back to
+        }
+        
         // Toggle scanner controls box
         function toggleScannerControls() {
             const scannerBox = document.getElementById('scannerControlsBox');
             if (scannerBox) {
                 scannerControlsVisible = !scannerControlsVisible;
                 scannerBox.style.display = scannerControlsVisible ? 'block' : 'none';
+                
+                // If hiding the scanner box, stop the camera
+                if (!scannerControlsVisible) {
+                    stopCamera();
+                }
             }
         }
+        
+        // Handle browser back button and Android back button
+        window.addEventListener('popstate', function(event) {
+            // Go back in navigation history
+            if (!goBack()) {
+                // If no history, allow default browser behavior (go to previous page)
+                // This prevents getting stuck
+            }
+        });
+        
+        // Handle Android hardware back button (Cordova/PhoneGap)
+        document.addEventListener('backbutton', function(event) {
+            event.preventDefault();
+            if (!goBack()) {
+                // If no history, exit app (for mobile apps)
+                if (window.cordova || window.PhoneGap) {
+                    navigator.app.exitApp();
+                } else {
+                    // For web, go to login or close
+                    const loginSection = document.getElementById('loginSection');
+                    if (loginSection && loginSection.style.display !== 'none') {
+                        // Already at login, do nothing
+                    } else {
+                        // Go back to menu if at a screen
+                        navigateToScreen(SCREENS.MENU, false);
+                    }
+                }
+            }
+        }, false);
+        
+        // Also handle backspace key (for desktop browsers) - disabled to avoid conflicts
+        // Users can use browser back button or Alt+Left Arrow instead
         
         document.addEventListener('DOMContentLoaded', function() {
             // Set up automatic cleanup every 24 hours
@@ -7236,8 +7347,7 @@ if (!userCredential.user.emailVerified) {
         });
 
         document.getElementById('backToMenuBtn').onclick = function() {
-            document.getElementById('appSection').style.display = 'none';
-            document.getElementById('toolScannerMenu').style.display = 'block';
+            navigateToScreen(SCREENS.MENU);
             // Refresh the OUT tools count when returning to menu
             updatePreviousOutToolsCount();
         };
