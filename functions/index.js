@@ -7,9 +7,10 @@ admin.initializeApp();
 
 // Create email transporter function (reads from Firestore)
 function createTransporter(emailAccount, emailAppPassword) {
-  // Use Firestore settings if available, otherwise fall back to functions.config()
-  const user = emailAccount || functions.config().email?.user || process.env.EMAIL_USER;
-  const pass = emailAppPassword || functions.config().email?.password || process.env.EMAIL_PASSWORD;
+  // Use Firestore settings if available, otherwise fall back to environment variables
+  // Note: functions.config() is deprecated and will be removed in March 2026
+  const user = emailAccount || process.env.EMAIL_USER;
+  const pass = emailAppPassword || process.env.EMAIL_PASSWORD;
   
   if (!user || !pass) {
     throw new Error('Email configuration not found. Please configure email settings in Admin Settings.');
@@ -82,10 +83,10 @@ async function processDailyToolNotifications(triggerSource = 'http') {
     lastEmailCheckTime: admin.firestore.FieldValue.serverTimestamp()
   });
 
-  // Get email configuration from Firestore
+  // Get email configuration from Firestore (with fallback to environment variables)
   const emailAccount = settings.emailAccount;
   const emailAppPassword = settings.emailAppPassword;
-  const emailFrom = settings.emailFrom || 'noreply@tooltracking.com';
+  const emailFrom = settings.emailFrom || process.env.EMAIL_FROM || 'noreply@tooltracking.com';
   
   // Get email templates from Firestore (with defaults)
   const emailSubjectUser = settings.emailSubjectUser || 'Tool Tracking Reminder: {count} Tool(s) Checked Out';
