@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tools by Work Location - Tool Tracking System</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Shared CSS -->
+    <link rel="stylesheet" href="css/common.css">
+    
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- Tools by Work Location Screen -->
+    <div id="appSection">
+        <!-- Purple Title Bar -->
+        <div style="background: #9C27B0; color: white; padding: 1rem 0; width: 100%; position: relative;">
+            <div class="container">
+                <h2 style="color: white; font-weight: bold; font-size: 2rem; margin: 0; text-align: center;">Tools by Work Location</h2>
+            </div>
+        </div>
+        
+        <div class="container py-4">
+            <button id="backToMenuBtn" class="btn btn-outline-secondary mb-3" onclick="window.location.href='menu.html'">
+                <i class="fas fa-arrow-left"></i> Back to Menu
+            </button>
+            
+            <!-- Work Location Selection -->
+            <div id="workLocationSelectionDiv" class="card mb-4">
+                <div class="card-body">
+                    <h4 class="mb-3"><i class="fas fa-map-marker-alt"></i> Select Station</h4>
+                    <select id="workLocationSelect" class="form-select form-select-lg mb-3">
+                        <option value="">-- Select a Station --</option>
+                        <option value="ALL">All Locations</option>
+                    </select>
+                    <button id="loadToolsByLocationBtn" class="btn btn-primary btn-lg w-100" disabled>
+                        <i class="fas fa-search"></i> Load Tools
+                    </button>
+                </div>
+            </div>
+
+            <!-- Currently OUT Tools Section (hidden initially) -->
+            <div id="dateFilterSection" style="display: none;">
+                <!-- Currently OUT Tools Section -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="mb-3" style="color: #dc3545; font-weight: bold;">
+                            <i class="fas fa-exclamation-triangle"></i> Currently OUT Tools
+                        </h5>
+                        <div id="workLocationCurrentOutSummary" class="text-muted mb-2">
+                            <!-- Summary will be populated here -->
+                        </div>
+                        <div id="workLocationCurrentOutList" style="max-height: 400px; overflow-y: auto;">
+                            <!-- Currently OUT tools will be populated here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Date Filter Section -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="mb-3"><i class="fas fa-calendar"></i> Filter History by Date</h5>
+                        <div class="d-flex gap-2 flex-wrap mb-3">
+                            <button class="btn btn-sm btn-primary filter-date-btn" onclick="filterToolsByDate('today', this)">
+                                <i class="fas fa-calendar-day"></i> Today
+                            </button>
+                            <button class="btn btn-sm btn-primary filter-date-btn" onclick="filterToolsByDate('week', this)">
+                                <i class="fas fa-calendar-week"></i> Last Week
+                            </button>
+                            <button class="btn btn-sm btn-primary filter-date-btn" onclick="filterToolsByDate('month', this)">
+                                <i class="fas fa-calendar-alt"></i> Last Month
+                            </button>
+                            <button class="btn btn-sm btn-primary filter-date-btn active" onclick="filterToolsByDate('all', this)">
+                                <i class="fas fa-infinity"></i> All Time
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tool History Section -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="mb-3" style="color: #667eea; font-weight: bold;">
+                            <i class="fas fa-history"></i> Tool Usage History
+                        </h5>
+                        <div id="workLocationHistoryList" style="max-height: 500px; overflow-y: auto;">
+                            <!-- Tool history will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js"></script>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Shared JS Files -->
+    <script src="js/firebase-config.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/navigation.js"></script>
+    
+    <!-- Tools by Location Specific JS -->
+    <script src="js/tools-by-location.js"></script>
+    
+    <script>
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check authentication
+            auth.onAuthStateChanged(function(user) {
+                if (!user) {
+                    window.location.href = 'index.html';
+                } else {
+                    // User is logged in, initialize page
+                    updateLoggedInTechnician();
+                    // Initialize tools by location functionality
+                    initializeToolsByLocation();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+
