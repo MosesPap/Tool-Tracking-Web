@@ -139,7 +139,7 @@ async function processDailyToolNotifications(triggerSource = 'http') {
   const notificationMinute = parseInt(minutes);
 
   // Only send if current time matches (within tolerance window)
-  const formattedNotificationTime = `${String(notificationHour).padStart(2, '0')}:${String(notificationMinute).padStart(2, '0')}`;
+const formattedNotificationTime = `${String(notificationHour).padStart(2, '0')}:${String(notificationMinute).padStart(2, '0')}`;
   const formattedCurrentTime = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
 
   if (currentHour !== notificationHour) {
@@ -326,6 +326,7 @@ async function sendUserNotificationEmail(transporter, emailFrom, userEmail, user
   if (tableColumns.partNumber) headers.push('<th style="background-color: ' + headerColor + '; color: white; padding: 12px; text-align: left;">Part Number</th>');
   if (tableColumns.checkoutDate) headers.push('<th style="background-color: ' + headerColor + '; color: white; padding: 12px; text-align: left;">Checkout Date</th>');
   if (tableColumns.location) headers.push('<th style="background-color: ' + headerColor + '; color: white; padding: 12px; text-align: left;">Location</th>');
+  if (tableColumns.owner) headers.push('<th style="background-color: ' + headerColor + '; color: white; padding: 12px; text-align: left;">Owner</th>');
   if (tableColumns.calDueDate) headers.push('<th style="background-color: ' + headerColor + '; color: white; padding: 12px; text-align: left;">Cal Due Date</th>');
   
   const toolList = tools.map(tool => {
@@ -335,6 +336,7 @@ async function sendUserNotificationEmail(transporter, emailFrom, userEmail, user
       ? tool.timestamp.toDate().toLocaleDateString() 
       : 'N/A';
     const location = tool.location || 'N/A';
+    const owner = tool.owner || 'N/A';
     const calDueDate = tool.calDueDate?.toDate 
       ? tool.calDueDate.toDate().toLocaleDateString() 
       : (tool.calDueDate || 'N/A');
@@ -344,6 +346,7 @@ async function sendUserNotificationEmail(transporter, emailFrom, userEmail, user
     if (tableColumns.partNumber) cells.push(`<td style="padding: 8px; border-bottom: 1px solid #ddd;">${partNumber}</td>`);
     if (tableColumns.checkoutDate) cells.push(`<td style="padding: 8px; border-bottom: 1px solid #ddd;">${checkoutDate}</td>`);
     if (tableColumns.location) cells.push(`<td style="padding: 8px; border-bottom: 1px solid #ddd;">${location}</td>`);
+    if (tableColumns.owner) cells.push(`<td style="padding: 8px; border-bottom: 1px solid #ddd;">${owner}</td>`);
     if (tableColumns.calDueDate) cells.push(`<td style="padding: 8px; border-bottom: 1px solid #ddd;">${calDueDate}</td>`);
     
     return `<tr>${cells.join('')}</tr>`;
