@@ -3334,6 +3334,8 @@
         // Bulk Scan Mode
         let bulkScanMode = false;
         let bulkScannedTools = []; // Array of {code, toolName, partNumber, status, data}
+        let bulkProcessingCodes = new Set(); // Track codes currently being processed
+        let bulkRecentlyProcessed = new Map(); // Track recently processed codes with timestamps
         
         // Online/Offline status
         let isOnline = navigator.onLine;
@@ -3933,10 +3935,33 @@ if (!userCredential.user.emailVerified) {
         }
         
         async function processToolInBulkMode(code) {
+            // Prevent duplicate processing
+            if (bulkProcessingCodes.has(code)) {
+                return; // Already processing this code
+            }
+            
+            // Check if recently processed (within last 3 seconds)
+            const now = Date.now();
+            if (bulkRecentlyProcessed.has(code)) {
+                const lastProcessed = bulkRecentlyProcessed.get(code);
+                if (now - lastProcessed < 3000) {
+                    // Clear input to prevent re-detection
+                    document.getElementById('toolCode').value = '';
+                    return; // Too soon, ignore
+                }
+            }
+            
+            // Mark as processing
+            bulkProcessingCodes.add(code);
+            
+            // Clear input immediately to prevent re-detection
+            document.getElementById('toolCode').value = '';
+            
             try {
                 const user = auth.currentUser;
                 if (!user) {
                     alert('Not authenticated');
+                    bulkProcessingCodes.delete(code);
                     return;
                 }
                 
@@ -3948,6 +3973,7 @@ if (!userCredential.user.emailVerified) {
                     setTimeout(() => {
                         toolCodeInput.style.border = '';
                     }, 500);
+                    bulkProcessingCodes.delete(code);
                     return;
                 }
                 
@@ -3956,6 +3982,7 @@ if (!userCredential.user.emailVerified) {
                 
                 if (!doc.exists) {
                     alert('Tool not found: ' + code);
+                    bulkProcessingCodes.delete(code);
                     return;
                 }
                 
@@ -3966,6 +3993,7 @@ if (!userCredential.user.emailVerified) {
                 // Validation checks (same as normal mode)
                 if (data.status === 'OUT' && data.technician !== technicianName) {
                     alert(`Tool checked out by ${data.technician}`);
+                    bulkProcessingCodes.delete(code);
                     return;
                 }
                 
@@ -3976,6 +4004,7 @@ if (!userCredential.user.emailVerified) {
                     today.setHours(0, 0, 0, 0);
                     if (toolDate < today) {
                         alert('This tool was checked out on a previous day and cannot be returned.');
+                        bulkProcessingCodes.delete(code);
                         return;
                     }
                 }
@@ -3998,6 +4027,7 @@ if (!userCredential.user.emailVerified) {
                     if (diffMs < cooldownMs) {
                         const remainingMinutes = Math.ceil((cooldownMs - diffMs) / 60000);
                         alert(`Cooldown: Wait ${remainingMinutes} more minute(s)`);
+                        bulkProcessingCodes.delete(code);
                         return;
                     }
                 }
@@ -4005,6 +4035,7 @@ if (!userCredential.user.emailVerified) {
                 // Check if station is selected (required for checkout)
                 if (newStatus === 'OUT' && !selectedWorkLocation) {
                     alert('Please select a Station first');
+                    bulkProcessingCodes.delete(code);
                     return;
                 }
                 
@@ -4048,6 +4079,13 @@ if (!userCredential.user.emailVerified) {
                     timestamp: new Date()
                 });
                 
+                // Mark as recently processed (prevents duplicate scans for 3 seconds)
+                bulkRecentlyProcessed.set(code, now);
+                // Remove from recently processed after 5 seconds
+                setTimeout(() => {
+                    bulkRecentlyProcessed.delete(code);
+                }, 5000);
+                
                 updateBulkScanList();
                 
                 // Visual feedback
@@ -4063,6 +4101,9 @@ if (!userCredential.user.emailVerified) {
             } catch (error) {
                 console.error('Error processing tool in bulk mode:', error);
                 alert('Error: ' + error.message);
+            } finally {
+                // Always remove from processing set
+                bulkProcessingCodes.delete(code);
             }
         }
         
@@ -4843,11 +4884,13 @@ if (!userCredential.user.emailVerified) {
                 { facingMode: "environment" },
                 config,
                 (decodedText) => {
-                    document.getElementById('toolCode').value = decodedText;
+                    const toolCodeInput = document.getElementById('toolCode');
+                    toolCodeInput.value = decodedText;
                     document.getElementById('toolDetailsBtn').disabled = false;
                     if (bulkScanMode) {
-                        // In bulk mode, auto-submit and keep scanning
-                        setTimeout(() => submitCode(), 100);
+                        // In bulk mode, clear input immediately and auto-submit
+                        toolCodeInput.value = '';
+                        setTimeout(() => submitCode(), 50);
                     } else {
                         stopCamera();
                     }
@@ -5204,11 +5247,13 @@ if (!userCredential.user.emailVerified) {
                                 const file = new File([blob], 'frame.jpg', { type: 'image/jpeg' });
                                 enhancedHtml5QrCode.scanFile(file, false)
                                     .then(decodedText => {
-                                        document.getElementById('toolCode').value = decodedText;
+                                        const toolCodeInput = document.getElementById('toolCode');
+                                        toolCodeInput.value = decodedText;
                                         document.getElementById('toolDetailsBtn').disabled = false;
                                         if (bulkScanMode) {
-                                            // In bulk mode, auto-submit and keep scanning
-                                            setTimeout(() => submitCode(), 100);
+                                            // In bulk mode, clear input immediately and auto-submit
+                                            toolCodeInput.value = '';
+                                            setTimeout(() => submitCode(), 50);
                                         } else {
                                             stopCamera();
                                         }
@@ -5369,11 +5414,13 @@ if (!userCredential.user.emailVerified) {
                 { facingMode: "environment" },
                 config,
                 (decodedText) => {
-                    document.getElementById('toolCode').value = decodedText;
+                    const toolCodeInput = document.getElementById('toolCode');
+                    toolCodeInput.value = decodedText;
                     document.getElementById('toolDetailsBtn').disabled = false;
                     if (bulkScanMode) {
-                        // In bulk mode, auto-submit and keep scanning
-                        setTimeout(() => submitCode(), 100);
+                        // In bulk mode, clear input immediately and auto-submit
+                        toolCodeInput.value = '';
+                        setTimeout(() => submitCode(), 50);
                     } else {
                         closeEnhancedScanner();
                     }
@@ -5388,11 +5435,13 @@ if (!userCredential.user.emailVerified) {
                     { facingMode: "user" },
                     config,
                     (decodedText) => {
-                        document.getElementById('toolCode').value = decodedText;
+                        const toolCodeInput = document.getElementById('toolCode');
+                        toolCodeInput.value = decodedText;
                         document.getElementById('toolDetailsBtn').disabled = false;
                         if (bulkScanMode) {
-                            // In bulk mode, auto-submit and keep scanning
-                            setTimeout(() => submitCode(), 100);
+                            // In bulk mode, clear input immediately and auto-submit
+                            toolCodeInput.value = '';
+                            setTimeout(() => submitCode(), 50);
                         } else {
                             closeEnhancedScanner();
                         }
