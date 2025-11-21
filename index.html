@@ -710,6 +710,41 @@
             box-shadow: 0 4px 10px rgba(255, 152, 0, 0.4), 
                         0 2px 4px rgba(0, 0, 0, 0.2);
         }
+        
+        /* Back to Menu button 3D interactive */
+        #backToMenuBtn {
+            position: absolute;
+            right: 18px;
+            top: 50%;
+            transform: translateY(-50%) perspective(1000px) rotateX(0deg);
+            z-index: 2;
+            padding: 6px 12px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            border-radius: 12px;
+            border: 2px solid #FF9800;
+            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(255, 152, 0, 0.3);
+            cursor: pointer;
+        }
+        
+        #backToMenuBtn:hover {
+            background: linear-gradient(135deg, #FFB74D 0%, #FF9800 100%);
+            border-color: #FFB74D;
+            transform: translateY(calc(-50% - 2px)) perspective(1000px) rotateX(5deg);
+            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.5), 
+                        0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        #backToMenuBtn:active {
+            transform: translateY(calc(-50% - 1px)) perspective(1000px) rotateX(3deg);
+            box-shadow: 0 4px 10px rgba(255, 152, 0, 0.4), 
+                        0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
         .status-badge {
             padding: 5px 10px;
             border-radius: 15px;
@@ -854,6 +889,9 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             cursor: pointer;
             transition: background-color 0.3s ease;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
         }
         
         .previous-out-tool-card:hover {
@@ -909,6 +947,9 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             cursor: pointer;
             transition: all 0.3s ease;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         .workloc-tool-card:hover {
@@ -1051,6 +1092,9 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.08);
             cursor: pointer;
             transition: background-color 0.3s ease;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
         }
         .register-tool-card.out { background: #FFCDD2; }
         .register-tool-card.broken { background: #FFF3E0; }
@@ -1064,6 +1108,9 @@
         
         .search-tool-card {
             transition: box-shadow 0.3s ease, transform 0.3s ease;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
         }
         
         .search-tool-card:hover {
@@ -1860,7 +1907,7 @@
             <!-- Orange Top Bar with Title -->
             <div style="background: #FF9800; color: white; width: 100vw; min-width: 100vw; margin-left: -12px; margin-right: -12px; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
                 <h2 style="margin: 0 0 0 20px; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px;">Register Tools</h2>
-                <button id="backToMenuBtn" class="btn btn-link p-0" style="position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-size: 1rem; color: white; z-index: 2; text-decoration: none; padding: 4px 8px;" title="Back to Menu">
+                <button id="backToMenuBtn" title="Back to Menu">
                     <i class="fas fa-arrow-left"></i> Back to Menu
                 </button>
             </div>
