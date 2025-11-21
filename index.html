@@ -2260,6 +2260,7 @@
                 <div class="tab-pane fade show active" id="scannerView" role="tabpanel">
                     <div class="row">
                         <div class="col-xl-6 mx-auto">
+                            <div id="scannerControlsBox" style="display: block;">
                             <div class="scanner-container" id="scannerContainer" style="position: relative;">
                             <div class="card mb-2">
                                 <div class="card-body" style="padding-bottom: 10px; padding-top: 12px; position: relative;">
@@ -2311,6 +2312,7 @@
                                         <i class="fas fa-times"></i> Close Scanner
                                     </button>
                                 </div>
+                            </div>
                             </div>
                             <div id="toolList" class="mt-2">
                                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
@@ -4063,9 +4065,8 @@ if (!userCredential.user.emailVerified) {
                     bulkRecentlyProcessed.delete(code);
                 }, 5000);
                 
-                // Show success message (1 second)
-                const actionText = newStatus === 'OUT' ? 'Checked OUT' : 'Checked IN';
-                showBulkScanMessage(`${data.toolName || code} - ${actionText}`, true);
+                // Show success message (2 seconds)
+                showBulkScanMessage(newStatus === 'OUT' ? 'CHECKED OUT' : 'CHECKED IN', true, newStatus === 'OUT');
                 
                 // Visual feedback on input
                 const toolCodeInput = document.getElementById('toolCode');
@@ -7022,6 +7023,18 @@ if (!userCredential.user.emailVerified) {
             refreshRegisterToolsScreen();
         }
 
+        // Track scanner controls box visibility state
+        let scannerControlsVisible = true;
+        
+        // Toggle scanner controls box
+        function toggleScannerControls() {
+            const scannerBox = document.getElementById('scannerControlsBox');
+            if (scannerBox) {
+                scannerControlsVisible = !scannerControlsVisible;
+                scannerBox.style.display = scannerControlsVisible ? 'block' : 'none';
+            }
+        }
+        
         document.addEventListener('DOMContentLoaded', function() {
             // Set up automatic cleanup every 24 hours
             setInterval(cleanupUnverifiedAccounts, 24 * 60 * 60 * 1000); // Every 24 hours
@@ -7032,6 +7045,28 @@ if (!userCredential.user.emailVerified) {
             if (lastCleanup !== today) {
                 cleanupUnverifiedAccounts();
                 localStorage.setItem('lastCleanupDate', today);
+            }
+            
+            // Set up Scan Tool tab toggle functionality
+            const scanToolTab = document.getElementById('scanToolTab');
+            if (scanToolTab) {
+                scanToolTab.addEventListener('click', function(e) {
+                    const scannerView = document.getElementById('scannerView');
+                    
+                    // Check if tab is already active before Bootstrap processes the click
+                    const wasActive = scannerView && scannerView.classList.contains('active');
+                    
+                    // If tab was already active, toggle scanner box instead of switching tabs
+                    if (wasActive) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleScannerControls();
+                        // Manually ensure tab stays active
+                        scanToolTab.classList.add('active');
+                        scanToolTab.setAttribute('aria-selected', 'true');
+                        return false;
+                    }
+                });
             }
             
             // Set up menu button event handlers
