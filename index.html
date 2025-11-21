@@ -2271,8 +2271,9 @@
                                             <i class="fas fa-camera"></i> Advanced Scanner
                                         </button>
                                     </div>
-                                    <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-2" style="display:none;">Stop Scanner</button>
                                     <div id="reader" style="display:none; position: relative;">
+                                        <!-- Bulk Scan Message - positioned above camera -->
+                                        <div id="bulkScanMessage" style="display: none; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 20; padding: 8px 16px; border-radius: 6px; font-weight: bold; text-align: center; font-size: 0.9rem; max-width: 90%; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"></div>
                                         <!-- Advanced scanner controls (hidden for basic scanner) -->
                                         <div id="advancedScannerControls" style="display: none; position: absolute; top: 10px; right: 10px; z-index: 10;">
                                             <button id="torchBtn" class="btn btn-sm" style="background: rgba(0,0,0,0.5); color: white; border: none; margin-bottom: 5px; border-radius: 50%; width: 40px; height: 40px; padding: 0;" title="Toggle Torch">
@@ -2302,8 +2303,6 @@
                                         </button>
                                         <button id="toolDetailsBtn" class="btn btn-info" style="flex: 1;" disabled onclick="showLastScannedToolDetails()">Tool Details</button>
                                     </div>
-                                    <!-- Bulk Scan Message -->
-                                    <div id="bulkScanMessage" style="display: none; padding: 8px 12px; margin-top: 10px; border-radius: 6px; font-weight: bold; text-align: center; font-size: 0.9rem;"></div>
                                     </div>
                                 </div>
                                 <!-- Overlay for expanded scanner -->
@@ -4812,14 +4811,23 @@ if (!userCredential.user.emailVerified) {
 
         // QR Code Scanner
         function startScanner() {
-            // Stop enhanced scanner if running
+            // Check if basic scanner is already running - toggle it off
             if (html5QrCode) {
-                html5QrCode.stop().then(() => {
-                    html5QrCode.clear();
-                    html5QrCode = null;
-                }).catch(err => {
-                    console.log('Error stopping scanner:', err);
-                });
+                stopCamera();
+                return;
+            }
+            
+            // Stop enhanced scanner if running
+            if (enhancedScannerStream) {
+                enhancedScannerStream.getTracks().forEach(track => track.stop());
+                enhancedScannerStream = null;
+            }
+            if (enhancedScannerInterval) {
+                if (enhancedScannerInterval.html5QrCode) {
+                    enhancedScannerInterval.html5QrCode.clear();
+                }
+                clearInterval(enhancedScannerInterval);
+                enhancedScannerInterval = null;
             }
             
             // Toggle active states
@@ -4829,7 +4837,6 @@ if (!userCredential.user.emailVerified) {
             var reader = document.getElementById('reader');
             reader.style.display = 'block';
             reader.style.height = '320px';
-            document.getElementById('stopScannerBtn').style.display = 'inline-block';
             
             html5QrCode = new Html5Qrcode("reader");
             // Basic Scanner: Simple configuration with common formats only
@@ -4942,7 +4949,6 @@ if (!userCredential.user.emailVerified) {
             // Immediately hide and collapse the scanner area
             reader.style.display = 'none';
             reader.style.height = '0';
-            document.getElementById('stopScannerBtn').style.display = 'none';
             
             // Reset state
             currentZoom = 1.0;
@@ -4961,6 +4967,12 @@ if (!userCredential.user.emailVerified) {
         let focusIndicator = null;
 
         async function startEnhancedScanner() {
+            // Check if advanced scanner is already running - toggle it off
+            if (enhancedScannerStream || enhancedScannerInterval) {
+                stopCamera();
+                return;
+            }
+            
             // Stop basic scanner if running
             if (html5QrCode) {
                 try {
@@ -4972,16 +4984,6 @@ if (!userCredential.user.emailVerified) {
                 }
             }
             
-            // Stop any existing advanced scanner
-            if (enhancedScannerStream) {
-                enhancedScannerStream.getTracks().forEach(track => track.stop());
-                enhancedScannerStream = null;
-            }
-            if (enhancedScannerInterval) {
-                clearInterval(enhancedScannerInterval);
-                enhancedScannerInterval = null;
-            }
-            
             // Toggle active states
             document.getElementById('advancedScannerBtn').classList.add('active');
             document.getElementById('basicScannerBtn').classList.remove('active');
@@ -4990,7 +4992,6 @@ if (!userCredential.user.emailVerified) {
             reader.style.display = 'block';
             reader.style.height = '320px';
             reader.style.position = 'relative';
-            document.getElementById('stopScannerBtn').style.display = 'inline-block';
             
             // Clear reader content but preserve the structure
             // Remove all child elements except the ones we'll recreate
