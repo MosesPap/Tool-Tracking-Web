@@ -3883,8 +3883,9 @@ if (!userCredential.user.emailVerified) {
         let checkupLocationStats = {};
 
         // Submit tool code
-        async function submitCode() {
-            const code = document.getElementById('toolCode').value.trim();
+        async function submitCode(codeParam = null) {
+            // If code is passed as parameter (from scanner), use it; otherwise read from input
+            const code = codeParam || document.getElementById('toolCode').value.trim();
     console.log('Submit button pressed. Tool code:', code);
     console.log('Selected work location:', selectedWorkLocation);
     
@@ -3897,7 +3898,7 @@ if (!userCredential.user.emailVerified) {
     if (bulkScanMode) {
         // Process immediately and add to history list
         await processToolInBulkMode(code);
-        document.getElementById('toolCode').value = ''; // Clear input for next scan
+        // Input already cleared in scanner callback
         return;
     }
 
@@ -4888,9 +4889,9 @@ if (!userCredential.user.emailVerified) {
                     toolCodeInput.value = decodedText;
                     document.getElementById('toolDetailsBtn').disabled = false;
                     if (bulkScanMode) {
-                        // In bulk mode, clear input immediately and auto-submit
+                        // In bulk mode, pass code directly and clear input
                         toolCodeInput.value = '';
-                        setTimeout(() => submitCode(), 50);
+                        setTimeout(() => submitCode(decodedText), 50);
                     } else {
                         stopCamera();
                     }
@@ -4907,8 +4908,10 @@ if (!userCredential.user.emailVerified) {
                         document.getElementById('toolCode').value = decodedText;
                         document.getElementById('toolDetailsBtn').disabled = false;
                         if (bulkScanMode) {
-                            // In bulk mode, auto-submit and keep scanning
-                            setTimeout(() => submitCode(), 100);
+                            // In bulk mode, pass code directly and keep scanning
+                            const code = decodedText;
+                            document.getElementById('toolCode').value = '';
+                            setTimeout(() => submitCode(code), 50);
                         } else {
                             stopCamera();
                         }
@@ -5251,9 +5254,9 @@ if (!userCredential.user.emailVerified) {
                                         toolCodeInput.value = decodedText;
                                         document.getElementById('toolDetailsBtn').disabled = false;
                                         if (bulkScanMode) {
-                                            // In bulk mode, clear input immediately and auto-submit
+                                            // In bulk mode, pass code directly and clear input
                                             toolCodeInput.value = '';
-                                            setTimeout(() => submitCode(), 50);
+                                            setTimeout(() => submitCode(decodedText), 50);
                                         } else {
                                             stopCamera();
                                         }
@@ -5418,9 +5421,9 @@ if (!userCredential.user.emailVerified) {
                     toolCodeInput.value = decodedText;
                     document.getElementById('toolDetailsBtn').disabled = false;
                     if (bulkScanMode) {
-                        // In bulk mode, clear input immediately and auto-submit
+                        // In bulk mode, pass code directly and clear input
                         toolCodeInput.value = '';
-                        setTimeout(() => submitCode(), 50);
+                        setTimeout(() => submitCode(decodedText), 50);
                     } else {
                         closeEnhancedScanner();
                     }
@@ -5439,9 +5442,9 @@ if (!userCredential.user.emailVerified) {
                         toolCodeInput.value = decodedText;
                         document.getElementById('toolDetailsBtn').disabled = false;
                         if (bulkScanMode) {
-                            // In bulk mode, clear input immediately and auto-submit
+                            // In bulk mode, pass code directly and clear input
                             toolCodeInput.value = '';
-                            setTimeout(() => submitCode(), 50);
+                            setTimeout(() => submitCode(decodedText), 50);
                         } else {
                             closeEnhancedScanner();
                         }
