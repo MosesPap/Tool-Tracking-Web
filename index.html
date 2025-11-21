@@ -4845,7 +4845,12 @@ if (!userCredential.user.emailVerified) {
                 (decodedText) => {
                     document.getElementById('toolCode').value = decodedText;
                     document.getElementById('toolDetailsBtn').disabled = false;
-                    stopCamera();
+                    if (bulkScanMode) {
+                        // In bulk mode, auto-submit and keep scanning
+                        setTimeout(() => submitCode(), 100);
+                    } else {
+                        stopCamera();
+                    }
                 },
                 (errorMessage) => {
                     // Ignore errors during scanning
@@ -5366,7 +5371,12 @@ if (!userCredential.user.emailVerified) {
                 (decodedText) => {
                     document.getElementById('toolCode').value = decodedText;
                     document.getElementById('toolDetailsBtn').disabled = false;
-                    closeEnhancedScanner();
+                    if (bulkScanMode) {
+                        // In bulk mode, auto-submit and keep scanning
+                        setTimeout(() => submitCode(), 100);
+                    } else {
+                        closeEnhancedScanner();
+                    }
                 },
                 (errorMessage) => {
                     // Ignore errors during scanning
@@ -5380,7 +5390,12 @@ if (!userCredential.user.emailVerified) {
                     (decodedText) => {
                         document.getElementById('toolCode').value = decodedText;
                         document.getElementById('toolDetailsBtn').disabled = false;
-                        closeEnhancedScanner();
+                        if (bulkScanMode) {
+                            // In bulk mode, auto-submit and keep scanning
+                            setTimeout(() => submitCode(), 100);
+                        } else {
+                            closeEnhancedScanner();
+                        }
                     },
                     (errorMessage) => {
                         // Ignore errors during scanning
