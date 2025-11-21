@@ -2260,9 +2260,9 @@
                 <div class="tab-pane fade show active" id="scannerView" role="tabpanel">
                     <div class="row">
                         <div class="col-xl-6 mx-auto">
-                            <div class="scanner-container" id="scannerContainer">
+                            <div class="scanner-container" id="scannerContainer" style="position: relative;">
                             <div class="card mb-2">
-                                <div class="card-body" style="padding-bottom: 10px; padding-top: 12px;">
+                                <div class="card-body" style="padding-bottom: 10px; padding-top: 12px; position: relative;">
                                     <div class="d-flex gap-2 mb-2" style="margin-top: 4px;">
                                         <button id="basicScannerBtn" onclick="startScanner()" class="btn btn-scan active">
                                             <i class="fas fa-qrcode"></i> Basic Scanner
@@ -2272,8 +2272,6 @@
                                         </button>
                                     </div>
                                     <div id="reader" style="display:none; position: relative;">
-                                        <!-- Bulk Scan Message - positioned above camera -->
-                                        <div id="bulkScanMessage" style="display: none; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 20; padding: 8px 16px; border-radius: 6px; font-weight: bold; text-align: center; font-size: 0.9rem; max-width: 90%; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"></div>
                                         <!-- Advanced scanner controls (hidden for basic scanner) -->
                                         <div id="advancedScannerControls" style="display: none; position: absolute; top: 10px; right: 10px; z-index: 10;">
                                             <button id="torchBtn" class="btn btn-sm" style="background: rgba(0,0,0,0.5); color: white; border: none; margin-bottom: 5px; border-radius: 50%; width: 40px; height: 40px; padding: 0;" title="Toggle Torch">
@@ -2291,6 +2289,8 @@
                                         </div>
                                         <div id="focusIndicator" style="display: none; position: absolute; width: 60px; height: 60px; border: 2px solid #4CAF50; border-radius: 50%; pointer-events: none; z-index: 15;"></div>
                                     </div>
+                                    <!-- Bulk Scan Message - positioned above camera -->
+                                    <div id="bulkScanMessage" style="display: none; position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1000; padding: 12px 24px; border-radius: 8px; font-weight: bold; text-align: center; font-size: 1rem; max-width: 90%; box-shadow: 0 4px 12px rgba(0,0,0,0.5); pointer-events: none; white-space: nowrap;"></div>
                                     <div class="input-group mb-2">
                                         <input type="text" id="toolCode" class="form-control" placeholder="Scan or Type Tool Code">
                                         <button onclick="submitCode()" class="btn btn-primary submit-check-btn">
@@ -4089,9 +4089,15 @@ if (!userCredential.user.emailVerified) {
         // Show bulk scan message (warning or success)
         function showBulkScanMessage(message, isSuccess = false) {
             const messageDiv = document.getElementById('bulkScanMessage');
-            if (!messageDiv) return;
+            if (!messageDiv) {
+                console.log('bulkScanMessage div not found');
+                return;
+            }
             
+            // Ensure the message is visible and positioned correctly
             messageDiv.style.display = 'block';
+            messageDiv.style.visibility = 'visible';
+            messageDiv.style.opacity = '1';
             messageDiv.textContent = message;
             
             if (isSuccess) {
