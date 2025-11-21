@@ -1126,9 +1126,9 @@
                             <h4><i class="fas fa-cog"></i> System Settings</h4>
                             
                             <div class="settings-group">
-                                <label for="adminPassword">Admin Password</label>
+                                <label for="adminPassword">Admin Code</label>
                                 <div class="input-group">
-                                    <input type="text" class="form-control" id="adminPasswordInput" placeholder="Enter new admin password">
+                                    <input type="text" class="form-control" id="adminPasswordInput" placeholder="Enter new admin code">
                                     <button class="btn btn-primary" id="updatePasswordBtn">
                                         <i class="fas fa-save"></i> Update
                                     </button>
@@ -1148,6 +1148,40 @@
                             </div>
 
                             <div class="settings-group">
+                                <label><i class="fas fa-envelope"></i> Email Notification Configuration</label>
+                                <div class="card" style="margin-top: 10px;">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Gmail Account Settings</h6>
+                                        
+                                        <div class="mb-3">
+                                            <label for="emailAccount" class="form-label">Gmail Address</label>
+                                            <input type="email" class="form-control" id="emailAccount" placeholder="your-email@gmail.com">
+                                            <small class="text-muted">The Gmail account used to send notification emails</small>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="emailAppPassword" class="form-label">Gmail App Password</label>
+                                            <input type="password" class="form-control" id="emailAppPassword" placeholder="Enter app password">
+                                            <small class="text-muted">
+                                                <a href="https://myaccount.google.com/apppasswords" target="_blank">Get App Password</a> - 
+                                                Not your regular Gmail password. Generate an app-specific password from Google Account settings.
+                                            </small>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="emailFrom" class="form-label">From Email Address</label>
+                                            <input type="text" class="form-control" id="emailFrom" placeholder="noreply@tooltracking.com">
+                                            <small class="text-muted">The "From" address shown in email headers</small>
+                                        </div>
+                                        
+                                        <button class="btn btn-primary" id="updateEmailConfigBtn">
+                                            <i class="fas fa-save"></i> Update Email Configuration
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
                                 <label for="emailNotificationTime">Daily Email Notification Time</label>
                                 <div class="input-group">
                                     <input type="time" class="form-control" id="emailNotificationTime" placeholder="09:00">
@@ -1155,7 +1189,257 @@
                                         <i class="fas fa-save"></i> Update
                                     </button>
                                 </div>
-                                <small class="text-muted">Time to send daily emails to users with OUT tools and administrators (24-hour format)</small>
+                                <small class="text-muted">Time to send daily emails to users with OUT tools and administrators (24-hour format, Nicosia timezone)</small>
+                            </div>
+
+                            <div class="settings-group">
+                                <label for="emailToleranceWindow">Email Time Tolerance Window (Minutes)</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="emailToleranceWindow" placeholder="1" min="0" max="60" value="1">
+                                    <button class="btn btn-primary" id="updateEmailToleranceBtn">
+                                        <i class="fas fa-save"></i> Update
+                                    </button>
+                                </div>
+                                <small class="text-muted">
+                                    How many minutes before/after the notification time should emails be sent? 
+                                    <br>
+                                    Example: If notification time is 09:00 and tolerance is 2 minutes, emails will be sent if the function runs between 08:58 and 09:02.
+                                    <br>
+                                    <strong>Recommended:</strong> 1-5 minutes (default: 1 minute)
+                                </small>
+                            </div>
+
+                            <div class="settings-group">
+                                <label><i class="fas fa-clock"></i> Email Check Frequency</label>
+                                <div class="card" style="margin-top: 10px;">
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label for="emailCheckFrequency" class="form-label">How often should the system check if it's time to send emails?</label>
+                                            <select class="form-select" id="emailCheckFrequency">
+                                                <option value="* * * * *">Every minute (Recommended for precise timing)</option>
+                                                <option value="*/5 * * * *">Every 5 minutes</option>
+                                                <option value="*/10 * * * *">Every 10 minutes</option>
+                                                <option value="*/15 * * * *">Every 15 minutes</option>
+                                                <option value="*/30 * * * *">Every 30 minutes</option>
+                                                <option value="0 * * * *">Every hour</option>
+                                                <option value="0 */2 * * *">Every 2 hours</option>
+                                                <option value="0 */6 * * *">Every 6 hours</option>
+                                                <option value="0 9 * * *">Once daily at 9:00 AM</option>
+                                                <option value="custom">Custom schedule (choose days/time below)</option>
+                                            </select>
+                                            <small class="text-muted">
+                                                This controls how often the Cloud Function runs to check if it's time to send emails.
+                                                <br>
+                                                <strong>Note:</strong> The actual schedule is managed by Google Cloud Scheduler. 
+                                                After updating here, you'll need to update it in Google Cloud Console.
+                                            </small>
+                                        </div>
+
+                                        <div id="customScheduleContainer" class="mt-3" style="display:none;">
+                                            <div class="card border-primary">
+                                                <div class="card-body">
+                                                    <h6 class="card-title"><i class="fas fa-calendar-alt me-2"></i>Custom schedule</h6>
+                                                    <p class="text-muted mb-2">Select the days of the week and the exact time (Asia/Nicosia) when the system should run. We'll convert it to the correct cron expression automatically.</p>
+                                                    
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Days of the week</label>
+                                                        <div class="d-flex flex-wrap gap-2">
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input custom-day-checkbox" type="checkbox" id="daySun" value="0">
+                                                                <label class="form-check-label" for="daySun">Sun</label>
+                                                            </div>
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input custom-day-checkbox" type="checkbox" id="dayMon" value="1">
+                                                                <label class="form-check-label" for="dayMon">Mon</label>
+                                                            </div>
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input custom-day-checkbox" type="checkbox" id="dayTue" value="2">
+                                                                <label class="form-check-label" for="dayTue">Tue</label>
+                                                            </div>
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input custom-day-checkbox" type="checkbox" id="dayWed" value="3">
+                                                                <label class="form-check-label" for="dayWed">Wed</label>
+                                                            </div>
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input custom-day-checkbox" type="checkbox" id="dayThu" value="4">
+                                                                <label class="form-check-label" for="dayThu">Thu</label>
+                                                            </div>
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input custom-day-checkbox" type="checkbox" id="dayFri" value="5">
+                                                                <label class="form-check-label" for="dayFri">Fri</label>
+                                                            </div>
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input custom-day-checkbox" type="checkbox" id="daySat" value="6">
+                                                                <label class="form-check-label" for="daySat">Sat</label>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="mb-3">
+                                                        <label for="customScheduleTime" class="form-label">Run at time</label>
+                                                        <input type="time" class="form-control" id="customScheduleTime" value="09:00">
+                                                    </div>
+
+                                                    <div class="alert alert-secondary mb-0" id="customScheduleSummary" style="display:none;"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-3">
+                                            <label class="form-label">Generated cron expression (copy &amp; paste into Cloud Scheduler)</label>
+                                            <div class="input-group">
+                                                <input type="text" class="form-control" id="emailFrequencyCron" readonly value="* * * * *">
+                                                <button type="button" class="btn btn-outline-secondary" id="copyCronBtn" title="Copy cron expression">
+                                                    <i class="fas fa-copy"></i>
+                                                </button>
+                                            </div>
+                                            <small class="text-muted">Matches your selection above. Use this when editing the Cloud Scheduler job.</small>
+                                        </div>
+                                        
+                                        <div class="alert alert-info" role="alert">
+                                            <i class="fas fa-info-circle"></i> 
+                                            <strong>How to point Google Cloud Scheduler to the new HTTP function:</strong>
+                                            <ol style="margin-top: 10px; margin-bottom: 0; padding-left: 20px;">
+                                                <li>Go to <a href="https://console.cloud.google.com/cloudscheduler" target="_blank">Google Cloud Scheduler</a></li>
+                                                <li>Create (or edit) a job for email notifications</li>
+                                                <li>Set <strong>Target type</strong> to <strong>HTTP</strong> and use:<br><code>https://us-central1-tool-tracking-system-15e84.cloudfunctions.net/sendDailyToolNotifications</code></li>
+                                                <li>Choose <strong>POST</strong> (empty body) and enable <strong>OIDC authentication</strong> using the App Engine default service account (<code>tool-tracking-system-15e84@appspot.gserviceaccount.com</code>)</li>
+                                                <li>Set the <strong>Frequency</strong> cron expression (e.g., <code>* * * * *</code>) and <strong>Timezone</strong> to Asia/Nicosia or Eastern European Time</li>
+                                                <li>Save the job. Future Firebase deployments will not overwrite this schedule.</li>
+                                            </ol>
+                                            <p class="mt-3 mb-0" style="font-size: 0.9rem;">
+                                                Tip: Keep the scheduler frequency at "Every minute" for best accuracy. The setting you choose above still controls how often the function actually runs, even if the scheduler triggers more often.
+                                            </p>
+                                        </div>
+                                        
+                                        <button class="btn btn-primary" id="updateEmailFrequencyBtn">
+                                            <i class="fas fa-save"></i> Save Frequency Preference
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
+                                <label><i class="fas fa-edit"></i> Email Template Customization</label>
+                                <div class="card" style="margin-top: 10px;">
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label for="emailSubjectUser" class="form-label">User Email Subject</label>
+                                            <input type="text" class="form-control" id="emailSubjectUser" placeholder="Tool Tracking Reminder: {count} Tool(s) Checked Out">
+                                            <small class="text-muted">Use {count} to insert the number of tools</small>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="emailSubjectAdmin" class="form-label">Admin Email Subject</label>
+                                            <input type="text" class="form-control" id="emailSubjectAdmin" placeholder="Daily Tool Status Report: {count} Tool(s) Currently OUT">
+                                            <small class="text-muted">Use {count} to insert the number of tools</small>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="emailBodyUser" class="form-label">User Email Body (HTML)</label>
+                                            <textarea class="form-control" id="emailBodyUser" rows="6" placeholder="Hello {userName},&#10;&#10;This is a reminder that you currently have {count} tool(s) checked out:&#10;&#10;{toolList}&#10;&#10;Please remember to check in these tools when you're done using them.&#10;&#10;Thank you!"></textarea>
+                                            <small class="text-muted">
+                                                Available variables: {userName}, {count}, {toolList}<br>
+                                                {toolList} will be replaced with a formatted table of tools
+                                            </small>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="emailBodyAdmin" class="form-label">Admin Email Body (HTML)</label>
+                                            <textarea class="form-control" id="emailBodyAdmin" rows="6" placeholder="Hello Administrators,&#10;&#10;This is the daily summary of tools currently checked out:&#10;&#10;Total Tools OUT: {count}&#10;&#10;{toolList}&#10;&#10;Thank you!"></textarea>
+                                            <small class="text-muted">
+                                                Available variables: {count}, {toolList}<br>
+                                                {toolList} will be replaced with a formatted table of tools
+                                            </small>
+                                        </div>
+                                        
+                                        <button class="btn btn-primary" id="updateEmailTemplateBtn">
+                                            <i class="fas fa-save"></i> Update Email Templates
+                                        </button>
+                                        <button class="btn btn-secondary" id="resetEmailTemplateBtn" style="margin-left: 10px;">
+                                            <i class="fas fa-undo"></i> Reset to Default
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
+                                <label><i class="fas fa-table"></i> Email Table Customization</label>
+                                <div class="card" style="margin-top: 10px;">
+                                    <div class="card-body">
+                                        <h6 class="card-title">User Email Table Columns</h6>
+                                        <div class="mb-3">
+                                            <label class="form-label">Select columns to show:</label>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="tableColToolName" checked>
+                                                <label class="form-check-label" for="tableColToolName">Tool Name</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="tableColPartNumber" checked>
+                                                <label class="form-check-label" for="tableColPartNumber">Part Number</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="tableColCheckoutDate" checked>
+                                                <label class="form-check-label" for="tableColCheckoutDate">Checkout Date</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="tableColLocation">
+                                                <label class="form-check-label" for="tableColLocation">Location</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="tableColOwner">
+                                                <label class="form-check-label" for="tableColOwner">Owner</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="tableColCalDueDate">
+                                                <label class="form-check-label" for="tableColCalDueDate">Cal Due Date</label>
+                                            </div>
+                                        </div>
+                                        
+                                        <h6 class="card-title mt-4">Admin Email Table Columns</h6>
+                                        <div class="mb-3">
+                                            <label class="form-label">Select columns to show:</label>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="adminTableColToolName" checked>
+                                                <label class="form-check-label" for="adminTableColToolName">Tool Name</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="adminTableColPartNumber" checked>
+                                                <label class="form-check-label" for="adminTableColPartNumber">Part Number</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="adminTableColTechnician" checked>
+                                                <label class="form-check-label" for="adminTableColTechnician">Technician</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="adminTableColCheckoutDate" checked>
+                                                <label class="form-check-label" for="adminTableColCheckoutDate">Checkout Date</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="adminTableColLocation">
+                                                <label class="form-check-label" for="adminTableColLocation">Location</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="adminTableColOwner">
+                                                <label class="form-check-label" for="adminTableColOwner">Owner</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="adminTableColCalDueDate">
+                                                <label class="form-check-label" for="adminTableColCalDueDate">Cal Due Date</label>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="tableHeaderColor" class="form-label">Table Header Background Color</label>
+                                            <input type="color" class="form-control form-control-color" id="tableHeaderColor" value="#FF9800" title="Choose header color">
+                                            <small class="text-muted">Color for table header background</small>
+                                        </div>
+                                        
+                                        <button class="btn btn-primary" id="updateTableConfigBtn">
+                                            <i class="fas fa-save"></i> Update Table Configuration
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="settings-group">
@@ -1817,6 +2101,131 @@
             loadAnalytics();
         }
 
+        // Custom schedule helpers for email frequency
+        const emailCheckFrequencySelect = document.getElementById('emailCheckFrequency');
+        const customScheduleContainer = document.getElementById('customScheduleContainer');
+        const customScheduleTimeInput = document.getElementById('customScheduleTime');
+        const customScheduleSummary = document.getElementById('customScheduleSummary');
+        const customDayCheckboxes = document.querySelectorAll('.custom-day-checkbox');
+        const cronPreviewInput = document.getElementById('emailFrequencyCron');
+        const copyCronBtn = document.getElementById('copyCronBtn');
+
+        function padNumber(num) {
+            return String(num).padStart(2, '0');
+        }
+
+        function toggleCustomSchedule(show) {
+            if (customScheduleContainer) {
+                customScheduleContainer.style.display = show ? 'block' : 'none';
+            }
+            if (!show && customScheduleSummary) {
+                customScheduleSummary.style.display = 'none';
+            }
+            updateCronPreview();
+        }
+
+        function updateCustomScheduleSummary() {
+            if (!customScheduleSummary) return;
+            const selectedDays = Array.from(customDayCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.nextElementSibling ? cb.nextElementSibling.textContent : cb.value);
+            const timeValue = customScheduleTimeInput?.value || '';
+
+            if (selectedDays.length === 0 || !timeValue) {
+                customScheduleSummary.style.display = 'none';
+                return;
+            }
+
+            customScheduleSummary.style.display = 'block';
+            customScheduleSummary.textContent = `Will run on ${selectedDays.join(', ')} at ${timeValue} (Asia/Nicosia)`;
+        }
+
+        customDayCheckboxes.forEach(cb => cb.addEventListener('change', () => {
+            updateCustomScheduleSummary();
+            updateCronPreview();
+        }));
+        if (customScheduleTimeInput) {
+            customScheduleTimeInput.addEventListener('input', () => {
+                updateCustomScheduleSummary();
+                updateCronPreview();
+            });
+        }
+
+        if (emailCheckFrequencySelect) {
+            emailCheckFrequencySelect.addEventListener('change', () => {
+                const isCustom = emailCheckFrequencySelect.value === 'custom';
+                toggleCustomSchedule(isCustom);
+                if (isCustom) {
+                    updateCustomScheduleSummary();
+                }
+                updateCronPreview();
+            });
+        }
+
+        function parseCustomCron(cronExpression) {
+            if (!cronExpression) return null;
+            const parts = cronExpression.trim().split(/\s+/);
+            if (parts.length !== 5) return null;
+            const [minute, hour, , , dayOfWeek] = parts;
+            return { minute, hour, dayOfWeek };
+        }
+
+        function setCustomFieldsFromCron(cronExpression) {
+            const parsed = parseCustomCron(cronExpression);
+            if (!parsed || !customScheduleTimeInput) return;
+
+            const hour = padNumber(parsed.hour);
+            const minute = padNumber(parsed.minute);
+            customScheduleTimeInput.value = `${hour}:${minute}`;
+
+            const dayValues = parsed.dayOfWeek === '*' ? ['0','1','2','3','4','5','6'] : parsed.dayOfWeek.split(',');
+            customDayCheckboxes.forEach(cb => {
+                cb.checked = dayValues.includes(cb.value);
+            });
+            updateCustomScheduleSummary();
+            updateCronPreview();
+        }
+
+        function getCustomCronExpression(showAlerts = false) {
+            if (!customScheduleTimeInput) return null;
+            const timeValue = customScheduleTimeInput.value;
+            const selectedDays = Array.from(customDayCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+
+            if (!timeValue) {
+                if (showAlerts) alert('Please select a time for the custom schedule.');
+                return null;
+            }
+
+            if (selectedDays.length === 0) {
+                if (showAlerts) alert('Please select at least one day for the custom schedule.');
+                return null;
+            }
+
+            const [hours, minutes] = timeValue.split(':');
+            const dayPart = selectedDays.length === 7 ? '*' : selectedDays.join(',');
+            return `${parseInt(minutes, 10)} ${parseInt(hours, 10)} * * ${dayPart}`;
+        }
+
+        function updateCronPreview() {
+            if (!cronPreviewInput || !emailCheckFrequencySelect) return;
+            let cronValue = '';
+            if (emailCheckFrequencySelect.value === 'custom') {
+                cronValue = getCustomCronExpression(false) || '';
+            } else {
+                cronValue = emailCheckFrequencySelect.value || '';
+            }
+            cronPreviewInput.value = cronValue;
+        }
+
+        function isPresetFrequency(value) {
+            if (!emailCheckFrequencySelect) return false;
+            return Array.from(emailCheckFrequencySelect.options)
+                .filter(option => option.value !== 'custom')
+                .some(option => option.value === value);
+        }
+
         // Load Statistics
         async function loadStatistics() {
             try {
@@ -1850,12 +2259,96 @@
                 const doc = await db.collection('settings').doc('admin').get();
                 if (doc.exists) {
                     const data = doc.data();
-                    document.getElementById('adminPasswordInput').placeholder = data.AdminPassword ? '••••••••' : 'Not set';
+                    document.getElementById('adminPasswordInput').placeholder = data.adminCode ? '••••••••' : 'Not set';
                     document.getElementById('cooldownMinutes').value = data.CheckINCooldownMinutes || 15;
                     
                     // Load email notification time
                     if (data.emailNotificationTime) {
                         document.getElementById('emailNotificationTime').value = data.emailNotificationTime;
+                    }
+                    
+                    // Load email tolerance window
+                    if (data.emailToleranceWindow !== undefined) {
+                        document.getElementById('emailToleranceWindow').value = data.emailToleranceWindow;
+                    } else {
+                        document.getElementById('emailToleranceWindow').value = 1; // Default
+                    }
+                    
+                    // Load email check frequency
+                    const frequencySelect = document.getElementById('emailCheckFrequency');
+                    const savedFrequency = data.emailCheckFrequency || '* * * * *';
+                    if (frequencySelect) {
+                        if (isPresetFrequency(savedFrequency)) {
+                            frequencySelect.value = savedFrequency;
+                            toggleCustomSchedule(false);
+                        } else {
+                            frequencySelect.value = 'custom';
+                            toggleCustomSchedule(true);
+                            setCustomFieldsFromCron(savedFrequency);
+                        }
+                        updateCronPreview();
+                    }
+                    
+                    // Load email configuration
+                    if (data.emailAccount) {
+                        document.getElementById('emailAccount').value = data.emailAccount;
+                    }
+                    if (data.emailAppPassword) {
+                        document.getElementById('emailAppPassword').placeholder = '••••••••';
+                    }
+                    if (data.emailFrom) {
+                        document.getElementById('emailFrom').value = data.emailFrom;
+                    }
+                    
+                    // Load email templates
+                    if (data.emailSubjectUser) {
+                        document.getElementById('emailSubjectUser').value = data.emailSubjectUser;
+                    }
+                    if (data.emailSubjectAdmin) {
+                        document.getElementById('emailSubjectAdmin').value = data.emailSubjectAdmin;
+                    }
+                    if (data.emailBodyUser) {
+                        document.getElementById('emailBodyUser').value = data.emailBodyUser;
+                    }
+                    if (data.emailBodyAdmin) {
+                        document.getElementById('emailBodyAdmin').value = data.emailBodyAdmin;
+                    }
+                    
+                    // Load table configuration
+                    const userTableCols = data.userTableColumns || {
+                        toolName: true,
+                        partNumber: true,
+                        checkoutDate: true,
+                        location: false,
+                        owner: false,
+                        calDueDate: false
+                    };
+                    document.getElementById('tableColToolName').checked = userTableCols.toolName !== false;
+                    document.getElementById('tableColPartNumber').checked = userTableCols.partNumber !== false;
+                    document.getElementById('tableColCheckoutDate').checked = userTableCols.checkoutDate !== false;
+                    document.getElementById('tableColLocation').checked = userTableCols.location === true;
+                    document.getElementById('tableColOwner').checked = userTableCols.owner === true;
+                    document.getElementById('tableColCalDueDate').checked = userTableCols.calDueDate === true;
+                    
+                    const adminTableCols = data.adminTableColumns || {
+                        toolName: true,
+                        partNumber: true,
+                        technician: true,
+                        checkoutDate: true,
+                        location: false,
+                        owner: false,
+                        calDueDate: false
+                    };
+                    document.getElementById('adminTableColToolName').checked = adminTableCols.toolName !== false;
+                    document.getElementById('adminTableColPartNumber').checked = adminTableCols.partNumber !== false;
+                    document.getElementById('adminTableColTechnician').checked = adminTableCols.technician !== false;
+                    document.getElementById('adminTableColCheckoutDate').checked = adminTableCols.checkoutDate !== false;
+                    document.getElementById('adminTableColLocation').checked = adminTableCols.location === true;
+                    document.getElementById('adminTableColOwner').checked = adminTableCols.owner === true;
+                    document.getElementById('adminTableColCalDueDate').checked = adminTableCols.calDueDate === true;
+                    
+                    if (data.tableHeaderColor) {
+                        document.getElementById('tableHeaderColor').value = data.tableHeaderColor;
                     }
                     
                     if (data.lastUpdated) {
@@ -1877,22 +2370,22 @@
             updatePasswordBtn.addEventListener('click', async () => {
             const newPassword = document.getElementById('adminPasswordInput').value.trim();
             if (!newPassword) {
-                alert('Please enter a password');
+                alert('Please enter an admin code');
                 return;
             }
 
             try {
                 await db.collection('settings').doc('admin').set({
-                    AdminPassword: newPassword,
+                    adminCode: newPassword,
                     lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
                 
-                alert('✅ Admin password updated successfully!');
+                alert('✅ Admin code updated successfully!');
                 document.getElementById('adminPasswordInput').value = '';
                 document.getElementById('adminPasswordInput').placeholder = '••••••••';
             } catch (error) {
-                console.error('Error updating password:', error);
-                alert('Failed to update password: ' + error.message);
+                console.error('Error updating admin code:', error);
+                alert('Failed to update admin code: ' + error.message);
             }
         });
         }
@@ -1945,6 +2438,259 @@
             });
         }
 
+        // Update Email Tolerance Window
+        const updateEmailToleranceBtn = document.getElementById('updateEmailToleranceBtn');
+        if (updateEmailToleranceBtn) {
+            updateEmailToleranceBtn.addEventListener('click', async () => {
+                const toleranceWindow = parseInt(document.getElementById('emailToleranceWindow').value);
+                
+                if (isNaN(toleranceWindow) || toleranceWindow < 0 || toleranceWindow > 60) {
+                    alert('Please enter a valid number between 0 and 60 minutes');
+                    return;
+                }
+
+                try {
+                    await db.collection('settings').doc('admin').set({
+                        emailToleranceWindow: toleranceWindow,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                    
+                    alert(`✅ Email tolerance window updated successfully!\n\nEmails will now be sent if the function runs within ${toleranceWindow} minute(s) of the notification time.`);
+                } catch (error) {
+                    console.error('Error updating email tolerance window:', error);
+                    alert('Failed to update email tolerance window: ' + error.message);
+                }
+            });
+        }
+
+        // Update Email Check Frequency
+        const updateEmailFrequencyBtn = document.getElementById('updateEmailFrequencyBtn');
+        if (updateEmailFrequencyBtn) {
+            updateEmailFrequencyBtn.addEventListener('click', async () => {
+                if (!emailCheckFrequencySelect) {
+                    alert('Frequency selector not found');
+                    return;
+                }
+
+                let frequencyValue = emailCheckFrequencySelect.value;
+
+                if (frequencyValue === 'custom') {
+                    const cronExpression = getCustomCronExpression(true);
+                    if (!cronExpression) {
+                        return;
+                    }
+                    frequencyValue = cronExpression;
+                }
+
+                try {
+                    await db.collection('settings').doc('admin').set({
+                        emailCheckFrequency: frequencyValue,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                    
+                    alert('✅ Email check frequency updated!\n\nYour Cloud Scheduler job should continue pointing to the HTTP function. The function now uses this preference to decide when to send notifications.');
+                    updateCronPreview();
+                } catch (error) {
+                    console.error('Error updating email check frequency:', error);
+                    alert('Failed to update email check frequency: ' + error.message);
+                }
+            });
+        }
+
+        if (copyCronBtn && cronPreviewInput) {
+            copyCronBtn.addEventListener('click', async () => {
+                const value = cronPreviewInput.value.trim();
+                if (!value) {
+                    alert('No cron expression to copy yet.');
+                    return;
+                }
+                try {
+                    await navigator.clipboard.writeText(value);
+                    copyCronBtn.innerHTML = '<i class="fas fa-check"></i>';
+                    setTimeout(() => {
+                        copyCronBtn.innerHTML = '<i class="fas fa-copy"></i>';
+                    }, 1500);
+                } catch (err) {
+                    console.error('Clipboard write failed:', err);
+                    alert('Unable to copy. Please copy manually.');
+                }
+            });
+        }
+
+        // Update Email Configuration
+        const updateEmailConfigBtn = document.getElementById('updateEmailConfigBtn');
+        if (updateEmailConfigBtn) {
+            updateEmailConfigBtn.addEventListener('click', async () => {
+                const emailAccount = document.getElementById('emailAccount').value.trim();
+                const emailAppPassword = document.getElementById('emailAppPassword').value.trim();
+                const emailFrom = document.getElementById('emailFrom').value.trim();
+
+                if (!emailAccount) {
+                    alert('Please enter a Gmail address');
+                    return;
+                }
+
+                if (!emailAppPassword && !document.getElementById('emailAppPassword').placeholder.includes('••••')) {
+                    alert('Please enter a Gmail app password');
+                    return;
+                }
+
+                if (!emailFrom) {
+                    alert('Please enter a "From" email address');
+                    return;
+                }
+
+                try {
+                    const updateData = {
+                        emailAccount: emailAccount,
+                        emailFrom: emailFrom,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+
+                    // Only update password if a new one was entered
+                    if (emailAppPassword) {
+                        updateData.emailAppPassword = emailAppPassword;
+                    }
+
+                    await db.collection('settings').doc('admin').set(updateData, { merge: true });
+                    
+                    // Clear password field and show placeholder
+                    document.getElementById('emailAppPassword').value = '';
+                    document.getElementById('emailAppPassword').placeholder = '••••••••';
+                    
+                    alert('✅ Email configuration updated successfully!\n\nNote: You may need to update Firebase Functions config manually using:\nfirebase functions:config:set email.user="' + emailAccount + '"\nfirebase functions:config:set email.password="your-app-password"\nfirebase functions:config:set email.from="' + emailFrom + '"');
+                } catch (error) {
+                    console.error('Error updating email configuration:', error);
+                    alert('Failed to update email configuration: ' + error.message);
+                }
+            });
+        }
+
+        // Update Email Templates
+        const updateEmailTemplateBtn = document.getElementById('updateEmailTemplateBtn');
+        if (updateEmailTemplateBtn) {
+            updateEmailTemplateBtn.addEventListener('click', async () => {
+                const emailSubjectUser = document.getElementById('emailSubjectUser').value.trim();
+                const emailSubjectAdmin = document.getElementById('emailSubjectAdmin').value.trim();
+                const emailBodyUser = document.getElementById('emailBodyUser').value.trim();
+                const emailBodyAdmin = document.getElementById('emailBodyAdmin').value.trim();
+
+                if (!emailSubjectUser || !emailSubjectAdmin || !emailBodyUser || !emailBodyAdmin) {
+                    alert('Please fill in all email template fields');
+                    return;
+                }
+
+                try {
+                    await db.collection('settings').doc('admin').set({
+                        emailSubjectUser: emailSubjectUser,
+                        emailSubjectAdmin: emailSubjectAdmin,
+                        emailBodyUser: emailBodyUser,
+                        emailBodyAdmin: emailBodyAdmin,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                    
+                    alert('✅ Email templates updated successfully!');
+                } catch (error) {
+                    console.error('Error updating email templates:', error);
+                    alert('Failed to update email templates: ' + error.message);
+                }
+            });
+        }
+
+        // Reset Email Templates to Default
+        const resetEmailTemplateBtn = document.getElementById('resetEmailTemplateBtn');
+        if (resetEmailTemplateBtn) {
+            resetEmailTemplateBtn.addEventListener('click', async () => {
+                if (!confirm('Are you sure you want to reset email templates to default values?')) {
+                    return;
+                }
+
+                const defaultSubjectUser = 'Tool Tracking Reminder: {count} Tool(s) Checked Out';
+                const defaultSubjectAdmin = 'Daily Tool Status Report: {count} Tool(s) Currently OUT';
+                const defaultBodyUser = `Hello {userName},
+
+This is a reminder that you currently have <strong>{count}</strong> tool(s) checked out:
+
+{toolList}
+
+Please remember to check in these tools when you're done using them.
+
+Thank you!`;
+                const defaultBodyAdmin = `Hello Administrators,
+
+This is the daily summary of tools currently checked out:
+
+<strong>Total Tools OUT: {count}</strong>
+
+{toolList}
+
+Thank you!`;
+
+                document.getElementById('emailSubjectUser').value = defaultSubjectUser;
+                document.getElementById('emailSubjectAdmin').value = defaultSubjectAdmin;
+                document.getElementById('emailBodyUser').value = defaultBodyUser;
+                document.getElementById('emailBodyAdmin').value = defaultBodyAdmin;
+
+                try {
+                    await db.collection('settings').doc('admin').set({
+                        emailSubjectUser: defaultSubjectUser,
+                        emailSubjectAdmin: defaultSubjectAdmin,
+                        emailBodyUser: defaultBodyUser,
+                        emailBodyAdmin: defaultBodyAdmin,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                    
+                    alert('✅ Email templates reset to default values!');
+                } catch (error) {
+                    console.error('Error resetting email templates:', error);
+                    alert('Failed to reset email templates: ' + error.message);
+                }
+            });
+        }
+
+        // Update Table Configuration
+        const updateTableConfigBtn = document.getElementById('updateTableConfigBtn');
+        if (updateTableConfigBtn) {
+            updateTableConfigBtn.addEventListener('click', async () => {
+                try {
+                    // Get user table columns
+                    const userTableColumns = {
+                        toolName: document.getElementById('tableColToolName').checked,
+                        partNumber: document.getElementById('tableColPartNumber').checked,
+                        checkoutDate: document.getElementById('tableColCheckoutDate').checked,
+                        location: document.getElementById('tableColLocation').checked,
+                        owner: document.getElementById('tableColOwner').checked,
+                        calDueDate: document.getElementById('tableColCalDueDate').checked
+                    };
+                    
+                    // Get admin table columns
+                    const adminTableColumns = {
+                        toolName: document.getElementById('adminTableColToolName').checked,
+                        partNumber: document.getElementById('adminTableColPartNumber').checked,
+                        technician: document.getElementById('adminTableColTechnician').checked,
+                        checkoutDate: document.getElementById('adminTableColCheckoutDate').checked,
+                        location: document.getElementById('adminTableColLocation').checked,
+                        owner: document.getElementById('adminTableColOwner').checked,
+                        calDueDate: document.getElementById('adminTableColCalDueDate').checked
+                    };
+                    
+                    // Get table header color
+                    const tableHeaderColor = document.getElementById('tableHeaderColor').value;
+                    
+                    await db.collection('settings').doc('admin').set({
+                        userTableColumns: userTableColumns,
+                        adminTableColumns: adminTableColumns,
+                        tableHeaderColor: tableHeaderColor,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                    
+                    alert('✅ Table configuration updated successfully!');
+                } catch (error) {
+                    console.error('Error updating table configuration:', error);
+                    alert('Failed to update table configuration: ' + error.message);
+                }
+            });
+        }
 
         // Load Users
         async function loadUsers() {
