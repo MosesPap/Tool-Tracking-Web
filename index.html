@@ -1362,6 +1362,35 @@
                         0 2px 4px rgba(0, 0, 0, 0.2) !important;
         }
         
+        /* Analytics Button - 3D Interactive */
+        .btn-analytics {
+            background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%) !important;
+            border: 2px solid #2196F3 !important;
+            color: white !important;
+            border-radius: 8px !important;
+            padding: 6px 12px !important;
+            font-size: 1rem !important;
+            box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4), 
+                        0 2px 4px rgba(0, 0, 0, 0.2) !important;
+            transform: perspective(1000px) rotateX(0deg) !important;
+            transition: all 0.3s ease !important;
+            cursor: pointer !important;
+        }
+        
+        .btn-analytics:hover {
+            background: linear-gradient(135deg, #42A5F5 0%, #2196F3 100%) !important;
+            border-color: #42A5F5 !important;
+            transform: translateY(-2px) perspective(1000px) rotateX(5deg) !important;
+            box-shadow: 0 6px 16px rgba(33, 150, 243, 0.5), 
+                        0 4px 8px rgba(0, 0, 0, 0.3) !important;
+        }
+        
+        .btn-analytics:active {
+            transform: translateY(-1px) perspective(1000px) rotateX(3deg) !important;
+            box-shadow: 0 4px 10px rgba(33, 150, 243, 0.4), 
+                        0 2px 4px rgba(0, 0, 0, 0.2) !important;
+        }
+        
         /* Scanner expansion styles */
         .scanner-container {
             transition: all 0.3s ease;
@@ -4140,6 +4169,182 @@ if (!userCredential.user.emailVerified) {
                 if (toolList) {
                     toolList.innerHTML = '<h4 class="tool-title">Today\'s Scanned Tools:</h4><p class="text-danger">Error loading tools. Please try again.</p>';
                 }
+            }
+        }
+
+        // Show Today's Analytics
+        async function showTodayAnalytics() {
+            try {
+                const user = firebase.auth().currentUser;
+                if (!user) return;
+
+                // Get technician name
+                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                const snapshot = await db.collection('tools')
+                    .where('technician', '==', technicianName)
+                    .where('timestamp', '>=', today)
+                    .get();
+
+                let allTools = [];
+                if (!snapshot.empty) {
+                    snapshot.docs.forEach(doc => {
+                        allTools.push(doc.data());
+                    });
+                }
+
+                // Calculate analytics
+                const totalTools = allTools.length;
+                const outTools = allTools.filter(t => t.status === 'OUT').length;
+                const inTools = allTools.filter(t => t.status === 'IN').length;
+                const brokenTools = allTools.filter(t => t.status === 'BROKEN').length;
+                const lostTools = allTools.filter(t => t.status === 'LOST').length;
+                const calibrationTools = allTools.filter(t => t.status === 'CALIBRATION').length;
+
+                // Group by hour
+                const toolsByHour = {};
+                allTools.forEach(tool => {
+                    if (tool.timestamp) {
+                        const date = tool.timestamp.toDate ? tool.timestamp.toDate() : new Date(tool.timestamp);
+                        const hour = date.getHours();
+                        toolsByHour[hour] = (toolsByHour[hour] || 0) + 1;
+                    }
+                });
+
+                // Find peak hour
+                let peakHour = null;
+                let peakCount = 0;
+                Object.keys(toolsByHour).forEach(hour => {
+                    if (toolsByHour[hour] > peakCount) {
+                        peakCount = toolsByHour[hour];
+                        peakHour = hour;
+                    }
+                });
+
+                // Create modal HTML
+                const modalHtml = `
+                    <div class="modal fade" id="todayAnalyticsModal" tabindex="-1" aria-labelledby="todayAnalyticsModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header bg-primary text-white">
+                                    <h5 class="modal-title" id="todayAnalyticsModalLabel">
+                                        <i class="fas fa-chart-bar"></i> Today's Analytics
+                                    </h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6 mb-2">
+                                            <div class="card bg-primary text-white">
+                                                <div class="card-body text-center">
+                                                    <h3>${totalTools}</h3>
+                                                    <p class="mb-0">Total Tools Scanned</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <div class="card bg-success text-white">
+                                                <div class="card-body text-center">
+                                                    <h3>${inTools}</h3>
+                                                    <p class="mb-0">Checked In</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-md-4 mb-2">
+                                            <div class="card bg-danger text-white">
+                                                <div class="card-body text-center">
+                                                    <h3>${outTools}</h3>
+                                                    <p class="mb-0">Checked Out</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4 mb-2">
+                                            <div class="card bg-warning text-white">
+                                                <div class="card-body text-center">
+                                                    <h3>${brokenTools}</h3>
+                                                    <p class="mb-0">Broken</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4 mb-2">
+                                            <div class="card bg-info text-white">
+                                                <div class="card-body text-center">
+                                                    <h3>${lostTools}</h3>
+                                                    <p class="mb-0">Lost</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    ${calibrationTools > 0 ? `
+                                    <div class="row mb-3">
+                                        <div class="col-md-12 mb-2">
+                                            <div class="card bg-secondary text-white">
+                                                <div class="card-body text-center">
+                                                    <h3>${calibrationTools}</h3>
+                                                    <p class="mb-0">Calibration</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    ` : ''}
+                                    ${peakHour !== null ? `
+                                    <div class="card mb-3">
+                                        <div class="card-body">
+                                            <h6 class="card-title"><i class="fas fa-clock"></i> Peak Activity Hour</h6>
+                                            <p class="mb-0"><strong>${peakHour}:00</strong> - ${peakCount} tool(s) scanned</p>
+                                        </div>
+                                    </div>
+                                    ` : ''}
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h6 class="card-title"><i class="fas fa-chart-line"></i> Activity by Hour</h6>
+                                            <div class="mt-2">
+                                                ${Object.keys(toolsByHour).sort((a, b) => a - b).map(hour => `
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <span>${hour}:00</span>
+                                                        <div class="progress flex-grow-1 mx-2" style="height: 20px;">
+                                                            <div class="progress-bar" role="progressbar" style="width: ${(toolsByHour[hour] / (peakCount || 1)) * 100}%;" 
+                                                                 aria-valuenow="${toolsByHour[hour]}" aria-valuemin="0" aria-valuemax="${peakCount || 1}">
+                                                                ${toolsByHour[hour]}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Remove existing modal if any
+                const existingModal = document.getElementById('todayAnalyticsModal');
+                if (existingModal) existingModal.remove();
+
+                // Add and show modal
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                const modal = new bootstrap.Modal(document.getElementById('todayAnalyticsModal'));
+                modal.show();
+
+                // Clean up after hide
+                document.getElementById('todayAnalyticsModal').addEventListener('hidden.bs.modal', function() {
+                    this.remove();
+                });
+
+            } catch (error) {
+                console.error('Error loading analytics:', error);
+                alert('Error loading analytics: ' + error.message);
             }
         }
 
