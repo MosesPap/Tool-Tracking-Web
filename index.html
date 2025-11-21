@@ -4000,7 +4000,29 @@ if (!userCredential.user.emailVerified) {
                     console.error('loadTools: toolList element not found!');
                     return;
                 }
-                toolList.innerHTML = '<h4 class="tool-title">Today\'s Scanned Tools:</h4>';
+                // Preserve the header with analytics button, only clear the tools container
+                const headerDiv = toolList.querySelector('div[style*="display: flex"]');
+                if (!headerDiv) {
+                    // If header doesn't exist, create it
+                    toolList.innerHTML = `
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                            <h4 style="font-size: 1.1rem; margin: 0;">Today's Tools</h4>
+                            <button id="todayAnalyticsBtn" onclick="showTodayAnalytics()" class="btn-analytics" title="View Today's Analytics">
+                                <i class="fas fa-chart-bar"></i>
+                            </button>
+                        </div>
+                        <div id="toolsContainer"></div>
+                    `;
+                } else {
+                    // Clear only the tools container, preserve header
+                    let toolsContainer = toolList.querySelector('#toolsContainer');
+                    if (!toolsContainer) {
+                        toolsContainer = document.createElement('div');
+                        toolsContainer.id = 'toolsContainer';
+                        toolList.appendChild(toolsContainer);
+                    }
+                    toolsContainer.innerHTML = '';
+                }
 
                 let allTools = [];
 
@@ -4030,8 +4052,10 @@ if (!userCredential.user.emailVerified) {
                     console.error('Error loading offline tools:', error);
                 }
 
+                const toolsContainer = toolList.querySelector('#toolsContainer') || toolList;
+                
                 if (allTools.length === 0) {
-                    toolList.innerHTML += '<p>No tools scanned today.</p>';
+                    toolsContainer.innerHTML = '<p>No tools scanned today.</p>';
                     return;
                 }
 
@@ -4154,7 +4178,7 @@ if (!userCredential.user.emailVerified) {
                             </div>` : ''}
                         </div>
                     `;
-                    toolList.appendChild(card);
+                    toolsContainer.appendChild(card);
                     
                     // Start countdown for OUT tools
                     if (status === 'OUT' && data.timestamp && data.timestamp.toDate) {
@@ -4167,7 +4191,8 @@ if (!userCredential.user.emailVerified) {
                 console.error('loadTools: Error loading tools:', error);
                 const toolList = document.getElementById('toolList');
                 if (toolList) {
-                    toolList.innerHTML = '<h4 class="tool-title">Today\'s Scanned Tools:</h4><p class="text-danger">Error loading tools. Please try again.</p>';
+                    const toolsContainer = toolList.querySelector('#toolsContainer') || toolList;
+                    toolsContainer.innerHTML = '<p class="text-danger">Error loading tools. Please try again.</p>';
                 }
             }
         }
