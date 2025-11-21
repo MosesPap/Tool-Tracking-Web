@@ -773,6 +773,43 @@
             box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3) !important;
         }
         
+        /* 3D Status Dot */
+        .status-dot {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            box-shadow: 
+                0 2px 4px rgba(76, 175, 80, 0.4),
+                0 0 0 2px rgba(76, 175, 80, 0.2),
+                inset 0 -2px 4px rgba(0, 0, 0, 0.2),
+                inset 0 2px 2px rgba(255, 255, 255, 0.3);
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        .status-dot::before {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.6);
+            box-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+        }
+        
+        .status-dot.offline {
+            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+            box-shadow: 
+                0 2px 4px rgba(244, 67, 54, 0.4),
+                0 0 0 2px rgba(244, 67, 54, 0.2),
+                inset 0 -2px 4px rgba(0, 0, 0, 0.2),
+                inset 0 2px 2px rgba(255, 255, 255, 0.3);
+        }
+        
         .status-badge {
             padding: 5px 10px;
             border-radius: 15px;
@@ -2175,7 +2212,7 @@
               <button id="changeWorkLocationBtn" class="btn btn-outline-primary btn-sm" type="button">
                 <i class="fas fa-map-marker-alt"></i> Change Station
               </button>
-              <span id="onlineStatus" style="font-weight: bold; font-size: 1rem;">🟢 Online</span>
+              <span id="onlineStatus" class="status-dot"></span>
             </div>
 
             <!-- Register Tools Title -->
@@ -4521,6 +4558,7 @@ if (!userCredential.user.emailVerified) {
             document.getElementById('stopScannerBtn').style.display = 'inline-block';
             
             html5QrCode = new Html5Qrcode("reader");
+            // Basic Scanner: Simple configuration with common formats only
             const config = {
                 fps: 10,
                 qrbox: { width: 250, height: 250 }, // Square QR box
@@ -4532,12 +4570,7 @@ if (!userCredential.user.emailVerified) {
                     Html5QrcodeSupportedFormats.EAN_13,
                     Html5QrcodeSupportedFormats.EAN_8,
                     Html5QrcodeSupportedFormats.UPC_A,
-                    Html5QrcodeSupportedFormats.UPC_E,
-                    Html5QrcodeSupportedFormats.ITF,
-                    Html5QrcodeSupportedFormats.AZTEC,
-                    Html5QrcodeSupportedFormats.DATA_MATRIX,
-                    Html5QrcodeSupportedFormats.CODABAR,
-                    Html5QrcodeSupportedFormats.PDF_417
+                    Html5QrcodeSupportedFormats.UPC_E
                 ]
             };
 
@@ -4624,8 +4657,9 @@ if (!userCredential.user.emailVerified) {
             
             try {
                 html5QrCode = new Html5Qrcode("reader");
+                // Advanced Scanner: Enhanced configuration with all formats and better performance
                 const config = {
-                    fps: 10,
+                    fps: 20, // Higher FPS for better scanning speed
                     qrbox: { width: 250, height: 250 },
                     aspectRatio: 1.0,
                     formatsToSupport: [
@@ -4644,8 +4678,13 @@ if (!userCredential.user.emailVerified) {
                     ]
                 };
                 
+                // Advanced scanner uses higher quality camera settings
                 html5QrCode.start(
-                    { facingMode: "environment" },
+                    { 
+                        facingMode: "environment",
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    },
                     config,
                     (decodedText) => {
                         document.getElementById('toolCode').value = decodedText;
@@ -4657,9 +4696,13 @@ if (!userCredential.user.emailVerified) {
                     }
                 ).catch(err => {
                     console.error('Enhanced scanner error:', err);
-                    // Try fallback to user camera
+                    // Try fallback to user camera with high quality
                     html5QrCode.start(
-                        { facingMode: "user" },
+                        { 
+                            facingMode: "user",
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        },
                         config,
                         (decodedText) => {
                             document.getElementById('toolCode').value = decodedText;
@@ -11109,13 +11152,11 @@ if (!userCredential.user.emailVerified) {
         
         if (statusElement) {
             if (isOnline) {
-                statusElement.textContent = '🟢 Online';
-                statusElement.className = 'text-success';
+                statusElement.className = 'status-dot';
                 // Trigger sync when back online
                 syncOfflineTools();
             } else {
-                statusElement.textContent = '🔴 Offline';
-                statusElement.className = 'text-danger';
+                statusElement.className = 'status-dot offline';
             }
         }
     }
