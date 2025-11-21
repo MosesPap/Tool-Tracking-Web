@@ -5319,18 +5319,54 @@ if (!userCredential.user.emailVerified) {
             if (!track) return;
             
             const capabilities = track.getCapabilities();
-            if (capabilities.focusMode && capabilities.focusMode.includes('manual')) {
-                // Normalize coordinates (0-1)
-                const pointX = x / width;
-                const pointY = y / height;
-                
+            
+            // Normalize coordinates (0-1)
+            const pointX = x / width;
+            const pointY = y / height;
+            
+            // Try different focus methods based on what's supported
+            const constraints = {};
+            
+            // Method 1: Use pointsOfInterest (most common)
+            if (capabilities.pointsOfInterest !== undefined) {
+                constraints.pointsOfInterest = [{ x: pointX, y: pointY }];
+            }
+            
+            // Method 2: Use focusPointOfInterest if available
+            if (capabilities.focusPointOfInterest !== undefined) {
+                constraints.focusPointOfInterest = { x: pointX, y: pointY };
+            }
+            
+            // Method 3: Use exposurePointOfInterest for exposure/focus
+            if (capabilities.exposurePointOfInterest !== undefined) {
+                constraints.exposurePointOfInterest = { x: pointX, y: pointY };
+            }
+            
+            // Apply focus mode - use 'single-shot' for tap-to-focus (focuses once then returns to auto)
+            if (capabilities.focusMode) {
+                if (capabilities.focusMode.includes('single-shot')) {
+                    constraints.focusMode = 'single-shot';
+                } else if (capabilities.focusMode.includes('continuous')) {
+                    // If single-shot not available, use continuous
+                    constraints.focusMode = 'continuous';
+                }
+            }
+            
+            // Apply constraints if we have any
+            if (Object.keys(constraints).length > 0) {
                 track.applyConstraints({
-                    advanced: [{
-                        focusMode: 'manual',
-                        pointsOfInterest: [{ x: pointX, y: pointY }]
-                    }]
+                    advanced: [constraints]
                 }).catch(error => {
                     console.log('Focus not supported:', error);
+                    // Fallback: try without focusMode
+                    if (constraints.focusMode) {
+                        delete constraints.focusMode;
+                        track.applyConstraints({
+                            advanced: [constraints]
+                        }).catch(err => {
+                            console.log('Focus fallback failed:', err);
+                        });
+                    }
                 });
             }
         }
