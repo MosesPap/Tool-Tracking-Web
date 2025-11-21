@@ -1,0 +1,10 @@
+# Netlify redirects file
+# This ensures all routes work correctly
+# Place this file in the ROOT of your repository (same level as index.html)
+
+# Redirect root to index.html
+/  /index.html  200
+
+# Handle all other routes - serve index.html for 404s
+/*  /index.html  200
+
