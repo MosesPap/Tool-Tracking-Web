@@ -658,7 +658,57 @@
             text-align: center;
         }
         .btn-scan {
-            margin: 10px 0;
+            margin: 4px 0;
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            border-radius: 12px;
+            border: 2px solid;
+            transition: all 0.3s ease;
+            flex: 1;
+        }
+        
+        /* Scanner button inactive (gray 3D) */
+        .btn-scan:not(.active) {
+            background: linear-gradient(135deg, #9e9e9e 0%, #757575 100%);
+            border-color: #757575;
+            color: white;
+            box-shadow: 0 2px 4px rgba(117, 117, 117, 0.3);
+            transform: perspective(1000px) rotateX(0deg);
+        }
+        
+        /* Scanner button active (orange 3D) */
+        .btn-scan.active {
+            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+            border-color: #FF9800;
+            color: white;
+            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4), 
+                        0 2px 4px rgba(0, 0, 0, 0.2);
+            transform: translateY(-2px) perspective(1000px) rotateX(5deg);
+        }
+        
+        .btn-scan:hover:not(.active) {
+            background: linear-gradient(135deg, #8e8e8e 0%, #656565 100%);
+            border-color: #656565;
+            transform: translateY(-1px) perspective(1000px) rotateX(3deg);
+            box-shadow: 0 3px 6px rgba(117, 117, 117, 0.4);
+        }
+        
+        .btn-scan:hover.active {
+            transform: translateY(-3px) perspective(1000px) rotateX(8deg);
+            box-shadow: 0 6px 16px rgba(255, 152, 0, 0.5), 
+                        0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        .btn-scan:active:not(.active) {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(117, 117, 117, 0.3);
+        }
+        
+        .btn-scan:active.active {
+            transform: translateY(-1px) perspective(1000px) rotateX(3deg);
+            box-shadow: 0 4px 10px rgba(255, 152, 0, 0.4), 
+                        0 2px 4px rgba(0, 0, 0, 0.2);
         }
         .status-badge {
             padding: 5px 10px;
@@ -1859,19 +1909,18 @@
                             <div class="scanner-container" id="scannerContainer">
                             <div class="card mb-2">
                                 <div class="card-body" style="padding-bottom: 10px; padding-top: 12px;">
-                                    <h4 style="font-size: 1.1rem; margin-bottom: 10px;">Scan Tool</h4>
-                                    <div class="d-flex gap-2 mb-2">
-                                        <button onclick="startEnhancedScanner()" class="btn btn-primary btn-scan flex-fill">
+                                    <div class="d-flex gap-2 mb-2" style="margin-top: 4px;">
+                                        <button id="advancedScannerBtn" onclick="startEnhancedScanner()" class="btn btn-scan active">
                                             <i class="fas fa-camera"></i> Advanced Scanner
                                         </button>
-                                        <button onclick="startScanner()" class="btn btn-outline-primary btn-scan flex-fill">
+                                        <button id="basicScannerBtn" onclick="startScanner()" class="btn btn-scan">
                                             <i class="fas fa-qrcode"></i> Basic Scanner
                                         </button>
                                     </div>
                                     <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-2" style="display:none;">Stop Scanner</button>
                                     <div id="reader" style="display:none;"></div>
                                     <div class="input-group mb-2">
-                                        <input type="text" id="toolCode" class="form-control" placeholder="Enter Tool Code">
+                                        <input type="text" id="toolCode" class="form-control" placeholder="Scan or Type Tool Code">
                                         <button onclick="submitCode()" class="btn btn-primary">
                                             <i class="fas fa-check"></i> Submit
                                         </button>
@@ -4026,6 +4075,10 @@ if (!userCredential.user.emailVerified) {
 
         // QR Code Scanner
         function startScanner() {
+            // Toggle active states
+            document.getElementById('basicScannerBtn').classList.add('active');
+            document.getElementById('advancedScannerBtn').classList.remove('active');
+            
             var reader = document.getElementById('reader');
             reader.style.display = 'block';
             reader.style.height = '320px';
@@ -4085,6 +4138,10 @@ if (!userCredential.user.emailVerified) {
         }
 
         function stopCamera() {
+            // Remove active states
+            document.getElementById('basicScannerBtn').classList.remove('active');
+            document.getElementById('advancedScannerBtn').classList.remove('active');
+            
             var reader = document.getElementById('reader');
             // Immediately hide and collapse the scanner area
             reader.style.display = 'none';
@@ -4109,6 +4166,10 @@ if (!userCredential.user.emailVerified) {
         let focusIndicator = null;
 
         async function startEnhancedScanner() {
+            // Toggle active states
+            document.getElementById('advancedScannerBtn').classList.add('active');
+            document.getElementById('basicScannerBtn').classList.remove('active');
+            
             try {
                 // Show the enhanced scanner modal
                 document.getElementById('enhancedScannerModal').style.display = 'flex';
@@ -4171,6 +4232,10 @@ if (!userCredential.user.emailVerified) {
         }
 
         function closeEnhancedScanner() {
+            // Remove active states
+            document.getElementById('advancedScannerBtn').classList.remove('active');
+            document.getElementById('basicScannerBtn').classList.remove('active');
+            
             // Stop the scanner
             if (enhancedScannerStream) {
                 enhancedScannerStream.getTracks().forEach(track => track.stop());
