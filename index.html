@@ -737,14 +737,40 @@
             background: linear-gradient(135deg, #FFB74D 0%, #FF9800 100%);
             border-color: #FFB74D;
             transform: translateY(calc(-50% - 2px)) perspective(1000px) rotateX(5deg);
-            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.5), 
+            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4),
                         0 2px 4px rgba(0, 0, 0, 0.2);
         }
         
         #backToMenuBtn:active {
-            transform: translateY(calc(-50% - 1px)) perspective(1000px) rotateX(3deg);
-            box-shadow: 0 4px 10px rgba(255, 152, 0, 0.4), 
-                        0 2px 4px rgba(0, 0, 0, 0.2);
+            transform: translateY(calc(-50% + 0px)) perspective(1000px) rotateX(2deg);
+            box-shadow: 0 2px 4px rgba(255, 152, 0, 0.3);
+        }
+        
+        /* Change Station button 3D interactive */
+        #changeWorkLocationBtn {
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%) !important;
+            border: 2px solid #bdbdbd !important;
+            color: #333 !important;
+            border-radius: 12px !important;
+            padding: 6px 12px !important;
+            font-size: 0.9rem !important;
+            font-weight: bold !important;
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3) !important;
+            transform: perspective(1000px) rotateX(0deg) !important;
+            transition: all 0.3s ease !important;
+        }
+        
+        #changeWorkLocationBtn:hover {
+            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%) !important;
+            border-color: #adadad !important;
+            transform: translateY(-2px) perspective(1000px) rotateX(5deg) !important;
+            box-shadow: 0 4px 12px rgba(189, 189, 189, 0.4),
+                        0 2px 4px rgba(0, 0, 0, 0.2) !important;
+        }
+        
+        #changeWorkLocationBtn:active {
+            transform: translateY(0) perspective(1000px) rotateX(2deg) !important;
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3) !important;
         }
         
         .status-badge {
@@ -4085,7 +4111,7 @@ if (!userCredential.user.emailVerified) {
                 }
 
                 const toolsContainer = toolList.querySelector('#toolsContainer') || toolList;
-                
+
                 if (allTools.length === 0) {
                     toolsContainer.innerHTML = '<p>No tools scanned today.</p>';
                     return;
@@ -4258,29 +4284,6 @@ if (!userCredential.user.emailVerified) {
                 const totalTools = allTools.length;
                 const outTools = allTools.filter(t => t.status === 'OUT').length;
                 const inTools = allTools.filter(t => t.status === 'IN').length;
-                const brokenTools = allTools.filter(t => t.status === 'BROKEN').length;
-                const lostTools = allTools.filter(t => t.status === 'LOST').length;
-                const calibrationTools = allTools.filter(t => t.status === 'CALIBRATION').length;
-
-                // Group by hour
-                const toolsByHour = {};
-                allTools.forEach(tool => {
-                    if (tool.timestamp) {
-                        const date = tool.timestamp.toDate ? tool.timestamp.toDate() : new Date(tool.timestamp);
-                        const hour = date.getHours();
-                        toolsByHour[hour] = (toolsByHour[hour] || 0) + 1;
-                    }
-                });
-
-                // Find peak hour
-                let peakHour = null;
-                let peakCount = 0;
-                Object.keys(toolsByHour).forEach(hour => {
-                    if (toolsByHour[hour] > peakCount) {
-                        peakCount = toolsByHour[hour];
-                        peakHour = hour;
-                    }
-                });
 
                 // Create modal HTML
                 const modalHtml = `
@@ -4295,84 +4298,28 @@ if (!userCredential.user.emailVerified) {
                                 </div>
                                 <div class="modal-body">
                                     <div class="row mb-3">
-                                        <div class="col-md-6 mb-2">
+                                        <div class="col-md-4 mb-2">
                                             <div class="card bg-primary text-white">
                                                 <div class="card-body text-center">
                                                     <h3>${totalTools}</h3>
-                                                    <p class="mb-0">Total Tools Scanned</p>
+                                                    <p class="mb-0">Total Scanned Tools</p>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="col-md-6 mb-2">
+                                        <div class="col-md-4 mb-2">
                                             <div class="card bg-success text-white">
                                                 <div class="card-body text-center">
                                                     <h3>${inTools}</h3>
-                                                    <p class="mb-0">Checked In</p>
+                                                    <p class="mb-0">Check In</p>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div class="row mb-3">
                                         <div class="col-md-4 mb-2">
                                             <div class="card bg-danger text-white">
                                                 <div class="card-body text-center">
                                                     <h3>${outTools}</h3>
-                                                    <p class="mb-0">Checked Out</p>
+                                                    <p class="mb-0">Check Out</p>
                                                 </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4 mb-2">
-                                            <div class="card bg-warning text-white">
-                                                <div class="card-body text-center">
-                                                    <h3>${brokenTools}</h3>
-                                                    <p class="mb-0">Broken</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4 mb-2">
-                                            <div class="card bg-info text-white">
-                                                <div class="card-body text-center">
-                                                    <h3>${lostTools}</h3>
-                                                    <p class="mb-0">Lost</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    ${calibrationTools > 0 ? `
-                                    <div class="row mb-3">
-                                        <div class="col-md-12 mb-2">
-                                            <div class="card bg-secondary text-white">
-                                                <div class="card-body text-center">
-                                                    <h3>${calibrationTools}</h3>
-                                                    <p class="mb-0">Calibration</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    ` : ''}
-                                    ${peakHour !== null ? `
-                                    <div class="card mb-3">
-                                        <div class="card-body">
-                                            <h6 class="card-title"><i class="fas fa-clock"></i> Peak Activity Hour</h6>
-                                            <p class="mb-0"><strong>${peakHour}:00</strong> - ${peakCount} tool(s) scanned</p>
-                                        </div>
-                                    </div>
-                                    ` : ''}
-                                    <div class="card">
-                                        <div class="card-body">
-                                            <h6 class="card-title"><i class="fas fa-chart-line"></i> Activity by Hour</h6>
-                                            <div class="mt-2">
-                                                ${Object.keys(toolsByHour).sort((a, b) => a - b).map(hour => `
-                                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                                        <span>${hour}:00</span>
-                                                        <div class="progress flex-grow-1 mx-2" style="height: 20px;">
-                                                            <div class="progress-bar" role="progressbar" style="width: ${(toolsByHour[hour] / (peakCount || 1)) * 100}%;" 
-                                                                 aria-valuenow="${toolsByHour[hour]}" aria-valuemin="0" aria-valuemax="${peakCount || 1}">
-                                                                ${toolsByHour[hour]}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                `).join('')}
                                             </div>
                                         </div>
                                     </div>
