@@ -1087,14 +1087,21 @@
 
         .register-tool-card {
             border-radius: 8px;
-            padding: 16px;
+            padding: 12px;
             margin-bottom: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.08);
             cursor: pointer;
             transition: background-color 0.3s ease;
-            max-width: 500px;
+            max-width: 380px;
             margin-left: auto;
             margin-right: auto;
+        }
+        
+        /* Reduce spacing between elements in register tool cards */
+        #toolList .register-tool-card > div,
+        #collectionDisplaySection .register-tool-card > div,
+        #searchResults .register-tool-card > div {
+            line-height: 1.2 !important;
         }
         .register-tool-card.out { background: #FFCDD2; }
         .register-tool-card.broken { background: #FFF3E0; }
@@ -1147,18 +1154,20 @@
             font-weight: bold;
             font-size: 18px;
             color: #000;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
             text-align: left;
+            line-height: 1.2;
         }
         .register-tool-date {
             font-size: 14px;
             color: #666;
             font-weight: bold;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
             text-align: left;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            line-height: 1.2;
         }
         .register-tool-row {
             display: flex;
@@ -1176,12 +1185,14 @@
             font-weight: bold;
             font-size: 14px;
             text-decoration: underline;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
+            line-height: 1.2;
         }
         .register-tool-value {
             color: #666;
             font-weight: bold;
             font-size: 14px;
+            line-height: 1.2;
         }
         .register-tool-status {
             color: #fff;
@@ -1204,6 +1215,45 @@
             border-radius: 12px !important;
             box-shadow: 0 6px 16px rgba(255, 152, 0, 0.5), 
                         0 2px 8px rgba(0, 0, 0, 0.2) !important;
+        }
+        
+        /* Tool Code Input Field - Darker and Wider Border */
+        #toolCode {
+            border: 3px solid #333 !important;
+            border-radius: 8px !important;
+        }
+        
+        #toolCode:focus {
+            border-color: #FF9800 !important;
+            box-shadow: 0 0 0 0.2rem rgba(255, 152, 0, 0.25) !important;
+        }
+        
+        /* Submit Button - 3D Green Checkmark */
+        .submit-check-btn {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%) !important;
+            border: 2px solid #4CAF50 !important;
+            color: white !important;
+            border-radius: 8px !important;
+            padding: 8px 16px !important;
+            font-size: 1.2rem !important;
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4), 
+                        0 2px 4px rgba(0, 0, 0, 0.2) !important;
+            transform: perspective(1000px) rotateX(0deg) !important;
+            transition: all 0.3s ease !important;
+        }
+        
+        .submit-check-btn:hover {
+            background: linear-gradient(135deg, #66BB6A 0%, #4CAF50 100%) !important;
+            border-color: #66BB6A !important;
+            transform: translateY(-2px) perspective(1000px) rotateX(5deg) !important;
+            box-shadow: 0 6px 16px rgba(76, 175, 80, 0.5), 
+                        0 4px 8px rgba(0, 0, 0, 0.3) !important;
+        }
+        
+        .submit-check-btn:active {
+            transform: translateY(-1px) perspective(1000px) rotateX(3deg) !important;
+            box-shadow: 0 4px 10px rgba(76, 175, 80, 0.4), 
+                        0 2px 4px rgba(0, 0, 0, 0.2) !important;
         }
         
         /* Scanner expansion styles */
@@ -1966,19 +2016,19 @@
                             <div class="card mb-2">
                                 <div class="card-body" style="padding-bottom: 10px; padding-top: 12px;">
                                     <div class="d-flex gap-2 mb-2" style="margin-top: 4px;">
-                                        <button id="advancedScannerBtn" onclick="startEnhancedScanner()" class="btn btn-scan active">
-                                            <i class="fas fa-camera"></i> Advanced Scanner
-                                        </button>
-                                        <button id="basicScannerBtn" onclick="startScanner()" class="btn btn-scan">
+                                        <button id="basicScannerBtn" onclick="startScanner()" class="btn btn-scan active">
                                             <i class="fas fa-qrcode"></i> Basic Scanner
+                                        </button>
+                                        <button id="advancedScannerBtn" onclick="startEnhancedScanner()" class="btn btn-scan">
+                                            <i class="fas fa-camera"></i> Advanced Scanner
                                         </button>
                                     </div>
                                     <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-2" style="display:none;">Stop Scanner</button>
                                     <div id="reader" style="display:none;"></div>
                                     <div class="input-group mb-2">
                                         <input type="text" id="toolCode" class="form-control" placeholder="Scan or Type Tool Code">
-                                        <button onclick="submitCode()" class="btn btn-primary">
-                                            <i class="fas fa-check"></i> Submit
+                                        <button onclick="submitCode()" class="btn btn-primary submit-check-btn">
+                                            <i class="fas fa-check"></i>
                                         </button>
                                     </div>
                                     <button id="toolDetailsBtn" class="btn btn-info w-100 mb-1" disabled onclick="showLastScannedToolDetails()">Tool Details</button>
@@ -3917,10 +3967,10 @@ if (!userCredential.user.emailVerified) {
                     const statusColor = status === 'IN' ? 'green' : 'red';
                     
                     card.innerHTML = `
-                        <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000; text-align: left;">
+                        <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 4px; color: #000; text-align: left; line-height: 1.2;">
                             ${index + 1}. ${data.toolName || 'Unknown Tool'}${offlineIndicator}
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; line-height: 1.2;">
                             <div style="color: #666; font-size: 0.9rem;">
                                 ${time}
                             </div>
@@ -3929,7 +3979,7 @@ if (!userCredential.user.emailVerified) {
                                 <span style="color: #666; font-weight: bold;">${workOnValue}</span>
                             </div>
                             </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px; line-height: 1.2;">
                             <div style="text-align: left;">
                                 <span style="color: black; font-weight: bold; text-decoration: underline;">TID</span>
                             </div>
@@ -3940,7 +3990,7 @@ if (!userCredential.user.emailVerified) {
                                 <span style="color: black; font-weight: bold; text-decoration: underline;">STS</span>
                             </div>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px; line-height: 1.2;">
                             <div style="text-align: left;">
                                 <span style="color: #666; font-weight: bold;">${tool.id}</span>
                             </div>
@@ -3951,7 +4001,7 @@ if (!userCredential.user.emailVerified) {
                                 <span class="badge bg-${status === 'IN' ? 'success' : 'danger'}" style="font-weight: bold; border-radius: 15px; padding: 4px 8px;">${status}</span>
                             </div>
                         </div>
-                        <div style="margin-bottom: 12px; text-align: left;">
+                        <div style="margin-bottom: 6px; text-align: left; line-height: 1.2;">
                             <span style="color: black; font-weight: bold;">Cal Due Date:</span> 
                             <span style="color: blue; font-weight: bold;">${calDueDate}</span>
                         </div>
