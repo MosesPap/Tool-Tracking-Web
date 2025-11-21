@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- Deprecated: apple-mobile-web-app-capable is deprecated, but kept for backward compatibility -->
+    <!-- <meta name="apple-mobile-web-app-capable" content="yes"> -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
     <title>Tool Tracking</title>
@@ -2147,7 +2148,12 @@
                                 </div>
                             </div>
                             <div id="toolList" class="mt-2">
-                                <h4 style="font-size: 1.1rem; margin-bottom: 8px;">Today's Tools</h4>
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                    <h4 style="font-size: 1.1rem; margin: 0;">Today's Tools</h4>
+                                    <button id="todayAnalyticsBtn" onclick="showTodayAnalytics()" class="btn-analytics" title="View Today's Analytics">
+                                        <i class="fas fa-chart-bar"></i>
+                                    </button>
+                                </div>
                                 <!-- Tools will be listed here -->
                             </div>
                         </div>
@@ -4443,8 +4449,8 @@ if (!userCredential.user.emailVerified) {
         }
 
         function closeEnhancedScanner() {
-            // Remove active states
-            document.getElementById('advancedScannerBtn').classList.remove('active');
+            // Keep advanced scanner button active since it was selected
+            document.getElementById('advancedScannerBtn').classList.add('active');
             document.getElementById('basicScannerBtn').classList.remove('active');
             
             // Stop the scanner
@@ -5842,6 +5848,20 @@ if (!userCredential.user.emailVerified) {
         }
 
         // Add event listener to toolCode input to trigger flash
+        // Fix aria-hidden warnings by ensuring focus is properly managed when modals are hidden
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add event listeners to all modals to handle focus management
+            document.querySelectorAll('.modal').forEach(function(modal) {
+                modal.addEventListener('hidden.bs.modal', function() {
+                    // Blur any focused elements inside the modal
+                    const focusedElement = this.querySelector(':focus');
+                    if (focusedElement) {
+                        focusedElement.blur();
+                    }
+                });
+            });
+        });
+        
         document.addEventListener('DOMContentLoaded', function() {
             const toolCodeInput = document.getElementById('toolCode');
             if (toolCodeInput) {
@@ -8822,6 +8842,11 @@ if (!userCredential.user.emailVerified) {
         // Force-hide the tool details modal and remove any modal backdrop
         const toolDetailsModalEl = document.getElementById('toolDetailsModal');
         if (toolDetailsModalEl) {
+            // Blur any focused elements inside the modal first
+            const focusedElement = toolDetailsModalEl.querySelector(':focus');
+            if (focusedElement) {
+                focusedElement.blur();
+            }
             toolDetailsModalEl.classList.remove('show');
             toolDetailsModalEl.style.display = 'none';
             toolDetailsModalEl.setAttribute('aria-hidden', 'true');
