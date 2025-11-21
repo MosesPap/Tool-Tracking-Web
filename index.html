@@ -712,7 +712,7 @@
                         0 2px 4px rgba(0, 0, 0, 0.2);
         }
         
-        /* Back to Menu button 3D interactive */
+        /* Back to Menu button 3D interactive Grey */
         #backToMenuBtn {
             position: absolute;
             right: 18px;
@@ -723,27 +723,27 @@
             font-size: 0.9rem;
             font-weight: bold;
             border-radius: 12px;
-            border: 2px solid #FF9800;
-            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
-            color: white;
+            border: 2px solid #bdbdbd;
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
+            color: #333;
             text-decoration: none;
             transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(255, 152, 0, 0.3);
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
             cursor: pointer;
             white-space: nowrap;
         }
         
         #backToMenuBtn:hover {
-            background: linear-gradient(135deg, #FFB74D 0%, #FF9800 100%);
-            border-color: #FFB74D;
+            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%);
+            border-color: #adadad;
             transform: translateY(calc(-50% - 2px)) perspective(1000px) rotateX(5deg);
-            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4),
+            box-shadow: 0 4px 12px rgba(189, 189, 189, 0.4),
                         0 2px 4px rgba(0, 0, 0, 0.2);
         }
         
         #backToMenuBtn:active {
             transform: translateY(calc(-50% + 0px)) perspective(1000px) rotateX(2deg);
-            box-shadow: 0 2px 4px rgba(255, 152, 0, 0.3);
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
         }
         
         /* Change Station button 3D interactive */
@@ -4501,6 +4501,16 @@ if (!userCredential.user.emailVerified) {
 
         // QR Code Scanner
         function startScanner() {
+            // Stop enhanced scanner if running
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                    html5QrCode = null;
+                }).catch(err => {
+                    console.log('Error stopping scanner:', err);
+                });
+            }
+            
             // Toggle active states
             document.getElementById('basicScannerBtn').classList.add('active');
             document.getElementById('advancedScannerBtn').classList.remove('active');
@@ -4592,107 +4602,89 @@ if (!userCredential.user.emailVerified) {
         let focusIndicator = null;
 
         async function startEnhancedScanner() {
+            // Stop basic scanner if running
+            if (html5QrCode) {
+                try {
+                    await html5QrCode.stop();
+                    html5QrCode.clear();
+                    html5QrCode = null;
+                } catch (err) {
+                    console.log('Error stopping basic scanner:', err);
+                }
+            }
+            
             // Toggle active states
             document.getElementById('advancedScannerBtn').classList.add('active');
             document.getElementById('basicScannerBtn').classList.remove('active');
             
+            var reader = document.getElementById('reader');
+            reader.style.display = 'block';
+            reader.style.height = '320px';
+            document.getElementById('stopScannerBtn').style.display = 'inline-block';
+            
             try {
-                // Show the enhanced scanner modal
-                document.getElementById('enhancedScannerModal').style.display = 'flex';
+                html5QrCode = new Html5Qrcode("reader");
+                const config = {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 },
+                    aspectRatio: 1.0,
+                    formatsToSupport: [
+                        Html5QrcodeSupportedFormats.QR_CODE,
+                        Html5QrcodeSupportedFormats.CODE_128,
+                        Html5QrcodeSupportedFormats.CODE_39,
+                        Html5QrcodeSupportedFormats.EAN_13,
+                        Html5QrcodeSupportedFormats.EAN_8,
+                        Html5QrcodeSupportedFormats.UPC_A,
+                        Html5QrcodeSupportedFormats.UPC_E,
+                        Html5QrcodeSupportedFormats.ITF,
+                        Html5QrcodeSupportedFormats.AZTEC,
+                        Html5QrcodeSupportedFormats.DATA_MATRIX,
+                        Html5QrcodeSupportedFormats.CODABAR,
+                        Html5QrcodeSupportedFormats.PDF_417
+                    ]
+                };
                 
-                // Get video element
-                enhancedScannerVideo = document.getElementById('enhancedScannerVideo');
-                
-                // Request camera access with enhanced constraints
-                const constraints = {
-                    video: {
-                        facingMode: 'environment',
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 }
+                html5QrCode.start(
+                    { facingMode: "environment" },
+                    config,
+                    (decodedText) => {
+                        document.getElementById('toolCode').value = decodedText;
+                        document.getElementById('toolDetailsBtn').disabled = false;
+                        stopCamera();
+                    },
+                    (errorMessage) => {
+                        // Ignore errors during scanning
                     }
-                };
-                
-                enhancedScannerStream = await navigator.mediaDevices.getUserMedia(constraints);
-                enhancedScannerVideo.srcObject = enhancedScannerStream;
-                
-                // Wait for video to load
-                enhancedScannerVideo.onloadedmetadata = () => {
-                    enhancedScannerVideo.play();
-                    startBarcodeDetection();
-                    setupTouchEvents();
-                };
-                
-                // Handle video errors
-                enhancedScannerVideo.onerror = (error) => {
-                    console.error('Video error:', error);
-                    alert('Camera access failed. Please check permissions.');
-                    closeEnhancedScanner();
-                };
-                
-            } catch (error) {
-                console.error('Enhanced scanner error:', error);
-                // Try fallback to user camera
-                try {
-                    const fallbackConstraints = {
-                        video: {
-                            facingMode: 'user',
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 }
+                ).catch(err => {
+                    console.error('Enhanced scanner error:', err);
+                    // Try fallback to user camera
+                    html5QrCode.start(
+                        { facingMode: "user" },
+                        config,
+                        (decodedText) => {
+                            document.getElementById('toolCode').value = decodedText;
+                            document.getElementById('toolDetailsBtn').disabled = false;
+                            stopCamera();
+                        },
+                        (errorMessage) => {
+                            // Ignore errors during scanning
                         }
-                    };
-                    
-                    enhancedScannerStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
-                    enhancedScannerVideo.srcObject = enhancedScannerStream;
-                    
-                    enhancedScannerVideo.onloadedmetadata = () => {
-                        enhancedScannerVideo.play();
-                        startBarcodeDetection();
-                        setupTouchEvents();
-                    };
-                } catch (fallbackError) {
-                    console.error('Enhanced scanner fallback error:', fallbackError);
-                    alert('Failed to start enhanced scanner: ' + fallbackError.message);
-                    closeEnhancedScanner();
-                }
+                    ).catch(fallbackErr => {
+                        console.error('Enhanced scanner fallback error:', fallbackErr);
+                        alert('Failed to start enhanced scanner: ' + fallbackErr.message);
+                        stopCamera();
+                    });
+                });
+            } catch (error) {
+                console.error('Enhanced scanner initialization error:', error);
+                alert('Failed to start enhanced scanner: ' + error.message);
+                stopCamera();
             }
         }
 
         function closeEnhancedScanner() {
-            // Keep advanced scanner button active since it was selected
-            document.getElementById('advancedScannerBtn').classList.add('active');
-            document.getElementById('basicScannerBtn').classList.remove('active');
-            
-            // Stop the scanner
-            if (enhancedScannerStream) {
-                enhancedScannerStream.getTracks().forEach(track => track.stop());
-                enhancedScannerStream = null;
-            }
-            
-            if (enhancedScannerInterval) {
-                if (typeof enhancedScannerInterval.stop === 'function') {
-                    enhancedScannerInterval.stop().then(() => {
-                        enhancedScannerInterval.clear();
-                    }).catch(err => {
-                        console.log('Error stopping enhanced scanner:', err);
-                    });
-                }
-                enhancedScannerInterval = null;
-            }
-            
-            // Remove temporary div
-            const tempDiv = document.getElementById('enhancedScannerTemp');
-            if (tempDiv) {
-                tempDiv.remove();
-            }
-            
-            // Hide the modal
-            document.getElementById('enhancedScannerModal').style.display = 'none';
-            
-            // Reset state
-            currentZoom = 1.0;
-            torchEnabled = false;
-            updateZoomDisplay();
-            updateTorchButton();
+            // Enhanced scanner now uses the same reader div, so just call stopCamera
+            stopCamera();
         }
 
         function startBarcodeDetection() {
