@@ -717,7 +717,7 @@
             right: 18px;
             top: 50%;
             transform: translateY(-50%) perspective(1000px) rotateX(0deg);
-            z-index: 2;
+            z-index: 10;
             padding: 6px 12px;
             font-size: 0.9rem;
             font-weight: bold;
@@ -729,6 +729,7 @@
             transition: all 0.3s ease;
             box-shadow: 0 2px 4px rgba(255, 152, 0, 0.3);
             cursor: pointer;
+            white-space: nowrap;
         }
         
         #backToMenuBtn:hover {
@@ -889,9 +890,35 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             cursor: pointer;
             transition: background-color 0.3s ease;
+            width: 100%;
             max-width: 500px;
             margin-left: auto;
             margin-right: auto;
+        }
+        
+        /* Responsive previous-out-tool-card widths */
+        @media (min-width: 576px) {
+            .previous-out-tool-card {
+                max-width: 550px;
+            }
+        }
+        
+        @media (min-width: 768px) {
+            .previous-out-tool-card {
+                max-width: 600px;
+            }
+        }
+        
+        @media (min-width: 992px) {
+            .previous-out-tool-card {
+                max-width: 700px;
+            }
+        }
+        
+        @media (min-width: 1200px) {
+            .previous-out-tool-card {
+                max-width: 800px;
+            }
         }
         
         .previous-out-tool-card:hover {
@@ -947,9 +974,35 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             cursor: pointer;
             transition: all 0.3s ease;
+            width: 100%;
             max-width: 500px;
             margin-left: auto;
             margin-right: auto;
+        }
+        
+        /* Responsive workloc-tool-card widths */
+        @media (min-width: 576px) {
+            .workloc-tool-card {
+                max-width: 550px;
+            }
+        }
+        
+        @media (min-width: 768px) {
+            .workloc-tool-card {
+                max-width: 600px;
+            }
+        }
+        
+        @media (min-width: 992px) {
+            .workloc-tool-card {
+                max-width: 700px;
+            }
+        }
+        
+        @media (min-width: 1200px) {
+            .workloc-tool-card {
+                max-width: 800px;
+            }
         }
 
         .workloc-tool-card:hover {
@@ -1092,9 +1145,35 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.08);
             cursor: pointer;
             transition: background-color 0.3s ease;
+            width: 100%;
             max-width: 380px;
             margin-left: auto;
             margin-right: auto;
+        }
+        
+        /* Responsive card widths */
+        @media (min-width: 576px) {
+            .register-tool-card {
+                max-width: 450px;
+            }
+        }
+        
+        @media (min-width: 768px) {
+            .register-tool-card {
+                max-width: 500px;
+            }
+        }
+        
+        @media (min-width: 992px) {
+            .register-tool-card {
+                max-width: 600px;
+            }
+        }
+        
+        @media (min-width: 1200px) {
+            .register-tool-card {
+                max-width: 700px;
+            }
         }
         
         /* Reduce spacing between elements in register tool cards */
@@ -1115,9 +1194,35 @@
         
         .search-tool-card {
             transition: box-shadow 0.3s ease, transform 0.3s ease;
+            width: 100%;
             max-width: 500px;
             margin-left: auto;
             margin-right: auto;
+        }
+        
+        /* Responsive search tool card widths */
+        @media (min-width: 576px) {
+            .search-tool-card {
+                max-width: 550px;
+            }
+        }
+        
+        @media (min-width: 768px) {
+            .search-tool-card {
+                max-width: 600px;
+            }
+        }
+        
+        @media (min-width: 992px) {
+            .search-tool-card {
+                max-width: 700px;
+            }
+        }
+        
+        @media (min-width: 1200px) {
+            .search-tool-card {
+                max-width: 800px;
+            }
         }
         
         .search-tool-card:hover {
@@ -1964,8 +2069,8 @@
         <!-- Main App Section -->
         <div id="appSection" style="display: none;">
             <!-- Orange Top Bar with Title -->
-            <div style="background: #FF9800; color: white; width: 100vw; min-width: 100vw; margin-left: -12px; margin-right: -12px; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
-                <h2 style="margin: 0 0 0 20px; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px;">Register Tools</h2>
+            <div style="background: #FF9800; color: white; width: 100%; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
+                <h2 style="margin: 0 0 0 20px; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px; padding-right: 160px;">Register Tools</h2>
                 <button id="backToMenuBtn" title="Back to Menu">
                     <i class="fas fa-arrow-left"></i> Back to Menu
                 </button>
