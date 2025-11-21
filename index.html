@@ -2272,7 +2272,24 @@
                                         </button>
                                     </div>
                                     <button id="stopScannerBtn" onclick="stopCamera()" class="btn btn-danger mb-2" style="display:none;">Stop Scanner</button>
-                                    <div id="reader" style="display:none;"></div>
+                                    <div id="reader" style="display:none; position: relative;">
+                                        <!-- Advanced scanner controls (hidden for basic scanner) -->
+                                        <div id="advancedScannerControls" style="display: none; position: absolute; top: 10px; right: 10px; z-index: 10;">
+                                            <button id="torchBtn" class="btn btn-sm" style="background: rgba(0,0,0,0.5); color: white; border: none; margin-bottom: 5px; border-radius: 50%; width: 40px; height: 40px; padding: 0;" title="Toggle Torch">
+                                                <i class="fas fa-star"></i>
+                                            </button>
+                                        </div>
+                                        <div id="advancedScannerBottomControls" style="display: none; position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 10; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 20px;">
+                                            <button id="zoomOutBtn" class="btn btn-sm" style="background: transparent; color: white; border: 1px solid white; border-radius: 50%; width: 35px; height: 35px; padding: 0; margin-right: 10px;" title="Zoom Out">
+                                                <i class="fas fa-search-minus"></i>
+                                            </button>
+                                            <span id="zoomLevel" style="color: white; font-weight: bold; margin: 0 10px; min-width: 50px; display: inline-block; text-align: center;">1.0x</span>
+                                            <button id="zoomInBtn" class="btn btn-sm" style="background: transparent; color: white; border: 1px solid white; border-radius: 50%; width: 35px; height: 35px; padding: 0; margin-left: 10px;" title="Zoom In">
+                                                <i class="fas fa-search-plus"></i>
+                                            </button>
+                                        </div>
+                                        <div id="focusIndicator" style="display: none; position: absolute; width: 60px; height: 60px; border: 2px solid #4CAF50; border-radius: 50%; pointer-events: none; z-index: 15;"></div>
+                                    </div>
                                     <div class="input-group mb-2">
                                         <input type="text" id="toolCode" class="form-control" placeholder="Scan or Type Tool Code">
                                         <button onclick="submitCode()" class="btn btn-primary submit-check-btn">
@@ -4629,17 +4646,55 @@ if (!userCredential.user.emailVerified) {
             document.getElementById('basicScannerBtn').classList.remove('active');
             document.getElementById('advancedScannerBtn').classList.remove('active');
             
+            // Stop basic scanner
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                }).catch(err => {
+                    console.log('Error stopping basic scanner:', err);
+                });
+                html5QrCode = null;
+            }
+            
+            // Stop advanced scanner
+            if (enhancedScannerStream) {
+                enhancedScannerStream.getTracks().forEach(track => track.stop());
+                enhancedScannerStream = null;
+            }
+            
+            if (enhancedScannerInterval) {
+                if (enhancedScannerInterval.html5QrCode) {
+                    enhancedScannerInterval.html5QrCode.clear();
+                }
+                clearInterval(enhancedScannerInterval);
+                enhancedScannerInterval = null;
+            }
+            
+            // Clean up temp div
+            const tempDiv = document.getElementById('enhancedScannerTemp');
+            if (tempDiv) {
+                tempDiv.remove();
+            }
+            
+            enhancedScannerCanvas = null;
+            enhancedScannerContext = null;
+            
+            // Hide advanced controls
+            const controls = document.getElementById('advancedScannerControls');
+            const bottomControls = document.getElementById('advancedScannerBottomControls');
+            if (controls) controls.style.display = 'none';
+            if (bottomControls) bottomControls.style.display = 'none';
+            
             var reader = document.getElementById('reader');
             // Immediately hide and collapse the scanner area
             reader.style.display = 'none';
             reader.style.height = '0';
             document.getElementById('stopScannerBtn').style.display = 'none';
-            if (html5QrCode) {
-                html5QrCode.stop().then(() => {
-                    html5QrCode.clear();
-                });
-                html5QrCode = null;
-            }
+            
+            // Reset state
+            currentZoom = 1.0;
+            torchEnabled = false;
+            enhancedScannerVideo = null;
         }
 
         // Enhanced Scanner Functions
@@ -4664,6 +4719,16 @@ if (!userCredential.user.emailVerified) {
                 }
             }
             
+            // Stop any existing advanced scanner
+            if (enhancedScannerStream) {
+                enhancedScannerStream.getTracks().forEach(track => track.stop());
+                enhancedScannerStream = null;
+            }
+            if (enhancedScannerInterval) {
+                clearInterval(enhancedScannerInterval);
+                enhancedScannerInterval = null;
+            }
+            
             // Toggle active states
             document.getElementById('advancedScannerBtn').classList.add('active');
             document.getElementById('basicScannerBtn').classList.remove('active');
@@ -4671,73 +4736,356 @@ if (!userCredential.user.emailVerified) {
             var reader = document.getElementById('reader');
             reader.style.display = 'block';
             reader.style.height = '320px';
+            reader.style.position = 'relative';
             document.getElementById('stopScannerBtn').style.display = 'inline-block';
             
+            // Clear reader content but preserve the structure
+            // Remove all child elements except the ones we'll recreate
+            while (reader.firstChild) {
+                reader.removeChild(reader.firstChild);
+            }
+            
+            // Create video element
+            const video = document.createElement('video');
+            video.id = 'enhancedScannerVideo';
+            video.style.width = '100%';
+            video.style.height = '100%';
+            video.style.objectFit = 'cover';
+            video.autoplay = true;
+            video.playsInline = true;
+            video.muted = true;
+            reader.appendChild(video);
+            
+            // Re-add controls
+            const controlsDiv = document.createElement('div');
+            controlsDiv.id = 'advancedScannerControls';
+            controlsDiv.style.cssText = 'display: block; position: absolute; top: 10px; right: 10px; z-index: 10;';
+            controlsDiv.innerHTML = `
+                <button id="torchBtn" class="btn btn-sm" style="background: rgba(0,0,0,0.5); color: white; border: none; margin-bottom: 5px; border-radius: 50%; width: 40px; height: 40px; padding: 0;" title="Toggle Torch">
+                    <i class="fas fa-star"></i>
+                </button>
+            `;
+            reader.appendChild(controlsDiv);
+            
+            const bottomControlsDiv = document.createElement('div');
+            bottomControlsDiv.id = 'advancedScannerBottomControls';
+            bottomControlsDiv.style.cssText = 'display: flex; position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 10; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 20px; align-items: center;';
+            bottomControlsDiv.innerHTML = `
+                <button id="zoomOutBtn" class="btn btn-sm" style="background: transparent; color: white; border: 1px solid white; border-radius: 50%; width: 35px; height: 35px; padding: 0; margin-right: 10px;" title="Zoom Out">
+                    <i class="fas fa-search-minus"></i>
+                </button>
+                <span id="zoomLevel" style="color: white; font-weight: bold; margin: 0 10px; min-width: 50px; display: inline-block; text-align: center;">1.0x</span>
+                <button id="zoomInBtn" class="btn btn-sm" style="background: transparent; color: white; border: 1px solid white; border-radius: 50%; width: 35px; height: 35px; padding: 0; margin-left: 10px;" title="Zoom In">
+                    <i class="fas fa-search-plus"></i>
+                </button>
+            `;
+            reader.appendChild(bottomControlsDiv);
+            
+            const focusIndicator = document.createElement('div');
+            focusIndicator.id = 'focusIndicator';
+            focusIndicator.style.cssText = 'display: none; position: absolute; width: 60px; height: 60px; border: 2px solid #4CAF50; border-radius: 50%; pointer-events: none; z-index: 15;';
+            reader.appendChild(focusIndicator);
+            
+            // Reset state
+            currentZoom = 1.0;
+            torchEnabled = false;
+            enhancedScannerVideo = video;
+            updateZoomDisplay();
+            updateTorchButton();
+            
             try {
-                html5QrCode = new Html5Qrcode("reader");
-                // Advanced Scanner: Enhanced configuration with all formats and better performance
-                const config = {
-                    fps: 20, // Higher FPS for better scanning speed
-                    qrbox: { width: 250, height: 250 },
-                    aspectRatio: 1.0,
-                    formatsToSupport: [
-                        Html5QrcodeSupportedFormats.QR_CODE,
-                        Html5QrcodeSupportedFormats.CODE_128,
-                        Html5QrcodeSupportedFormats.CODE_39,
-                        Html5QrcodeSupportedFormats.EAN_13,
-                        Html5QrcodeSupportedFormats.EAN_8,
-                        Html5QrcodeSupportedFormats.UPC_A,
-                        Html5QrcodeSupportedFormats.UPC_E,
-                        Html5QrcodeSupportedFormats.ITF,
-                        Html5QrcodeSupportedFormats.AZTEC,
-                        Html5QrcodeSupportedFormats.DATA_MATRIX,
-                        Html5QrcodeSupportedFormats.CODABAR,
-                        Html5QrcodeSupportedFormats.PDF_417
-                    ]
+                // Request camera with high quality
+                const constraints = {
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
                 };
                 
-                // Advanced scanner uses higher quality camera settings
-                html5QrCode.start(
-                    { facingMode: "environment" },
-                    config,
-                    (decodedText) => {
-                        document.getElementById('toolCode').value = decodedText;
-                        document.getElementById('toolDetailsBtn').disabled = false;
-                        stopCamera();
-                    },
-                    (errorMessage) => {
-                        // Ignore errors during scanning
-                    }
-                ).catch(err => {
-                    console.error('Enhanced scanner error:', err);
-                    // Try fallback to user camera
-                    html5QrCode.start(
-                        { facingMode: "user" },
-                        config,
-                        (decodedText) => {
-                            document.getElementById('toolCode').value = decodedText;
-                            document.getElementById('toolDetailsBtn').disabled = false;
-                            stopCamera();
-                        },
-                        (errorMessage) => {
-                            // Ignore errors during scanning
-                        }
-                    ).catch(fallbackErr => {
-                        console.error('Enhanced scanner fallback error:', fallbackErr);
-                        alert('Failed to start enhanced scanner: ' + fallbackErr.message);
-                        stopCamera();
-                    });
+                enhancedScannerStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = enhancedScannerStream;
+                
+                // Wait for video to load
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        video.play();
+                        resolve();
+                    };
                 });
+                
+                // Setup event handlers
+                setupAdvancedScannerEvents();
+                
+                // Start barcode detection
+                startAdvancedBarcodeDetection();
+                
             } catch (error) {
-                console.error('Enhanced scanner initialization error:', error);
-                alert('Failed to start enhanced scanner: ' + error.message);
-                stopCamera();
+                console.error('Enhanced scanner error:', error);
+                // Try fallback to user camera
+                try {
+                    const fallbackConstraints = {
+                        video: {
+                            facingMode: 'user',
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    };
+                    
+                    enhancedScannerStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                    video.srcObject = enhancedScannerStream;
+                    
+                    await new Promise((resolve) => {
+                        video.onloadedmetadata = () => {
+                            video.play();
+                            resolve();
+                        };
+                    });
+                    
+                    setupAdvancedScannerEvents();
+                    startAdvancedBarcodeDetection();
+                } catch (fallbackErr) {
+                    console.error('Enhanced scanner fallback error:', fallbackErr);
+                    alert('Failed to start enhanced scanner: ' + fallbackErr.message);
+                    stopCamera();
+                }
             }
         }
 
         function closeEnhancedScanner() {
             // Enhanced scanner now uses the same reader div, so just call stopCamera
             stopCamera();
+        }
+
+        // Advanced Scanner Helper Functions
+        function setupAdvancedScannerEvents() {
+            const reader = document.getElementById('reader');
+            const video = document.getElementById('enhancedScannerVideo');
+            
+            // Zoom buttons
+            const zoomInBtn = document.getElementById('zoomInBtn');
+            const zoomOutBtn = document.getElementById('zoomOutBtn');
+            if (zoomInBtn) {
+                zoomInBtn.onclick = () => {
+                    if (currentZoom < 3.0) {
+                        currentZoom = Math.min(3.0, currentZoom + 0.5);
+                        updateZoomDisplay();
+                        applyZoom();
+                    }
+                };
+            }
+            if (zoomOutBtn) {
+                zoomOutBtn.onclick = () => {
+                    if (currentZoom > 1.0) {
+                        currentZoom = Math.max(1.0, currentZoom - 0.5);
+                        updateZoomDisplay();
+                        applyZoom();
+                    }
+                };
+            }
+            
+            // Torch button
+            const torchBtn = document.getElementById('torchBtn');
+            if (torchBtn) {
+                torchBtn.onclick = toggleTorch;
+            }
+            
+            // Tap to focus
+            if (video) {
+                video.onclick = (e) => {
+                    const rect = video.getBoundingClientRect();
+                    const readerRect = reader.getBoundingClientRect();
+                    const x = e.clientX - readerRect.left;
+                    const y = e.clientY - readerRect.top;
+                    showFocusIndicator(x, y);
+                    applyFocus(x, y, rect.width, rect.height);
+                };
+            }
+            
+            // Pinch to zoom
+            let initialDistance = 0;
+            let initialZoom = currentZoom;
+            
+            reader.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 2) {
+                    initialDistance = getDistance(e.touches[0], e.touches[1]);
+                    initialZoom = currentZoom;
+                }
+            });
+            
+            reader.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 2) {
+                    e.preventDefault();
+                    const currentDistance = getDistance(e.touches[0], e.touches[1]);
+                    const scale = currentDistance / initialDistance;
+                    const newZoom = Math.max(1.0, Math.min(3.0, initialZoom * scale));
+                    
+                    if (Math.abs(newZoom - currentZoom) > 0.05) {
+                        currentZoom = newZoom;
+                        updateZoomDisplay();
+                        applyZoom();
+                    }
+                }
+            });
+        }
+        
+        function startAdvancedBarcodeDetection() {
+            // Create hidden canvas for frame capture
+            if (!enhancedScannerCanvas) {
+                enhancedScannerCanvas = document.createElement('canvas');
+                enhancedScannerContext = enhancedScannerCanvas.getContext('2d');
+            }
+            
+            // Create Html5Qrcode instance for file scanning
+            if (!enhancedScannerInterval) {
+                const tempDiv = document.createElement('div');
+                tempDiv.id = 'enhancedScannerTemp';
+                tempDiv.style.position = 'absolute';
+                tempDiv.style.top = '-9999px';
+                tempDiv.style.left = '-9999px';
+                document.body.appendChild(tempDiv);
+                
+                const enhancedHtml5QrCode = new Html5Qrcode("enhancedScannerTemp");
+                
+                // Scan frames periodically
+                enhancedScannerInterval = setInterval(() => {
+                    if (!enhancedScannerVideo || enhancedScannerVideo.readyState !== enhancedScannerVideo.HAVE_ENOUGH_DATA) {
+                        return;
+                    }
+                    
+                    try {
+                        // Capture frame to canvas
+                        enhancedScannerCanvas.width = enhancedScannerVideo.videoWidth;
+                        enhancedScannerCanvas.height = enhancedScannerVideo.videoHeight;
+                        enhancedScannerContext.drawImage(enhancedScannerVideo, 0, 0);
+                        
+                        // Convert to blob and scan
+                        enhancedScannerCanvas.toBlob((blob) => {
+                            if (blob) {
+                                const file = new File([blob], 'frame.jpg', { type: 'image/jpeg' });
+                                enhancedHtml5QrCode.scanFile(file, false)
+                                    .then(decodedText => {
+                                        document.getElementById('toolCode').value = decodedText;
+                                        document.getElementById('toolDetailsBtn').disabled = false;
+                                        stopCamera();
+                                    })
+                                    .catch(() => {
+                                        // Ignore scan errors
+                                    });
+                            }
+                        }, 'image/jpeg', 0.8);
+                    } catch (error) {
+                        // Ignore errors
+                    }
+                }, 200); // Scan every 200ms (5 FPS for detection)
+                
+                // Store reference for cleanup
+                enhancedScannerInterval.html5QrCode = enhancedHtml5QrCode;
+            }
+        }
+        
+        function toggleTorch() {
+            if (!enhancedScannerStream) return;
+            
+            const track = enhancedScannerStream.getVideoTracks()[0];
+            if (!track) return;
+            
+            const capabilities = track.getCapabilities();
+            if (!capabilities.torch) {
+                console.log('Torch not supported');
+                return;
+            }
+            
+            torchEnabled = !torchEnabled;
+            track.applyConstraints({
+                advanced: [{ torch: torchEnabled }]
+            }).then(() => {
+                updateTorchButton();
+            }).catch(error => {
+                console.log('Torch toggle failed:', error);
+                torchEnabled = !torchEnabled; // Revert
+            });
+        }
+        
+        function updateTorchButton() {
+            const torchBtn = document.getElementById('torchBtn');
+            if (torchBtn) {
+                if (torchEnabled) {
+                    torchBtn.style.background = 'rgba(255, 193, 7, 0.8)';
+                    torchBtn.style.color = '#000';
+                } else {
+                    torchBtn.style.background = 'rgba(0,0,0,0.5)';
+                    torchBtn.style.color = 'white';
+                }
+            }
+        }
+        
+        function applyFocus(x, y, width, height) {
+            if (!enhancedScannerStream) return;
+            
+            const track = enhancedScannerStream.getVideoTracks()[0];
+            if (!track) return;
+            
+            const capabilities = track.getCapabilities();
+            if (capabilities.focusMode && capabilities.focusMode.includes('manual')) {
+                // Normalize coordinates (0-1)
+                const pointX = x / width;
+                const pointY = y / height;
+                
+                track.applyConstraints({
+                    advanced: [{
+                        focusMode: 'manual',
+                        pointsOfInterest: [{ x: pointX, y: pointY }]
+                    }]
+                }).catch(error => {
+                    console.log('Focus not supported:', error);
+                });
+            }
+        }
+        
+        function showFocusIndicator(x, y) {
+            const indicator = document.getElementById('focusIndicator');
+            if (indicator) {
+                indicator.style.left = (x - 30) + 'px';
+                indicator.style.top = (y - 30) + 'px';
+                indicator.style.display = 'block';
+                
+                setTimeout(() => {
+                    if (indicator) {
+                        indicator.style.display = 'none';
+                    }
+                }, 2000);
+            }
+        }
+        
+        function applyZoom() {
+            if (!enhancedScannerStream) return;
+            
+            const track = enhancedScannerStream.getVideoTracks()[0];
+            if (!track) return;
+            
+            const capabilities = track.getCapabilities();
+            if (capabilities.zoom) {
+                const zoomValue = Math.max(capabilities.zoom.min || 1, Math.min(capabilities.zoom.max || 3, currentZoom));
+                track.applyConstraints({
+                    advanced: [{ zoom: zoomValue }]
+                }).catch(error => {
+                    console.log('Zoom not supported:', error);
+                    // Fallback: CSS zoom
+                    const video = document.getElementById('enhancedScannerVideo');
+                    if (video) {
+                        video.style.transform = `scale(${currentZoom})`;
+                        video.style.transformOrigin = 'center center';
+                    }
+                });
+            } else {
+                // Fallback: CSS zoom
+                const video = document.getElementById('enhancedScannerVideo');
+                if (video) {
+                    video.style.transform = `scale(${currentZoom})`;
+                    video.style.transformOrigin = 'center center';
+                }
+            }
         }
 
         function startBarcodeDetection() {
@@ -4907,7 +5255,10 @@ if (!userCredential.user.emailVerified) {
         }
 
         function updateZoomDisplay() {
-            document.getElementById('zoomLevel').textContent = currentZoom.toFixed(1) + 'x';
+            const zoomLevel = document.getElementById('zoomLevel');
+            if (zoomLevel) {
+                zoomLevel.textContent = currentZoom.toFixed(1) + 'x';
+            }
         }
 
         function applyZoom() {
