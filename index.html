@@ -2061,6 +2061,32 @@
     </style>
 </head>
 <body>
+    <!-- Immediate script to handle skipSplash before other scripts run -->
+    <script>
+        // Check skipSplash immediately to prevent login screen flash
+        (function() {
+            const skipSplash = sessionStorage.getItem('skipSplash');
+            if (skipSplash === 'true') {
+                // Hide login section immediately if it exists
+                document.addEventListener('DOMContentLoaded', function() {
+                    const loginSection = document.getElementById('loginSection');
+                    const splashScreen = document.getElementById('splashScreen');
+                    const orangeOverlay = document.getElementById('orangeOverlay');
+                    
+                    if (loginSection) {
+                        loginSection.style.display = 'none';
+                        loginSection.classList.add('d-none');
+                    }
+                    if (splashScreen) {
+                        splashScreen.style.display = 'none';
+                    }
+                    if (orangeOverlay) {
+                        orangeOverlay.classList.add('hidden');
+                    }
+                });
+            }
+        })();
+    </script>
     <div id="orangeOverlay"></div>
     <div id="splashScreen">
         <video id="splashVideo" autoplay muted playsinline webkit-playsinline preload="auto">
@@ -2277,8 +2303,8 @@
                                         <div id="advancedScannerControls" style="display: none; position: absolute; top: 10px; right: 10px; z-index: 10;">
                                             <button id="torchBtn" class="btn btn-sm" style="background: rgba(0,0,0,0.5); color: white; border: none; margin-bottom: 5px; border-radius: 50%; width: 40px; height: 40px; padding: 0;" title="Toggle Torch">
                                                 <i class="fas fa-star"></i>
-                                            </button>
-                                        </div>
+                                        </button>
+                                    </div>
                                         <div id="advancedScannerBottomControls" style="display: none; position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 10; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 20px;">
                                             <button id="zoomOutBtn" class="btn btn-sm" style="background: transparent; color: white; border: 1px solid white; border-radius: 50%; width: 35px; height: 35px; padding: 0; margin-right: 10px;" title="Zoom Out">
                                                 <i class="fas fa-search-minus"></i>
@@ -2312,7 +2338,7 @@
                                         <i class="fas fa-times"></i> Close Scanner
                                     </button>
                                 </div>
-                            </div>
+                                </div>
                             </div>
                             <div id="toolList" class="mt-2">
                                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
@@ -4888,7 +4914,7 @@ if (!userCredential.user.emailVerified) {
                         toolCodeInput.value = '';
                         setTimeout(() => submitCode(decodedText), 50);
                     } else {
-                        stopCamera();
+                    stopCamera();
                     }
                 },
                 (errorMessage) => {
@@ -4908,7 +4934,7 @@ if (!userCredential.user.emailVerified) {
                             document.getElementById('toolCode').value = '';
                             setTimeout(() => submitCode(code), 50);
                         } else {
-                            stopCamera();
+                        stopCamera();
                         }
                     },
                     (errorMessage) => {
@@ -5196,7 +5222,7 @@ if (!userCredential.user.emailVerified) {
                     
                     if (Math.abs(newZoom - currentZoom) > 0.05) {
                         currentZoom = newZoom;
-                        updateZoomDisplay();
+            updateZoomDisplay();
                         applyZoom();
                     }
                 }
@@ -5281,7 +5307,7 @@ if (!userCredential.user.emailVerified) {
             track.applyConstraints({
                 advanced: [{ torch: torchEnabled }]
             }).then(() => {
-                updateTorchButton();
+            updateTorchButton();
             }).catch(error => {
                 console.log('Torch toggle failed:', error);
                 torchEnabled = !torchEnabled; // Revert
@@ -5450,7 +5476,7 @@ if (!userCredential.user.emailVerified) {
                         toolCodeInput.value = '';
                         setTimeout(() => submitCode(decodedText), 50);
                     } else {
-                        closeEnhancedScanner();
+                    closeEnhancedScanner();
                     }
                 },
                 (errorMessage) => {
@@ -5471,7 +5497,7 @@ if (!userCredential.user.emailVerified) {
                             toolCodeInput.value = '';
                             setTimeout(() => submitCode(decodedText), 50);
                         } else {
-                            closeEnhancedScanner();
+                        closeEnhancedScanner();
                         }
                     },
                     (errorMessage) => {
@@ -6621,18 +6647,26 @@ if (!userCredential.user.emailVerified) {
                 }
                 document.getElementById('headerBranding').style.display = 'none';
                 
-                // Check if we should skip splash (coming from register-tools)
+                // Check if we should skip splash (coming from register-tools or previous-out)
                 const skipSplash = sessionStorage.getItem('skipSplash');
                 if (skipSplash === 'true') {
                     // Hide splash screen immediately if it's still visible
                     const splashScreen = document.getElementById('splashScreen');
                     const orangeOverlay = document.getElementById('orangeOverlay');
+                    const loginSection = document.getElementById('loginSection');
                     if (splashScreen) {
                         splashScreen.style.display = 'none';
                     }
                     if (orangeOverlay) {
                         orangeOverlay.classList.add('hidden');
                     }
+                    // Hide login section and show menu immediately
+                    if (loginSection) {
+                        loginSection.style.display = 'none';
+                        loginSection.classList.add('d-none');
+                    }
+                    hideAllMainScreens();
+                    document.getElementById('toolScannerMenu').style.display = 'block';
                     // Clear the flag
                     sessionStorage.removeItem('skipSplash');
                 }
@@ -7162,7 +7196,7 @@ if (!userCredential.user.emailVerified) {
         
         // Also handle backspace key (for desktop browsers) - disabled to avoid conflicts
         // Users can use browser back button or Alt+Left Arrow instead
-        
+
         document.addEventListener('DOMContentLoaded', function() {
             // Set up automatic cleanup every 24 hours
             setInterval(cleanupUnverifiedAccounts, 24 * 60 * 60 * 1000); // Every 24 hours
@@ -7242,8 +7276,19 @@ if (!userCredential.user.emailVerified) {
                 if (orangeOverlay) {
                     orangeOverlay.classList.add('hidden');
                 }
+                // Hide login section and show menu immediately if user is authenticated
+                const loginSection = document.getElementById('loginSection');
+                if (loginSection) {
+                    loginSection.style.display = 'none';
+                    loginSection.classList.add('d-none');
+                }
+                const user = auth.currentUser;
+                if (user) {
+                    hideAllMainScreens();
+                    document.getElementById('toolScannerMenu').style.display = 'block';
+                }
                 // Don't show splash video, go directly to menu if logged in
-                console.log('Skipping splash screen - coming from register-tools');
+                console.log('Skipping splash screen - coming from register-tools or previous-out');
                 return; // Exit early, don't show splash
             }
             
