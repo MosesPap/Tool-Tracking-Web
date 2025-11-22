@@ -1,0 +1,2923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <title>Register Tools - Tool Tracking</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/common.css">
+</head>
+<body>
+    <!-- Register Tools Screen -->
+    <div id="appSection">
+        <!-- Orange Top Bar with Title -->
+        <div class="full-width-title-bar" style="background: #FF9800; color: white; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
+            <h2 style="margin: 0 0 0 20px; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px; padding-right: 160px;">Register Tools</h2>
+            <button id="backToMenuBtn" title="Back to Menu">
+                <i class="fas fa-arrow-left"></i> Back to Menu
+            </button>
+        </div>
+        <!-- Welcome Message (no background) -->
+        <div style="margin: 8px 0 10px 0; text-align: left; display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 1.5rem; color: #333; font-weight: bold;">Welcome, <span id="registerScreenName" class="technician-name"></span></span>
+            <span id="onlineStatus" class="status-dot"></span>
+        </div>
+        <div id="registerToolsHeader" style="display: flex; align-items: center; justify-content: flex-start; gap: 16px; margin-bottom: 12px;">
+          <span id="workLocationLabel" style="font-weight: bold; font-size: 2rem;">
+            <span style="color: black;">Station:</span> 
+            <span id="workLocationValue" style="color: red; font-size: 2rem;">(not selected)</span>
+          </span>
+          <button id="changeWorkLocationBtn" class="btn btn-outline-primary btn-sm" type="button">
+            <i class="fas fa-helicopter"></i> Change Station
+          </button>
+        </div>
+
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs mb-3" id="registerToolsTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="scanToolTab" data-bs-toggle="tab" data-bs-target="#scannerView" type="button" role="tab" aria-controls="scannerView" aria-selected="true">
+                    <i class="fas fa-qrcode"></i> Scan Tool
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="searchToolsTab" data-bs-toggle="tab" data-bs-target="#searchToolsView" type="button" role="tab" aria-controls="searchToolsView" aria-selected="false">
+                    <i class="fas fa-search"></i> Search Tools
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content">
+            <!-- Scanner View -->
+            <div class="tab-pane fade show active" id="scannerView" role="tabpanel">
+                <div class="row">
+                    <div class="col-xl-6 mx-auto">
+                        <div id="scannerControlsBox" style="display: block;">
+                        <div class="scanner-container" id="scannerContainer" style="position: relative;">
+                        <div class="card mb-2">
+                            <div class="card-body" style="padding-bottom: 10px; padding-top: 12px; position: relative;">
+                                <div class="d-flex gap-2 mb-2" style="margin-top: 4px;">
+                                    <button id="basicScannerBtn" onclick="startScanner()" class="btn btn-scan active">
+                                        <i class="fas fa-qrcode"></i> Basic Scanner
+                                    </button>
+                                    <button id="advancedScannerBtn" onclick="startEnhancedScanner()" class="btn btn-scan">
+                                        <i class="fas fa-camera"></i> Advanced Scanner
+                                    </button>
+                                </div>
+                                <div id="reader" style="display:none; position: relative;">
+                                    <!-- Advanced scanner controls (hidden for basic scanner) -->
+                                    <div id="advancedScannerControls" style="display: none; position: absolute; top: 10px; right: 10px; z-index: 10;">
+                                        <button id="torchBtn" class="btn btn-sm" style="background: rgba(0,0,0,0.5); color: white; border: none; margin-bottom: 5px; border-radius: 50%; width: 40px; height: 40px; padding: 0;" title="Toggle Torch">
+                                            <i class="fas fa-star"></i>
+                                        </button>
+                                    </div>
+                                    <div id="advancedScannerBottomControls" style="display: none; position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 10; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 20px;">
+                                        <button id="zoomOutBtn" class="btn btn-sm" style="background: transparent; color: white; border: 1px solid white; border-radius: 50%; width: 35px; height: 35px; padding: 0; margin-right: 10px;" title="Zoom Out">
+                                            <i class="fas fa-search-minus"></i>
+                                        </button>
+                                        <span id="zoomLevel" style="color: white; font-weight: bold; margin: 0 10px; min-width: 50px; display: inline-block; text-align: center;">1.0x</span>
+                                        <button id="zoomInBtn" class="btn btn-sm" style="background: transparent; color: white; border: 1px solid white; border-radius: 50%; width: 35px; height: 35px; padding: 0; margin-left: 10px;" title="Zoom In">
+                                            <i class="fas fa-search-plus"></i>
+                                        </button>
+                                    </div>
+                                    <div id="focusIndicator" style="display: none; position: absolute; width: 60px; height: 60px; border: 2px solid #4CAF50; border-radius: 50%; pointer-events: none; z-index: 15;"></div>
+                                </div>
+                                <!-- Bulk Scan Message - positioned above camera -->
+                                <div id="bulkScanMessage" style="display: none; position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1000; padding: 12px 24px; border-radius: 8px; font-weight: bold; text-align: center; font-size: 1rem; max-width: 90%; box-shadow: 0 4px 12px rgba(0,0,0,0.5); pointer-events: none; white-space: nowrap;"></div>
+                                <div class="input-group mb-2">
+                                    <input type="text" id="toolCode" class="form-control" placeholder="Scan or Type Tool Code">
+                                    <button onclick="submitCode()" class="btn btn-primary submit-check-btn">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                </div>
+                                <div class="d-flex gap-2 mb-2">
+                                    <button id="bulkScanModeBtn" onclick="toggleBulkScanMode()" class="btn btn-sm" style="background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%); border: 2px solid #bdbdbd; color: #333; border-radius: 12px; font-weight: bold; flex: 1;">
+                                        <i class="fas fa-layer-group"></i> Bulk Scan Mode
+                                    </button>
+                                    <button id="toolDetailsBtn" class="btn btn-info" style="flex: 1;" disabled onclick="showLastScannedToolDetails()">Tool Details</button>
+                                </div>
+                                </div>
+                            </div>
+                            <!-- Overlay for expanded scanner -->
+                            <div class="scanner-overlay" id="scannerOverlay" style="display:none;">
+                                <button onclick="stopCamera()" class="btn btn-danger btn-lg">
+                                    <i class="fas fa-times"></i> Close Scanner
+                                </button>
+                            </div>
+                        </div>
+                        </div>
+                        <div id="toolList" class="mt-2">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <h4 style="font-size: 1.5rem; font-weight: bold; margin: 0;">Today's Scanned Tools</h4>
+                                <button id="todayAnalyticsBtn" onclick="showTodayAnalytics()" class="btn-analytics" title="View Today's Analytics">
+                                    <i class="fas fa-chart-bar"></i>
+                                </button>
+                            </div>
+                            <!-- Tools will be listed here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Search Tools View -->
+            <div class="tab-pane fade" id="searchToolsView" role="tabpanel">
+                <div class="row">
+                    <div class="col-xl-6 mx-auto">
+                        <div class="card mb-2">
+                            <div class="card-body" style="padding-bottom: 10px; padding-top: 12px;">
+                                <h4 style="font-size: 1.1rem; margin-bottom: 10px;">Search Tools</h4>
+                                <div class="mb-3">
+                                    <label class="form-label mb-2 d-block">Search By:</label>
+                                    <div class="d-flex gap-2">
+                                        <button id="searchTypeToolName" onclick="setSearchType('toolName')" class="btn search-type-btn active">
+                                            Tool Name
+                                        </button>
+                                        <button id="searchTypePartNumber" onclick="setSearchType('partNumber')" class="btn search-type-btn">
+                                            Part Number
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="mb-2 position-relative">
+                                    <input type="text" id="searchToolInput" class="form-control" placeholder="Start typing to search..." onkeyup="handleSearchInputKeyup(event)" onfocus="handleSearchInputFocus()" onblur="handleSearchInputBlur()" autocomplete="off">
+                                    <div id="searchDropdownList" class="search-dropdown-list" style="display: none;">
+                                        <!-- Dropdown items will be populated here -->
+                                    </div>
+                                </div>
+                                <div id="searchResultsContainer" style="display: none;">
+                                    <label for="searchResultsDropdown" class="form-label mt-2">Search Results:</label>
+                                    <select id="searchResultsDropdown" class="form-select" size="10" onchange="selectToolFromSearch(this.value)">
+                                        <option value="">-- Select a tool --</option>
+                                    </select>
+                                </div>
+                                <div id="selectedToolDetails" class="mt-3" style="display: none;">
+                                    <!-- Selected tool details will be displayed here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <!-- Tool Already Checked Out Modal -->
+    <div class="modal fade" id="toolAlreadyCheckedOutModal" tabindex="-1" aria-labelledby="toolAlreadyCheckedOutModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="toolAlreadyCheckedOutModalLabel">Tool Already Checked Out</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="toolAlreadyCheckedOutModalBody">
+            <!-- Message will be set by JS -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tool Previous Date Modal -->
+    <div class="modal fade" id="toolPreviousDateModal" tabindex="-1" aria-labelledby="toolPreviousDateModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="toolPreviousDateModalLabel">Cannot Check In Tool</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="toolPreviousDateModalBody">
+            This tool was checked out on a previous date. You cannot check it in from the Register Tools screen. Please use the Previous Out Tools screen to handle this tool.
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Location Selection Modal for Tool Submission -->
+    <div class="modal fade" id="locationSelectionModal" tabindex="-1" aria-labelledby="locationSelectionModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                <div class="modal-header" style="background: #FF9800; color: white; border-radius: 16px 16px 0 0; border: none; padding: 20px;">
+                    <h5 class="modal-title" id="locationSelectionModalLabel" style="font-weight: bold; font-size: 1.3rem;">Select Station</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="padding: 24px;">
+                    <p class="mb-4" style="font-size: 1.1rem; color: #333;">Please select a work location:</p>
+                    <div class="row g-3" id="locationSelectionOptions">
+                        <!-- Work location buttons will be dynamically loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5-Minute Cooldown Warning Modal -->
+    <div class="modal fade" id="cooldownWarnModal" tabindex="-1" aria-labelledby="cooldownWarnModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="cooldownWarnModalLabel">Return Not Allowed</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            You must wait at least 5 minutes after checking out a tool before you can return it.
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tool Details Modal -->
+    <div class="modal fade" id="toolDetailsModal" tabindex="-1" aria-labelledby="toolDetailsModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="toolDetailsModalLabel">Tool Details</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="toolDetailsBody">
+            <!-- Tool details will be populated here -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Helicopter Model Selection Modal -->
+    <div class="modal fade" id="helicopterModelSelectionModal" tabindex="-1" aria-labelledby="helicopterModelSelectionModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                <div class="modal-header" style="background: #FF9800; color: white; border-radius: 16px 16px 0 0; border: none; padding: 20px;">
+                    <h5 class="modal-title" id="helicopterModelSelectionModalLabel" style="font-weight: bold; font-size: 1.3rem;">Select Helicopter Model</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="padding: 24px;">
+                    <p class="mb-4" style="font-size: 1.1rem; color: #333;">Please select the helicopter model:</p>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <button class="btn helicopter-model-option w-100 text-start p-3" data-model="AW139" style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; transition: all 0.3s ease;">
+                                <div style="font-weight: bold; font-size: 1.2rem; color: #333;">AW139</div>
+                                <div style="font-size: 0.9rem; color: #666; margin-top: 4px;">Work Locations: 701, 702, 703</div>
+                            </button>
+                        </div>
+                        <div class="col-12">
+                            <button class="btn helicopter-model-option w-100 text-start p-3" data-model="SA342L" style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; transition: all 0.3s ease;">
+                                <div style="font-weight: bold; font-size: 1.2rem; color: #333;">SA342L</div>
+                                <div style="font-size: 0.9rem; color: #666; margin-top: 4px;">Work Locations: 352, 353, 354, 355</div>
+                            </button>
+                        </div>
+                        <div class="col-12">
+                            <button class="btn helicopter-model-option w-100 text-start p-3" data-model="B206L" style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; transition: all 0.3s ease;">
+                                <div style="font-weight: bold; font-size: 1.2rem; color: #333;">B206L</div>
+                                <div style="font-size: 0.9rem; color: #666; margin-top: 4px;">Work Locations: 110, 111</div>
+                            </button>
+                        </div>
+                        <div class="col-12">
+                            <button class="btn helicopter-model-option w-100 text-start p-3" data-model="H145M" style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; transition: all 0.3s ease;">
+                                <div style="font-weight: bold; font-size: 1.2rem; color: #333;">H145M</div>
+                                <div style="font-size: 0.9rem; color: #666; margin-top: 4px;">Work Locations: 1955, 1956, 1957, 1958, 1959, 1960</div>
+                            </button>
+                        </div>
+                        <div class="col-12">
+                            <button class="btn helicopter-model-option w-100 text-start p-3" data-model="Other" style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; transition: all 0.3s ease;">
+                                <div style="font-weight: bold; font-size: 1.2rem; color: #333;">Other</div>
+                                <div style="font-size: 0.9rem; color: #666; margin-top: 4px;">Work Locations: Other</div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Work Location Selection Modal -->
+    <div class="modal fade" id="workLocationSelectionModal" tabindex="-1" aria-labelledby="workLocationSelectionModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                <div class="modal-header" style="background: #FF9800; color: white; border-radius: 16px 16px 0 0; border: none; padding: 20px;">
+                    <h5 class="modal-title" id="workLocationSelectionModalLabel" style="font-weight: bold; font-size: 1.3rem;">Select Station</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="padding: 24px;">
+                    <p class="mb-4" id="workLocationSelectionModalBody" style="font-size: 1.1rem; color: #333;">
+                        <!-- Work location options will be dynamically loaded here -->
+                    </p>
+                    <div class="row g-3" id="workLocationOptions">
+                        <!-- Work location buttons will be dynamically loaded here -->
+                    </div>
+                    <div class="text-center mt-4">
+                        <button type="button" class="btn btn-link text-decoration-none" onclick="goBackToHelicopterModels()" style="color: #666; font-size: 1rem;">
+                            <i class="fas fa-arrow-left me-2"></i>Back to Models
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tool Photo Gallery Modal -->
+    <div class="modal fade" id="toolPhotoGalleryModal" tabindex="-1" aria-labelledby="toolPhotoGalleryModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content bg-dark text-white">
+          <div class="modal-header border-0">
+            <h5 class="modal-title" id="toolPhotoGalleryModalLabel">Tool Photos</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body d-flex flex-column align-items-center justify-content-center position-relative" id="toolPhotoGalleryContent">
+            <!-- Photo will be shown here -->
+          </div>
+          <div class="modal-footer justify-content-center border-0 bg-dark">
+            <span id="toolPhotoCounter" class="text-white"></span>
+            <button type="button" class="btn btn-danger ms-3" id="toolPhotoDeleteBtn">
+              <i class="fas fa-trash"></i> Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Photo Upload Loading Modal -->
+    <div class="modal fade" id="photoUploadLoadingModal" tabindex="-1" aria-labelledby="photoUploadLoadingModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+      <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="photoUploadLoadingModalLabel">Uploading Photo</h5>
+          </div>
+          <div class="modal-body text-center">
+            <div class="spinner-border text-primary mb-3" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <div id="photoUploadProgress">Processing image...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Photo Upload Choice Modal -->
+    <div class="modal fade" id="photoUploadChoiceModal" tabindex="-1" aria-labelledby="photoUploadChoiceModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+          <div class="modal-header" style="background: #FF9800; color: white; border-radius: 16px 16px 0 0; border: none; padding: 20px;">
+            <h5 class="modal-title" id="photoUploadChoiceModalLabel" style="font-weight: bold; font-size: 1.3rem;">
+              <i class="fas fa-camera"></i> Add Photo
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" style="padding: 24px;">
+            <div style="margin-bottom: 16px;">
+              <strong style="font-size: 1.1rem; color: #333;">Other tools with this part number that have photos:</strong>
+              <div id="photoUploadToolsList" style="margin-top: 8px; padding: 12px; background: #f5f5f5; border-radius: 8px;"></div>
+            </div>
+            <div style="margin-bottom: 16px;">
+              <strong style="font-size: 1.1rem; color: #333;">Select photos to use (click to select/deselect):</strong>
+              <div id="photoUploadThumbnails" style="margin-top: 8px; padding: 12px; background: #f5f5f5; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 8px; max-height: 250px; overflow-y: auto;"></div>
+              <div id="selectedPhotosCount" style="margin-top: 8px; text-align: center; color: #666; font-size: 0.9rem;">
+                <span id="selectedCount">0</span> photo(s) selected
+              </div>
+            </div>
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #ddd;">
+              <div class="d-grid gap-2" id="selectedPhotosActions" style="margin-bottom: 12px;">
+                <button type="button" class="btn" id="addSelectedPhotosMyToolBtn" style="background: #2196F3; color: white; font-weight: bold; border-radius: 12px; padding: 12px; font-size: 1rem;" disabled>
+                  <i class="fas fa-user-check"></i> Add Selected to MY Tool
+                </button>
+                <button type="button" class="btn" id="addSelectedPhotosAllToolsBtn" style="background: #673AB7; color: white; font-weight: bold; border-radius: 12px; padding: 12px; font-size: 1rem;" disabled>
+                  <i class="fas fa-users"></i> Add Selected to ALL Tools 🔐
+                </button>
+              </div>
+              <div class="d-grid gap-2">
+                <button type="button" class="btn" id="addNewPhotoMyToolBtn" style="background: #4CAF50; color: white; font-weight: bold; border-radius: 12px; padding: 12px; font-size: 1rem;">
+                  <i class="fas fa-camera"></i> Add New Photo to MY Tool
+                </button>
+                <button type="button" class="btn" id="addNewPhotoAllToolsBtn" style="background: #FF5722; color: white; font-weight: bold; border-radius: 12px; padding: 12px; font-size: 1rem;">
+                  <i class="fas fa-camera-retro"></i> Add New Photo to ALL Tools 🔐
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Photo Delete Choice Modal -->
+    <div class="modal fade" id="photoDeleteChoiceModal" tabindex="-1" aria-labelledby="photoDeleteChoiceModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+          <div class="modal-header" style="background: #FF5722; color: white; border-radius: 16px 16px 0 0; border: none; padding: 20px;">
+            <h5 class="modal-title" id="photoDeleteChoiceModalLabel" style="font-weight: bold; font-size: 1.3rem;">
+              <i class="fas fa-trash-alt"></i> Delete Photo
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" style="padding: 24px;">
+            <div style="margin-bottom: 16px;">
+              <strong style="font-size: 1.1rem; color: #333;">Tools with this part number are owned by:</strong>
+              <div id="photoDeleteOwnersList" style="margin-top: 8px; padding: 12px; background: #f5f5f5; border-radius: 8px;"></div>
+            </div>
+            <p style="color: #666; margin-bottom: 20px;">Choose how you want to delete this photo:</p>
+            <div class="d-grid gap-2">
+              <button type="button" class="btn" id="deleteMyToolOnlyBtn" style="background: #2196F3; color: white; font-weight: bold; border-radius: 12px; padding: 12px; font-size: 1rem;">
+                <i class="fas fa-user"></i> Delete from MY Tool Only
+              </button>
+              <button type="button" class="btn" id="deleteFromAllToolsBtn" style="background: #FF5722; color: white; font-weight: bold; border-radius: 12px; padding: 12px; font-size: 1rem;">
+                <i class="fas fa-users"></i> Delete from ALL Tools 🔐
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Outstanding Tools Notification Modal -->
+    <div class="modal fade" id="outstandingToolsModal" tabindex="-1" aria-labelledby="outstandingToolsModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="outstandingToolsModalLabel">
+              <i class="fas fa-exclamation-triangle" style="color: #FFD600; margin-right: 8px;"></i>
+              YOUR TOOLS CHECKED OUT BY OTHERS
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="outstandingToolsBody">
+            <!-- Notification content will be set by JS -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" id="outstandingToolsOkBtn" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Out Tools Notification Modal -->
+    <div class="modal fade" id="outToolsNotifModal" tabindex="-1" aria-labelledby="outToolsNotifModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="outToolsNotifModalLabel">
+              <i class="fas fa-exclamation-triangle" style="color: #FFD600; margin-right: 8px;"></i>
+              TOOLS YOU HAVE CHECKED OUT
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="outToolsNotifBody">
+            <!-- Content will be set by JS -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" id="outToolsNotifOkBtn" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Today Analytics Modal -->
+    <div class="modal fade" id="todayAnalyticsModal" tabindex="-1" aria-labelledby="todayAnalyticsModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="todayAnalyticsModalLabel">
+              <i class="fas fa-chart-bar"></i> Today's Analytics
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="todayAnalyticsModalBody">
+            <!-- Analytics content will be populated here -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cooldown Info Modal -->
+    <div class="modal fade" id="cooldownInfoModal" tabindex="-1" aria-labelledby="cooldownInfoModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="cooldownInfoModalLabel">5-Minute Cooldown</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            When you check out a tool, you must wait at least 5 minutes before returning it. This helps ensure accurate tool tracking. You will not see this message again today.
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+    <!-- QR Code Scanner -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Common JS -->
+    <script src="js/common.js"></script>
+    
+    <script>
+        // ============================================
+        // REGISTER TOOLS PAGE - SPECIFIC JAVASCRIPT
+        // ============================================
+        
+        // Page-specific variables
+        let scannerControlsVisible = true;
+        let lastScannedToolData = null;
+        let currentSearchType = 'toolName';
+        let searchTimeout = null;
+        let searchResultsData = [];
+        let dropdownSelectedIndex = -1;
+        let allToolsCache = [];
+        let enhancedScannerStream = null;
+        let enhancedScannerVideo = null;
+        let enhancedScannerCanvas = null;
+        let enhancedScannerContext = null;
+        let enhancedScannerInterval = null;
+        let currentZoom = 1.0;
+        let torchEnabled = false;
+        let focusIndicator = null;
+        let activeCountdowns = {};
+        let flashTimeout = null;
+        let lastCollectionDetailsSource = 'registerTools';
+        let photoUploadToAllTools = false;
+        let currentPhotoUploadToolId = null;
+        let currentPhotoUploadPartNumber = null;
+        let photoUploadAutoShareTargets = [];
+        let currentToolPhotoUrls = [];
+        
+        // Initialize page on load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check authentication
+            auth.onAuthStateChanged(function(user) {
+                if (!user) {
+                    // Redirect to index.html if not authenticated
+                    window.location.href = 'index.html';
+                    return;
+                }
+                
+                // Update technician name
+                const fullName = localStorage.getItem('fullName') || user.email;
+                const registerScreenNameElem = document.getElementById('registerScreenName');
+                if (registerScreenNameElem) {
+                    registerScreenNameElem.textContent = fullName;
+                }
+                
+                // Check if work location is already selected
+                if (!selectedWorkLocation) {
+                    // Show location selection modal on first load
+                    showLocationSelectionModalForRegisterTools();
+                } else {
+                    // Initialize screen if location already selected
+                    refreshRegisterToolsScreen();
+                }
+                
+                // Set up event listeners
+                setupEventListeners();
+            });
+        });
+        
+        function setupEventListeners() {
+            // Back to menu button
+            document.getElementById('backToMenuBtn').onclick = function() {
+                window.location.href = 'index.html';
+            };
+            
+            // Change work location button
+            document.getElementById('changeWorkLocationBtn').onclick = function() {
+                showLocationSelectionModalForRegisterTools();
+            };
+            
+            // Tool code input - enable/disable Tool Details button
+            document.getElementById('toolCode').addEventListener('input', function() {
+                const btn = document.getElementById('toolDetailsBtn');
+                btn.disabled = !this.value.trim();
+            });
+            
+            // Scan Tool tab toggle
+            const scanToolTab = document.getElementById('scanToolTab');
+            if (scanToolTab) {
+                scanToolTab.addEventListener('click', function(e) {
+                    const scannerView = document.getElementById('scannerView');
+                    const wasActive = scannerView && scannerView.classList.contains('active');
+                    
+                    if (wasActive) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleScannerControls();
+                        scanToolTab.classList.add('active');
+                        scanToolTab.setAttribute('aria-selected', 'true');
+                        return false;
+                    }
+                });
+            }
+        }
+        
+        // Global variables for register tools
+        let selectedWorkLocation = null;
+        let html5QrCode;
+        let bulkScanMode = false;
+        let bulkScannedTools = [];
+        let bulkProcessingCodes = new Set();
+        let bulkRecentlyProcessed = new Map();
+        let previousOutToolsCount = 0;
+        let previousOutToolsData = [];
+        
+        // Initialize work location from localStorage if available
+        if (localStorage.getItem('selectedWorkLocation')) {
+            selectedWorkLocation = localStorage.getItem('selectedWorkLocation');
+            updateWorkLocationLabel();
+        }
+        
+        // Tool submission function
+        async function submitCode(codeParam = null) {
+            const code = codeParam || document.getElementById('toolCode').value.trim();
+            console.log('Submit button pressed. Tool code:', code);
+            console.log('Selected work location:', selectedWorkLocation);
+            
+            if (!code) {
+                console.log('No tool code entered');
+                return;
+            }
+
+            // Check if bulk scan mode is enabled
+            if (bulkScanMode) {
+                await processToolInBulkMode(code);
+                return;
+            }
+
+            // Normal mode - process immediately
+            if (!selectedWorkLocation) {
+                console.log('No work location selected, showing modal');
+                showLocationSelectionModalForToolSubmission(code);
+            } else {
+                console.log('Work location already selected, processing tool submission');
+                processToolSubmission(code);
+            }
+        }
+        
+        // Bulk Scan Mode Functions
+        function toggleBulkScanMode() {
+            bulkScanMode = !bulkScanMode;
+            const btn = document.getElementById('bulkScanModeBtn');
+            
+            if (bulkScanMode) {
+                btn.style.background = 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)';
+                btn.style.borderColor = '#FF9800';
+                btn.style.color = 'white';
+                bulkScannedTools = [];
+            } else {
+                btn.style.background = 'linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%)';
+                btn.style.borderColor = '#bdbdbd';
+                btn.style.color = '#333';
+                bulkScannedTools = [];
+            }
+        }
+        
+        async function processToolInBulkMode(code) {
+            // Prevent duplicate processing
+            if (bulkProcessingCodes.has(code)) {
+                return;
+            }
+            
+            // Check if recently processed (within last 3 seconds)
+            const now = Date.now();
+            if (bulkRecentlyProcessed.has(code)) {
+                const lastProcessed = bulkRecentlyProcessed.get(code);
+                if (now - lastProcessed < 3000) {
+                    document.getElementById('toolCode').value = '';
+                    return;
+                }
+            }
+            
+            // Mark as processing
+            bulkProcessingCodes.add(code);
+            document.getElementById('toolCode').value = '';
+            
+            try {
+                const user = auth.currentUser;
+                if (!user) {
+                    showBulkScanMessage('Not authenticated', false);
+                    bulkProcessingCodes.delete(code);
+                    return;
+                }
+                
+                // Check if already processed in this session
+                if (bulkScannedTools.some(t => t.code === code)) {
+                    showBulkScanMessage('Tool already processed in this session', false);
+                    bulkProcessingCodes.delete(code);
+                    return;
+                }
+                
+                const toolRef = db.collection('tools').doc(code);
+                const doc = await toolRef.get();
+                
+                if (!doc.exists) {
+                    showBulkScanMessage(`Tool not found: ${code}`, false);
+                    bulkProcessingCodes.delete(code);
+                    return;
+                }
+                
+                const data = doc.data();
+                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+                
+                // Validation checks
+                if (data.status === 'OUT' && data.technician !== technicianName) {
+                    showBulkScanMessage(`Tool checked out by ${data.technician}`, false);
+                    bulkProcessingCodes.delete(code);
+                    return;
+                }
+                
+                // Prevent returning previous OUT tools
+                if (data.status === 'OUT' && data.timestamp && data.timestamp.toDate) {
+                    const toolDate = data.timestamp.toDate();
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    if (toolDate < today) {
+                        showBulkScanMessage('Tool checked out on previous day - cannot return', false);
+                        bulkProcessingCodes.delete(code);
+                        return;
+                    }
+                }
+                
+                // Determine new status (toggle)
+                const newStatus = data.status === 'OUT' ? 'IN' : 'OUT';
+                
+                // Check cooldown for check-in
+                if (newStatus === 'IN' && data.status === 'OUT' && data.timestamp && data.timestamp.toDate) {
+                    const outTime = data.timestamp.toDate();
+                    const now = new Date();
+                    const diffMs = now - outTime;
+                    const settingsDoc = await db.collection('settings').doc('admin').get();
+                    let cooldownMinutes = 5;
+                    if (settingsDoc.exists && settingsDoc.data().CheckINCooldownMinutes) {
+                        cooldownMinutes = settingsDoc.data().CheckINCooldownMinutes;
+                    }
+                    const cooldownMs = cooldownMinutes * 60 * 1000;
+                    
+                    if (diffMs < cooldownMs) {
+                        const remainingMinutes = Math.ceil((cooldownMs - diffMs) / 60000);
+                        showBulkScanMessage(`Cooldown: Wait ${remainingMinutes} more minute(s)`, false);
+                        bulkProcessingCodes.delete(code);
+                        return;
+                    }
+                }
+                
+                // Check if station is selected (required for checkout)
+                if (newStatus === 'OUT' && !selectedWorkLocation) {
+                    showBulkScanMessage('Please select a Station first', false);
+                    bulkProcessingCodes.delete(code);
+                    return;
+                }
+                
+                // Update tool
+                const updateData = {
+                    status: newStatus,
+                    technician: technicianName,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                if (newStatus === 'OUT' && selectedWorkLocation) {
+                    updateData.WorkOn = selectedWorkLocation;
+                }
+                
+                await toolRef.update(updateData);
+                
+                // Log movement
+                const logData = {
+                    toolId: code,
+                    toolName: data.toolName || 'Unknown',
+                    partNumber: data.partNumber || code,
+                    location: data.location || '',
+                    status: newStatus,
+                    technician: technicianName,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                if (newStatus === 'OUT' && selectedWorkLocation) {
+                    logData.WorkOn = selectedWorkLocation;
+                }
+                
+                await db.collection('logtoolmovements').add(logData);
+                
+                // Add to history list
+                bulkScannedTools.push({
+                    code: code,
+                    toolName: data.toolName || 'Unknown',
+                    partNumber: data.partNumber || code,
+                    oldStatus: data.status,
+                    newStatus: newStatus,
+                    timestamp: new Date()
+                });
+                
+                // Mark as recently processed
+                bulkRecentlyProcessed.set(code, now);
+                setTimeout(() => {
+                    bulkRecentlyProcessed.delete(code);
+                }, 5000);
+                
+                // Show success message (2 seconds)
+                showBulkScanMessage(newStatus === 'OUT' ? 'CHECKED OUT' : 'CHECKED IN', true, newStatus === 'OUT');
+                
+                // Visual feedback
+                const toolCodeInput = document.getElementById('toolCode');
+                toolCodeInput.style.border = '2px solid #4CAF50';
+                setTimeout(() => {
+                    toolCodeInput.style.border = '';
+                }, 300);
+                
+                // Refresh tools list
+                loadTools();
+                
+            } catch (error) {
+                console.error('Error processing tool in bulk mode:', error);
+                showBulkScanMessage('Error: ' + error.message, false);
+            } finally {
+                bulkProcessingCodes.delete(code);
+            }
+        }
+        
+        // Show bulk scan message
+        function showBulkScanMessage(message, isSuccess = false, isCheckOut = false) {
+            const messageDiv = document.getElementById('bulkScanMessage');
+            if (!messageDiv) {
+                console.log('bulkScanMessage div not found');
+                return;
+            }
+            
+            messageDiv.style.display = 'block';
+            messageDiv.style.visibility = 'visible';
+            messageDiv.style.opacity = '1';
+            
+            if (isSuccess) {
+                messageDiv.innerHTML = `<i class="fas fa-check-circle" style="margin-right: 8px;"></i>${message}`;
+            } else {
+                messageDiv.textContent = message;
+            }
+            
+            if (isSuccess) {
+                if (isCheckOut) {
+                    messageDiv.style.background = '#f44336';
+                    messageDiv.style.color = 'white';
+                    messageDiv.style.border = '2px solid #d32f2f';
+                } else {
+                    messageDiv.style.background = '#4CAF50';
+                    messageDiv.style.color = 'white';
+                    messageDiv.style.border = '2px solid #45a049';
+                }
+                setTimeout(() => {
+                    messageDiv.style.display = 'none';
+                }, 2000);
+            } else {
+                messageDiv.style.background = '#ff9800';
+                messageDiv.style.color = 'white';
+                messageDiv.style.border = '2px solid #F57C00';
+                setTimeout(() => {
+                    messageDiv.style.display = 'none';
+                }, 2000);
+            }
+        }
+        
+        // Process tool submission after location selection
+        async function processToolSubmission(code) {
+            console.log('processToolSubmission called with code:', code);
+            try {
+                const user = auth.currentUser;
+                console.log('User:', user);
+                
+                console.log('Online mode - processing normally');
+                const toolRef = db.collection('tools').doc(code);
+                const doc = await toolRef.get({ source: 'server' });
+                console.log('Tool document exists:', doc.exists);
+
+                if (doc.exists) {
+                    const data = doc.data();
+                    
+                    // Get current technician name
+                    const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                    const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+
+                    // Only show warning if tool is OUT and checked out by a different technician
+                    if (data.status === 'OUT' && data.technician !== technicianName) {
+                        let checkedOutDate = 'Unknown';
+                        if (data.timestamp && data.timestamp.toDate) {
+                            checkedOutDate = data.timestamp.toDate().toLocaleString('en-GB', {
+                                day: '2-digit', month: '2-digit', year: 'numeric',
+                                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                            });
+                        }
+                        document.getElementById('toolAlreadyCheckedOutModalBody').innerHTML =
+                          `This tool was checked out by <b>${data.technician || 'Unknown Technician'}</b> on ${checkedOutDate}<br>You cannot Check Out the tool.`;
+                        const modal = new bootstrap.Modal(document.getElementById('toolAlreadyCheckedOutModal'));
+                        modal.show();
+                        return;
+                    }
+                    
+                    // Prevent returning previous OUT tools
+                    if (data.status === 'OUT' && data.timestamp && data.timestamp.toDate) {
+                        const toolDate = data.timestamp.toDate();
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        if (toolDate < today) {
+                            const modal = new bootstrap.Modal(document.getElementById('toolPreviousDateModal'));
+                            modal.show();
+                            document.getElementById('toolCode').value = '';
+                            lastScannedToolData = null;
+                            document.getElementById('toolDetailsBtn').disabled = true;
+                            return;
+                        }
+                    }
+                    
+                    // Enforce cooldown for returning tools
+                    if (data.status === 'OUT' && data.timestamp && data.timestamp.toDate) {
+                        const outTime = data.timestamp.toDate();
+                        const now = new Date();
+                        const diffMs = now - outTime;
+                        
+                        const settingsDoc = await db.collection('settings').doc('admin').get();
+                        let cooldownMinutes = 5;
+                        if (settingsDoc.exists && settingsDoc.data().CheckINCooldownMinutes) {
+                            cooldownMinutes = settingsDoc.data().CheckINCooldownMinutes;
+                        }
+                        const cooldownMs = cooldownMinutes * 60 * 1000;
+                        
+                        if (diffMs < cooldownMs) {
+                            setCooldownWarnMessage(cooldownMs - diffMs);
+                            const warnModal = new bootstrap.Modal(document.getElementById('cooldownWarnModal'));
+                            warnModal.show();
+                            document.getElementById('toolCode').value = '';
+                            lastScannedToolData = null;
+                            document.getElementById('toolDetailsBtn').disabled = true;
+                            return;
+                        }
+                    }
+                    
+                    const status = data.status === 'OUT' ? 'IN' : 'OUT';
+                    const timestamp = firebase.firestore.FieldValue.serverTimestamp();
+
+                    // Show cooldown info dialog only once per day when first tool is checked OUT
+                    if (status === 'OUT') {
+                        const today = new Date().toDateString();
+                        const lastShownDate = localStorage.getItem('cooldownDialogLastShown');
+                        
+                        if (lastShownDate !== today) {
+                        const settingsDoc = await db.collection('settings').doc('admin').get();
+                        let cooldownMinutes = 5;
+                        if (settingsDoc.exists && settingsDoc.data().CheckINCooldownMinutes) {
+                            cooldownMinutes = settingsDoc.data().CheckINCooldownMinutes;
+                        }
+                        document.querySelector('#cooldownInfoModal .modal-title').textContent = `Cooldown: ${cooldownMinutes} Minute${cooldownMinutes !== 1 ? 's' : ''}`;
+                        document.querySelector('#cooldownInfoModal .modal-body').textContent =
+                            `When you check out a tool, you must wait at least ${cooldownMinutes} minute${cooldownMinutes !== 1 ? 's' : ''} before returning it. This helps ensure accurate tool tracking. You will not see this message again today.`;
+                            
+                            localStorage.setItem('cooldownDialogLastShown', today);
+                            
+                        const infoModal = new bootstrap.Modal(document.getElementById('cooldownInfoModal'));
+                        infoModal.show();
+                        }
+                    }
+
+                    // Update tool status with WorkOn field
+                    const updateData = {
+                        status: status,
+                        technician: technicianName,
+                        timestamp: timestamp
+                    };
+                    
+                    if (status === 'OUT' && selectedWorkLocation) {
+                        updateData.WorkOn = selectedWorkLocation;
+                    }
+                    
+                    await toolRef.update(updateData);
+
+                    // Add log entry with WorkOn field
+                    const logData = {
+                        toolId: code,
+                        toolName: data.toolName || 'Unknown',
+                        partNumber: data.partNumber || code,
+                        location: data.location || '',
+                        status: status,
+                        technician: technicianName,
+                        timestamp: timestamp
+                    };
+                    
+                    if (status === 'OUT' && selectedWorkLocation) {
+                        logData.WorkOn = selectedWorkLocation;
+                    }
+                    
+                    await db.collection('logtoolmovements').add(logData);
+
+                    // Show success message
+                    const successMessage = status === 'OUT' ? 'Tool Checked Out Successfully!' : 'Tool Checked In Successfully!';
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = `alert alert-success alert-dismissible fade show`;
+                    alertDiv.innerHTML = `
+                        <i class="fas fa-check-circle me-2"></i>
+                        ${successMessage}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    `;
+                    
+                    const scannerView = document.getElementById('scannerView');
+                    scannerView.insertBefore(alertDiv, scannerView.firstChild);
+                    
+                    setTimeout(() => {
+                        if (alertDiv.parentNode) {
+                            alertDiv.remove();
+                        }
+                    }, 3000);
+
+                    document.getElementById('toolCode').value = '';
+                    loadTools();
+                    updatePreviousOutToolsCount();
+                    
+                    // Store last scanned tool data for modal
+                    lastScannedToolData = {
+                        toolName: data.toolName || 'Unknown Tool',
+                        toolId: doc.id,
+                        partNumber: data.partNumber || doc.id,
+                        collectionCode: data.collectionCode || '',
+                        location: data.location || 'N/A',
+                        owner: data.owner || 'N/A',
+                    };
+                    document.getElementById('toolDetailsBtn').disabled = false;
+                } else {
+                    alert('Warning: This tool does not exist in the system. Please contact an administrator to add the tool.');
+                    document.getElementById('toolCode').value = '';
+                    lastScannedToolData = null;
+                    document.getElementById('toolDetailsBtn').disabled = true;
+                }
+            } catch (error) {
+                console.error('Error processing tool submission:', error);
+                alert('Error processing tool submission. Please try again.');
+                document.getElementById('toolCode').value = '';
+            }
+        }
+
+        // Load today's tools
+        async function loadTools() {
+            const user = auth.currentUser;
+            if (!user) {
+                console.log('loadTools: No user logged in');
+                return;
+            }
+
+            try {
+                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                const snapshot = await db.collection('tools')
+                    .where('technician', '==', technicianName)
+                    .where('timestamp', '>=', today)
+                    .get();
+
+                const toolList = document.getElementById('toolList');
+                if (!toolList) {
+                    console.error('loadTools: toolList element not found!');
+                    return;
+                }
+                
+                const headerDiv = toolList.querySelector('div[style*="display: flex"]');
+                if (!headerDiv) {
+                    toolList.innerHTML = `
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                            <h4 style="font-size: 1.5rem; font-weight: bold; margin: 0;">Today's Scanned Tools</h4>
+                            <button id="todayAnalyticsBtn" onclick="showTodayAnalytics()" class="btn-analytics" title="View Today's Analytics">
+                                <i class="fas fa-chart-bar"></i>
+                            </button>
+                        </div>
+                        <div id="toolsContainer"></div>
+                    `;
+                } else {
+                    let toolsContainer = toolList.querySelector('#toolsContainer');
+                    if (!toolsContainer) {
+                        toolsContainer = document.createElement('div');
+                        toolsContainer.id = 'toolsContainer';
+                        toolList.appendChild(toolsContainer);
+                    }
+                    toolsContainer.innerHTML = '';
+                }
+
+                let allTools = [];
+
+                // Add online tools
+                if (!snapshot.empty) {
+                    snapshot.docs.forEach(doc => {
+                        allTools.push({
+                            id: doc.id,
+                            data: doc.data(),
+                            isOffline: false,
+                            doc: doc
+                        });
+                    });
+                }
+
+                const toolsContainer = toolList.querySelector('#toolsContainer') || toolList;
+
+                if (allTools.length === 0) {
+                    toolsContainer.innerHTML = '<p>No tools scanned today.</p>';
+                    return;
+                }
+
+                // Sort tools: OUT first, then IN, and by timestamp within each group
+                allTools.sort((a, b) => {
+                    const aData = a.data;
+                    const bData = b.data;
+                    if (aData.status !== bData.status) {
+                        return aData.status === 'OUT' ? -1 : 1;
+                    }
+                    const aTime = aData.timestamp ? (aData.timestamp.toDate ? aData.timestamp.toDate() : new Date(aData.timestamp)) : new Date(0);
+                    const bTime = bData.timestamp ? (bData.timestamp.toDate ? bData.timestamp.toDate() : new Date(bData.timestamp)) : new Date(0);
+                    return bTime - aTime;
+                });
+
+                allTools.forEach((tool, index) => {
+                    const data = tool.data;
+                    const status = (data.status || '').toUpperCase();
+                    let statusClass = 'in';
+                    if (status === 'OUT') statusClass = 'out';
+                    else if (status === 'BROKEN') statusClass = 'broken';
+                    else if (status === 'LOST') statusClass = 'lost';
+                    else if (status === 'CALIBRATION') statusClass = 'calibration';
+
+                    const time = data.timestamp ? 
+                        (data.timestamp.toDate ? 
+                            data.timestamp.toDate().toLocaleString('en-GB', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false
+                            }) : 
+                            new Date(data.timestamp).toLocaleString('en-GB', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false
+                            })
+                        ) : 'N/A';
+
+                    const card = document.createElement('div');
+                    card.className = `register-tool-card ${statusClass}`;
+                    
+                    card.onclick = function() {
+                        showToolDetails(buildToolDetailsObject(tool.doc, data), 'registerTools');
+                    };
+                    
+                    const workOnValue = data.WorkOn ? data.WorkOn : 'N/A';
+                    const serialNumber = data.serialNumber || data.partNumber || 'N/A';
+                    const calDueDate = data.calDueDate && data.calDueDate.toDate 
+                        ? data.calDueDate.toDate().toLocaleDateString('en-GB')
+                        : 'N/A';
+                    
+                    card.innerHTML = `
+                        <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 4px; color: #000; text-align: left; line-height: 1.2;">
+                            ${index + 1}. ${data.toolName || 'Unknown Tool'}
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; line-height: 1.2;">
+                            <div style="color: #666; font-size: 0.9rem;">
+                                ${time}
+                            </div>
+                            <div>
+                                <span style="color: black; font-weight: bold;">WorkOn:</span> 
+                                <span style="color: #666; font-weight: bold;">${workOnValue}</span>
+                            </div>
+                            </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px; line-height: 1.2;">
+                            <div style="text-align: left;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">TID</span>
+                            </div>
+                            <div style="text-align: center;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">P/N</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">STS</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px; line-height: 1.2;">
+                            <div style="text-align: left;">
+                                <span style="color: #666; font-weight: bold;">${tool.id}</span>
+                            </div>
+                            <div style="text-align: center;">
+                                <span style="color: #666; font-weight: bold;">${serialNumber}</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <span class="badge bg-${status === 'IN' ? 'success' : 'danger'}" style="font-weight: bold; border-radius: 15px; padding: 4px 8px;">${status}</span>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 6px; text-align: left; line-height: 1.2;">
+                            <span style="color: black; font-weight: bold;">Cal Due Date:</span> 
+                            <span style="color: blue; font-weight: bold;">${calDueDate}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                            <div style="color: blue; font-weight: normal; cursor: pointer; text-align: left;">
+                                Click For Details
+                            </div>
+                            ${status === 'OUT' ? `<div id="countdown-${tool.id}" class="cooldown-countdown" style="background: #FF9800; color: white; padding: 6px 8px; border-radius: 4px; font-weight: bold; text-align: center; white-space: nowrap;" onclick="event.stopPropagation();">
+                                <span style="font-weight: bold;">Check-in in:</span> <span class="countdown-value">Loading...</span>
+                            </div>` : ''}
+                        </div>
+                    `;
+                    toolsContainer.appendChild(card);
+                    
+                    // Start countdown for OUT tools
+                    if (status === 'OUT' && data.timestamp && data.timestamp.toDate) {
+                        startCooldownCountdown(tool.id, data.timestamp.toDate());
+                    }
+                });
+                
+                console.log('loadTools: Successfully loaded', allTools.length, 'tools');
+            } catch (error) {
+                console.error('loadTools: Error loading tools:', error);
+                const toolList = document.getElementById('toolList');
+                if (toolList) {
+                    const toolsContainer = toolList.querySelector('#toolsContainer') || toolList;
+                    toolsContainer.innerHTML = '<p class="text-danger">Error loading tools. Please try again.</p>';
+                }
+            }
+        }
+        
+        // Show Today's Analytics
+        async function showTodayAnalytics() {
+            try {
+                const user = firebase.auth().currentUser;
+                if (!user) return;
+
+                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                const snapshot = await db.collection('tools')
+                    .where('technician', '==', technicianName)
+                    .where('timestamp', '>=', today)
+                    .get();
+
+                let allTools = [];
+                if (!snapshot.empty) {
+                    snapshot.docs.forEach(doc => {
+                        allTools.push(doc.data());
+                    });
+                }
+
+                let checkedOut = 0;
+                let checkedIn = 0;
+                allTools.forEach(tool => {
+                    if (tool.status === 'OUT') checkedOut++;
+                    else if (tool.status === 'IN') checkedIn++;
+                });
+
+                const modalBody = document.getElementById('todayAnalyticsModalBody');
+                if (modalBody) {
+                    modalBody.innerHTML = `
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="p-3 bg-danger text-white rounded">
+                                    <h3>${checkedOut}</h3>
+                                    <p class="mb-0">Checked Out</p>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-3 bg-success text-white rounded">
+                                    <h3>${checkedIn}</h3>
+                                    <p class="mb-0">Checked In</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <p><strong>Total Tools Scanned Today:</strong> ${allTools.length}</p>
+                        </div>
+                    `;
+                }
+
+                const modal = new bootstrap.Modal(document.getElementById('todayAnalyticsModal'));
+                modal.show();
+            } catch (error) {
+                console.error('Error showing analytics:', error);
+                alert('Error loading analytics: ' + error.message);
+            }
+        }
+        
+        // Scanner functions
+        function startScanner() {
+            if (html5QrCode) {
+                stopCamera();
+                return;
+            }
+            
+            if (enhancedScannerStream) {
+                enhancedScannerStream.getTracks().forEach(track => track.stop());
+                enhancedScannerStream = null;
+            }
+            if (enhancedScannerInterval) {
+                if (enhancedScannerInterval.html5QrCode) {
+                    enhancedScannerInterval.html5QrCode.clear();
+                }
+                clearInterval(enhancedScannerInterval);
+                enhancedScannerInterval = null;
+            }
+            
+            document.getElementById('basicScannerBtn').classList.add('active');
+            document.getElementById('advancedScannerBtn').classList.remove('active');
+            
+            var reader = document.getElementById('reader');
+            reader.style.display = 'block';
+            reader.style.height = '320px';
+            
+            html5QrCode = new Html5Qrcode("reader");
+            const config = {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0,
+                formatsToSupport: [
+                    Html5QrcodeSupportedFormats.QR_CODE,
+                    Html5QrcodeSupportedFormats.CODE_128,
+                    Html5QrcodeSupportedFormats.CODE_39,
+                    Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.EAN_8,
+                    Html5QrcodeSupportedFormats.UPC_A,
+                    Html5QrcodeSupportedFormats.UPC_E
+                ]
+            };
+
+            html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText) => {
+                    const toolCodeInput = document.getElementById('toolCode');
+                    toolCodeInput.value = decodedText;
+                    document.getElementById('toolDetailsBtn').disabled = false;
+                    if (bulkScanMode) {
+                        toolCodeInput.value = '';
+                        setTimeout(() => submitCode(decodedText), 50);
+                    } else {
+                        stopCamera();
+                    }
+                },
+                (errorMessage) => {
+                    // Ignore errors during scanning
+                }
+            ).catch(err => {
+                html5QrCode.start(
+                    { facingMode: "user" },
+                    config,
+                    (decodedText) => {
+                        document.getElementById('toolCode').value = decodedText;
+                        document.getElementById('toolDetailsBtn').disabled = false;
+                        if (bulkScanMode) {
+                            const code = decodedText;
+                            document.getElementById('toolCode').value = '';
+                            setTimeout(() => submitCode(code), 50);
+                        } else {
+                            stopCamera();
+                        }
+                    },
+                    (errorMessage) => {
+                        // Ignore errors during scanning
+                    }
+                ).catch(err => {
+                    alert('Camera error: ' + err);
+                    stopCamera();
+                });
+            });
+        }
+
+        function stopCamera() {
+            document.getElementById('basicScannerBtn').classList.remove('active');
+            document.getElementById('advancedScannerBtn').classList.remove('active');
+            
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                }).catch(err => {
+                    console.log('Error stopping basic scanner:', err);
+                });
+                html5QrCode = null;
+            }
+            
+            if (enhancedScannerStream) {
+                enhancedScannerStream.getTracks().forEach(track => track.stop());
+                enhancedScannerStream = null;
+            }
+            
+            if (enhancedScannerInterval) {
+                if (enhancedScannerInterval.html5QrCode) {
+                    enhancedScannerInterval.html5QrCode.clear();
+                }
+                clearInterval(enhancedScannerInterval);
+                enhancedScannerInterval = null;
+            }
+            
+            const tempDiv = document.getElementById('enhancedScannerTemp');
+            if (tempDiv) {
+                tempDiv.remove();
+            }
+            
+            enhancedScannerCanvas = null;
+            enhancedScannerContext = null;
+            
+            const controls = document.getElementById('advancedScannerControls');
+            const bottomControls = document.getElementById('advancedScannerBottomControls');
+            if (controls) controls.style.display = 'none';
+            if (bottomControls) bottomControls.style.display = 'none';
+            
+            var reader = document.getElementById('reader');
+            reader.style.display = 'none';
+            reader.style.height = '0';
+            
+            currentZoom = 1.0;
+            torchEnabled = false;
+            enhancedScannerVideo = null;
+        }
+
+        // Enhanced Scanner Functions
+        async function startEnhancedScanner() {
+            if (enhancedScannerStream || enhancedScannerInterval) {
+                stopCamera();
+                return;
+            }
+            
+            if (html5QrCode) {
+                try {
+                    await html5QrCode.stop();
+                    html5QrCode.clear();
+                    html5QrCode = null;
+                } catch (err) {
+                    console.log('Error stopping basic scanner:', err);
+                }
+            }
+            
+            document.getElementById('advancedScannerBtn').classList.add('active');
+            document.getElementById('basicScannerBtn').classList.remove('active');
+            
+            var reader = document.getElementById('reader');
+            reader.style.display = 'block';
+            reader.style.height = '320px';
+            reader.style.position = 'relative';
+            
+            while (reader.firstChild) {
+                reader.removeChild(reader.firstChild);
+            }
+            
+            const video = document.createElement('video');
+            video.id = 'enhancedScannerVideo';
+            video.style.width = '100%';
+            video.style.height = '100%';
+            video.style.objectFit = 'cover';
+            video.autoplay = true;
+            video.playsInline = true;
+            video.muted = true;
+            reader.appendChild(video);
+            
+            const controlsDiv = document.createElement('div');
+            controlsDiv.id = 'advancedScannerControls';
+            controlsDiv.style.cssText = 'display: block; position: absolute; top: 10px; right: 10px; z-index: 10;';
+            controlsDiv.innerHTML = `
+                <button id="torchBtn" class="btn btn-sm" style="background: rgba(0,0,0,0.5); color: white; border: none; margin-bottom: 5px; border-radius: 50%; width: 40px; height: 40px; padding: 0;" title="Toggle Torch">
+                    <i class="fas fa-star"></i>
+                </button>
+            `;
+            reader.appendChild(controlsDiv);
+            
+            const bottomControlsDiv = document.createElement('div');
+            bottomControlsDiv.id = 'advancedScannerBottomControls';
+            bottomControlsDiv.style.cssText = 'display: flex; position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 10; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 20px; align-items: center;';
+            bottomControlsDiv.innerHTML = `
+                <button id="zoomOutBtn" class="btn btn-sm" style="background: transparent; color: white; border: 1px solid white; border-radius: 50%; width: 35px; height: 35px; padding: 0; margin-right: 10px;" title="Zoom Out">
+                    <i class="fas fa-search-minus"></i>
+                </button>
+                <span id="zoomLevel" style="color: white; font-weight: bold; margin: 0 10px; min-width: 50px; display: inline-block; text-align: center;">1.0x</span>
+                <button id="zoomInBtn" class="btn btn-sm" style="background: transparent; color: white; border: 1px solid white; border-radius: 50%; width: 35px; height: 35px; padding: 0; margin-left: 10px;" title="Zoom In">
+                    <i class="fas fa-search-plus"></i>
+                </button>
+            `;
+            reader.appendChild(bottomControlsDiv);
+            
+            const focusIndicator = document.createElement('div');
+            focusIndicator.id = 'focusIndicator';
+            focusIndicator.style.cssText = 'display: none; position: absolute; width: 60px; height: 60px; border: 2px solid #4CAF50; border-radius: 50%; pointer-events: none; z-index: 15;';
+            reader.appendChild(focusIndicator);
+            
+            currentZoom = 1.0;
+            torchEnabled = false;
+            enhancedScannerVideo = video;
+            updateZoomDisplay();
+            updateTorchButton();
+            
+            try {
+                const constraints = {
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                };
+                
+                enhancedScannerStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = enhancedScannerStream;
+                
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        video.play();
+                        resolve();
+                    };
+                });
+                
+                setupAdvancedScannerEvents();
+                startAdvancedBarcodeDetection();
+                
+            } catch (error) {
+                console.error('Enhanced scanner error:', error);
+                try {
+                    const fallbackConstraints = {
+                        video: {
+                            facingMode: 'user',
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    };
+                    
+                    enhancedScannerStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                    video.srcObject = enhancedScannerStream;
+                    
+                    await new Promise((resolve) => {
+                        video.onloadedmetadata = () => {
+                            video.play();
+                            resolve();
+                        };
+                    });
+                    
+                    setupAdvancedScannerEvents();
+                    startAdvancedBarcodeDetection();
+                } catch (fallbackErr) {
+                    console.error('Enhanced scanner fallback error:', fallbackErr);
+                    alert('Failed to start enhanced scanner: ' + fallbackErr.message);
+                    stopCamera();
+                }
+            }
+        }
+
+        function setupAdvancedScannerEvents() {
+            const reader = document.getElementById('reader');
+            const video = document.getElementById('enhancedScannerVideo');
+            
+            const zoomInBtn = document.getElementById('zoomInBtn');
+            const zoomOutBtn = document.getElementById('zoomOutBtn');
+            if (zoomInBtn) {
+                zoomInBtn.onclick = () => {
+                    if (currentZoom < 3.0) {
+                        currentZoom = Math.min(3.0, currentZoom + 0.5);
+                        updateZoomDisplay();
+                        applyZoom();
+                    }
+                };
+            }
+            if (zoomOutBtn) {
+                zoomOutBtn.onclick = () => {
+                    if (currentZoom > 1.0) {
+                        currentZoom = Math.max(1.0, currentZoom - 0.5);
+                        updateZoomDisplay();
+                        applyZoom();
+                    }
+                };
+            }
+            
+            const torchBtn = document.getElementById('torchBtn');
+            if (torchBtn) {
+                torchBtn.onclick = toggleTorch;
+            }
+            
+            if (video) {
+                video.onclick = (e) => {
+                    const rect = video.getBoundingClientRect();
+                    const readerRect = reader.getBoundingClientRect();
+                    const x = e.clientX - readerRect.left;
+                    const y = e.clientY - readerRect.top;
+                    showFocusIndicator(x, y);
+                    applyFocus(x, y, rect.width, rect.height);
+                };
+            }
+            
+            let initialDistance = 0;
+            let initialZoom = currentZoom;
+            
+            reader.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 2) {
+                    initialDistance = getDistance(e.touches[0], e.touches[1]);
+                    initialZoom = currentZoom;
+                }
+            });
+            
+            reader.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 2) {
+                    e.preventDefault();
+                    const currentDistance = getDistance(e.touches[0], e.touches[1]);
+                    const scale = currentDistance / initialDistance;
+                    const newZoom = Math.max(1.0, Math.min(3.0, initialZoom * scale));
+                    
+                    if (Math.abs(newZoom - currentZoom) > 0.05) {
+                        currentZoom = newZoom;
+                        updateZoomDisplay();
+                        applyZoom();
+                    }
+                }
+            });
+        }
+        
+        function startAdvancedBarcodeDetection() {
+            if (!enhancedScannerCanvas) {
+                enhancedScannerCanvas = document.createElement('canvas');
+                enhancedScannerContext = enhancedScannerCanvas.getContext('2d');
+            }
+            
+            if (!enhancedScannerInterval) {
+                const tempDiv = document.createElement('div');
+                tempDiv.id = 'enhancedScannerTemp';
+                tempDiv.style.position = 'absolute';
+                tempDiv.style.top = '-9999px';
+                tempDiv.style.left = '-9999px';
+                document.body.appendChild(tempDiv);
+                
+                const enhancedHtml5QrCode = new Html5Qrcode("enhancedScannerTemp");
+                
+                enhancedScannerInterval = setInterval(() => {
+                    if (!enhancedScannerVideo || enhancedScannerVideo.readyState !== enhancedScannerVideo.HAVE_ENOUGH_DATA) {
+                        return;
+                    }
+                    
+                    try {
+                        enhancedScannerCanvas.width = enhancedScannerVideo.videoWidth;
+                        enhancedScannerCanvas.height = enhancedScannerVideo.videoHeight;
+                        enhancedScannerContext.drawImage(enhancedScannerVideo, 0, 0);
+                        
+                        enhancedScannerCanvas.toBlob((blob) => {
+                            if (blob) {
+                                const file = new File([blob], 'frame.jpg', { type: 'image/jpeg' });
+                                enhancedHtml5QrCode.scanFile(file, false)
+                                    .then(decodedText => {
+                                        const toolCodeInput = document.getElementById('toolCode');
+                                        toolCodeInput.value = decodedText;
+                                        document.getElementById('toolDetailsBtn').disabled = false;
+                                        if (bulkScanMode) {
+                                            toolCodeInput.value = '';
+                                            setTimeout(() => submitCode(decodedText), 50);
+                                        } else {
+                                            stopCamera();
+                                        }
+                                    })
+                                    .catch(() => {
+                                        // Ignore scan errors
+                                    });
+                            }
+                        }, 'image/jpeg', 0.8);
+                    } catch (error) {
+                        // Ignore errors
+                    }
+                }, 200);
+                
+                enhancedScannerInterval.html5QrCode = enhancedHtml5QrCode;
+            }
+        }
+        
+        function toggleTorch() {
+            if (!enhancedScannerStream) return;
+            
+            const track = enhancedScannerStream.getVideoTracks()[0];
+            if (!track) return;
+            
+            const capabilities = track.getCapabilities();
+            if (!capabilities.torch) {
+                console.log('Torch not supported');
+                return;
+            }
+            
+            torchEnabled = !torchEnabled;
+            track.applyConstraints({
+                advanced: [{ torch: torchEnabled }]
+            }).then(() => {
+                updateTorchButton();
+            }).catch(error => {
+                console.log('Torch toggle failed:', error);
+                torchEnabled = !torchEnabled;
+            });
+        }
+        
+        function updateTorchButton() {
+            const torchBtn = document.getElementById('torchBtn');
+            if (torchBtn) {
+                if (torchEnabled) {
+                    torchBtn.style.background = 'rgba(255, 193, 7, 0.8)';
+                    torchBtn.style.color = '#000';
+                } else {
+                    torchBtn.style.background = 'rgba(0,0,0,0.5)';
+                    torchBtn.style.color = 'white';
+                }
+            }
+        }
+        
+        function applyFocus(x, y, width, height) {
+            if (!enhancedScannerStream) return;
+            
+            const track = enhancedScannerStream.getVideoTracks()[0];
+            if (!track) return;
+            
+            const capabilities = track.getCapabilities();
+            const pointX = x / width;
+            const pointY = y / height;
+            
+            const constraints = {};
+            
+            if (capabilities.pointsOfInterest !== undefined) {
+                constraints.pointsOfInterest = [{ x: pointX, y: pointY }];
+            }
+            
+            if (capabilities.focusPointOfInterest !== undefined) {
+                constraints.focusPointOfInterest = { x: pointX, y: pointY };
+            }
+            
+            if (capabilities.exposurePointOfInterest !== undefined) {
+                constraints.exposurePointOfInterest = { x: pointX, y: pointY };
+            }
+            
+            if (capabilities.focusMode) {
+                if (capabilities.focusMode.includes('single-shot')) {
+                    constraints.focusMode = 'single-shot';
+                } else if (capabilities.focusMode.includes('continuous')) {
+                    constraints.focusMode = 'continuous';
+                }
+            }
+            
+            if (Object.keys(constraints).length > 0) {
+                track.applyConstraints({
+                    advanced: [constraints]
+                }).catch(error => {
+                    console.log('Focus not supported:', error);
+                    if (constraints.focusMode) {
+                        delete constraints.focusMode;
+                        track.applyConstraints({
+                            advanced: [constraints]
+                        }).catch(err => {
+                            console.log('Focus fallback failed:', err);
+                        });
+                    }
+                });
+            }
+        }
+        
+        function showFocusIndicator(x, y) {
+            const indicator = document.getElementById('focusIndicator');
+            if (indicator) {
+                indicator.style.left = (x - 30) + 'px';
+                indicator.style.top = (y - 30) + 'px';
+                indicator.style.display = 'block';
+                
+                setTimeout(() => {
+                    if (indicator) {
+                        indicator.style.display = 'none';
+                    }
+                }, 2000);
+            }
+        }
+        
+        function applyZoom() {
+            if (!enhancedScannerStream) return;
+            
+            const track = enhancedScannerStream.getVideoTracks()[0];
+            if (!track) return;
+            
+            const capabilities = track.getCapabilities();
+            if (capabilities.zoom) {
+                const zoomValue = Math.max(capabilities.zoom.min || 1, Math.min(capabilities.zoom.max || 3, currentZoom));
+                track.applyConstraints({
+                    advanced: [{ zoom: zoomValue }]
+                }).catch(error => {
+                    console.log('Zoom not supported:', error);
+                    const video = document.getElementById('enhancedScannerVideo');
+                    if (video) {
+                        video.style.transform = `scale(${currentZoom})`;
+                        video.style.transformOrigin = 'center center';
+                    }
+                });
+            } else {
+                const video = document.getElementById('enhancedScannerVideo');
+                if (video) {
+                    video.style.transform = `scale(${currentZoom})`;
+                    video.style.transformOrigin = 'center center';
+                }
+            }
+        }
+        
+        function getDistance(touch1, touch2) {
+            const dx = touch1.clientX - touch2.clientX;
+            const dy = touch1.clientY - touch2.clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function updateZoomDisplay() {
+            const zoomLevel = document.getElementById('zoomLevel');
+            if (zoomLevel) {
+                zoomLevel.textContent = currentZoom.toFixed(1) + 'x';
+            }
+        }
+        
+        // Toggle scanner controls box
+        function toggleScannerControls() {
+            const scannerBox = document.getElementById('scannerControlsBox');
+            if (scannerBox) {
+                scannerControlsVisible = !scannerControlsVisible;
+                scannerBox.style.display = scannerControlsVisible ? 'block' : 'none';
+                
+                if (!scannerControlsVisible) {
+                    stopCamera();
+                }
+            }
+        }
+        
+        // Helper functions
+        function getStatusClass(status) {
+            const upperStatus = status ? status.toUpperCase() : 'IN';
+            switch (upperStatus) {
+                case 'OUT': return 'out';
+                case 'BROKEN': return 'broken';
+                case 'LOST': return 'lost';
+                case 'CALIBRATION': return 'calibration';
+                default: return 'in';
+            }
+        }
+
+        function setCooldownWarnMessage(remainingMs) {
+            const mins = Math.floor(remainingMs / 60000);
+            const secs = Math.ceil((remainingMs % 60000) / 1000);
+            document.querySelector('#cooldownWarnModal .modal-body').textContent = `You must wait ${mins} minute${mins !== 1 ? 's' : ''} and ${secs} second${secs !== 1 ? 's' : ''} before you can return this tool.`;
+        }
+
+        async function startCooldownCountdown(toolId, outTime) {
+            try {
+                const settingsDoc = await db.collection('settings').doc('admin').get();
+                let cooldownMinutes = 5;
+                if (settingsDoc.exists && settingsDoc.data().CheckINCooldownMinutes) {
+                    cooldownMinutes = settingsDoc.data().CheckINCooldownMinutes;
+                }
+                const cooldownMs = cooldownMinutes * 60 * 1000;
+                
+                const countdownElement = document.getElementById(`countdown-${toolId}`);
+                if (!countdownElement) return;
+                
+                const valueSpan = countdownElement.querySelector('.countdown-value');
+                if (!valueSpan) return;
+                
+                if (activeCountdowns[toolId]) {
+                    clearInterval(activeCountdowns[toolId]);
+                }
+                
+                function updateCountdown() {
+                    const now = new Date();
+                    const diffMs = now - outTime;
+                    const remainingMs = cooldownMs - diffMs;
+                    
+                    if (remainingMs <= 0) {
+                        countdownElement.innerHTML = '<span style="font-weight: bold;">Check/In :</span> <span class="countdown-value">Ready</span>';
+                        countdownElement.style.background = '#4CAF50';
+                        if (activeCountdowns[toolId]) {
+                            clearInterval(activeCountdowns[toolId]);
+                            delete activeCountdowns[toolId];
+                        }
+                    } else {
+                        const mins = Math.floor(remainingMs / 60000);
+                        const secs = Math.floor((remainingMs % 60000) / 1000);
+                        valueSpan.textContent = `${mins}m ${secs}s`;
+                    }
+                }
+                
+                updateCountdown();
+                activeCountdowns[toolId] = setInterval(updateCountdown, 1000);
+                
+            } catch (error) {
+                console.error('Error starting countdown:', error);
+            }
+        }
+
+        function clearAllCountdowns() {
+            Object.keys(activeCountdowns).forEach(toolId => {
+                clearInterval(activeCountdowns[toolId]);
+            });
+            activeCountdowns = {};
+        }
+        
+        // Work Location functions
+        function updateWorkLocationLabel() {
+            const valueSpan = document.getElementById('workLocationValue');
+            if (valueSpan) {
+                valueSpan.textContent = selectedWorkLocation || '(not selected)';
+            }
+            if (selectedWorkLocation) {
+                localStorage.setItem('selectedWorkLocation', selectedWorkLocation);
+            }
+        }
+
+        function startWorkLocationFlash() {
+            const labelSpan = document.getElementById('workLocationLabel');
+            const valueSpan = document.getElementById('workLocationValue');
+            
+            if (!labelSpan || !valueSpan) return;
+
+            clearWorkLocationFlash();
+
+            const labelTextSpan = labelSpan.querySelector('span:first-child');
+            
+            if (labelTextSpan) {
+                labelTextSpan.classList.add('work-location-label-flashing');
+            }
+            valueSpan.classList.add('work-location-value-flashing');
+
+            flashTimeout = setTimeout(() => {
+                clearWorkLocationFlash();
+            }, 4000);
+        }
+
+        function clearWorkLocationFlash() {
+            const labelSpan = document.getElementById('workLocationLabel');
+            const valueSpan = document.getElementById('workLocationValue');
+            
+            if (labelSpan) {
+                const labelTextSpan = labelSpan.querySelector('span:first-child');
+                if (labelTextSpan) {
+                    labelTextSpan.classList.remove('work-location-label-flashing');
+                }
+            }
+            
+            if (valueSpan) {
+                valueSpan.classList.remove('work-location-value-flashing');
+            }
+            
+            if (flashTimeout) {
+                clearTimeout(flashTimeout);
+                flashTimeout = null;
+            }
+        }
+        
+        // Location selection modals
+        function showLocationSelectionModalForToolSubmission(toolCode) {
+            console.log('Showing location selection modal for tool code:', toolCode);
+            const modal = new bootstrap.Modal(document.getElementById('locationSelectionModal'));
+            
+            selectedWorkLocation = null;
+            document.querySelectorAll('.location-option').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            document.querySelectorAll('.location-option').forEach(btn => {
+                btn.onclick = function() {
+                    document.querySelectorAll('.location-option').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    selectedWorkLocation = this.getAttribute('data-location');
+                    console.log('Location selected:', selectedWorkLocation);
+                    
+                    modal.hide();
+                    processToolSubmission(toolCode);
+                };
+            });
+            
+            modal.show();
+            
+            const modalElement = document.getElementById('locationSelectionModal');
+            const handleModalHidden = function() {
+                if (!selectedWorkLocation) {
+                    document.getElementById('toolCode').value = '';
+                }
+                modalElement.removeEventListener('hidden.bs.modal', handleModalHidden);
+            };
+            modalElement.addEventListener('hidden.bs.modal', handleModalHidden);
+        }
+
+        function showLocationSelectionModalForRegisterTools() {
+            showHelicopterModelSelectionModal();
+        }
+
+        function showHelicopterModelSelectionModal() {
+            const modal = new bootstrap.Modal(document.getElementById('helicopterModelSelectionModal'));
+            document.querySelectorAll('.helicopter-model-option').forEach(btn => {
+                btn.classList.remove('active');
+                btn.style.background = '#f8f9fa';
+                btn.style.borderColor = '#e9ecef';
+                btn.style.transform = 'scale(1)';
+                
+                btn.onclick = function() {
+                    document.querySelectorAll('.helicopter-model-option').forEach(b => {
+                        b.classList.remove('active');
+                        b.style.background = '#f8f9fa';
+                        b.style.borderColor = '#e9ecef';
+                        b.style.transform = 'scale(1)';
+                    });
+                    this.classList.add('active');
+                    this.style.background = '#FF9800';
+                    this.style.borderColor = '#FF9800';
+                    this.style.color = 'white';
+                    this.style.transform = 'scale(1.02)';
+                    
+                    const selectedModel = this.getAttribute('data-model');
+                    modal.hide();
+                    showWorkLocationSelectionModal(selectedModel);
+                };
+                
+                btn.onmouseenter = function() {
+                    if (!this.classList.contains('active')) {
+                        this.style.background = '#e9ecef';
+                        this.style.borderColor = '#FF9800';
+                        this.style.transform = 'scale(1.02)';
+                    }
+                };
+                
+                btn.onmouseleave = function() {
+                    if (!this.classList.contains('active')) {
+                        this.style.background = '#f8f9fa';
+                        this.style.borderColor = '#e9ecef';
+                        this.style.transform = 'scale(1)';
+                    }
+                };
+            });
+            modal.show();
+        }
+
+        function showWorkLocationSelectionModal(helicopterModel) {
+            if (helicopterModel === 'Other') {
+                selectedWorkLocation = 'Other';
+                updateWorkLocationLabel();
+                enterRegisterToolsScreen();
+                return;
+            }
+            
+            const modal = new bootstrap.Modal(document.getElementById('workLocationSelectionModal'));
+            const modalTitle = document.getElementById('workLocationSelectionModalLabel');
+            const modalBody = document.getElementById('workLocationSelectionModalBody');
+            const modalOptions = document.getElementById('workLocationOptions');
+            
+            modalTitle.textContent = `Select Station for ${helicopterModel}`;
+            modalBody.innerHTML = `Select work location for <strong>${helicopterModel}</strong>:`;
+            modalOptions.innerHTML = '';
+            
+            const locations = getLocationsForHelicopterModel(helicopterModel);
+            
+            locations.forEach((location, index) => {
+                const colDiv = document.createElement('div');
+                colDiv.className = 'col-4 mb-3';
+                
+                const button = document.createElement('button');
+                button.className = 'btn work-location-option w-100 p-3';
+                button.setAttribute('data-location', location);
+                button.style.cssText = 'background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; transition: all 0.3s ease; font-weight: bold; font-size: 1.1rem; color: #333;';
+                button.textContent = location;
+                
+                button.onmouseenter = function() {
+                    if (!this.classList.contains('active')) {
+                        this.style.background = '#e9ecef';
+                        this.style.borderColor = '#FF9800';
+                        this.style.transform = 'scale(1.02)';
+                    }
+                };
+                
+                button.onmouseleave = function() {
+                    if (!this.classList.contains('active')) {
+                        this.style.background = '#f8f9fa';
+                        this.style.borderColor = '#e9ecef';
+                        this.style.transform = 'scale(1)';
+                    }
+                };
+                
+                button.onclick = function() {
+                    document.querySelectorAll('.work-location-option').forEach(b => {
+                        b.classList.remove('active');
+                        b.style.background = '#f8f9fa';
+                        b.style.borderColor = '#e9ecef';
+                        b.style.transform = 'scale(1)';
+                    });
+                    this.classList.add('active');
+                    this.style.background = '#FF9800';
+                    this.style.borderColor = '#FF9800';
+                    this.style.color = 'white';
+                    this.style.transform = 'scale(1.02)';
+                    
+                    selectedWorkLocation = this.getAttribute('data-location');
+                    modal.hide();
+                    updateWorkLocationLabel();
+                    enterRegisterToolsScreen();
+                };
+                
+                colDiv.appendChild(button);
+                modalOptions.appendChild(colDiv);
+            });
+            
+            modal.show();
+        }
+
+        function getLocationsForHelicopterModel(model) {
+            const locationMap = {
+                'AW139': ['701', '702', '703'],
+                'SA342L': ['352', '353', '354', '355'],
+                'B206L': ['110', '111'],
+                'H145M': ['1955', '1956', '1957', '1958', '1959', '1960'],
+                'Other': ['Other']
+            };
+            return locationMap[model] || [];
+        }
+
+        function goBackToHelicopterModels() {
+            const workLocationModalElement = document.getElementById('workLocationSelectionModal');
+            const workLocationModal = bootstrap.Modal.getInstance(workLocationModalElement);
+            
+            if (workLocationModal) {
+                workLocationModalElement.addEventListener('hidden.bs.modal', function onHidden() {
+                    workLocationModalElement.removeEventListener('hidden.bs.modal', onHidden);
+                    showHelicopterModelSelectionModal();
+                }, { once: true });
+                
+                workLocationModal.hide();
+            } else {
+                if (workLocationModalElement) {
+                    workLocationModalElement.classList.remove('show');
+                    workLocationModalElement.style.display = 'none';
+                    document.body.classList.remove('modal-open');
+                    
+                    const backdrop = document.querySelector('.modal-backdrop');
+                    if (backdrop) {
+                        backdrop.remove();
+                    }
+                    
+                    setTimeout(() => {
+                        showHelicopterModelSelectionModal();
+                    }, 150);
+                }
+            }
+        }
+        
+        // Screen navigation functions
+        function refreshRegisterToolsScreen() {
+            const toolCodeInput = document.getElementById('toolCode');
+            if (toolCodeInput) {
+                toolCodeInput.value = '';
+            }
+            
+            clearWorkLocationFlash();
+            clearAllCountdowns();
+            updateWorkLocationLabel();
+            loadTools();
+            showNotificationsInSequence();
+        }
+
+        function enterRegisterToolsScreen() {
+            refreshRegisterToolsScreen();
+        }
+        
+        // Search functions
+        function setSearchType(type) {
+            currentSearchType = type;
+            
+            const toolNameBtn = document.getElementById('searchTypeToolName');
+            const partNumberBtn = document.getElementById('searchTypePartNumber');
+            
+            if (type === 'toolName') {
+                toolNameBtn.classList.add('active');
+                partNumberBtn.classList.remove('active');
+            } else {
+                partNumberBtn.classList.add('active');
+                toolNameBtn.classList.remove('active');
+            }
+            
+            const searchInput = document.getElementById('searchToolInput');
+            if (searchInput && searchInput.value.trim()) {
+                performRealTimeSearch(searchInput.value.trim());
+            }
+        }
+        
+        function handleSearchInputKeyup(event) {
+            const searchInput = document.getElementById('searchToolInput');
+            const searchTerm = searchInput.value.trim();
+            const dropdown = document.getElementById('searchDropdownList');
+            
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                navigateDropdown(1);
+                return;
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                navigateDropdown(-1);
+                return;
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+                if (dropdownSelectedIndex >= 0 && searchResultsData[dropdownSelectedIndex]) {
+                    selectToolFromDropdown(searchResultsData[dropdownSelectedIndex].id);
+                }
+                return;
+            } else if (event.key === 'Escape') {
+                dropdown.style.display = 'none';
+                return;
+            }
+            
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
+            }
+            
+            searchTimeout = setTimeout(() => {
+                if (searchTerm.length >= 1) {
+                    performRealTimeSearch(searchTerm);
+                } else {
+                    dropdown.style.display = 'none';
+                    searchResultsData = [];
+                }
+            }, 300);
+        }
+        
+        function handleSearchInputFocus() {
+            const searchInput = document.getElementById('searchToolInput');
+            const searchTerm = searchInput.value.trim();
+            if (searchTerm.length >= 1) {
+                performRealTimeSearch(searchTerm);
+            }
+        }
+        
+        function handleSearchInputBlur() {
+            setTimeout(() => {
+                const dropdown = document.getElementById('searchDropdownList');
+                dropdown.style.display = 'none';
+            }, 200);
+        }
+        
+        function navigateDropdown(direction) {
+            const dropdown = document.getElementById('searchDropdownList');
+            const items = dropdown.querySelectorAll('.search-dropdown-item');
+            
+            if (items.length === 0) return;
+            
+            if (dropdownSelectedIndex >= 0 && items[dropdownSelectedIndex]) {
+                items[dropdownSelectedIndex].classList.remove('selected');
+            }
+            
+            dropdownSelectedIndex += direction;
+            if (dropdownSelectedIndex < 0) {
+                dropdownSelectedIndex = items.length - 1;
+            } else if (dropdownSelectedIndex >= items.length) {
+                dropdownSelectedIndex = 0;
+            }
+            
+            if (items[dropdownSelectedIndex]) {
+                items[dropdownSelectedIndex].classList.add('selected');
+                items[dropdownSelectedIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+        }
+        
+        async function performRealTimeSearch(searchTerm) {
+            const dropdown = document.getElementById('searchDropdownList');
+            dropdown.style.display = 'block';
+            dropdown.innerHTML = '<div class="search-dropdown-item" style="text-align: center; color: #999;">Loading...</div>';
+            dropdownSelectedIndex = -1;
+            
+            try {
+                if (allToolsCache.length === 0) {
+                    const snapshot = await db.collection('tools').get();
+                    allToolsCache = [];
+                    snapshot.forEach((doc) => {
+                        const data = doc.data();
+                        allToolsCache.push({
+                            id: doc.id,
+                            toolName: (data.toolName || '').toString(),
+                            partNumber: (data.partNumber || doc.id).toString(),
+                            collectionCode: (data.collectionCode || '').toString(),
+                            owner: (data.owner || '').toString()
+                        });
+                    });
+                }
+                
+                const searchTermLower = searchTerm.toLowerCase();
+                let filtered = allToolsCache.filter(tool => {
+                    if (currentSearchType === 'toolName') {
+                        return tool.toolName.toLowerCase().includes(searchTermLower);
+                    } else {
+                        return tool.partNumber.toLowerCase().includes(searchTermLower);
+                    }
+                });
+                
+                filtered.sort((a, b) => {
+                    if (currentSearchType === 'toolName') {
+                        const nameA = (a.toolName || '').toLowerCase();
+                        const nameB = (b.toolName || '').toLowerCase();
+                        return nameA.localeCompare(nameB);
+                    } else {
+                        const partA = (a.partNumber || a.id).toLowerCase();
+                        const partB = (b.partNumber || b.id).toLowerCase();
+                        return partA.localeCompare(partB);
+                    }
+                });
+                
+                filtered = filtered.slice(0, 20);
+                searchResultsData = filtered;
+                
+                if (filtered.length === 0) {
+                    dropdown.innerHTML = '<div class="search-dropdown-item" style="text-align: center; color: #999;">No tools found</div>';
+                    return;
+                }
+                
+                dropdown.innerHTML = '';
+                filtered.forEach((tool, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'search-dropdown-item';
+                    item.onclick = () => selectToolFromDropdown(tool.id);
+                    item.onmouseenter = () => {
+                        dropdown.querySelectorAll('.search-dropdown-item').forEach(el => el.classList.remove('selected'));
+                        item.classList.add('selected');
+                        dropdownSelectedIndex = index;
+                    };
+                    
+                    const highlightText = (text, searchTerm) => {
+                        if (!searchTerm) return text;
+                        const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                        return text.replace(regex, '<span class="highlight-match">$1</span>');
+                    };
+                    
+                    const toolName = tool.toolName || 'Unknown Tool';
+                    const partNumber = tool.partNumber || tool.id;
+                    const collectionCode = tool.collectionCode || 'N/A';
+                    const owner = tool.owner || 'N/A';
+                    
+                    let highlightedName = toolName;
+                    let highlightedPart = partNumber;
+                    
+                    if (currentSearchType === 'toolName') {
+                        highlightedName = highlightText(toolName, searchTerm);
+                    } else {
+                        highlightedPart = highlightText(partNumber, searchTerm);
+                    }
+                    
+                    if (currentSearchType === 'partNumber') {
+                        item.innerHTML = `
+                            <div class="tool-name">${highlightedPart}</div>
+                            <div class="tool-part"><span class="label">Tool Name:</span> <span class="value">${toolName}</span></div>
+                            <div class="tool-collection"><span class="label">Collection:</span> <span class="value">${collectionCode}</span></div>
+                            <div class="tool-owner"><span class="label">Owner:</span> <span class="value">${owner}</span></div>
+                        `;
+                    } else {
+                        item.innerHTML = `
+                            <div class="tool-name">${highlightedName}</div>
+                            <div class="tool-part"><span class="label">Part #:</span> <span class="value">${highlightedPart}</span></div>
+                            <div class="tool-collection"><span class="label">Collection:</span> <span class="value">${collectionCode}</span></div>
+                            <div class="tool-owner"><span class="label">Owner:</span> <span class="value">${owner}</span></div>
+                        `;
+                    }
+                    
+                    dropdown.appendChild(item);
+                });
+                
+            } catch (error) {
+                console.error('Error searching tools:', error);
+                dropdown.innerHTML = '<div class="search-dropdown-item" style="text-align: center; color: #f00;">Error loading results</div>';
+            }
+        }
+        
+        async function getCollectionPhotoCount(collectionCode) {
+            if (!collectionCode || collectionCode === 'N/A') return 0;
+            try {
+                const collectionQuery = await db.collection('collections')
+                    .where('collectionName', '==', collectionCode)
+                    .get();
+                
+                if (!collectionQuery.empty) {
+                    const collectionDoc = collectionQuery.docs[0];
+                    const photoUrls = collectionDoc.data().photoUrls || [];
+                    return photoUrls.length;
+                }
+            } catch (error) {
+                console.error('Error getting collection photo count:', error);
+            }
+            return 0;
+        }
+        
+        async function getLocationPhotoCount(collectionCode, location) {
+            if (!collectionCode || collectionCode === 'N/A' || !location || location === 'N/A') return 0;
+            try {
+                const documentId = `${collectionCode}_${location}`;
+                const locationDoc = await db.collection('locationPhotos').doc(documentId).get();
+                
+                if (locationDoc.exists) {
+                    const data = locationDoc.data();
+                    const photoUrls = data.photoUrls || [];
+                    return photoUrls.length;
+                }
+            } catch (error) {
+                console.error('Error getting location photo count:', error);
+            }
+            return 0;
+        }
+        
+        async function selectToolFromDropdown(toolId) {
+            const searchInput = document.getElementById('searchToolInput');
+            const dropdown = document.getElementById('searchDropdownList');
+            const selectedToolDetails = document.getElementById('selectedToolDetails');
+            
+            dropdown.style.display = 'none';
+            searchInput.value = '';
+            
+            try {
+                const toolRef = db.collection('tools').doc(toolId);
+                const doc = await toolRef.get();
+                
+                if (doc.exists) {
+                    const data = doc.data();
+                    const tool = {
+                        id: doc.id,
+                        ...data
+                    };
+                    
+                    selectedToolDetails.style.display = 'block';
+                    
+                    const toolName = tool.toolName || 'Unknown Tool';
+                    const partNumber = tool.partNumber || toolId;
+                    const collectionCode = tool.collectionCode || 'N/A';
+                    const location = tool.location || 'N/A';
+                    const status = tool.status || 'N/A';
+                    const owner = tool.owner || 'N/A';
+                    const technician = tool.technician || 'N/A';
+                    const calDueDate = tool.calDueDate ? (tool.calDueDate.toDate ? tool.calDueDate.toDate().toLocaleDateString() : tool.calDueDate) : 'N/A';
+                    
+                    const toolPhotoUrls = tool.photoUrls || [];
+                    const toolPhotoCount = toolPhotoUrls.length;
+                    
+                    const collectionPhotoCount = await getCollectionPhotoCount(collectionCode);
+                    const locationPhotoCount = await getLocationPhotoCount(collectionCode, location);
+                    
+                    let collectionPhotoUrls = [];
+                    let locationPhotoUrls = [];
+                    
+                    if (collectionCode !== 'N/A' && collectionPhotoCount > 0) {
+                        try {
+                            const collectionQuery = await db.collection('collections')
+                                .where('collectionName', '==', collectionCode)
+                                .get();
+                            if (!collectionQuery.empty) {
+                                collectionPhotoUrls = collectionQuery.docs[0].data().photoUrls || [];
+                            }
+                        } catch (error) {
+                            console.error('Error fetching collection photos:', error);
+                        }
+                    }
+                    
+                    if (location !== 'N/A' && locationPhotoCount > 0) {
+                        try {
+                            const documentId = `${collectionCode}_${location}`;
+                            const locationDoc = await db.collection('locationPhotos').doc(documentId).get();
+                            if (locationDoc.exists) {
+                                locationPhotoUrls = locationDoc.data().photoUrls || [];
+                            }
+                        } catch (error) {
+                            console.error('Error fetching location photos:', error);
+                        }
+                    }
+                    
+                    let toolNameDisplay = toolName;
+                    if (toolPhotoCount > 0) {
+                        const toolPhotoUrlsJson = JSON.stringify(toolPhotoUrls).replace(/'/g, "&#39;");
+                        toolNameDisplay = `${toolName} (<a href="#" onclick="showToolPhotoGallery(this); return false;" data-photo-urls='${toolPhotoUrlsJson}' data-tool-id='${toolId}' data-part-number='${partNumber}' style="color: #2196F3; text-decoration: underline; cursor: pointer; font-weight: bold;">${toolPhotoCount} photos</a>)`;
+                    } else {
+                        toolNameDisplay = `${toolName} (<span style="color: #888; text-decoration: none; cursor: not-allowed; font-weight: bold;">0 photos</span>)`;
+                    }
+                    
+                    let collectionDisplay = collectionCode;
+                    if (collectionCode !== 'N/A') {
+                        if (collectionPhotoCount > 0) {
+                            const collectionPhotoUrlsJson = JSON.stringify(collectionPhotoUrls).replace(/'/g, "&#39;");
+                            collectionDisplay = `${collectionCode} (<a href="#" onclick="showCollectionPhotoGallery(this); return false;" data-photo-urls='${collectionPhotoUrlsJson}' style="color: #2196F3; text-decoration: underline; cursor: pointer; font-weight: bold;">${collectionPhotoCount} photos</a>)`;
+                        } else {
+                            collectionDisplay = `${collectionCode} (0 photos)`;
+                        }
+                    }
+                    
+                    let locationDisplay = location;
+                    if (location !== 'N/A') {
+                        if (locationPhotoCount > 0) {
+                            const locationPhotoUrlsJson = JSON.stringify(locationPhotoUrls).replace(/'/g, "&#39;");
+                            locationDisplay = `${location} (<a href="#" onclick="showLocationPhotoGallery(this); return false;" data-photo-urls='${locationPhotoUrlsJson}' style="color: #2196F3; text-decoration: underline; cursor: pointer; font-weight: bold;">${locationPhotoCount} photos</a>)`;
+                        } else {
+                            locationDisplay = `${location} (0 photos)`;
+                        }
+                    }
+                    
+                    selectedToolDetails.innerHTML = `
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0">Tool Details</h5>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Tool Name:</strong> ${toolNameDisplay}</p>
+                                <p><strong>Part Number:</strong> ${partNumber}</p>
+                                <p><strong>Collection Code:</strong> ${collectionDisplay}</p>
+                                <p><strong>Location:</strong> ${locationDisplay}</p>
+                                <p><strong>Status:</strong> <span class="badge ${status === 'OUT' ? 'bg-danger' : 'bg-success'}">${status}</span></p>
+                                <p><strong>Owner:</strong> ${owner}</p>
+                                <p><strong>Technician:</strong> ${technician}</p>
+                                <p><strong>Cal Due Date:</strong> ${calDueDate}</p>
+                                <button onclick="useSelectedTool('${toolId}')" class="btn btn-primary mt-2">
+                                    <i class="fas fa-check"></i> Use This Tool
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error fetching tool details:', error);
+                alert('Error fetching tool details. Please try again.');
+            }
+        }
+        
+        function showCollectionPhotoGallery(el) {
+            const photoUrls = JSON.parse(el.getAttribute('data-photo-urls'));
+            if (!photoUrls || photoUrls.length === 0) {
+                alert('No photos available for this collection.');
+                return;
+            }
+            showToolPhotoGallery(el);
+        }
+        
+        function showLocationPhotoGallery(el) {
+            const photoUrls = JSON.parse(el.getAttribute('data-photo-urls'));
+            if (!photoUrls || photoUrls.length === 0) {
+                alert('No photos available for this location.');
+                return;
+            }
+            showToolPhotoGallery(el);
+        }
+        
+        function selectToolFromSearch(toolId) {
+            selectToolFromDropdown(toolId);
+        }
+        
+        function useSelectedTool(toolId) {
+            const toolCodeInput = document.getElementById('toolCode');
+            toolCodeInput.value = toolId;
+            
+            const inputEvent = new Event('input', { bubbles: true });
+            toolCodeInput.dispatchEvent(inputEvent);
+            
+            const toolDetailsBtn = document.getElementById('toolDetailsBtn');
+            if (toolDetailsBtn) {
+                toolDetailsBtn.disabled = false;
+            }
+            
+            const scanToolTab = document.getElementById('scanToolTab');
+            const searchToolsTab = document.getElementById('searchToolsTab');
+            const scannerView = document.getElementById('scannerView');
+            const searchToolsView = document.getElementById('searchToolsView');
+            
+            searchToolsTab.classList.remove('active');
+            searchToolsView.classList.remove('show', 'active');
+            
+            scanToolTab.classList.add('active');
+            scannerView.classList.add('show', 'active');
+            
+            const tab = new bootstrap.Tab(scanToolTab);
+            tab.show();
+            
+            document.getElementById('searchToolInput').value = '';
+            document.getElementById('searchResultsContainer').style.display = 'none';
+            document.getElementById('selectedToolDetails').style.display = 'none';
+        }
+
+        async function showLastScannedToolDetails() {
+            const code = document.getElementById('toolCode').value.trim();
+            if (!code) return;
+            try {
+                const toolRef = db.collection('tools').doc(code);
+                const doc = await toolRef.get();
+                if (doc.exists) {
+                    const data = doc.data();
+                    lastScannedToolData = buildToolDetailsObject(doc, data);
+                    showToolDetails(lastScannedToolData, 'registerTools');
+                } else {
+                    alert('Tool not found. Please check the code.');
+                }
+            } catch (error) {
+                console.error('Error fetching tool details:', error);
+                alert('Error fetching tool details: ' + error.message);
+            }
+        }
+
+        function showToolDetails(tool, sourceScreen = 'registerTools') {
+            const body = document.getElementById('toolDetailsBody');
+            
+            const formatTimestamp = (timestamp) => {
+                if (!timestamp) return 'N/A';
+                if (timestamp.toDate) {
+                    return timestamp.toDate().toLocaleString('en-GB', {
+                        day: '2-digit', month: '2-digit', year: 'numeric', 
+                        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                    });
+                }
+                return timestamp;
+            };
+            
+            const status = tool.status || 'N/A';
+            let checkoutInfo = '';
+            
+            if (status === 'OUT') {
+                const technician = tool.technician || 'N/A';
+                const checkoutDate = formatTimestamp(tool.timestamp);
+                checkoutInfo = `
+                <div class="mb-2" style="font-size: 1.1em;">
+                        <span style="font-weight: 600; color: #222; font-size: 1.2em;">Checked Out By:</span> 
+                        <span style="font-size: 1.0em; color: #1976d2;">${technician}</span>
+                </div>
+                <div class="mb-2" style="font-size: 1.1em;">
+                        <span style="font-weight: 600; color: #222; font-size: 1.2em;">ChkOut Date:</span> 
+                        <span style="font-size: 1.0em; color: #1976d2;">${checkoutDate}</span>
+                </div>
+                `;
+            } else if (status === 'IN') {
+                const lastTechnician = tool.technician || 'N/A';
+                const lastCheckoutDate = formatTimestamp(tool.timestamp);
+                checkoutInfo = `
+                <div class="mb-2" style="font-size: 1.1em;">
+                        <span style="font-weight: 600; color: #222; font-size: 1.2em;">Last ChkOut By:</span> 
+                        <span style="font-size: 1.0em; color: #1976d2;">${lastTechnician}</span>
+                </div>
+                <div class="mb-2" style="font-size: 1.1em;">
+                        <span style="font-weight: 600; color: #222; font-size: 1.2em;">Last ChkOut:</span> 
+                        <span style="font-size: 1.0em; color: #1976d2;">${lastCheckoutDate}</span>
+                </div>
+            `;
+            }
+            
+            const fields = [
+                { label: 'Tool ID', value: tool.documentId || tool.toolId || 'N/A' },
+                { label: 'Tool Name', value: tool.toolName || 'N/A' },
+                { label: 'Part Number', value: tool.partNumber || 'N/A' },
+                { label: 'Serial Number', value: tool.serialNumber || 'N/A' },
+                { label: 'Collection', value: tool.collectionCode || 'N/A', isCollection: true },
+                { label: 'Location', value: tool.location || 'N/A' },
+                { label: 'WorkOn', value: (typeof tool.WorkOn === 'string' && tool.WorkOn.trim()) ? tool.WorkOn : 'N/A', isWorkOn: true },
+                { label: 'Owner', value: tool.owner || 'N/A' },
+                { label: 'Status', value: tool.status || 'N/A' },
+                { label: 'Calibration Due', value: tool.calDueDate || 'N/A' },
+            ];
+            let html = '';
+            fields.forEach(f => {
+                if (f.isCollection) {
+                    html += `<div class="mb-2" style="font-size: 1.22em;"><span style="font-weight: 600; color: #222; font-size: 1.2em;">${f.label}:</span> <a href="#" onclick="showCollectionDetails('${f.value !== 'N/A' ? f.value : ''}', '${sourceScreen}')" style="font-size: 1.18em; color: #FF9800; text-decoration: underline; font-weight: bold;">${f.value}</a></div>`;
+                } else if (f.isWorkOn) {
+                    html += `<div class=\"mb-2\" style=\"font-size: 1.1em;\"><span style=\"font-weight: 600; color: #222; font-size: 1.2em;\">${f.label}:</span> <span style=\"font-size: 1.0em; color: #888; font-weight: bold;\">${f.value}</span></div>`;
+                } else {
+                    html += `<div class=\"mb-2\" style=\"font-size: 1.1em;\"><span style=\"font-weight: 600; color: #222; font-size: 1.2em;\">${f.label}:</span> <span style=\"font-size: 1.0em; color: #1976d2;\">${f.value}</span></div>`;
+                }
+            });
+            
+            html += checkoutInfo;
+            
+            html += `<div class="mb-2">
+  ${tool.photoUrls && tool.photoUrls.length > 0
+    ? `<a style="color: #1976d2; text-decoration: underline; cursor: pointer; font-size: 1.18em; font-weight: bold; display: inline-block; margin-top: 10px;"
+         onclick="if(this.hasAttribute('data-photo-urls')) showToolPhotoGallery(this)"
+         data-photo-urls='${JSON.stringify(tool.photoUrls)}'
+         data-tool-id='${tool.toolId || tool.documentId}'
+         data-part-number='${tool.partNumber}'>
+        Photo (${tool.photoUrls.length})
+      </a>`
+    : `<span style="color: #888; text-decoration: none; cursor: not-allowed; font-size: 1.18em; font-weight: bold; display: inline-block; margin-top: 10px;">Photo (0)</span>`}
+</div>`;
+            body.innerHTML = html;
+            const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
+            modal.show();
+        }
+
+        function buildToolDetailsObject(doc, data) {
+            return {
+                toolName: data.toolName || 'Unknown Tool',
+                toolId: doc.id,
+                documentId: doc.id,
+                partNumber: data.partNumber || doc.id,
+                collectionCode: data.collectionCode || '',
+                location: data.location || 'N/A',
+                status: data.status || 'N/A',
+                owner: data.owner || 'N/A',
+                technician: data.technician || 'N/A',
+                timestamp: data.timestamp,
+                calDueDate: data.calDueDate && data.calDueDate.toDate ? data.calDueDate.toDate().toLocaleDateString('en-GB') : 'N/A',
+                photoUrls: data.photoUrls || [],
+                WorkOn: data.WorkOn || 'N/A',
+                serialNumber: data.serialNumber || 'N/A'
+            };
+        }
+        
+        // Photo gallery functions
+        function showToolPhotoGallery(el) {
+            const photoUrls = JSON.parse(el.getAttribute('data-photo-urls'));
+            const toolId = el.getAttribute('data-tool-id');
+            const partNumber = el.getAttribute('data-part-number');
+            if (!photoUrls || photoUrls.length === 0) return;
+            let currentPhotoIndex = 0;
+            const galleryContent = document.getElementById('toolPhotoGalleryContent');
+            const counter = document.getElementById('toolPhotoCounter');
+            const prevBtn = document.getElementById('toolPhotoPrevBtn');
+            const nextBtn = document.getElementById('toolPhotoNextBtn');
+            
+            function updatePhoto() {
+                galleryContent.innerHTML = `<img src="${photoUrls[currentPhotoIndex]}" class="img-fluid rounded shadow" style="max-height:80vh;max-width:100vw;object-fit:contain;">`;
+                
+                const prevArrow = document.createElement('button');
+                prevArrow.type = 'button';
+                prevArrow.className = 'btn btn-light position-absolute';
+                prevArrow.id = 'toolPhotoPrevBtn';
+                prevArrow.style = 'left: 20px; top: 50%; transform: translateY(-50%); z-index: 1000; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;';
+                prevArrow.innerHTML = '<i class="fas fa-chevron-left"></i>';
+                prevArrow.onclick = function() {
+                    if (currentPhotoIndex > 0) {
+                        currentPhotoIndex--;
+                        updatePhoto();
+                    }
+                };
+                
+                const nextArrow = document.createElement('button');
+                nextArrow.type = 'button';
+                nextArrow.className = 'btn btn-light position-absolute';
+                nextArrow.id = 'toolPhotoNextBtn';
+                nextArrow.style = 'right: 20px; top: 50%; transform: translateY(-50%); z-index: 1000; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;';
+                nextArrow.innerHTML = '<i class="fas fa-chevron-right"></i>';
+                nextArrow.onclick = function() {
+                    if (currentPhotoIndex < photoUrls.length - 1) {
+                        currentPhotoIndex++;
+                        updatePhoto();
+                    }
+                };
+                
+                galleryContent.appendChild(prevArrow);
+                galleryContent.appendChild(nextArrow);
+                
+                counter.textContent = `${currentPhotoIndex + 1} / ${photoUrls.length}`;
+                
+                prevArrow.style.display = currentPhotoIndex === 0 ? 'none' : 'flex';
+                nextArrow.style.display = currentPhotoIndex === photoUrls.length - 1 ? 'none' : 'flex';
+                
+                const deleteBtn = document.getElementById('toolPhotoDeleteBtn');
+                if (deleteBtn) {
+                    deleteBtn.onclick = function() {
+                        deletePhoto(toolId, partNumber, currentPhotoIndex, photoUrls[currentPhotoIndex]);
+                    };
+                }
+            }
+            
+            updatePhoto();
+            const modal = new bootstrap.Modal(document.getElementById('toolPhotoGalleryModal'));
+            modal.show();
+        }
+        
+        // Collection details function (placeholder - will be implemented in common.js or separate file)
+        function showCollectionDetails(collectionCode, sourceScreen) {
+            // This function will be implemented when creating the collection details page
+            alert('Collection details feature coming soon');
+        }
+        
+        // Notification functions
+        async function showNotificationsInSequence() {
+            console.log('showNotificationsInSequence called');
+            let outstandingNeeded = false;
+            let overdueNeeded = false;
+            let outstandingMsg = '';
+            let overdueMsg = '';
+
+            const user = auth.currentUser;
+            if (user) {
+                const fullName = localStorage.getItem('fullName') || user.email;
+                const now = new Date();
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                const snapshot = await db.collection('tools')
+                    .where('owner', '==', fullName)
+                    .where('status', '==', 'OUT')
+                    .get();
+                
+                let ownerToday = 0;
+                let ownerPrev = 0;
+                let techToolIds = new Set();
+                
+                snapshot.docs.forEach(doc => {
+                    const data = doc.data();
+                    if (data.technician !== fullName) {
+                        if (data.timestamp && data.timestamp.toDate) {
+                            const outTime = data.timestamp.toDate();
+                            if (outTime >= today) {
+                                ownerToday++;
+                            } else {
+                                ownerPrev++;
+                            }
+                        }
+                    } else {
+                        techToolIds.add(doc.id);
+                    }
+                });
+                
+                if (ownerToday > 0 || ownerPrev > 0) {
+                    outstandingNeeded = true;
+                    outstandingMsg = '<b>ACTION REQUIRED:</b> THE FOLLOWING TOOLS YOU OWN ARE STILL CHECKED OUT BY OTHERS.';
+                    if (ownerToday > 0) outstandingMsg += `<br>- <b>${ownerToday} TOOL${ownerToday > 1 ? 'S' : ''} CHECKED OUT TODAY</b>.`;
+                    if (ownerPrev > 0) outstandingMsg += `<br>- <b>${ownerPrev} TOOL${ownerPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES</b>.`;
+                    outstandingMsg += `<br><span style="display: flex; align-items: center; margin-top: 8px;"><i class='fas fa-bell' style='color: #1976D2; margin-right: 4px;'></i>PLEASE FOLLOW UP TO ENSURE THESE TOOLS ARE RETURNED.</span>`;
+                }
+                
+                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'UNKNOWN TECHNICIAN';
+                
+                const techSnapshot = await db.collection('tools')
+                    .where('technician', '==', technicianName)
+                    .where('status', '==', 'OUT')
+                    .get();
+                
+                let techToday = 0;
+                let techPrev = 0;
+                techSnapshot.docs.forEach(doc => {
+                    const data = doc.data();
+                    if (data.timestamp && data.timestamp.toDate) {
+                        const outTime = data.timestamp.toDate();
+                        if (outTime >= today) {
+                            techToday++;
+                        } else {
+                            techPrev++;
+                        }
+                    }
+                });
+                
+                if (techToday > 0 || techPrev > 0) {
+                    overdueNeeded = true;
+                    overdueMsg = '<b>REMINDER:</b> YOU HAVE TOOLS CHECKED OUT THAT NEED TO BE RETURNED.';
+                    if (techToday > 0) overdueMsg += `<br>- <b>${techToday} TOOL${techToday > 1 ? 'S' : ''} CHECKED OUT TODAY</b>.`;
+                    if (techPrev > 0) overdueMsg += `<br>- <b>${techPrev} TOOL${techPrev > 1 ? 'S' : ''} CHECKED OUT FROM PREVIOUS DATES</b>.`;
+                    overdueMsg += `<br><span style="display: flex; align-items: center; margin-top: 8px;"><i class='fas fa-undo' style='color: #1976D2; margin-right: 4px;'></i>PLEASE RETURN THESE TOOLS AS SOON AS POSSIBLE.</span>`;
+                }
+            }
+            
+            if (outstandingNeeded) {
+                document.getElementById('outstandingToolsBody').innerHTML = outstandingMsg;
+                const outstandingModal = new bootstrap.Modal(document.getElementById('outstandingToolsModal'));
+                document.getElementById('outstandingToolsOkBtn').onclick = function() {
+                    outstandingModal.hide();
+                    if (overdueNeeded) {
+                        setTimeout(() => {
+                            document.getElementById('outToolsNotifBody').innerHTML = overdueMsg;
+                            const notifModal = new bootstrap.Modal(document.getElementById('outToolsNotifModal'));
+                            notifModal.show();
+                        }, 300);
+                    }
+                };
+                outstandingModal.show();
+            } else if (overdueNeeded) {
+                document.getElementById('outToolsNotifBody').innerHTML = overdueMsg;
+                const notifModal = new bootstrap.Modal(document.getElementById('outToolsNotifModal'));
+                notifModal.show();
+            }
+        }
+        
+        // Update previous out tools count (placeholder - will be implemented in common.js)
+        async function updatePreviousOutToolsCount() {
+            // This function will be implemented in common.js
+            console.log('updatePreviousOutToolsCount called');
+        }
+        
+        // Photo delete function (placeholder - will be implemented when needed)
+        async function deletePhoto(toolId, partNumber, photoIndex, photoUrl) {
+            alert('Photo deletion feature coming soon');
+        }
+        
+        // Add event listener for tool code input to trigger flash
+        document.addEventListener('DOMContentLoaded', function() {
+            const toolCodeInput = document.getElementById('toolCode');
+            if (toolCodeInput) {
+                toolCodeInput.addEventListener('input', function() {
+                    if (this.value.trim().length > 0) {
+                        startWorkLocationFlash();
+                    }
+                });
+            }
+        });
+        
+    </script>
+</body>
+</html>
+
