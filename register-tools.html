@@ -88,7 +88,7 @@
                                 <!-- Bulk Scan Message - positioned above camera -->
                                 <div id="bulkScanMessage" style="display: none; position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1000; padding: 12px 24px; border-radius: 8px; font-weight: bold; text-align: center; font-size: 1rem; max-width: 90%; box-shadow: 0 4px 12px rgba(0,0,0,0.5); pointer-events: none; white-space: nowrap;"></div>
                                 <div class="input-group mb-2">
-                                    <input type="text" id="toolCode" class="form-control" placeholder="Scan or Type Tool Code">
+                                    <input type="text" id="toolCode" class="form-control" placeholder="Scan or Type Tool Code (comma-separated for multiple)">
                                     <button onclick="submitCode()" class="btn btn-primary submit-check-btn">
                                         <i class="fas fa-check"></i>
                                     </button>
@@ -761,14 +761,27 @@
         
         // Tool submission function (make it global)
         window.submitCode = async function submitCode(codeParam = null) {
-            const code = codeParam || document.getElementById('toolCode').value.trim();
-            console.log('Submit button pressed. Tool code:', code);
+            const codeInput = codeParam || document.getElementById('toolCode').value.trim();
+            console.log('Submit button pressed. Tool code:', codeInput);
             console.log('Selected work location:', selectedWorkLocation);
             
-            if (!code) {
+            if (!codeInput) {
                 console.log('No tool code entered');
                 return;
             }
+
+            // Check if input contains multiple TIDs (comma-separated)
+            const codes = codeInput.split(',').map(c => c.trim()).filter(c => c.length > 0);
+            
+            if (codes.length > 1) {
+                // Multiple TIDs entered - process each one
+                console.log(`Processing ${codes.length} tools:`, codes);
+                await processMultipleTools(codes);
+                return;
+            }
+
+            // Single TID - use existing logic
+            const code = codes[0];
 
             // Check if bulk scan mode is enabled
             if (bulkScanMode) {
@@ -784,6 +797,240 @@
                 console.log('Work location already selected, processing tool submission');
                 processToolSubmission(code);
             }
+        }
+        
+        // Process multiple tools sequentially
+        async function processMultipleTools(codes) {
+            if (!selectedWorkLocation) {
+                console.log('No work location selected, showing modal');
+                showLocationSelectionModalForMultipleTools(codes);
+                return;
+            }
+            
+            // Clear input field
+            document.getElementById('toolCode').value = '';
+            
+            // Show processing message
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-info alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                <i class="fas fa-spinner fa-spin me-2"></i>
+                Processing ${codes.length} tool(s)...
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            const scannerView = document.getElementById('scannerView');
+            scannerView.insertBefore(alertDiv, scannerView.firstChild);
+            
+            let successCount = 0;
+            let errorCount = 0;
+            const errors = [];
+            const skippedCodes = [];
+            
+            // Process each tool sequentially
+            for (let i = 0; i < codes.length; i++) {
+                const code = codes[i];
+                try {
+                    // Check if tool exists before processing
+                    const toolRef = db.collection('tools').doc(code);
+                    const doc = await toolRef.get({ source: 'server' });
+                    
+                    if (!doc.exists) {
+                        errorCount++;
+                        errors.push({ code, error: 'Tool does not exist' });
+                        continue;
+                    }
+                    
+                    const data = doc.data();
+                    const user = auth.currentUser;
+                    if (!user) {
+                        errorCount++;
+                        errors.push({ code, error: 'Not authenticated' });
+                        continue;
+                    }
+                    
+                    const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                    const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+                    
+                    // Check if tool is OUT and checked out by different technician
+                    if (data.status === 'OUT' && data.technician !== technicianName) {
+                        skippedCodes.push({ code, reason: 'Checked out by different technician' });
+                        continue;
+                    }
+                    
+                    // Check for previous date tools
+                    if (data.status === 'OUT' && data.timestamp && data.timestamp.toDate) {
+                        const toolDate = data.timestamp.toDate();
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        if (toolDate < today) {
+                            skippedCodes.push({ code, reason: 'Checked out on previous day' });
+                            continue;
+                        }
+                    }
+                    
+                    // Check cooldown
+                    if (data.status === 'OUT' && data.timestamp && data.timestamp.toDate) {
+                        const outTime = data.timestamp.toDate();
+                        const now = new Date();
+                        const diffMs = now - outTime;
+                        
+                        const settingsDoc = await db.collection('settings').doc('admin').get();
+                        let cooldownMinutes = 5;
+                        if (settingsDoc.exists && settingsDoc.data().CheckINCooldownMinutes) {
+                            cooldownMinutes = settingsDoc.data().CheckINCooldownMinutes;
+                        }
+                        const cooldownMs = cooldownMinutes * 60 * 1000;
+                        
+                        if (diffMs < cooldownMs) {
+                            skippedCodes.push({ code, reason: `Cooldown: ${Math.ceil((cooldownMs - diffMs) / 60000)} min remaining` });
+                            continue;
+                        }
+                    }
+                    
+                    // Process the tool
+                    const status = data.status === 'OUT' ? 'IN' : 'OUT';
+                    const timestamp = firebase.firestore.FieldValue.serverTimestamp();
+                    
+                    const updateData = {
+                        status: status,
+                        technician: technicianName,
+                        timestamp: timestamp
+                    };
+                    
+                    if (status === 'OUT' && selectedWorkLocation) {
+                        updateData.WorkOn = selectedWorkLocation;
+                    }
+                    
+                    await toolRef.update(updateData);
+                    
+                    // Add log entry
+                    const logData = {
+                        toolId: code,
+                        toolName: data.toolName || 'Unknown',
+                        partNumber: data.partNumber || code,
+                        location: data.location || '',
+                        status: status,
+                        technician: technicianName,
+                        timestamp: timestamp
+                    };
+                    
+                    if (status === 'OUT' && selectedWorkLocation) {
+                        logData.WorkOn = selectedWorkLocation;
+                    }
+                    
+                    await db.collection('logtoolmovements').add(logData);
+                    
+                    successCount++;
+                } catch (error) {
+                    errorCount++;
+                    errors.push({ code, error: error.message || 'Unknown error' });
+                    console.error(`Error processing tool ${code}:`, error);
+                }
+            }
+            
+            // Remove processing message
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+            
+            // Show summary message
+            let summaryMessage = '';
+            if (successCount > 0 && errorCount === 0 && skippedCodes.length === 0) {
+                summaryMessage = `Successfully processed ${successCount} tool(s)!`;
+            } else {
+                const parts = [];
+                if (successCount > 0) parts.push(`${successCount} successful`);
+                if (errorCount > 0) parts.push(`${errorCount} failed`);
+                if (skippedCodes.length > 0) parts.push(`${skippedCodes.length} skipped`);
+                summaryMessage = `Processed: ${parts.join(', ')}`;
+            }
+            
+            const summaryAlert = document.createElement('div');
+            summaryAlert.className = (errorCount === 0 && skippedCodes.length === 0)
+                ? 'alert alert-success alert-dismissible fade show'
+                : 'alert alert-warning alert-dismissible fade show';
+            
+            let detailsHtml = '';
+            if (errors.length > 0) {
+                detailsHtml += `<br><small><strong>Errors:</strong> ${errors.map(e => `${e.code} (${e.error})`).join(', ')}</small>`;
+            }
+            if (skippedCodes.length > 0) {
+                detailsHtml += `<br><small><strong>Skipped:</strong> ${skippedCodes.map(s => `${s.code} (${s.reason})`).join(', ')}</small>`;
+            }
+            
+            summaryAlert.innerHTML = `
+                <i class="fas ${(errorCount === 0 && skippedCodes.length === 0) ? 'fa-check-circle' : 'fa-exclamation-triangle'} me-2"></i>
+                ${summaryMessage}
+                ${detailsHtml}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            scannerView.insertBefore(summaryAlert, scannerView.firstChild);
+            
+            setTimeout(() => {
+                if (summaryAlert.parentNode) {
+                    summaryAlert.remove();
+                }
+            }, 8000);
+            
+            // Refresh tools list
+            loadTools();
+            updatePreviousOutToolsCount();
+        }
+        
+        // Show location selection modal for multiple tools
+        function showLocationSelectionModalForMultipleTools(codes) {
+            console.log('Showing location selection modal for multiple tool codes:', codes);
+            const modal = new bootstrap.Modal(document.getElementById('locationSelectionModal'));
+            
+            // Use global selectedWorkLocation
+            window.selectedWorkLocation = null;
+            selectedWorkLocation = null;
+            
+            // Store codes for later use
+            window.pendingMultipleTools = codes;
+            
+            // Setup event listeners
+            const modalElement = document.getElementById('locationSelectionModal');
+            
+            // Remove existing listeners by removing and re-adding
+            const helicopterOptions = document.querySelectorAll('#locationSelectionModal .helicopter-model-option');
+            helicopterOptions.forEach(option => {
+                // Remove old onclick
+                option.onclick = null;
+                // Add new onclick
+                option.onclick = function() {
+                    const model = this.getAttribute('data-model');
+                    document.querySelectorAll('.helicopter-model-option').forEach(opt => opt.classList.remove('selected'));
+                    this.classList.add('selected');
+                    
+                    const stations = this.querySelectorAll('.station-option');
+                    stations.forEach(station => {
+                        station.onclick = function() {
+                            const stationName = this.getAttribute('data-station');
+                            selectedWorkLocation = `${model} - ${stationName}`;
+                            window.selectedWorkLocation = selectedWorkLocation;
+                            localStorage.setItem('selectedWorkLocation', selectedWorkLocation);
+                            
+                            modal.hide();
+                            // Process multiple tools after location is selected
+                            const codesToProcess = window.pendingMultipleTools || codes;
+                            processMultipleTools(codesToProcess);
+                            window.pendingMultipleTools = null;
+                        };
+                    });
+                };
+            });
+            
+            const handleModalHidden = function() {
+                if (!selectedWorkLocation) {
+                    document.getElementById('toolCode').value = '';
+                }
+                window.pendingMultipleTools = null;
+                modalElement.removeEventListener('hidden.bs.modal', handleModalHidden);
+            };
+            modalElement.addEventListener('hidden.bs.modal', handleModalHidden);
+            
+            modal.show();
         }
         
         // Bulk Scan Mode Functions (make it global)
