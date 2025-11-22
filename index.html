@@ -9173,10 +9173,8 @@ if (!userCredential.user.emailVerified) {
 
     // Previous OUT Tools functionality
     document.getElementById('menuOutBtn').onclick = function() {
-        // Auto-refresh: Update count first, then show the screen
-        updatePreviousOutToolsCount().then(() => {
-            showPreviousOutTools();
-        });
+        // Navigate to previous-out.html
+        window.location.href = 'previous-out.html';
     };
 
     // Back button for Previous OUT Tools

@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <title>Previous OUT Tools - Tool Tracking</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/common.css">
+    <style>
+        /* Previous OUT Tools Card Styles - matching Android ToolCard */
+        .previous-out-tool-card {
+            background: #FFCDD2; /* Light red for OUT status */
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            width: 100%;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        /* Responsive previous-out-tool-card widths */
+        @media (min-width: 576px) {
+            .previous-out-tool-card {
+                max-width: 550px;
+            }
+        }
+        
+        @media (min-width: 768px) {
+            .previous-out-tool-card {
+                max-width: 600px;
+            }
+        }
+        
+        @media (min-width: 992px) {
+            .previous-out-tool-card {
+                max-width: 700px;
+            }
+        }
+        
+        @media (min-width: 1200px) {
+            .previous-out-tool-card {
+                max-width: 800px;
+            }
+        }
+        
+        .previous-out-tool-card:hover {
+            background: #FFB3BA; /* Slightly darker red on hover */
+        }
+        
+        .previous-out-tool-name {
+            font-weight: bold;
+            font-size: 16px;
+            color: #000;
+            margin-bottom: 4px;
+        }
+        
+        .previous-out-tool-date {
+            font-size: 12px;
+            color: #666;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .previous-out-tool-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        
+        .previous-out-tool-column {
+            flex: 1;
+            text-align: center;
+        }
+        
+        .previous-out-tool-column:first-child {
+            text-align: left;
+        }
+
+        .previous-out-tool-column:last-child {
+            text-align: right;
+        }
+        
+        .previous-out-tool-label {
+            color: #000;
+            font-weight: bold;
+            font-size: 14px;
+            text-decoration: underline;
+            margin-bottom: 4px;
+        }
+        
+        .previous-out-tool-value {
+            color: #666;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        
+        .previous-out-tool-status {
+            color: #fff;
+            font-weight: bold;
+            font-size: 14px;
+            background: rgba(229, 115, 115, 0.8); /* Red background for OUT status */
+            border-radius: 16px;
+            padding: 4px 12px;
+            display: inline-block;
+        }
+        
+        /* Status colors for different tool statuses */
+        .previous-out-tool-card.broken {
+            background: #FFF3E0; /* Light orange for BROKEN */
+        }
+        
+        .previous-out-tool-card.broken:hover {
+            background: #FFE0B2;
+        }
+        
+        .previous-out-tool-card.broken .previous-out-tool-status {
+            background: rgba(255, 152, 0, 0.8); /* Orange background */
+        }
+        
+        .previous-out-tool-card.lost {
+            background: #FFE0B2; /* Light amber for LOST */
+        }
+        
+        .previous-out-tool-card.lost:hover {
+            background: #FFCC80;
+        }
+        
+        .previous-out-tool-card.lost .previous-out-tool-status {
+            background: rgba(255, 179, 0, 0.8); /* Amber background */
+        }
+        
+        .previous-out-tool-card.calibration {
+            background: #E3F2FD; /* Light blue for CALIBRATION */
+        }
+        
+        .previous-out-tool-card.calibration:hover {
+            background: #BBDEFB;
+        }
+        
+        .previous-out-tool-card.calibration .previous-out-tool-status {
+            background: rgba(33, 150, 243, 0.8); /* Blue background */
+        }
+        
+        .previous-out-tool-card.in {
+            background: #E8F5E9; /* Light green for IN */
+        }
+        
+        .previous-out-tool-card.in:hover {
+            background: #C8E6C9;
+        }
+        
+        .previous-out-tool-card.in .previous-out-tool-status {
+            background: rgba(76, 175, 80, 0.8); /* Green background */
+        }
+
+        /* Medium fonts for tool cards on tablets (between mobile and desktop) */
+        @media (min-width: 769px) and (max-width: 1024px) {
+          #previousOutToolsList .previous-out-tool-card * {
+            font-size: 1.1rem !important;
+          }
+
+          #previousOutToolsList .previous-out-tool-card .previous-out-tool-name {
+            font-size: 1.3rem !important;
+          }
+
+          #previousOutToolsList .previous-out-tool-card .previous-out-tool-status {
+            font-size: 1.0rem !important;
+            padding: 5px 10px !important;
+          }
+        }
+
+        /* Larger fonts for tool cards in modals on desktop screens */
+        @media (min-width: 1025px) {
+          #previousOutToolsList .previous-out-tool-card * {
+            font-size: 1.5rem !important;
+          }
+
+          #previousOutToolsList .previous-out-tool-card .previous-out-tool-name {
+            font-size: 1.8rem !important;
+          }
+
+          #previousOutToolsList .previous-out-tool-card .previous-out-tool-status {
+            font-size: 1.3rem !important;
+            padding: 6px 12px !important;
+          }
+
+          #previousOutToolsList .previous-out-tool-card .previous-out-tool-date,
+          #previousOutToolsList .previous-out-tool-card .previous-out-tool-label,
+          #previousOutToolsList .previous-out-tool-card .previous-out-tool-value {
+            font-size: 1.3rem !important;
+          }
+        }
+    </style>
+</head>
+<body>
+    <!-- Previous OUT Tools Screen -->
+    <div id="previousOutToolsScreen">
+      <!-- Orange Title Bar -->
+      <div style="background: #FF9800; color: white; padding: 1rem 0; width: 100%; position: relative;">
+        <div class="container">
+          <h2 style="color: white; font-weight: bold; font-size: 2rem; margin: 0; text-align: center;">Previous Dates OUT Tools</h2>
+        </div>
+      </div>
+      
+      <div class="container py-4">
+        <button id="backToMenuFromOutToolsBtn" class="btn btn-outline-secondary mb-3">
+          <i class="fas fa-arrow-left"></i> Back to Menu
+        </button>
+        
+        <!-- Summary -->
+        <div id="previousOutToolsSummary" class="text-muted mb-3">
+            <!-- Summary will be populated here -->
+        </div>
+        
+        <!-- Tools List -->
+        <div id="previousOutToolsList" style="height: calc(100vh - 200px); overflow-y: auto;"></div>
+      </div>
+    </div>
+
+    <!-- Tool Details Modal for Previous OUT Tools -->
+    <div class="modal fade" id="previousOutToolDetailsModal" tabindex="-1" aria-labelledby="previousOutToolDetailsModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="previousOutToolDetailsModalLabel">Tool Details</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="previousOutToolDetailsContent">
+            <!-- Tool details will be populated here -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Photo Viewer Modal for Previous OUT Tools -->
+    <div class="modal fade" id="previousOutPhotoViewerModal" tabindex="-1" aria-labelledby="previousOutPhotoViewerModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="previousOutPhotoViewerModalLabel">Tool Photos</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body text-center" id="previousOutPhotoViewerContent">
+            <!-- Photo content will be populated here -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" id="previousOutPhotoPrevBtn">Previous</button>
+            <span id="previousOutPhotoCounter" class="mx-3"></span>
+            <button type="button" class="btn btn-secondary" id="previousOutPhotoNextBtn">Next</button>
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tool Details Modal (shared with register-tools) -->
+    <div class="modal fade" id="toolDetailsModal" tabindex="-1" aria-labelledby="toolDetailsModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="toolDetailsModalLabel">Tool Details</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="toolDetailsBody">
+            <!-- Tool details will be populated here -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tool Photo Gallery Modal -->
+    <div class="modal fade" id="toolPhotoGalleryModal" tabindex="-1" aria-labelledby="toolPhotoGalleryModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content bg-dark text-white">
+          <div class="modal-header border-0">
+            <h5 class="modal-title" id="toolPhotoGalleryModalLabel">Tool Photos</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body d-flex flex-column align-items-center justify-content-center position-relative" id="toolPhotoGalleryContent">
+            <!-- Photo will be shown here -->
+          </div>
+          <div class="modal-footer justify-content-center border-0 bg-dark">
+            <span id="toolPhotoCounter" class="text-white"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collection Details Screen (for navigation from tool details) -->
+    <div id="collectionDetailsScreen" style="display:none;">
+      <!-- Orange Title Bar -->
+      <div style="background: #FF9800; color: white; padding: 1rem 0; width: 100%; position: relative;">
+        <div class="container">
+          <h2 style="color: white; font-weight: bold; font-size: 2rem; margin: 0; text-align: center;">Collection Details</h2>
+        </div>
+      </div>
+      
+      <div class="container py-4">
+        <button id="backToPreviousOutBtn" class="btn btn-outline-secondary mb-3">
+          <i class="fas fa-arrow-left"></i> Back to Previous OUT Tools
+        </button>
+        <div id="collectionDetailsContent">
+          <!-- Collection details will be populated here -->
+        </div>
+      </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/common.js"></script>
+    <script>
+        // Global variable to track previous out tools data
+        let previousOutToolsData = [];
+        let lastCollectionDetailsSource = 'previousOut';
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if Firebase is available
+            if (typeof firebase === 'undefined' || !firebase.apps.length) {
+                console.error('Firebase not initialized. Waiting...');
+                setTimeout(() => {
+                    if (typeof firebase !== 'undefined' && firebase.apps.length) {
+                        initializePage();
+                    } else {
+                        console.error('Firebase still not available after timeout');
+                    }
+                }, 500);
+            } else {
+                initializePage();
+            }
+            
+            function initializePage() {
+                auth.onAuthStateChanged(function(user) {
+                    console.log('Auth state changed, user:', user ? user.email : 'null');
+                    if (!user) {
+                        // Redirect to index.html if not authenticated
+                        console.log('No user, redirecting to index.html');
+                        window.location.href = 'index.html';
+                        return;
+                    }
+                    
+                    // Update technician name using common.js function
+                    if (typeof updateLoggedInTechnician === 'function') {
+                        updateLoggedInTechnician();
+                    }
+                    
+                    // Update online status
+                    if (typeof updateOnlineStatus === 'function') {
+                        updateOnlineStatus();
+                    }
+                    
+                    // Set up event listeners
+                    setupEventListeners();
+                    
+                    // Load previous out tools
+                    loadPreviousOutTools();
+                });
+            }
+        });
+        
+        function setupEventListeners() {
+            // Back to menu button
+            document.getElementById('backToMenuFromOutToolsBtn').onclick = function() {
+                window.location.href = 'index.html';
+            };
+            
+            // Back to previous out tools from collection details
+            document.getElementById('backToPreviousOutBtn').onclick = function() {
+                document.getElementById('collectionDetailsScreen').style.display = 'none';
+                document.getElementById('previousOutToolsScreen').style.display = 'block';
+            };
+        }
+
+        // Load previous out tools
+        async function loadPreviousOutTools() {
+            const user = auth.currentUser;
+            if (!user) {
+                console.log('loadPreviousOutTools: No user logged in');
+                return;
+            }
+            
+            const previousOutToolsList = document.getElementById('previousOutToolsList');
+            
+            // Show loading state
+            previousOutToolsList.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><div class="mt-2">Refreshing previous OUT tools...</div></div>';
+            document.getElementById('previousOutToolsSummary').innerHTML = '<strong>Refreshing...</strong>';
+            
+            try {
+                // Fetch fresh data
+                const fullName = localStorage.getItem('fullName') || user.email;
+                console.log('loadPreviousOutTools: Searching for tools with technician:', fullName);
+                
+                const snapshot = await db.collection('tools')
+                    .where('technician', '==', fullName)
+                    .where('status', '==', 'OUT')
+                    .get();
+                
+                console.log('loadPreviousOutTools: Found', snapshot.docs.length, 'OUT tools for technician:', fullName);
+                
+                if (snapshot.empty) {
+                    console.log('loadPreviousOutTools: No OUT tools found for technician:', fullName);
+                    previousOutToolsList.innerHTML = '<div class="text-center text-muted">No previous OUT tools found.</div>';
+                    const now = new Date();
+                    const timeString = now.toLocaleString('en-GB', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    });
+                    document.getElementById('previousOutToolsSummary').innerHTML = `
+                        <strong>Total: 0 tools</strong>
+                        <br><small class="text-muted">Last updated: ${timeString}</small>
+                    `;
+                    return;
+                }
+                
+                // Get today's start time in local timezone
+                const currentTime = new Date();
+                const today = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate());
+                console.log('loadPreviousOutTools: Today start time (local):', today.toISOString());
+                console.log('loadPreviousOutTools: Today start time (local date):', today.toDateString());
+                
+                // Filter tools from previous days
+                const previousTools = snapshot.docs.filter(doc => {
+                    const timestamp = doc.data().timestamp;
+                    console.log('loadPreviousOutTools: Tool', doc.id, 'timestamp:', timestamp);
+                    
+                    if (timestamp && timestamp.toDate) {
+                        const toolDate = timestamp.toDate();
+                        // Compare dates in local timezone
+                        const toolDateLocal = new Date(toolDate.getFullYear(), toolDate.getMonth(), toolDate.getDate());
+                        const isPrevious = toolDateLocal < today;
+                        console.log('loadPreviousOutTools: Tool', doc.id, 'date (UTC):', toolDate.toISOString(), 'date (local):', toolDateLocal.toDateString(), 'isPrevious:', isPrevious);
+                        return isPrevious;
+                    }
+                    console.log('loadPreviousOutTools: Tool', doc.id, 'has no valid timestamp');
+                    return false;
+                });
+                
+                console.log('loadPreviousOutTools: Previous tools count:', previousTools.length);
+                
+                if (previousTools.length === 0) {
+                    console.log('loadPreviousOutTools: No previous tools found after filtering');
+                    previousOutToolsList.innerHTML = '<div class="text-center text-muted">No previous OUT tools found.</div>';
+                    const now = new Date();
+                    const timeString = now.toLocaleString('en-GB', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    });
+                    document.getElementById('previousOutToolsSummary').innerHTML = `
+                        <strong>Total: 0 tools</strong>
+                        <br><small class="text-muted">Last updated: ${timeString}</small>
+                    `;
+                    return;
+                }
+                
+                // Update the global data
+                previousOutToolsData = previousTools.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                
+                // Update summary with timestamp
+                const now = new Date();
+                const timeString = now.toLocaleString('en-GB', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+                document.getElementById('previousOutToolsSummary').innerHTML = `
+                    <strong>Total: ${previousTools.length} tool${previousTools.length !== 1 ? 's' : ''}</strong>
+                    <br><small class="text-muted">Last updated: ${timeString}</small>
+                `;
+                
+                // Sort tools by timestamp (newest first)
+                const sortedTools = previousOutToolsData.sort((a, b) => {
+                    const timestampA = a.timestamp ? a.timestamp.toDate() : new Date(0);
+                    const timestampB = b.timestamp ? b.timestamp.toDate() : new Date(0);
+                    return timestampB - timestampA;
+                });
+                
+                let html = '';
+                sortedTools.forEach((tool, index) => {
+                    const status = (tool.status || '').toUpperCase();
+                    const statusClass = status.toLowerCase();
+                    
+                    // Format timestamp
+                    const formattedDate = tool.timestamp ? tool.timestamp.toDate().toLocaleString('en-GB', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    }) : 'Unknown';
+                    // Get WorkOn value or N/A
+                    const workOnValue = (typeof tool.WorkOn === 'string' && tool.WorkOn.trim()) ? tool.WorkOn : 'N/A';
+                    html += `
+                        <div class="previous-out-tool-card ${statusClass}" onclick="showPreviousOutToolDetails('${tool.id}')">
+                            <div class="previous-out-tool-name">${index + 1}. ${tool.toolName || 'Unknown Tool'}</div>
+                            <div class="previous-out-tool-date" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                                <span>${formattedDate}</span>
+                                <span style="font-size:1em;font-weight:bold;color:#222;display:inline-block;">WorkOn: <span style="color:#888;font-weight:bold;">${workOnValue}</span></span>
+                            </div>
+                            <div class="previous-out-tool-row">
+                                <div class="previous-out-tool-column">
+                                    <div class="previous-out-tool-label">TID</div>
+                                    <div class="previous-out-tool-value">${tool.id}</div>
+                                </div>
+                                <div class="previous-out-tool-column">
+                                    <div class="previous-out-tool-label">P/N</div>
+                                    <div class="previous-out-tool-value">${tool.partNumber || 'N/A'}</div>
+                                </div>
+                                <div class="previous-out-tool-column">
+                                    <div class="previous-out-tool-label">STS</div>
+                                    <div class="previous-out-tool-status">${status}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                previousOutToolsList.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Error loading previous OUT tools:', error);
+                previousOutToolsList.innerHTML = '<div class="text-center text-danger">Error loading previous OUT tools. Please try again.</div>';
+                const now = new Date();
+                const timeString = now.toLocaleString('en-GB', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+                document.getElementById('previousOutToolsSummary').innerHTML = `
+                    <strong class="text-danger">Error loading data</strong>
+                    <br><small class="text-muted">Last attempt: ${timeString}</small>
+                `;
+            }
+        }
+
+        async function showPreviousOutToolDetails(toolId) {
+            const tool = previousOutToolsData.find(t => t.id === toolId);
+            if (!tool) {
+                alert('Tool not found.');
+                return;
+            }
+            // Build the tool object in the format expected by showToolDetails
+            const formattedTimestamp = tool.timestamp && tool.timestamp.toDate ? tool.timestamp.toDate().toLocaleString('en-GB', {
+                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+            }) : 'N/A';
+            const calDueDate = tool.calDueDate && tool.calDueDate.toDate ? tool.calDueDate.toDate().toLocaleDateString('en-GB') : 'N/A';
+            showToolDetails({
+                toolName: tool.toolName || 'Unknown Tool',
+                toolId: tool.id,
+                partNumber: tool.partNumber || tool.id,
+                collectionCode: tool.collectionCode || '',
+                location: tool.location || 'N/A',
+                owner: tool.owner || 'N/A',
+                status: tool.status || 'N/A',
+                technician: tool.technician || 'N/A',
+                timestamp: formattedTimestamp,
+                calDueDate: calDueDate,
+                photoUrls: tool.photoUrls || [],
+                WorkOn: tool.WorkOn || 'N/A'
+            }, 'previousOut');
+        }
+
+        function showToolDetails(tool, sourceScreen = 'previousOut') {
+            const body = document.getElementById('toolDetailsBody');
+            
+            // Format timestamp for display
+            const formatTimestamp = (timestamp) => {
+                if (!timestamp) return 'N/A';
+                if (timestamp.toDate) {
+                    return timestamp.toDate().toLocaleString('en-GB', {
+                        day: '2-digit', month: '2-digit', year: 'numeric', 
+                        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                    });
+                }
+                return timestamp;
+            };
+            
+            // Determine checkout information based on status
+            const status = tool.status || 'N/A';
+            let checkoutInfo = '';
+            
+            if (status === 'OUT') {
+                // Tool is currently checked out - fetch from tools collection
+                const technician = tool.technician || 'N/A';
+                const checkoutDate = formatTimestamp(tool.timestamp);
+                checkoutInfo = `
+                <div class="mb-2" style="font-size: 1.1em;">
+                        <span style="font-weight: 600; color: #222; font-size: 1.2em;">Checked Out By:</span> 
+                        <span style="font-size: 1.0em; color: #1976d2;">${technician}</span>
+                </div>
+                <div class="mb-2" style="font-size: 1.1em;">
+                        <span style="font-weight: 600; color: #222; font-size: 1.2em;">ChkOut Date:</span> 
+                        <span style="font-size: 1.0em; color: #1976d2;">${checkoutDate}</span>
+                </div>
+                `;
+            } else if (status === 'IN') {
+                // Tool is currently in - fetch from tools collection
+                const lastTechnician = tool.technician || 'N/A';
+                const lastCheckoutDate = formatTimestamp(tool.timestamp);
+                checkoutInfo = `
+                <div class="mb-2" style="font-size: 1.1em;">
+                        <span style="font-weight: 600; color: #222; font-size: 1.2em;">Last ChkOut By:</span> 
+                        <span style="font-size: 1.0em; color: #1976d2;">${lastTechnician}</span>
+                </div>
+                <div class="mb-2" style="font-size: 1.1em;">
+                        <span style="font-weight: 600; color: #222; font-size: 1.2em;">Last ChkOut:</span> 
+                        <span style="font-size: 1.0em; color: #1976d2;">${lastCheckoutDate}</span>
+                </div>
+            `;
+            }
+            
+            // Always show all fields in a consistent order
+            const fields = [
+                { label: 'Tool ID', value: tool.toolId || 'N/A' },
+                { label: 'Tool Name', value: tool.toolName || 'N/A' },
+                { label: 'Part Number', value: tool.partNumber || 'N/A' },
+                { label: 'Serial Number', value: tool.serialNumber || 'N/A' },
+                { label: 'Collection', value: tool.collectionCode || 'N/A', isCollection: true },
+                { label: 'Location', value: tool.location || 'N/A' },
+                // Insert WorkOn after Location
+                { label: 'WorkOn', value: (typeof tool.WorkOn === 'string' && tool.WorkOn.trim()) ? tool.WorkOn : 'N/A', isWorkOn: true },
+                { label: 'Owner', value: tool.owner || 'N/A' },
+                { label: 'Status', value: tool.status || 'N/A' },
+                { label: 'Calibration Due', value: tool.calDueDate || 'N/A' },
+            ];
+            let html = '';
+            fields.forEach(f => {
+                if (f.isCollection) {
+                    html += `<div class="mb-2" style="font-size: 1.22em;"><span style="font-weight: 600; color: #222; font-size: 1.2em;">${f.label}:</span> <a href="#" onclick="showCollectionDetails('${f.value !== 'N/A' ? f.value : ''}', '${sourceScreen}')" style="font-size: 1.18em; color: #FF9800; text-decoration: underline; font-weight: bold;">${f.value}</a></div>`;
+                } else if (f.isWorkOn) {
+                    html += `<div class=\"mb-2\" style=\"font-size: 1.1em;\"><span style=\"font-weight: 600; color: #222; font-size: 1.2em;\">${f.label}:</span> <span style=\"font-size: 1.0em; color: #888; font-weight: bold;\">${f.value}</span></div>`;
+                } else {
+                    html += `<div class=\"mb-2\" style=\"font-size: 1.1em;\"><span style=\"font-weight: 600; color: #222; font-size: 1.2em;\">${f.label}:</span> <span style=\"font-size: 1.0em; color: #1976d2;\">${f.value}</span></div>`;
+                }
+            });
+            
+            // Add checkout information after the standard fields
+            html += checkoutInfo;
+            
+            html += `<div class="mb-2">
+  ${tool.photoUrls && tool.photoUrls.length > 0
+    ? `<a style="color: #1976d2; text-decoration: underline; cursor: pointer; font-size: 1.18em; font-weight: bold; display: inline-block; margin-top: 10px;"
+         onclick="if(this.hasAttribute('data-photo-urls')) showToolPhotoGallery(this)"
+         data-photo-urls='${JSON.stringify(tool.photoUrls)}'
+         data-tool-id='${tool.toolId || tool.id}'
+         data-part-number='${tool.partNumber}'>
+        Photo (${tool.photoUrls.length})
+      </a>`
+    : `<span style="color: #888; text-decoration: none; cursor: not-allowed; font-size: 1.18em; font-weight: bold; display: inline-block; margin-top: 10px;">Photo (0)</span>`}
+</div>`;
+            body.innerHTML = html;
+            const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
+            modal.show();
+        }
+
+        // Function to show collection details
+        async function showCollectionDetails(collectionCode, sourceScreen) {
+            if (!collectionCode) return;
+            // Track the source screen
+            lastCollectionDetailsSource = sourceScreen || 'previousOut';
+            // Hide main screen and show collection details
+            document.getElementById('previousOutToolsScreen').style.display = 'none';
+            document.getElementById('collectionDetailsScreen').style.display = 'block';
+            
+            // Force-hide the tool details modal and remove any modal backdrop
+            const toolDetailsModalEl = document.getElementById('toolDetailsModal');
+            if (toolDetailsModalEl) {
+                // Blur any focused elements inside the modal first
+                const focusedElement = toolDetailsModalEl.querySelector(':focus');
+                if (focusedElement) {
+                    focusedElement.blur();
+                }
+                toolDetailsModalEl.classList.remove('show');
+                toolDetailsModalEl.style.display = 'none';
+                toolDetailsModalEl.setAttribute('aria-hidden', 'true');
+                toolDetailsModalEl.removeAttribute('aria-modal');
+                toolDetailsModalEl.removeAttribute('role');
+            }
+            // Remove any modal-backdrop
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.parentNode.removeChild(el));
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+
+            // Update the title to show "Collection (value)"
+            const titleElement = document.querySelector('#collectionDetailsScreen h2');
+            if (titleElement) {
+                titleElement.textContent = `Collection (${collectionCode})`;
+            }
+
+            // Get owner from tools collection
+            let ownerFromTools = 'N/A';
+            try {
+                const toolsSnapshot = await db.collection('tools')
+                    .where('collectionCode', '==', collectionCode)
+                    .limit(1)
+                    .get();
+                if (!toolsSnapshot.empty) {
+                    const toolData = toolsSnapshot.docs[0].data();
+                    ownerFromTools = toolData.owner || 'N/A';
+                }
+            } catch (error) {
+                console.log('Error getting owner from tools:', error);
+            }
+
+            // Add owner information below back button
+            const backButton = document.getElementById('backToPreviousOutBtn');
+            if (backButton) {
+                // Check if owner div already exists
+                let ownerDiv = document.getElementById('collectionOwnerDiv');
+                
+                if (!ownerDiv) {
+                    // Create new owner div only if it doesn't exist
+                    ownerDiv = document.createElement('div');
+                    ownerDiv.id = 'collectionOwnerDiv';
+                backButton.parentNode.insertBefore(ownerDiv, backButton.nextSibling);
+                }
+                
+                // Update the content (whether new or existing)
+                ownerDiv.innerHTML = `<div style="color: #1976d2; font-weight: bold; font-size: 1.1em; margin-bottom: 1rem;">Owner: ${ownerFromTools}</div>`;
+            }
+
+            const content = document.getElementById('collectionDetailsContent');
+            content.innerHTML = '<div class="text-center">Loading collection details...</div>';
+            
+            try {
+                // Query collections collection where collectionName matches the collectionCode from tools
+                const querySnapshot = await db.collection('collections').where('collectionName', '==', collectionCode).get();
+                if (querySnapshot.empty) {
+                    content.innerHTML = `<div class="text-center text-danger">Collection not found.</div>`;
+                } else {
+                    const doc = querySnapshot.docs[0]; // Get the first matching document
+                    const data = doc.data();
+                    let html = `<div class="card mb-4">
+                        <div class="card-body">`;
+                    if (data.description) html += `<p class="card-text"><strong>Description:</strong> ${data.description}</p>`;
+                    html += `</div></div>`;
+                    
+                    if (data.photoUrls && Array.isArray(data.photoUrls) && data.photoUrls.length > 0) {
+                        html += `<h5 class="mb-3">Photos <span style='color:#FF9800;font-weight:bold;'>(${data.photoUrls.length})</span></h5><div class="row">`;
+                        data.photoUrls.forEach(url => {
+                            html += `<div class="col-6 col-md-4 col-lg-3 mb-3">
+                                <img src="${url}" alt="Collection Photo" class="img-fluid rounded shadow" style="width: 100%; height: 200px; object-fit: cover;">
+                            </div>`;
+                        });
+                        html += `</div>`;
+                    } else {
+                        html += `<div class="text-center text-muted"><em>No photos available for this collection.</em></div>`;
+                    }
+                    content.innerHTML = html;
+                }
+            } catch (error) {
+                content.innerHTML = `<div class="text-center text-danger">Error loading collection details: ${error.message}</div>`;
+            }
+        }
+
+        // Function to show tool photo gallery
+        function showToolPhotoGallery(el) {
+            const photoUrls = JSON.parse(el.getAttribute('data-photo-urls'));
+            const toolId = el.getAttribute('data-tool-id');
+            const partNumber = el.getAttribute('data-part-number');
+            if (!photoUrls || photoUrls.length === 0) return;
+            let currentPhotoIndex = 0;
+            const galleryContent = document.getElementById('toolPhotoGalleryContent');
+            const counter = document.getElementById('toolPhotoCounter');
+            
+            function updatePhoto() {
+                // Clear the content and add the image
+                galleryContent.innerHTML = `<img src="${photoUrls[currentPhotoIndex]}" class="img-fluid rounded shadow" style="max-height:80vh;max-width:100vw;object-fit:contain;">`;
+                
+                // Add back the navigation arrows
+                const prevArrow = document.createElement('button');
+                prevArrow.type = 'button';
+                prevArrow.className = 'btn btn-light position-absolute';
+                prevArrow.id = 'toolPhotoPrevBtn';
+                prevArrow.style = 'left: 20px; top: 50%; transform: translateY(-50%); z-index: 1000; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;';
+                prevArrow.innerHTML = '<i class="fas fa-chevron-left"></i>';
+                prevArrow.onclick = function() {
+                    if (currentPhotoIndex > 0) {
+                        currentPhotoIndex--;
+                        updatePhoto();
+                    }
+                };
+                
+                const nextArrow = document.createElement('button');
+                nextArrow.type = 'button';
+                nextArrow.className = 'btn btn-light position-absolute';
+                nextArrow.id = 'toolPhotoNextBtn';
+                nextArrow.style = 'right: 20px; top: 50%; transform: translateY(-50%); z-index: 1000; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;';
+                nextArrow.innerHTML = '<i class="fas fa-chevron-right"></i>';
+                nextArrow.onclick = function() {
+                    if (currentPhotoIndex < photoUrls.length - 1) {
+                        currentPhotoIndex++;
+                        updatePhoto();
+                    }
+                };
+                
+                galleryContent.appendChild(prevArrow);
+                galleryContent.appendChild(nextArrow);
+                
+                // Update counter
+                counter.textContent = `${currentPhotoIndex + 1} / ${photoUrls.length}`;
+                
+                // Show/hide arrows based on position
+                prevArrow.style.display = currentPhotoIndex === 0 ? 'none' : 'flex';
+                nextArrow.style.display = currentPhotoIndex === photoUrls.length - 1 ? 'none' : 'flex';
+            }
+            
+            updatePhoto();
+            const modal = new bootstrap.Modal(document.getElementById('toolPhotoGalleryModal'));
+            modal.show();
+        }
+
+        // Make functions globally accessible
+        window.showPreviousOutToolDetails = showPreviousOutToolDetails;
+        window.showToolDetails = showToolDetails;
+        window.showCollectionDetails = showCollectionDetails;
+        window.showToolPhotoGallery = showToolPhotoGallery;
+    </script>
+</body>
+</html>
+
