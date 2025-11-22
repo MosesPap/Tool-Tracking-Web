@@ -550,7 +550,40 @@
             
             // Handle phone back button - same behavior as Back to Menu button
             window.addEventListener('popstate', function(event) {
-                // When user presses phone back button, navigate to menu with skipSplash flag
+                // Check if a modal is open
+                const toolDetailsModal = document.getElementById('toolDetailsModal');
+                const toolPhotoGalleryModal = document.getElementById('toolPhotoGalleryModal');
+                const collectionDetailsScreen = document.getElementById('collectionDetailsScreen');
+                
+                // If tool details modal is open, close it
+                if (toolDetailsModal && toolDetailsModal.classList.contains('show')) {
+                    const modal = bootstrap.Modal.getInstance(toolDetailsModal);
+                    if (modal) {
+                        modal.hide();
+                    }
+                    return; // Don't navigate away, just close modal
+                }
+                
+                // If photo gallery modal is open, close it
+                if (toolPhotoGalleryModal && toolPhotoGalleryModal.classList.contains('show')) {
+                    const modal = bootstrap.Modal.getInstance(toolPhotoGalleryModal);
+                    if (modal) {
+                        modal.hide();
+                    }
+                    return; // Don't navigate away, just close modal
+                }
+                
+                // If collection details screen is shown, go back to previous out
+                if (collectionDetailsScreen && collectionDetailsScreen.style.display !== 'none') {
+                    // Show previous out screen and hide collection details
+                    document.getElementById('previousOutToolsScreen').style.display = 'block';
+                    collectionDetailsScreen.style.display = 'none';
+                    // Push state back to previous-out
+                    window.history.pushState({ page: 'previous-out' }, '', '');
+                    return; // Don't navigate away, just switch screens
+                }
+                
+                // Otherwise, navigate to menu with skipSplash flag
                 handleBackNavigation();
             });
             
@@ -937,7 +970,22 @@
     : `<span style="color: #888; text-decoration: none; cursor: not-allowed; font-size: 1.18em; font-weight: bold; display: inline-block; margin-top: 10px;">Photo (0)</span>`}
 </div>`;
             body.innerHTML = html;
-            const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
+            const modalElement = document.getElementById('toolDetailsModal');
+            const modal = new bootstrap.Modal(modalElement);
+            
+            // Push history state when opening modal for back button support
+            window.history.pushState({ modal: 'toolDetails', source: 'previousOut' }, '', '');
+            
+            // Handle modal close - clean up history state if modal was closed via button
+            const handleModalClose = function() {
+                // Check if current state is the tool details modal state
+                if (window.history.state && window.history.state.modal === 'toolDetails') {
+                    // Replace current state instead of going back to avoid navigation issues
+                    window.history.replaceState({ page: 'previous-out' }, '', '');
+                }
+            };
+            modalElement.addEventListener('hidden.bs.modal', handleModalClose, { once: true });
+            
             modal.show();
         }
 
@@ -1095,7 +1143,29 @@
             }
             
             updatePhoto();
-            const modal = new bootstrap.Modal(document.getElementById('toolPhotoGalleryModal'));
+            const modalElement = document.getElementById('toolPhotoGalleryModal');
+            const modal = new bootstrap.Modal(modalElement);
+            
+            // Push history state when opening photo gallery modal for back button support
+            window.history.pushState({ modal: 'photoGallery', source: 'previousOut' }, '', '');
+            
+            // Handle modal close - clean up history state if modal was closed via button
+            const handlePhotoModalClose = function() {
+                // Check if current state is the photo gallery modal state
+                if (window.history.state && window.history.state.modal === 'photoGallery') {
+                    // Check if tool details modal is still open
+                    const toolDetailsModal = document.getElementById('toolDetailsModal');
+                    if (toolDetailsModal && toolDetailsModal.classList.contains('show')) {
+                        // If tool details is still open, replace with tool details state
+                        window.history.replaceState({ modal: 'toolDetails', source: 'previousOut' }, '', '');
+                    } else {
+                        // Otherwise, go back to previous-out state
+                        window.history.replaceState({ page: 'previous-out' }, '', '');
+                    }
+                }
+            };
+            modalElement.addEventListener('hidden.bs.modal', handlePhotoModalClose, { once: true });
+            
             modal.show();
         }
 
