@@ -56,13 +56,13 @@
         
         .previous-out-tool-name {
             font-weight: bold;
-            font-size: 16px;
+            font-size: 18px;
             color: #000;
             margin-bottom: 4px;
         }
         
         .previous-out-tool-date {
-            font-size: 12px;
+            font-size: 14px;
             color: #666;
             font-weight: bold;
             margin-bottom: 8px;
@@ -90,7 +90,7 @@
         .previous-out-tool-label {
             color: #000;
             font-weight: bold;
-            font-size: 14px;
+            font-size: 15px;
             text-decoration: underline;
             margin-bottom: 4px;
         }
@@ -98,7 +98,7 @@
         .previous-out-tool-value {
             color: #666;
             font-weight: bold;
-            font-size: 12px;
+            font-size: 14px;
         }
         
         .previous-out-tool-status {
@@ -109,6 +109,20 @@
             border-radius: 16px;
             padding: 4px 12px;
             display: inline-block;
+        }
+        
+        /* WorkOn label and value styles */
+        .previous-out-workon-label {
+            font-weight: bold;
+            color: #222;
+            font-size: 15px; /* Mobile */
+            display: inline-block;
+        }
+        
+        .previous-out-workon-value {
+            color: #888;
+            font-weight: bold;
+            font-size: 14px; /* Mobile */
         }
         
         /* Status colors for different tool statuses */
@@ -163,22 +177,30 @@
         /* Medium fonts for tool cards on tablets (between mobile and desktop) */
         @media (min-width: 769px) and (max-width: 1024px) {
           #previousOutToolsList .previous-out-tool-card * {
-            font-size: 1.25rem !important;
+            font-size: 1.1rem !important;
           }
 
           #previousOutToolsList .previous-out-tool-card .previous-out-tool-name {
-            font-size: 1.6rem !important;
+            font-size: 1.3rem !important;
           }
 
           #previousOutToolsList .previous-out-tool-card .previous-out-tool-date,
           #previousOutToolsList .previous-out-tool-card .previous-out-tool-label,
           #previousOutToolsList .previous-out-tool-card .previous-out-tool-value {
-            font-size: 1.4rem !important;
+            font-size: 1.15rem !important;
           }
 
           #previousOutToolsList .previous-out-tool-card .previous-out-tool-status {
-            font-size: 1.1rem !important;
+            font-size: 1.0rem !important;
             padding: 5px 10px !important;
+          }
+
+          #previousOutToolsList .previous-out-tool-card .previous-out-workon-label {
+            font-size: 1.4rem !important;
+          }
+
+          #previousOutToolsList .previous-out-tool-card .previous-out-workon-value {
+            font-size: 1.4rem !important;
           }
         }
 
@@ -200,6 +222,14 @@
           #previousOutToolsList .previous-out-tool-card .previous-out-tool-date,
           #previousOutToolsList .previous-out-tool-card .previous-out-tool-label,
           #previousOutToolsList .previous-out-tool-card .previous-out-tool-value {
+            font-size: 1.3rem !important;
+          }
+
+          #previousOutToolsList .previous-out-tool-card .previous-out-workon-label {
+            font-size: 1.3rem !important;
+          }
+
+          #previousOutToolsList .previous-out-tool-card .previous-out-workon-value {
             font-size: 1.3rem !important;
           }
         }
@@ -305,16 +335,16 @@
             width: 100%;
             margin-top: 12px;
             padding: 10px 16px;
-            background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
-            border: 2px solid #FFB74D;
+            background: linear-gradient(135deg, #d0d0d0 0%, #bdbdbd 100%);
+            border: 2px solid #b0b0b0;
             border-radius: 10px;
-            color: #E65100;
+            color: #333;
             font-weight: bold;
             font-size: 1.15rem;
             text-align: center;
-            box-shadow: 0 2px 6px rgba(255, 183, 77, 0.3),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
             transform: perspective(1000px) rotateX(2deg);
         }
 
@@ -584,8 +614,6 @@
                         <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 12px;">
                             <span class="summary-label-3d">Total:</span>
                             <span class="summary-total-3d">0 tools</span>
-                            <span class="summary-label-3d">Last updated:</span>
-                            <span class="summary-timestamp-3d">${timeString}</span>
                         </div>
                         <div class="summary-admin-text">Contact Admin to Check Tools In</div>
                     `;
@@ -653,8 +681,6 @@
                         <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 12px;">
                             <span class="summary-label-3d">Total:</span>
                             <span class="summary-total-3d">0 tools</span>
-                            <span class="summary-label-3d">Last updated:</span>
-                            <span class="summary-timestamp-3d">${timeString}</span>
                         </div>
                         <div class="summary-admin-text">Contact Admin to Check Tools In</div>
                     `;
@@ -684,8 +710,6 @@
                     <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 12px;">
                         <span class="summary-label-3d">Total:</span>
                         <span class="summary-total-3d">${previousTools.length} tool${previousTools.length !== 1 ? 's' : ''}</span>
-                        <span class="summary-label-3d">Last updated:</span>
-                        <span class="summary-timestamp-3d">${timeString}</span>
                     </div>
                     <div class="summary-admin-text">Contact Admin to Check Tools In</div>
                 `;
@@ -747,7 +771,7 @@
                             <div class="previous-out-tool-name">${index + 1}. ${tool.toolName || 'Unknown Tool'}</div>
                             <div class="previous-out-tool-date" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
                                 <span>${formattedDate}</span>
-                                <span style="font-size:1em;font-weight:bold;color:#222;display:inline-block;">WorkOn: <span style="color:#888;font-weight:bold;">${workOnValue}</span></span>
+                                <span style="display:inline-block;"><span class="previous-out-workon-label">WorkOn:</span> <span class="previous-out-workon-value">${workOnValue}</span></span>
                             </div>
                             <div class="previous-out-tool-row">
                                 <div class="previous-out-tool-column">
@@ -791,8 +815,6 @@
                     <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 12px;">
                         <span class="summary-label-3d" style="color: #d32f2f;">Error:</span>
                         <span class="summary-total-3d" style="background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); border-color: #d32f2f; box-shadow: 0 4px 8px rgba(244, 67, 54, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2);">Loading Failed</span>
-                        <span class="summary-label-3d">Last attempt:</span>
-                        <span class="summary-timestamp-3d">${timeString}</span>
                     </div>
                     <div class="summary-admin-text">Contact Admin to Check Tools In</div>
                 `;
