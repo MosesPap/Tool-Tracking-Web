@@ -237,15 +237,28 @@ const formattedNotificationTime = `${String(notificationHour).padStart(2, '0')}:
     const email = techData.email || '';
     const isAdmin = techData.isAdmin || false;
     
+    console.log(`Technician: ${fullName || 'N/A'}, Email: ${email || 'N/A'}, isAdmin: ${isAdmin}`);
+    
+    // Map technician name to email (for user notifications)
     if (fullName && email) {
       technicianEmailMap.set(fullName, email);
-      
-      // Collect all admin emails
-      if (isAdmin) {
-        allAdminEmails.push({ email, fullName });
-      }
+    }
+    
+    // Collect all admin emails - only require email, fullName is optional
+    if (isAdmin && email) {
+      console.log(`Adding admin email: ${email} (${fullName || 'No name'})`);
+      allAdminEmails.push({ email, fullName: fullName || email });
+    } else if (isAdmin && !email) {
+      console.log(`WARNING: Admin found but missing email - fullName: "${fullName}", doc ID: ${doc.id}`);
     }
   });
+  
+  console.log(`Total admin emails collected: ${allAdminEmails.length}`);
+  if (allAdminEmails.length > 0) {
+    console.log(`Admin emails: ${allAdminEmails.map(a => a.email).join(', ')}`);
+  } else {
+    console.log(`WARNING: No admin emails found! Check that technicians have isAdmin=true and email field set.`);
+  }
 
   // Send emails to users with OUT tools
   const emailPromises = [];
@@ -275,10 +288,12 @@ const formattedNotificationTime = `${String(notificationHour).padStart(2, '0')}:
   const adminEmailsForSummary = allAdminEmails.map(admin => admin.email);
 
   console.log(`Found ${allAdminEmails.length} total administrator(s)`);
+  console.log(`Admin emails for summary: ${adminEmailsForSummary.join(', ')}`);
   console.log(`Sending summary to ${adminEmailsForSummary.length} administrator(s) (all admins receive admin summary)`);
 
   // Send summary email to ALL administrators (admins receive both user email and admin summary)
   if (adminEmailsForSummary.length > 0) {
+    console.log(`Attempting to send admin summary email to: ${adminEmailsForSummary.join(', ')}`);
     emailPromises.push(sendAdminSummaryEmail(
       transporter,
       emailFrom,
@@ -288,7 +303,12 @@ const formattedNotificationTime = `${String(notificationHour).padStart(2, '0')}:
       emailBodyAdmin,
       adminTableColumns,
       tableHeaderColor
-    ));
+    ).catch(error => {
+      console.error(`Error sending admin summary email to ${adminEmailsForSummary.join(', ')}:`, error);
+      throw error;
+    }));
+  } else {
+    console.log('WARNING: No admin emails found to send summary to!');
   }
 
   // Wait for all emails to be sent
@@ -566,10 +586,18 @@ async function sendAdminSummaryEmail(transporter, emailFrom, adminEmails, outToo
   };
 
   try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Summary email sent to administrators: ${adminEmails.join(', ')}`);
+    const result = await transporter.sendMail(mailOptions);
+    console.log(`Summary email sent successfully to administrators: ${adminEmails.join(', ')}`);
+    console.log(`Email message ID: ${result.messageId}`);
+    console.log(`Email response: ${result.response}`);
   } catch (error) {
-    console.error('Error sending admin summary email:', error);
+    console.error(`Error sending admin summary email to ${adminEmails.join(', ')}:`, error);
+    console.error(`Error details:`, {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+      response: error.response
+    });
     throw error;
   }
 }
