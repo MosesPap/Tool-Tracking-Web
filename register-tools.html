@@ -824,7 +824,7 @@
                 
                 // Validation checks
                 if (data.status === 'OUT' && data.technician !== technicianName) {
-                    showBulkScanMessage(`Tool checked out by ${data.technician}`, false);
+                    showBulkScanMessage(`Tool checked out by <br>${data.technician}`, false);
                     bulkProcessingCodes.delete(code);
                     return;
                 }
@@ -835,7 +835,7 @@
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
                     if (toolDate < today) {
-                        showBulkScanMessage('Tool checked out on previous day - cannot return', false);
+                        showBulkScanMessage('Tool checked out on previous day.<br>Contact Administrator', false);
                         bulkProcessingCodes.delete(code);
                         return;
                     }
@@ -1542,6 +1542,16 @@
             currentZoom = 1.0;
             torchEnabled = false;
             enhancedScannerVideo = null;
+            
+            // Clear bulk scan message when closing scanner
+            const messageDiv = document.getElementById('bulkScanMessage');
+            if (messageDiv) {
+                if (bulkScanMessageTimeout) {
+                    clearTimeout(bulkScanMessageTimeout);
+                    bulkScanMessageTimeout = null;
+                }
+                messageDiv.style.display = 'none';
+            }
         }
 
         // Enhanced Scanner Functions (make it global)
