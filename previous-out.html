@@ -210,7 +210,7 @@
       </div>
       
       <div class="container py-4">
-        <button id="backToMenuFromOutToolsBtn" class="btn btn-outline-secondary mb-3">
+        <button id="backToMenuFromOutToolsBtn" class="btn btn-outline-secondary mb-3" onclick="window.location.href='index.html'">
           <i class="fas fa-arrow-left"></i> Back to Menu
         </button>
         
@@ -375,19 +375,25 @@
         });
         
         function setupEventListeners() {
-            // Back to menu button
-            document.getElementById('backToMenuFromOutToolsBtn').onclick = function() {
-                window.location.href = 'index.html';
-            };
+            // Back to menu button - use window.location for navigation
+            const backBtn = document.getElementById('backToMenuFromOutToolsBtn');
+            if (backBtn) {
+                backBtn.onclick = function() {
+                    window.location.href = 'index.html';
+                };
+            }
             
             // Back to previous out tools from collection details
-            document.getElementById('backToPreviousOutBtn').onclick = function() {
-                document.getElementById('collectionDetailsScreen').style.display = 'none';
-                document.getElementById('previousOutToolsScreen').style.display = 'block';
-            };
+            const backToPreviousBtn = document.getElementById('backToPreviousOutBtn');
+            if (backToPreviousBtn) {
+                backToPreviousBtn.onclick = function() {
+                    document.getElementById('collectionDetailsScreen').style.display = 'none';
+                    document.getElementById('previousOutToolsScreen').style.display = 'block';
+                };
+            }
         }
 
-        // Load previous out tools
+        // Load previous out tools from logtoolmovements
         async function loadPreviousOutTools() {
             const user = auth.currentUser;
             if (!user) {
@@ -402,19 +408,26 @@
             document.getElementById('previousOutToolsSummary').innerHTML = '<strong>Refreshing...</strong>';
             
             try {
-                // Fetch fresh data
+                // Fetch fresh data from logtoolmovements
                 const fullName = localStorage.getItem('fullName') || user.email;
                 console.log('loadPreviousOutTools: Searching for tools with technician:', fullName);
                 
-                const snapshot = await db.collection('tools')
+                // Get today's start time in local timezone
+                const currentTime = new Date();
+                const today = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate());
+                console.log('loadPreviousOutTools: Today start time (local):', today.toISOString());
+                
+                // Query logtoolmovements for OUT status with this technician
+                const snapshot = await db.collection('logtoolmovements')
                     .where('technician', '==', fullName)
                     .where('status', '==', 'OUT')
+                    .orderBy('timestamp', 'desc')
                     .get();
                 
-                console.log('loadPreviousOutTools: Found', snapshot.docs.length, 'OUT tools for technician:', fullName);
+                console.log('loadPreviousOutTools: Found', snapshot.docs.length, 'OUT log entries for technician:', fullName);
                 
                 if (snapshot.empty) {
-                    console.log('loadPreviousOutTools: No OUT tools found for technician:', fullName);
+                    console.log('loadPreviousOutTools: No OUT log entries found for technician:', fullName);
                     previousOutToolsList.innerHTML = '<div class="text-center text-muted">No previous OUT tools found.</div>';
                     const now = new Date();
                     const timeString = now.toLocaleString('en-GB', {
@@ -430,29 +443,39 @@
                     return;
                 }
                 
-                // Get today's start time in local timezone
-                const currentTime = new Date();
-                const today = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate());
-                console.log('loadPreviousOutTools: Today start time (local):', today.toISOString());
-                console.log('loadPreviousOutTools: Today start time (local date):', today.toDateString());
-                
-                // Filter tools from previous days
-                const previousTools = snapshot.docs.filter(doc => {
-                    const timestamp = doc.data().timestamp;
-                    console.log('loadPreviousOutTools: Tool', doc.id, 'timestamp:', timestamp);
+                // Filter tools from previous days and get unique tools (by toolId)
+                const toolMap = new Map();
+                snapshot.docs.forEach(doc => {
+                    const data = doc.data();
+                    const timestamp = data.timestamp;
                     
                     if (timestamp && timestamp.toDate) {
                         const toolDate = timestamp.toDate();
                         // Compare dates in local timezone
                         const toolDateLocal = new Date(toolDate.getFullYear(), toolDate.getMonth(), toolDate.getDate());
                         const isPrevious = toolDateLocal < today;
-                        console.log('loadPreviousOutTools: Tool', doc.id, 'date (UTC):', toolDate.toISOString(), 'date (local):', toolDateLocal.toDateString(), 'isPrevious:', isPrevious);
-                        return isPrevious;
+                        
+                        if (isPrevious && data.toolId) {
+                            // Use toolId as key to get the most recent entry for each tool
+                            const existingEntry = toolMap.get(data.toolId);
+                            if (!existingEntry || toolDate > existingEntry.timestamp.toDate()) {
+                                toolMap.set(data.toolId, {
+                                    logId: doc.id,
+                                    toolId: data.toolId,
+                                    toolName: data.toolName || 'Unknown Tool',
+                                    partNumber: data.partNumber || data.toolId,
+                                    location: data.location || 'N/A',
+                                    status: data.status || 'OUT',
+                                    technician: data.technician || fullName,
+                                    timestamp: timestamp,
+                                    WorkOn: data.WorkOn || 'N/A'
+                                });
+                            }
+                        }
                     }
-                    console.log('loadPreviousOutTools: Tool', doc.id, 'has no valid timestamp');
-                    return false;
                 });
                 
+                const previousTools = Array.from(toolMap.values());
                 console.log('loadPreviousOutTools: Previous tools count:', previousTools.length);
                 
                 if (previousTools.length === 0) {
@@ -472,11 +495,36 @@
                     return;
                 }
                 
-                // Update the global data
-                previousOutToolsData = previousTools.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
+                // Fetch additional tool details from tools collection
+                const toolIds = previousTools.map(t => t.toolId);
+                const toolsSnapshot = await db.collection('tools').get();
+                const toolsMap = new Map();
+                toolsSnapshot.docs.forEach(doc => {
+                    if (toolIds.includes(doc.id)) {
+                        toolsMap.set(doc.id, doc.data());
+                    }
+                });
+                
+                // Merge log data with tools collection data
+                previousOutToolsData = previousTools.map(logEntry => {
+                    const toolData = toolsMap.get(logEntry.toolId) || {};
+                    return {
+                        id: logEntry.toolId,
+                        logId: logEntry.logId,
+                        toolName: logEntry.toolName || toolData.toolName || 'Unknown Tool',
+                        partNumber: logEntry.partNumber || toolData.partNumber || logEntry.toolId,
+                        collectionCode: toolData.collectionCode || '',
+                        location: logEntry.location || toolData.location || 'N/A',
+                        owner: toolData.owner || 'N/A',
+                        status: logEntry.status || 'OUT',
+                        technician: logEntry.technician,
+                        timestamp: logEntry.timestamp,
+                        calDueDate: toolData.calDueDate || null,
+                        photoUrls: toolData.photoUrls || [],
+                        WorkOn: logEntry.WorkOn || toolData.WorkOn || 'N/A',
+                        serialNumber: toolData.serialNumber || 'N/A'
+                    };
+                });
                 
                 // Update summary with timestamp
                 const now = new Date();
@@ -487,7 +535,7 @@
                     hour12: false
                 });
                 document.getElementById('previousOutToolsSummary').innerHTML = `
-                    <strong>Total: ${previousTools.length} tool${previousTools.length !== 1 ? 's' : ''}</strong>
+                    <strong>Total: ${previousOutToolsData.length} tool${previousOutToolsData.length !== 1 ? 's' : ''}</strong>
                     <br><small class="text-muted">Last updated: ${timeString}</small>
                 `;
                 
@@ -500,7 +548,7 @@
                 
                 let html = '';
                 sortedTools.forEach((tool, index) => {
-                    const status = (tool.status || '').toUpperCase();
+                    const status = (tool.status || 'OUT').toUpperCase();
                     const statusClass = status.toLowerCase();
                     
                     // Format timestamp
