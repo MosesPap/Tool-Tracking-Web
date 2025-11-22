@@ -643,24 +643,24 @@
                     // Check if work location is already selected (check both local and global)
                     const currentLocation = selectedWorkLocation || window.selectedWorkLocation || localStorage.getItem('selectedWorkLocation');
                     console.log('Current work location:', currentLocation);
-                    if (!currentLocation) {
-                        // Show location selection modal on first load
-                        console.log('No location selected, showing modal');
-                        setTimeout(() => {
-                            if (typeof showLocationSelectionModalForRegisterTools === 'function') {
-                                showLocationSelectionModalForRegisterTools();
-                            } else {
-                                console.error('showLocationSelectionModalForRegisterTools function not found!');
-                            }
-                        }, 500);
-                    } else {
-                        // Set the global variable
+                    
+                    // Always show location selection modal when navigating to register tools
+                    if (currentLocation) {
+                        // Set the global variable and update label if location exists
                         selectedWorkLocation = currentLocation;
                         window.selectedWorkLocation = currentLocation;
                         updateWorkLocationLabel();
-                        // Initialize screen if location already selected
-                        refreshRegisterToolsScreen();
                     }
+                    
+                    // Always show location selection modal on page load
+                    console.log('Showing location selection modal');
+                    setTimeout(() => {
+                        if (typeof showLocationSelectionModalForRegisterTools === 'function') {
+                            showLocationSelectionModalForRegisterTools();
+                        } else {
+                            console.error('showLocationSelectionModalForRegisterTools function not found!');
+                        }
+                    }, 500);
                 });
             }
         });
@@ -2677,18 +2677,13 @@
             selectToolFromDropdown(toolId);
         }
         
-        function useSelectedTool(toolId) {
-            const toolCodeInput = document.getElementById('toolCode');
-            toolCodeInput.value = toolId;
+        window.useSelectedTool = async function useSelectedTool(toolId) {
+            // Hide search results
+            document.getElementById('searchToolInput').value = '';
+            document.getElementById('searchResultsContainer').style.display = 'none';
+            document.getElementById('selectedToolDetails').style.display = 'none';
             
-            const inputEvent = new Event('input', { bubbles: true });
-            toolCodeInput.dispatchEvent(inputEvent);
-            
-            const toolDetailsBtn = document.getElementById('toolDetailsBtn');
-            if (toolDetailsBtn) {
-                toolDetailsBtn.disabled = false;
-            }
-            
+            // Switch to scanner tab
             const scanToolTab = document.getElementById('scanToolTab');
             const searchToolsTab = document.getElementById('searchToolsTab');
             const scannerView = document.getElementById('scannerView');
@@ -2703,9 +2698,14 @@
             const tab = new bootstrap.Tab(scanToolTab);
             tab.show();
             
-            document.getElementById('searchToolInput').value = '';
-            document.getElementById('searchResultsContainer').style.display = 'none';
-            document.getElementById('selectedToolDetails').style.display = 'none';
+            // Check if work location is selected, then register the tool directly
+            if (!selectedWorkLocation) {
+                console.log('No work location selected, showing modal');
+                showLocationSelectionModalForToolSubmission(toolId);
+            } else {
+                console.log('Work location already selected, processing tool registration');
+                await processToolSubmission(toolId);
+            }
         }
 
         window.showLastScannedToolDetails = async function showLastScannedToolDetails() {
