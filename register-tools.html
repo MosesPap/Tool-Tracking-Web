@@ -272,33 +272,6 @@
         </div>
     </div>
 
-    <!-- Excessive Check-in/Check-out Warning Modal -->
-    <div class="modal fade" id="excessiveMovementModal" tabindex="-1" aria-labelledby="excessiveMovementModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content" style="border: 4px solid #FF0000; border-radius: 20px; box-shadow: 0 10px 40px rgba(255, 0, 0, 0.5);">
-          <div class="modal-header" style="background: linear-gradient(135deg, #FF0000 0%, #CC0000 100%); color: white; border-radius: 16px 16px 0 0;">
-            <h5 class="modal-title" id="excessiveMovementModalLabel" style="font-size: 2rem; font-weight: bold; text-align: center; width: 100%;">
-              <i class="fas fa-exclamation-triangle" style="font-size: 2.5rem; margin-right: 10px;"></i>
-              WARNING
-            </h5>
-          </div>
-          <div class="modal-body" style="background: #FFF3E0; padding: 40px; text-align: center;">
-            <h2 style="font-size: 3rem; font-weight: bold; color: #FF0000; margin: 20px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">
-              ΡΕ ΜΕΝ ΜΑΛΑΚΙΖΕΣΑΙ
-            </h2>
-            <p style="font-size: 1.5rem; color: #333; margin-top: 20px;">
-              This tool has been checked in/out more than 3 times today!
-            </p>
-          </div>
-          <div class="modal-footer" style="background: #FFF3E0; border-radius: 0 0 16px 16px; justify-content: center;">
-            <button type="button" class="btn btn-danger btn-lg" data-bs-dismiss="modal" style="font-size: 1.5rem; padding: 15px 40px; font-weight: bold;">
-              OK
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- 5-Minute Cooldown Warning Modal -->
     <div class="modal fade" id="cooldownWarnModal" tabindex="-1" aria-labelledby="cooldownWarnModalLabel" aria-hidden="true">
       <div class="modal-dialog">
@@ -1032,30 +1005,6 @@
                         }
                     }
                     
-                    // Check if tool has been checked in/out more than 3 times today
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const todayEnd = new Date(today);
-                    todayEnd.setHours(23, 59, 59, 999);
-                    
-                    const todayStartTimestamp = firebase.firestore.Timestamp.fromDate(today);
-                    const todayEndTimestamp = firebase.firestore.Timestamp.fromDate(todayEnd);
-                    
-                    const todayMovements = await db.collection('logtoolmovements')
-                        .where('toolId', '==', code)
-                        .where('timestamp', '>=', todayStartTimestamp)
-                        .where('timestamp', '<=', todayEndTimestamp)
-                        .get();
-                    
-                    if (todayMovements.size > 3) {
-                        // Show warning modal with sound (only once for the first excessive tool)
-                        if (successCount === 0 && errorCount === 0 && skippedCodes.length === 0) {
-                            showExcessiveMovementWarning();
-                        }
-                        skippedCodes.push({ code, reason: 'Excessive movements today (>3)' });
-                        continue;
-                    }
-                    
                     // Process the tool
                     const status = data.status === 'OUT' ? 'IN' : 'OUT';
                     const timestamp = firebase.firestore.FieldValue.serverTimestamp();
@@ -1318,28 +1267,6 @@
                     }
                 }
                 
-                // Check if tool has been checked in/out more than 3 times today
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const todayEnd = new Date(today);
-                todayEnd.setHours(23, 59, 59, 999);
-                
-                const todayStartTimestamp = firebase.firestore.Timestamp.fromDate(today);
-                const todayEndTimestamp = firebase.firestore.Timestamp.fromDate(todayEnd);
-                
-                const todayMovements = await db.collection('logtoolmovements')
-                    .where('toolId', '==', code)
-                    .where('timestamp', '>=', todayStartTimestamp)
-                    .where('timestamp', '<=', todayEndTimestamp)
-                    .get();
-                
-                if (todayMovements.size > 3) {
-                    // Show warning modal with sound
-                    showExcessiveMovementWarning();
-                    bulkProcessingCodes.delete(code);
-                    return;
-                }
-                
                 // Check if station is selected (required for checkout)
                 if (newStatus === 'OUT' && !selectedWorkLocation) {
                     showBulkScanMessage('Please select a Station first', false);
@@ -1478,31 +1405,6 @@
                     // Get current technician name
                     const technicianDoc = await db.collection('technicians').doc(user.uid).get();
                     const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
-                    
-                    // Check if tool has been checked in/out more than 3 times today
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const todayEnd = new Date(today);
-                    todayEnd.setHours(23, 59, 59, 999);
-                    
-                    const todayStartTimestamp = firebase.firestore.Timestamp.fromDate(today);
-                    const todayEndTimestamp = firebase.firestore.Timestamp.fromDate(todayEnd);
-                    
-                    const todayMovements = await db.collection('logtoolmovements')
-                        .where('toolId', '==', code)
-                        .where('timestamp', '>=', todayStartTimestamp)
-                        .where('timestamp', '<=', todayEndTimestamp)
-                        .get();
-                    
-                    if (todayMovements.size > 3) {
-                        // Show warning modal with sound
-                        showExcessiveMovementWarning();
-                        document.getElementById('toolCode').value = '';
-                        clearAllButtonStates();
-                        lastScannedToolData = null;
-                        document.getElementById('toolDetailsBtn').disabled = true;
-                        return;
-                    }
 
                     // Only show warning if tool is OUT and checked out by a different technician
                     if (data.status === 'OUT' && data.technician !== technicianName) {
@@ -2481,44 +2383,6 @@
             const secs = Math.ceil((remainingMs % 60000) / 1000);
             document.querySelector('#cooldownWarnModal .modal-body').textContent = `You must wait ${mins} minute${mins !== 1 ? 's' : ''} and ${secs} second${secs !== 1 ? 's' : ''} before you can return this tool.`;
         }
-        
-        // Function to show excessive movement warning with sound
-        function showExcessiveMovementWarning() {
-            // Create and play annoying sound
-            try {
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-                
-                // Annoying high-pitched beep pattern
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-                oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.1);
-                oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.2);
-                oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.3);
-                oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.4);
-                
-                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-                
-                oscillator.start(audioContext.currentTime);
-                oscillator.stop(audioContext.currentTime + 0.5);
-            } catch (error) {
-                console.error('Error playing sound:', error);
-            }
-            
-            // Show modal
-            const modal = new bootstrap.Modal(document.getElementById('excessiveMovementModal'), {
-                backdrop: 'static',
-                keyboard: false
-            });
-            modal.show();
-        }
-        
-        // Function to show excessive movement warning with sound
 
         async function startCooldownCountdown(toolId, outTime) {
             try {
