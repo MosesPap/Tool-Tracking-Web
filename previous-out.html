@@ -368,8 +368,10 @@
                     // Set up event listeners
                     setupEventListeners();
                     
-                    // Load previous out tools
-                    loadPreviousOutTools();
+                    // Load previous out tools - add small delay to ensure DOM is ready
+                    setTimeout(() => {
+                        loadPreviousOutTools();
+                    }, 100);
                 });
             }
         });
@@ -464,17 +466,38 @@
                 const previousTools = snapshot.docs.filter(doc => {
                     const data = doc.data();
                     const timestamp = data.timestamp;
-                    console.log('loadPreviousOutTools: Tool', doc.id, 'timestamp:', timestamp);
+                    console.log('loadPreviousOutTools: Tool', doc.id, 'timestamp:', timestamp, 'timestamp type:', typeof timestamp);
                     
-                    if (timestamp && timestamp.toDate) {
-                        const toolDate = timestamp.toDate();
+                    if (timestamp) {
+                        let toolDate;
+                        // Handle Firestore Timestamp
+                        if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+                            toolDate = timestamp.toDate();
+                        } 
+                        // Handle regular Date object
+                        else if (timestamp instanceof Date) {
+                            toolDate = timestamp;
+                        }
+                        // Handle timestamp as seconds (Firestore Timestamp serialized)
+                        else if (timestamp.seconds) {
+                            toolDate = new Date(timestamp.seconds * 1000);
+                        }
+                        // Handle ISO string
+                        else if (typeof timestamp === 'string') {
+                            toolDate = new Date(timestamp);
+                        }
+                        else {
+                            console.log('loadPreviousOutTools: Tool', doc.id, 'has unsupported timestamp format');
+                            return false;
+                        }
+                        
                         // Compare dates in local timezone
                         const toolDateLocal = new Date(toolDate.getFullYear(), toolDate.getMonth(), toolDate.getDate());
                         const isPrevious = toolDateLocal < today;
                         console.log('loadPreviousOutTools: Tool', doc.id, 'date (UTC):', toolDate.toISOString(), 'date (local):', toolDateLocal.toDateString(), 'isPrevious:', isPrevious);
                         return isPrevious;
                     }
-                    console.log('loadPreviousOutTools: Tool', doc.id, 'has no valid timestamp');
+                    console.log('loadPreviousOutTools: Tool', doc.id, 'has no timestamp');
                     return false;
                 });
                 
@@ -497,11 +520,16 @@
                     return;
                 }
                 
-                // Update the global data
-                previousOutToolsData = previousTools.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
+                // Update the global data - preserve Firestore Timestamp objects
+                previousOutToolsData = previousTools.map(doc => {
+                    const data = doc.data();
+                    return {
+                        id: doc.id,
+                        ...data,
+                        // Ensure timestamp is preserved as Firestore Timestamp if it exists
+                        timestamp: data.timestamp || null
+                    };
+                });
                 
                 // Update summary with timestamp
                 const now = new Date();
@@ -528,20 +556,48 @@
                     const status = (tool.status || '').toUpperCase();
                     const statusClass = status.toLowerCase();
                     
-                    // Format timestamp
-                    const formattedDate = tool.timestamp ? tool.timestamp.toDate().toLocaleString('en-GB', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        hour12: false
-                    }) : 'Unknown';
+                    // Format timestamp - handle different timestamp formats
+                    let formattedDate = 'Unknown';
+                    if (tool.timestamp) {
+                        try {
+                            let dateObj;
+                            if (tool.timestamp.toDate && typeof tool.timestamp.toDate === 'function') {
+                                dateObj = tool.timestamp.toDate();
+                            } else if (tool.timestamp instanceof Date) {
+                                dateObj = tool.timestamp;
+                            } else if (tool.timestamp.seconds) {
+                                dateObj = new Date(tool.timestamp.seconds * 1000);
+                            } else if (typeof tool.timestamp === 'string') {
+                                dateObj = new Date(tool.timestamp);
+                            } else {
+                                dateObj = null;
+                            }
+                            
+                            if (dateObj && !isNaN(dateObj.getTime())) {
+                                formattedDate = dateObj.toLocaleString('en-GB', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                    hour12: false
+                                });
+                            }
+                        } catch (e) {
+                            console.error('Error formatting date for tool', tool.id, e);
+                            formattedDate = 'Unknown';
+                        }
+                    }
+                    
                     // Get WorkOn value or N/A
                     const workOnValue = (typeof tool.WorkOn === 'string' && tool.WorkOn.trim()) ? tool.WorkOn : 'N/A';
+                    
+                    // Escape tool.id for onclick to prevent XSS
+                    const safeToolId = tool.id.replace(/'/g, "\\'");
+                    
                     html += `
-                        <div class="previous-out-tool-card ${statusClass}" onclick="showPreviousOutToolDetails('${tool.id}')">
+                        <div class="previous-out-tool-card ${statusClass}" onclick="window.showPreviousOutToolDetails('${safeToolId}')">
                             <div class="previous-out-tool-name">${index + 1}. ${tool.toolName || 'Unknown Tool'}</div>
                             <div class="previous-out-tool-date" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
                                 <span>${formattedDate}</span>
@@ -565,7 +621,15 @@
                     `;
                 });
                 
-                previousOutToolsList.innerHTML = html;
+                console.log('loadPreviousOutTools: Generated HTML for', sortedTools.length, 'tools');
+                console.log('loadPreviousOutTools: HTML length:', html.length);
+                
+                if (previousOutToolsList) {
+                    previousOutToolsList.innerHTML = html;
+                    console.log('loadPreviousOutTools: HTML set to previousOutToolsList');
+                } else {
+                    console.error('loadPreviousOutTools: previousOutToolsList element not found!');
+                }
                 
             } catch (error) {
                 console.error('Error loading previous OUT tools:', error);
