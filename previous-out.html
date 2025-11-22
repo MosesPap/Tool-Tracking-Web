@@ -210,7 +210,7 @@
       </div>
       
       <div class="container py-4">
-        <button id="backToMenuFromOutToolsBtn" class="btn btn-outline-secondary mb-3">
+        <button id="backToMenuFromOutToolsBtn" class="btn btn-outline-secondary mb-3" onclick="if(typeof handleBackNavigation === 'function') { handleBackNavigation(); } else { sessionStorage.setItem('skipSplash', 'true'); window.location.href='index.html'; }">
           <i class="fas fa-arrow-left"></i> Back to Menu
         </button>
         
@@ -318,15 +318,15 @@
       </div>
     </div>
 
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="js/common.js"></script>
     <script>
-        // Global variable to track previous out tools data
-        let previousOutToolsData = [];
+        // Note: previousOutToolsData is already declared in common.js
+        // Use the global one from common.js
         let lastCollectionDetailsSource = 'previousOut';
 
         // Initialize page
@@ -377,7 +377,7 @@
         });
         
         // Function to handle back navigation (used by both button and phone back button)
-        function handleBackNavigation() {
+        window.handleBackNavigation = function handleBackNavigation() {
             // Set flag to skip splash video
             sessionStorage.setItem('skipSplash', 'true');
             window.location.href = 'index.html';
@@ -387,9 +387,15 @@
             // Back to menu button - set skipSplash flag before navigating
             const backBtn = document.getElementById('backToMenuFromOutToolsBtn');
             if (backBtn) {
-                backBtn.onclick = function() {
+                // Remove any existing onclick to avoid conflicts
+                backBtn.onclick = null;
+                backBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
                     handleBackNavigation();
-                };
+                });
+                console.log('Back button event listener attached');
+            } else {
+                console.error('Back button element not found!');
             }
             
             // Handle phone back button - same behavior as Back to Menu button
