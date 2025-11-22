@@ -572,6 +572,32 @@
       </div>
     </div>
 
+    <!-- Repeated Tool Warning Modal -->
+    <div class="modal fade" id="repeatedToolWarningModal" tabindex="-1" aria-labelledby="repeatedToolWarningModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border: 4px solid #FF0000; border-radius: 20px;">
+          <div class="modal-header bg-danger text-white" style="border-radius: 16px 16px 0 0;">
+            <h2 class="modal-title" id="repeatedToolWarningModalLabel" style="font-size: 2.5rem; font-weight: bold; text-align: center; width: 100%;">
+              ⚠️ ΡΕ ΜΕΝ ΜΑΛΑΚΙΖΕΣΑΙ ⚠️
+            </h2>
+          </div>
+          <div class="modal-body text-center" style="padding: 40px 20px; background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);">
+            <h3 style="font-size: 2rem; font-weight: bold; color: #d32f2f; margin-bottom: 20px;">
+              Stop checking the same tool repeatedly!
+            </h3>
+            <p style="font-size: 1.5rem; color: #333; font-weight: bold;">
+              You have checked this tool in/out more than 3 times in a short period.
+            </p>
+          </div>
+          <div class="modal-footer justify-content-center" style="border-radius: 0 0 16px 16px;">
+            <button type="button" class="btn btn-danger btn-lg" data-bs-dismiss="modal" style="font-size: 1.5rem; padding: 15px 40px; font-weight: bold;">
+              OK
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -1007,6 +1033,13 @@
                     
                     // Process the tool
                     const status = data.status === 'OUT' ? 'IN' : 'OUT';
+                    
+                    // Check for repeated submissions
+                    if (checkRepeatedToolSubmission(code, status)) {
+                        // Don't process the tool if it's being repeated
+                        continue;
+                    }
+                    
                     const timestamp = firebase.firestore.FieldValue.serverTimestamp();
                     
                     const updateData = {
@@ -1247,6 +1280,13 @@
                 // Determine new status (toggle)
                 const newStatus = data.status === 'OUT' ? 'IN' : 'OUT';
                 
+                // Check for repeated submissions
+                if (checkRepeatedToolSubmission(code, newStatus)) {
+                    // Don't process the tool if it's being repeated
+                    bulkProcessingCodes.delete(code);
+                    return;
+                }
+                
                 // Check cooldown for check-in
                 if (newStatus === 'IN' && data.status === 'OUT' && data.timestamp && data.timestamp.toDate) {
                     const outTime = data.timestamp.toDate();
@@ -1387,6 +1427,85 @@
             }
         }
         
+        // Function to play annoying sound
+        function playAnnoyingSound() {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                // Create annoying beep pattern
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
+                oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.2);
+                oscillator.frequency.setValueAtTime(500, audioContext.currentTime + 0.3);
+                oscillator.frequency.setValueAtTime(1200, audioContext.currentTime + 0.4);
+                
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.5);
+                
+                // Play multiple times for extra annoyance
+                setTimeout(() => {
+                    const oscillator2 = audioContext.createOscillator();
+                    const gainNode2 = audioContext.createGain();
+                    oscillator2.connect(gainNode2);
+                    gainNode2.connect(audioContext.destination);
+                    oscillator2.type = 'sine';
+                    oscillator2.frequency.setValueAtTime(1000, audioContext.currentTime);
+                    oscillator2.frequency.setValueAtTime(400, audioContext.currentTime + 0.1);
+                    oscillator2.frequency.setValueAtTime(1200, audioContext.currentTime + 0.2);
+                    gainNode2.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                    oscillator2.start(audioContext.currentTime);
+                    oscillator2.stop(audioContext.currentTime + 0.3);
+                }, 600);
+            } catch (error) {
+                console.error('Error playing sound:', error);
+            }
+        }
+        
+        // Check for repeated tool submissions
+        function checkRepeatedToolSubmission(toolId, newStatus) {
+            const now = Date.now();
+            
+            // Clean old entries (older than time window)
+            if (recentToolSubmissions.has(toolId)) {
+                const submissions = recentToolSubmissions.get(toolId);
+                const recentSubmissions = submissions.filter(sub => now - sub.timestamp < REPEATED_TOOL_TIME_WINDOW);
+                recentToolSubmissions.set(toolId, recentSubmissions);
+                
+                // Add current submission
+                recentSubmissions.push({ timestamp: now, status: newStatus });
+                
+                // Check if threshold exceeded
+                if (recentSubmissions.length >= REPEATED_TOOL_THRESHOLD) {
+                    // Show warning modal and play sound
+                    playAnnoyingSound();
+                    const modal = new bootstrap.Modal(document.getElementById('repeatedToolWarningModal'));
+                    modal.show();
+                    
+                    // Clear submissions for this tool after showing modal
+                    setTimeout(() => {
+                        recentToolSubmissions.delete(toolId);
+                    }, REPEATED_TOOL_TIME_WINDOW);
+                    
+                    return true; // Indicates repeated submission detected
+                }
+            } else {
+                // First submission for this tool
+                recentToolSubmissions.set(toolId, [{ timestamp: now, status: newStatus }]);
+            }
+            
+            return false; // Not repeated
+        }
+
         // Process tool submission after location selection
         async function processToolSubmission(code) {
             console.log('processToolSubmission called with code:', code);
@@ -1405,6 +1524,17 @@
                     // Get current technician name
                     const technicianDoc = await db.collection('technicians').doc(user.uid).get();
                     const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
+                    
+                    // Determine new status before checking for repetition
+                    const newStatus = data.status === 'OUT' ? 'IN' : 'OUT';
+                    
+                    // Check for repeated submissions (track all attempts, even if they fail validation)
+                    if (checkRepeatedToolSubmission(code, newStatus)) {
+                        // Don't process the tool if it's being repeated
+                        document.getElementById('toolCode').value = '';
+                        clearAllButtonStates();
+                        return;
+                    }
 
                     // Only show warning if tool is OUT and checked out by a different technician
                     if (data.status === 'OUT' && data.technician !== technicianName) {
