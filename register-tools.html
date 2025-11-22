@@ -1264,7 +1264,7 @@
                     };
                     
                     const workOnValue = data.WorkOn ? data.WorkOn : 'N/A';
-                    const serialNumber = data.serialNumber || data.partNumber || 'N/A';
+                    const partNumber = data.partNumber || data.serialNumber || 'N/A';
                     const calDueDate = data.calDueDate && data.calDueDate.toDate 
                         ? data.calDueDate.toDate().toLocaleDateString('en-GB')
                         : 'N/A';
@@ -1298,7 +1298,7 @@
                                 <span style="color: #666; font-weight: bold;">${tool.id}</span>
                             </div>
                             <div style="text-align: center;">
-                                <span style="color: #666; font-weight: bold;">${serialNumber}</span>
+                                <span style="color: #666; font-weight: bold;">${partNumber}</span>
                             </div>
                             <div style="text-align: right;">
                                 <span class="badge bg-${status === 'IN' ? 'success' : 'danger'}" style="font-weight: bold; border-radius: 15px; padding: 4px 8px;">${status}</span>
