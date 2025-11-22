@@ -665,13 +665,29 @@
             }
         });
         
+        // Function to handle back navigation (used by both button and phone back button)
+        function handleBackNavigation() {
+            // Set flag to skip splash video
+            sessionStorage.setItem('skipSplash', 'true');
+            window.location.href = 'index.html';
+        }
+        
         function setupEventListeners() {
             // Back to menu button
             document.getElementById('backToMenuBtn').onclick = function() {
-                // Set flag to skip splash video
-                sessionStorage.setItem('skipSplash', 'true');
-                window.location.href = 'index.html';
+                handleBackNavigation();
             };
+            
+            // Handle phone back button - same behavior as Back to Menu button
+            window.addEventListener('popstate', function(event) {
+                // When user presses phone back button, navigate to menu with skipSplash flag
+                handleBackNavigation();
+            });
+            
+            // Push a state to history so back button works
+            if (window.history.state === null) {
+                window.history.pushState({ page: 'register-tools' }, '', '');
+            }
             
             // Change work location button
             document.getElementById('changeWorkLocationBtn').onclick = function() {
