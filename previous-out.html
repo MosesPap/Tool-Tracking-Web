@@ -163,15 +163,21 @@
         /* Medium fonts for tool cards on tablets (between mobile and desktop) */
         @media (min-width: 769px) and (max-width: 1024px) {
           #previousOutToolsList .previous-out-tool-card * {
-            font-size: 1.1rem !important;
+            font-size: 1.15rem !important;
           }
 
           #previousOutToolsList .previous-out-tool-card .previous-out-tool-name {
-            font-size: 1.3rem !important;
+            font-size: 1.4rem !important;
+          }
+
+          #previousOutToolsList .previous-out-tool-card .previous-out-tool-date,
+          #previousOutToolsList .previous-out-tool-card .previous-out-tool-label,
+          #previousOutToolsList .previous-out-tool-card .previous-out-tool-value {
+            font-size: 1.15rem !important;
           }
 
           #previousOutToolsList .previous-out-tool-card .previous-out-tool-status {
-            font-size: 1.0rem !important;
+            font-size: 1.1rem !important;
             padding: 5px 10px !important;
           }
         }
@@ -254,19 +260,19 @@
 
         .summary-total-3d {
             display: inline-block;
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-            color: white;
+            background: linear-gradient(135deg, #FFCDD2 0%, #EF9A9A 100%);
+            color: #333;
             font-weight: bold;
-            font-size: 1.4rem;
-            padding: 10px 20px;
+            font-size: 1.1rem;
+            padding: 8px 16px;
             border-radius: 12px;
-            border: 2px solid #45a049;
-            box-shadow: 0 4px 8px rgba(76, 175, 80, 0.4),
+            border: 2px solid #EF9A9A;
+            box-shadow: 0 4px 8px rgba(255, 205, 210, 0.4),
                         inset 0 1px 0 rgba(255, 255, 255, 0.3),
                         inset 0 -1px 0 rgba(0, 0, 0, 0.2);
             transform: perspective(1000px) rotateX(5deg);
             margin-right: 12px;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
         }
 
         .summary-timestamp-3d {
@@ -274,8 +280,8 @@
             background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
             color: white;
             font-weight: bold;
-            font-size: 1rem;
-            padding: 8px 16px;
+            font-size: 0.9rem;
+            padding: 6px 14px;
             border-radius: 10px;
             border: 2px solid #1976D2;
             box-shadow: 0 3px 6px rgba(33, 150, 243, 0.4),
@@ -286,13 +292,32 @@
         }
 
         .summary-label-3d {
-            color: #666;
-            font-weight: 600;
-            font-size: 0.9rem;
+            color: #333;
+            font-weight: 700;
+            font-size: 1.2rem;
             margin-right: 8px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
+
+        .summary-admin-text {
+            display: block;
+            width: 100%;
+            margin-top: 12px;
+            padding: 10px 16px;
+            background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
+            border: 2px solid #FFB74D;
+            border-radius: 10px;
+            color: #E65100;
+            font-weight: bold;
+            font-size: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(255, 183, 77, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+            transform: perspective(1000px) rotateX(2deg);
+        }
+
     </style>
 </head>
 <body>
@@ -562,6 +587,7 @@
                             <span class="summary-label-3d">Last updated:</span>
                             <span class="summary-timestamp-3d">${timeString}</span>
                         </div>
+                        <div class="summary-admin-text">Contact Admin to Check Tools In</div>
                     `;
                     return;
                 }
@@ -630,6 +656,7 @@
                             <span class="summary-label-3d">Last updated:</span>
                             <span class="summary-timestamp-3d">${timeString}</span>
                         </div>
+                        <div class="summary-admin-text">Contact Admin to Check Tools In</div>
                     `;
                     return;
                 }
@@ -660,6 +687,7 @@
                         <span class="summary-label-3d">Last updated:</span>
                         <span class="summary-timestamp-3d">${timeString}</span>
                     </div>
+                    <div class="summary-admin-text">Contact Admin to Check Tools In</div>
                 `;
                 
                 // Sort tools by timestamp (newest first)
@@ -766,6 +794,7 @@
                         <span class="summary-label-3d">Last attempt:</span>
                         <span class="summary-timestamp-3d">${timeString}</span>
                     </div>
+                    <div class="summary-admin-text">Contact Admin to Check Tools In</div>
                 `;
             }
         }
