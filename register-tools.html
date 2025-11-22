@@ -759,6 +759,48 @@
             window.selectedWorkLocation = selectedWorkLocation;
         }
         
+        // Function to paste tool ID to input field (supports multiple comma-separated)
+        window.pasteToolIdToInput = function pasteToolIdToInput(toolId) {
+            const toolCodeInput = document.getElementById('toolCode');
+            if (!toolCodeInput) {
+                console.error('toolCode input not found');
+                return;
+            }
+            
+            const currentValue = toolCodeInput.value.trim();
+            
+            // If input is empty, just set the TID
+            if (!currentValue) {
+                toolCodeInput.value = toolId;
+            } else {
+                // Check if TID is already in the input
+                const existingCodes = currentValue.split(',').map(c => c.trim());
+                if (existingCodes.includes(toolId)) {
+                    // TID already exists, remove it
+                    const newCodes = existingCodes.filter(c => c !== toolId);
+                    toolCodeInput.value = newCodes.join(', ');
+                } else {
+                    // Add TID to existing codes
+                    toolCodeInput.value = currentValue + ', ' + toolId;
+                }
+            }
+            
+            // Enable tool details button if there's a value
+            const toolDetailsBtn = document.getElementById('toolDetailsBtn');
+            if (toolDetailsBtn) {
+                toolDetailsBtn.disabled = !toolCodeInput.value.trim();
+            }
+            
+            // Switch to scanner tab if not already there
+            const scanToolTab = document.getElementById('scanToolTab');
+            if (scanToolTab && !scanToolTab.classList.contains('active')) {
+                scanToolTab.click();
+            }
+            
+            // Focus on the input field
+            toolCodeInput.focus();
+        }
+        
         // Tool submission function (make it global)
         window.submitCode = async function submitCode(codeParam = null) {
             const codeInput = codeParam || document.getElementById('toolCode').value.trim();
@@ -1608,10 +1650,13 @@
                             <span style="color: blue; font-weight: bold;">${calDueDate}</span>
                         </div>
                         <div style="color: #666; font-size: 0.85rem; font-style: italic; margin-top: 8px; text-align: left;">Press for Details</div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                            ${status === 'OUT' ? `<div id="countdown-${tool.id}" class="cooldown-countdown" style="background: #FF9800; color: white; padding: 6px 8px; border-radius: 4px; font-weight: bold; text-align: center; white-space: nowrap;" onclick="event.stopPropagation();">
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px;">
+                            ${status === 'OUT' ? `<div id="countdown-${tool.id}" class="cooldown-countdown" style="background: #FF9800; color: white; padding: 6px 8px; border-radius: 4px; font-weight: bold; text-align: center; white-space: nowrap; flex: 1;" onclick="event.stopPropagation();">
                                 <span style="font-weight: bold;">Check-in in:</span> <span class="countdown-value">Loading...</span>
                             </div>` : ''}
+                            <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); pasteToolIdToInput('${tool.id}');" style="font-weight: bold; border-radius: 8px; padding: 6px 12px; white-space: nowrap;">
+                                <i class="fas fa-sign-out-alt"></i> OUT
+                            </button>
                         </div>
                     `;
                     toolsContainer.appendChild(card);
