@@ -1210,11 +1210,63 @@
             modal.show();
         }
 
+        // Function to show admin names
+        async function showAdminNames() {
+            const adminBody = document.getElementById('adminNamesBody');
+            if (!adminBody) {
+                console.error('adminNamesBody element not found');
+                return;
+            }
+            
+            // Check if db is available (from common.js)
+            if (typeof db === 'undefined') {
+                console.error('Firebase db not available');
+                adminBody.innerHTML = '<p class="text-center text-danger">Database not available. Please refresh the page.</p>';
+                const modal = new bootstrap.Modal(document.getElementById('adminNamesModal'));
+                modal.show();
+                return;
+            }
+            
+            adminBody.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><div class="mt-2">Loading administrators...</div></div>';
+            
+            try {
+                const snapshot = await db.collection('technicians')
+                    .where('isAdmin', '==', true)
+                    .get();
+                
+                if (snapshot.empty) {
+                    adminBody.innerHTML = '<p class="text-center text-muted">No administrators found.</p>';
+                } else {
+                    let html = '<ul class="list-group">';
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        const name = data.fullName || data.email || 'Unknown';
+                        const email = data.email || 'No email';
+                        html += `<li class="list-group-item">
+                            <strong>${name}</strong><br>
+                            <small class="text-muted">${email}</small>
+                        </li>`;
+                    });
+                    html += '</ul>';
+                    adminBody.innerHTML = html;
+                }
+                
+                const modal = new bootstrap.Modal(document.getElementById('adminNamesModal'));
+                modal.show();
+            } catch (error) {
+                console.error('Error fetching admin names:', error);
+                adminBody.innerHTML = '<p class="text-center text-danger">Error loading administrators. Please try again.</p>';
+                const modal = new bootstrap.Modal(document.getElementById('adminNamesModal'));
+                modal.show();
+            }
+        }
+
         // Make functions globally accessible
         window.showPreviousOutToolDetails = showPreviousOutToolDetails;
         window.showToolDetails = showToolDetails;
         window.showCollectionDetails = showCollectionDetails;
         window.showToolPhotoGallery = showToolPhotoGallery;
+        window.showAdminNames = showAdminNames;
     </script>
 </body>
 </html>
