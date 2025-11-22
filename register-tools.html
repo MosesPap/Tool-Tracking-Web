@@ -535,6 +535,17 @@
         // REGISTER TOOLS PAGE - SPECIFIC JAVASCRIPT
         // ============================================
         
+        // Make sure functions are in global scope for inline onclick handlers
+        window.submitCode = null; // Will be defined below
+        window.startScanner = null;
+        window.startEnhancedScanner = null;
+        window.stopCamera = null;
+        window.toggleBulkScanMode = null;
+        window.showLastScannedToolDetails = null;
+        window.showTodayAnalytics = null;
+        window.setSearchType = null;
+        window.goBackToHelicopterModels = null;
+        
         // Page-specific variables
         let scannerControlsVisible = true;
         let lastScannedToolData = null;
@@ -562,33 +573,95 @@
         
         // Initialize page on load
         document.addEventListener('DOMContentLoaded', function() {
-            // Check authentication
-            auth.onAuthStateChanged(function(user) {
-                if (!user) {
-                    // Redirect to index.html if not authenticated
-                    window.location.href = 'index.html';
-                    return;
+            console.log('DOMContentLoaded - Register Tools page');
+            
+            // Load selectedWorkLocation from localStorage (set by common.js)
+            if (localStorage.getItem('selectedWorkLocation')) {
+                selectedWorkLocation = localStorage.getItem('selectedWorkLocation');
+                window.selectedWorkLocation = selectedWorkLocation;
+                console.log('Loaded selectedWorkLocation from localStorage:', selectedWorkLocation);
+            }
+            
+            // Update online status
+            if (typeof updateOnlineStatus === 'function') {
+                updateOnlineStatus();
+            }
+            
+            // Set up online/offline listeners
+            window.addEventListener('online', function() {
+                if (typeof updateOnlineStatus === 'function') {
+                    updateOnlineStatus();
                 }
-                
-                // Update technician name
-                const fullName = localStorage.getItem('fullName') || user.email;
-                const registerScreenNameElem = document.getElementById('registerScreenName');
-                if (registerScreenNameElem) {
-                    registerScreenNameElem.textContent = fullName;
-                }
-                
-                // Check if work location is already selected
-                if (!selectedWorkLocation) {
-                    // Show location selection modal on first load
-                    showLocationSelectionModalForRegisterTools();
-                } else {
-                    // Initialize screen if location already selected
-                    refreshRegisterToolsScreen();
-                }
-                
-                // Set up event listeners
-                setupEventListeners();
             });
+            window.addEventListener('offline', function() {
+                if (typeof updateOnlineStatus === 'function') {
+                    updateOnlineStatus();
+                }
+            });
+            
+            // Check authentication
+            if (typeof auth === 'undefined') {
+                console.error('Firebase auth not initialized!');
+                setTimeout(() => {
+                    if (typeof auth !== 'undefined') {
+                        initializePage();
+                    } else {
+                        console.error('Firebase auth still not available after timeout');
+                    }
+                }, 500);
+            } else {
+                initializePage();
+            }
+            
+            function initializePage() {
+                auth.onAuthStateChanged(function(user) {
+                    console.log('Auth state changed, user:', user ? user.email : 'null');
+                    if (!user) {
+                        // Redirect to index.html if not authenticated
+                        console.log('No user, redirecting to index.html');
+                        window.location.href = 'index.html';
+                        return;
+                    }
+                    
+                    // Update technician name using common.js function
+                    if (typeof updateLoggedInTechnician === 'function') {
+                        updateLoggedInTechnician();
+                    }
+                    
+                    // Also set it directly as backup
+                    const fullName = localStorage.getItem('fullName') || user.email;
+                    console.log('Setting technician name to:', fullName);
+                    const registerScreenNameElem = document.getElementById('registerScreenName');
+                    if (registerScreenNameElem) {
+                        registerScreenNameElem.textContent = fullName;
+                    }
+                    
+                    // Set up event listeners first
+                    setupEventListeners();
+                    
+                    // Check if work location is already selected (check both local and global)
+                    const currentLocation = selectedWorkLocation || window.selectedWorkLocation || localStorage.getItem('selectedWorkLocation');
+                    console.log('Current work location:', currentLocation);
+                    if (!currentLocation) {
+                        // Show location selection modal on first load
+                        console.log('No location selected, showing modal');
+                        setTimeout(() => {
+                            if (typeof showLocationSelectionModalForRegisterTools === 'function') {
+                                showLocationSelectionModalForRegisterTools();
+                            } else {
+                                console.error('showLocationSelectionModalForRegisterTools function not found!');
+                            }
+                        }, 500);
+                    } else {
+                        // Set the global variable
+                        selectedWorkLocation = currentLocation;
+                        window.selectedWorkLocation = currentLocation;
+                        updateWorkLocationLabel();
+                        // Initialize screen if location already selected
+                        refreshRegisterToolsScreen();
+                    }
+                });
+            }
         });
         
         function setupEventListeners() {
@@ -628,23 +701,20 @@
         }
         
         // Global variables for register tools
-        let selectedWorkLocation = null;
+        // Note: selectedWorkLocation is declared in common.js, we use the global one
+        // Override local variables that might conflict with common.js
         let html5QrCode;
-        let bulkScanMode = false;
-        let bulkScannedTools = [];
-        let bulkProcessingCodes = new Set();
-        let bulkRecentlyProcessed = new Map();
-        let previousOutToolsCount = 0;
-        let previousOutToolsData = [];
         
-        // Initialize work location from localStorage if available
+        // Use the global selectedWorkLocation from common.js
+        // It's already declared there, so we just reference it
+        // Load it from localStorage if available
         if (localStorage.getItem('selectedWorkLocation')) {
             selectedWorkLocation = localStorage.getItem('selectedWorkLocation');
-            updateWorkLocationLabel();
+            window.selectedWorkLocation = selectedWorkLocation;
         }
         
-        // Tool submission function
-        async function submitCode(codeParam = null) {
+        // Tool submission function (make it global)
+        window.submitCode = async function submitCode(codeParam = null) {
             const code = codeParam || document.getElementById('toolCode').value.trim();
             console.log('Submit button pressed. Tool code:', code);
             console.log('Selected work location:', selectedWorkLocation);
@@ -670,8 +740,8 @@
             }
         }
         
-        // Bulk Scan Mode Functions
-        function toggleBulkScanMode() {
+        // Bulk Scan Mode Functions (make it global)
+        window.toggleBulkScanMode = function toggleBulkScanMode() {
             bulkScanMode = !bulkScanMode;
             const btn = document.getElementById('bulkScanModeBtn');
             
@@ -1259,8 +1329,8 @@
             }
         }
         
-        // Show Today's Analytics
-        async function showTodayAnalytics() {
+        // Show Today's Analytics (make it global)
+        window.showTodayAnalytics = async function showTodayAnalytics() {
             try {
                 const user = firebase.auth().currentUser;
                 if (!user) return;
@@ -1322,7 +1392,7 @@
         }
         
         // Scanner functions
-        function startScanner() {
+        window.startScanner = function startScanner() {
             if (html5QrCode) {
                 stopCamera();
                 return;
@@ -1405,7 +1475,7 @@
             });
         }
 
-        function stopCamera() {
+        window.stopCamera = function stopCamera() {
             document.getElementById('basicScannerBtn').classList.remove('active');
             document.getElementById('advancedScannerBtn').classList.remove('active');
             
@@ -1453,8 +1523,8 @@
             enhancedScannerVideo = null;
         }
 
-        // Enhanced Scanner Functions
-        async function startEnhancedScanner() {
+        // Enhanced Scanner Functions (make it global)
+        window.startEnhancedScanner = async function startEnhancedScanner() {
             if (enhancedScannerStream || enhancedScannerInterval) {
                 stopCamera();
                 return;
@@ -1931,9 +2001,13 @@
         function updateWorkLocationLabel() {
             const valueSpan = document.getElementById('workLocationValue');
             if (valueSpan) {
-                valueSpan.textContent = selectedWorkLocation || '(not selected)';
+                // Use global selectedWorkLocation from common.js
+                const location = window.selectedWorkLocation || selectedWorkLocation || localStorage.getItem('selectedWorkLocation');
+                valueSpan.textContent = location || '(not selected)';
             }
+            // Update global variable in common.js
             if (selectedWorkLocation) {
+                window.selectedWorkLocation = selectedWorkLocation;
                 localStorage.setItem('selectedWorkLocation', selectedWorkLocation);
             }
         }
@@ -1984,6 +2058,8 @@
             console.log('Showing location selection modal for tool code:', toolCode);
             const modal = new bootstrap.Modal(document.getElementById('locationSelectionModal'));
             
+            // Use global selectedWorkLocation
+            window.selectedWorkLocation = null;
             selectedWorkLocation = null;
             document.querySelectorAll('.location-option').forEach(btn => {
                 btn.classList.remove('active');
@@ -1993,8 +2069,11 @@
                 btn.onclick = function() {
                     document.querySelectorAll('.location-option').forEach(b => b.classList.remove('active'));
                     this.classList.add('active');
-                    selectedWorkLocation = this.getAttribute('data-location');
-                    console.log('Location selected:', selectedWorkLocation);
+                    const location = this.getAttribute('data-location');
+                    selectedWorkLocation = location;
+                    window.selectedWorkLocation = location;
+                    localStorage.setItem('selectedWorkLocation', location);
+                    console.log('Location selected:', location);
                     
                     modal.hide();
                     processToolSubmission(toolCode);
@@ -2064,7 +2143,10 @@
 
         function showWorkLocationSelectionModal(helicopterModel) {
             if (helicopterModel === 'Other') {
-                selectedWorkLocation = 'Other';
+                const location = 'Other';
+                selectedWorkLocation = location;
+                window.selectedWorkLocation = location;
+                localStorage.setItem('selectedWorkLocation', location);
                 updateWorkLocationLabel();
                 enterRegisterToolsScreen();
                 return;
@@ -2120,7 +2202,10 @@
                     this.style.color = 'white';
                     this.style.transform = 'scale(1.02)';
                     
-                    selectedWorkLocation = this.getAttribute('data-location');
+                    const location = this.getAttribute('data-location');
+                    selectedWorkLocation = location;
+                    window.selectedWorkLocation = location;
+                    localStorage.setItem('selectedWorkLocation', location);
                     modal.hide();
                     updateWorkLocationLabel();
                     enterRegisterToolsScreen();
@@ -2144,7 +2229,7 @@
             return locationMap[model] || [];
         }
 
-        function goBackToHelicopterModels() {
+        window.goBackToHelicopterModels = function goBackToHelicopterModels() {
             const workLocationModalElement = document.getElementById('workLocationSelectionModal');
             const workLocationModal = bootstrap.Modal.getInstance(workLocationModalElement);
             
@@ -2191,8 +2276,8 @@
             refreshRegisterToolsScreen();
         }
         
-        // Search functions
-        function setSearchType(type) {
+        // Search functions (make it global)
+        window.setSearchType = function setSearchType(type) {
             currentSearchType = type;
             
             const toolNameBtn = document.getElementById('searchTypeToolName');
@@ -2602,7 +2687,7 @@
             document.getElementById('selectedToolDetails').style.display = 'none';
         }
 
-        async function showLastScannedToolDetails() {
+        window.showLastScannedToolDetails = async function showLastScannedToolDetails() {
             const code = document.getElementById('toolCode').value.trim();
             if (!code) return;
             try {
