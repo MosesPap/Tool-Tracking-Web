@@ -63,6 +63,43 @@
                         inset 0 -1px 0 rgba(0, 0, 0, 0.3);
         }
         
+        /* Disabled state for IN button (during countdown) */
+        .tool-in-btn-3d:disabled {
+            background: linear-gradient(135deg, #9e9e9e 0%, #757575 100%);
+            border-color: #616161;
+            color: white;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        
+        .tool-in-btn-3d:disabled:hover {
+            background: linear-gradient(135deg, #9e9e9e 0%, #757575 100%);
+            border-color: #616161;
+            transform: perspective(1000px) rotateX(2deg);
+            box-shadow: 0 2px 4px rgba(117, 117, 117, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        }
+        
+        /* Enabled green state for IN button (when ready) */
+        .tool-in-btn-3d.enabled {
+            background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
+            border-color: #388E3C;
+            color: white;
+            box-shadow: 0 2px 4px rgba(76, 175, 80, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        }
+        
+        .tool-in-btn-3d.enabled:hover {
+            background: linear-gradient(135deg, #45a049 0%, #2e7d32 100%);
+            border-color: #2e7d32;
+            transform: perspective(1000px) rotateX(0deg) translateY(-2px);
+            box-shadow: 0 4px 8px rgba(76, 175, 80, 0.5),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+        }
+        
         /* 3D Orange Countdown (when counting down) */
         .cooldown-countdown.counting {
             background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
@@ -75,24 +112,6 @@
             white-space: nowrap;
             flex: 1;
             box-shadow: 0 2px 4px rgba(255, 152, 0, 0.4),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
-            transform: perspective(1000px) rotateX(2deg);
-            transition: all 0.3s ease;
-        }
-        
-        /* 3D Green Countdown (when ready) */
-        .cooldown-countdown.ready {
-            background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
-            border: 2px solid #388E3C;
-            color: white;
-            padding: 6px 8px;
-            border-radius: 8px;
-            font-weight: bold;
-            text-align: center;
-            white-space: nowrap;
-            flex: 1;
-            box-shadow: 0 2px 4px rgba(76, 175, 80, 0.4),
                         inset 0 1px 0 rgba(255, 255, 255, 0.3),
                         inset 0 -1px 0 rgba(0, 0, 0, 0.2);
             transform: perspective(1000px) rotateX(2deg);
@@ -653,6 +672,7 @@
         let torchEnabled = false;
         let focusIndicator = null;
         let activeCountdowns = {};
+        let countdownRemainingTimes = {}; // Store remaining time for each tool
         let flashTimeout = null;
         let lastCollectionDetailsSource = 'registerTools';
         let photoUploadToAllTools = false;
@@ -851,6 +871,20 @@
         
         // Function to paste tool ID to input field (supports multiple comma-separated)
         window.pasteToolIdToInput = function pasteToolIdToInput(toolId) {
+            const button = document.getElementById(`tool-in-btn-${toolId}`);
+            
+            // Check if button is disabled (countdown still active)
+            if (button && button.disabled) {
+                // Show cooldown warning
+                const remainingMs = countdownRemainingTimes[toolId] || 0;
+                if (remainingMs > 0) {
+                    setCooldownWarnMessage(remainingMs);
+                    const warnModal = new bootstrap.Modal(document.getElementById('cooldownWarnModal'));
+                    warnModal.show();
+                }
+                return;
+            }
+            
             const toolCodeInput = document.getElementById('toolCode');
             if (!toolCodeInput) {
                 console.error('toolCode input not found');
@@ -858,7 +892,6 @@
             }
             
             const currentValue = toolCodeInput.value.trim();
-            const button = document.getElementById(`tool-in-btn-${toolId}`);
             
             // Check if TID is already in the input
             const existingCodes = currentValue ? currentValue.split(',').map(c => c.trim()) : [];
@@ -1769,9 +1802,9 @@
                         <div style="color: #666; font-size: 0.85rem; font-style: italic; margin-top: 8px; text-align: left;">Press for Details</div>
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px;">
                             ${status === 'OUT' ? `<div id="countdown-${tool.id}" class="cooldown-countdown counting" onclick="event.stopPropagation();">
-                                <span style="font-weight: bold;">Check-in in:</span> <span class="countdown-value">Loading...</span>
+                                <span style="font-weight: bold;">Time for Check-in:</span> <span class="countdown-value">Loading...</span>
                             </div>` : ''}
-                            ${status === 'OUT' ? `<button id="tool-in-btn-${tool.id}" class="tool-in-btn-3d" data-tool-id="${tool.id}" onclick="event.stopPropagation(); pasteToolIdToInput('${tool.id}');">
+                            ${status === 'OUT' ? `<button id="tool-in-btn-${tool.id}" class="tool-in-btn-3d" data-tool-id="${tool.id}" disabled onclick="event.stopPropagation(); pasteToolIdToInput('${tool.id}');">
                                 <i class="fas fa-sign-in-alt"></i> IN
                             </button>` : ''}
                         </div>
@@ -2435,6 +2468,12 @@
                 const valueSpan = countdownElement.querySelector('.countdown-value');
                 if (!valueSpan) return;
                 
+                const inButton = document.getElementById(`tool-in-btn-${toolId}`);
+                if (inButton) {
+                    inButton.disabled = true;
+                    inButton.classList.remove('enabled', 'selected');
+                }
+                
                 if (activeCountdowns[toolId]) {
                     clearInterval(activeCountdowns[toolId]);
                 }
@@ -2444,21 +2483,35 @@
                     const diffMs = now - outTime;
                     const remainingMs = cooldownMs - diffMs;
                     
+                    // Store remaining time for access by pasteToolIdToInput
+                    countdownRemainingTimes[toolId] = remainingMs;
+                    
+                    const inButton = document.getElementById(`tool-in-btn-${toolId}`);
+                    
                     if (remainingMs <= 0) {
-                        countdownElement.innerHTML = '<span style="font-weight: bold;">Check/In :</span> <span class="countdown-value">Ready</span>';
-                        countdownElement.classList.remove('counting');
-                        countdownElement.classList.add('ready');
+                        // Countdown finished - hide countdown, enable IN button
+                        countdownElement.style.display = 'none';
+                        if (inButton) {
+                            inButton.disabled = false;
+                            inButton.classList.add('enabled');
+                            inButton.classList.remove('selected');
+                        }
+                        delete countdownRemainingTimes[toolId];
                         if (activeCountdowns[toolId]) {
                             clearInterval(activeCountdowns[toolId]);
                             delete activeCountdowns[toolId];
                         }
                     } else {
+                        // Still counting down - show countdown, disable IN button
                         const mins = Math.floor(remainingMs / 60000);
                         const secs = Math.floor((remainingMs % 60000) / 1000);
                         valueSpan.textContent = `${mins}m ${secs}s`;
-                        // Ensure counting class is applied
                         countdownElement.classList.remove('ready');
                         countdownElement.classList.add('counting');
+                        if (inButton) {
+                            inButton.disabled = true;
+                            inButton.classList.remove('enabled', 'selected');
+                        }
                     }
                 }
                 
