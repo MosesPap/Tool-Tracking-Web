@@ -804,7 +804,7 @@
                 
                 // Check if already processed in this session
                 if (bulkScannedTools.some(t => t.code === code)) {
-                    showBulkScanMessage('Tool already processed in this session', false);
+                    showBulkScanMessage('Tool already processed in this session. Close Scanner and Try again', false);
                     bulkProcessingCodes.delete(code);
                     return;
                 }
