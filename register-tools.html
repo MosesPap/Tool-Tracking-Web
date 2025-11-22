@@ -570,6 +570,7 @@
         let currentPhotoUploadPartNumber = null;
         let photoUploadAutoShareTargets = [];
         let currentToolPhotoUrls = [];
+        let bulkScanMessageTimeout = null;
         
         // Initialize page on load
         document.addEventListener('DOMContentLoaded', function() {
@@ -766,6 +767,14 @@
         }
         
         async function processToolInBulkMode(code) {
+            // Clear any existing message at start of new scan
+            const messageDiv = document.getElementById('bulkScanMessage');
+            if (messageDiv && bulkScanMessageTimeout) {
+                clearTimeout(bulkScanMessageTimeout);
+                bulkScanMessageTimeout = null;
+                messageDiv.style.display = 'none';
+            }
+            
             // Prevent duplicate processing
             if (bulkProcessingCodes.has(code)) {
                 return;
@@ -937,17 +946,19 @@
                 return;
             }
             
+            // Clear any existing timeout
+            if (bulkScanMessageTimeout) {
+                clearTimeout(bulkScanMessageTimeout);
+                bulkScanMessageTimeout = null;
+            }
+            
             messageDiv.style.display = 'block';
             messageDiv.style.visibility = 'visible';
             messageDiv.style.opacity = '1';
             
             if (isSuccess) {
                 messageDiv.innerHTML = `<i class="fas fa-check-circle" style="margin-right: 8px;"></i>${message}`;
-            } else {
-                messageDiv.textContent = message;
-            }
-            
-            if (isSuccess) {
+                
                 if (isCheckOut) {
                     messageDiv.style.background = '#f44336';
                     messageDiv.style.color = 'white';
@@ -957,16 +968,19 @@
                     messageDiv.style.color = 'white';
                     messageDiv.style.border = '2px solid #45a049';
                 }
-                setTimeout(() => {
+                // Success messages: 4 seconds OR until next scan
+                bulkScanMessageTimeout = setTimeout(() => {
                     messageDiv.style.display = 'none';
-                }, 2000);
+                    bulkScanMessageTimeout = null;
+                }, 4000);
             } else {
-                messageDiv.style.background = '#ff9800';
-                messageDiv.style.color = 'white';
-                messageDiv.style.border = '2px solid #F57C00';
-                setTimeout(() => {
-                    messageDiv.style.display = 'none';
-                }, 2000);
+                // Warning/Error messages: grey 3D background with orange bold text
+                messageDiv.innerHTML = `<strong style="color: #FF9800; font-weight: bold;">${message}</strong>`;
+                messageDiv.style.background = 'linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%)';
+                messageDiv.style.color = '#FF9800';
+                messageDiv.style.border = '2px solid #bdbdbd';
+                messageDiv.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.5)';
+                // Warning messages: stay until next scan (no auto-hide)
             }
         }
         
@@ -1264,7 +1278,7 @@
                     };
                     
                     const workOnValue = data.WorkOn ? data.WorkOn : 'N/A';
-                    const partNumber = data.partNumber || data.serialNumber || 'N/A';
+                    const partNumber = data.partNumber || 'N/A';
                     const calDueDate = data.calDueDate && data.calDueDate.toDate 
                         ? data.calDueDate.toDate().toLocaleDateString('en-GB')
                         : 'N/A';
