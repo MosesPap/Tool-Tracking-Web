@@ -701,9 +701,14 @@
         }
         
         // Global variables for register tools
-        // Note: selectedWorkLocation is declared in common.js, we use the global one
-        // Override local variables that might conflict with common.js
-        let html5QrCode;
+        // Note: These variables are declared in common.js, we use the global ones:
+        // - html5QrCode (declared in common.js line 37)
+        // - bulkScanMode (declared in common.js line 38)
+        // - bulkScannedTools (declared in common.js line 39)
+        // - bulkProcessingCodes (declared in common.js line 40)
+        // - bulkRecentlyProcessed (declared in common.js line 41)
+        // - selectedWorkLocation (declared in common.js line 44)
+        // DO NOT redeclare these variables here - just use the global ones!
         
         // Use the global selectedWorkLocation from common.js
         // It's already declared there, so we just reference it
