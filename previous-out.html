@@ -111,6 +111,14 @@
             display: inline-block;
         }
         
+        .previous-out-press-details {
+            color: #666;
+            font-size: 0.85rem;
+            font-style: italic;
+            margin-top: 8px;
+            text-align: left;
+        }
+        
         /* WorkOn label and value styles */
         .previous-out-workon-label {
             font-weight: bold;
@@ -346,6 +354,20 @@
                         inset 0 1px 0 rgba(255, 255, 255, 0.3),
                         inset 0 -1px 0 rgba(0, 0, 0, 0.2);
             transform: perspective(1000px) rotateX(2deg);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .summary-admin-text:hover {
+            background: linear-gradient(135deg, #c0c0c0 0%, #adadad 100%);
+            transform: perspective(1000px) rotateX(0deg) translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+        }
+        
+        .summary-admin-text:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(0px);
         }
 
     </style>
@@ -408,6 +430,24 @@
             <span id="previousOutPhotoCounter" class="mx-3"></span>
             <button type="button" class="btn btn-secondary" id="previousOutPhotoNextBtn">Next</button>
             <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Names Modal -->
+    <div class="modal fade" id="adminNamesModal" tabindex="-1" aria-labelledby="adminNamesModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="adminNamesModalLabel">Administrators</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="adminNamesBody">
+            <!-- Admin names will be populated here -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
         </div>
       </div>
@@ -648,7 +688,7 @@
                             <span class="summary-label-3d">Total:</span>
                             <span class="summary-total-3d">0 tools</span>
                         </div>
-                        <div class="summary-admin-text">Contact Admin to Check Tools In</div>
+                        <button class="summary-admin-text" onclick="showAdminNames()" style="border: none; width: 100%; background: linear-gradient(135deg, #d0d0d0 0%, #bdbdbd 100%); cursor: pointer;"><strong>Contact Admin to Check Tools In</strong></button>
                     `;
                     return;
                 }
@@ -715,7 +755,7 @@
                             <span class="summary-label-3d">Total:</span>
                             <span class="summary-total-3d">0 tools</span>
                         </div>
-                        <div class="summary-admin-text">Contact Admin to Check Tools In</div>
+                        <button class="summary-admin-text" onclick="showAdminNames()" style="border: none; width: 100%; background: linear-gradient(135deg, #d0d0d0 0%, #bdbdbd 100%); cursor: pointer;"><strong>Contact Admin to Check Tools In</strong></button>
                     `;
                     return;
                 }
@@ -744,7 +784,7 @@
                         <span class="summary-label-3d">Total:</span>
                         <span class="summary-total-3d">${previousTools.length} tool${previousTools.length !== 1 ? 's' : ''}</span>
                     </div>
-                    <div class="summary-admin-text">Contact Admin to Check Tools In</div>
+                    <button class="summary-admin-text" onclick="showAdminNames()" style="border: none; width: 100%; background: linear-gradient(135deg, #d0d0d0 0%, #bdbdbd 100%); cursor: pointer;"><strong>Contact Admin to Check Tools In</strong></button>
                 `;
                 
                 // Sort tools by timestamp (newest first)
@@ -820,6 +860,7 @@
                                     <div class="previous-out-tool-status">${status}</div>
                                 </div>
                             </div>
+                            <div class="previous-out-press-details">Press for Details</div>
                         </div>
                     `;
                 });
@@ -849,7 +890,7 @@
                         <span class="summary-label-3d" style="color: #d32f2f;">Error:</span>
                         <span class="summary-total-3d" style="background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); border-color: #d32f2f; box-shadow: 0 4px 8px rgba(244, 67, 54, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2);">Loading Failed</span>
                     </div>
-                    <div class="summary-admin-text">Contact Admin to Check Tools In</div>
+                    <button class="summary-admin-text" onclick="showAdminNames()" style="border: none; width: 100%; background: linear-gradient(135deg, #d0d0d0 0%, #bdbdbd 100%); cursor: pointer;"><strong>Contact Admin to Check Tools In</strong></button>
                 `;
             }
         }

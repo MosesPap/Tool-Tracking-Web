@@ -190,6 +190,39 @@
             box-shadow: 0 6px 12px rgba(255, 152, 0, 0.4);
         }
         
+        /* 3D Grey button styles for My Tools - darker than other buttons */
+        #menuMyToolsBtn {
+            background: linear-gradient(135deg, #9e9e9e 0%, #757575 100%) !important;
+            border-color: #757575 !important;
+            color: white !important;
+            font-weight: bold;
+            border-radius: 24px !important;
+            padding: 12px 24px !important;
+            box-shadow: 0 4px 8px rgba(117, 117, 117, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2) !important;
+            transition: all 0.3s ease;
+            border: 2px solid #616161 !important;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        #menuMyToolsBtn:hover {
+            background: linear-gradient(135deg, #8e8e8e 0%, #616161 100%) !important;
+            border-color: #616161 !important;
+            color: white !important;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 8px 16px rgba(117, 117, 117, 0.5),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.3) !important;
+        }
+        
+        #menuMyToolsBtn:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 6px 12px rgba(117, 117, 117, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2) !important;
+        }
+        
         /* Helicopter Model Selection Styles */
         .helicopter-model-option {
             transition: all 0.3s ease;
@@ -348,30 +381,47 @@
             box-shadow: 0 6px 12px rgba(23, 162, 184, 0.4);
         }
         
-        /* Purple button styles for Tools by Work Location */
+        /* 3D Grey button styles for Tools by Work Location - darker than other buttons */
         #menuWorkLocationBtn {
-            background-color: #9C27B0 !important;
-            border-color: #9C27B0 !important;
+            background: linear-gradient(135deg, #9e9e9e 0%, #757575 100%) !important;
+            border-color: #757575 !important;
             color: white !important;
             font-weight: bold;
             border-radius: 24px !important;
             padding: 12px 24px !important;
-            box-shadow: 0 4px 8px rgba(156, 39, 176, 0.3) !important;
+            box-shadow: 0 4px 8px rgba(117, 117, 117, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2) !important;
             transition: all 0.3s ease;
-            border: none !important;
+            border: 2px solid #616161 !important;
+            transform: perspective(1000px) rotateX(2deg);
         }
         
         #menuWorkLocationBtn:hover {
-            background-color: #7B1FA2 !important;
-            border-color: #7B1FA2 !important;
+            background: linear-gradient(135deg, #8e8e8e 0%, #616161 100%) !important;
+            border-color: #616161 !important;
             color: white !important;
-            transform: translateY(-3px);
-            box-shadow: 0 8px 16px rgba(156, 39, 176, 0.4) !important;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 8px 16px rgba(117, 117, 117, 0.5),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.3) !important;
         }
         
         #menuWorkLocationBtn:active {
-            transform: translateY(-1px);
-            box-shadow: 0 6px 12px rgba(156, 39, 176, 0.4) !important;
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 6px 12px rgba(117, 117, 117, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2) !important;
+        }
+        
+        /* Larger text and icon for Logout button */
+        #menuLogoutBtn {
+            font-size: 1.2rem !important;
+        }
+        
+        #menuLogoutBtn i {
+            font-size: 1.3rem !important;
+            margin-right: 8px;
         }
         
         /* Tablet styles for ToolScanner menu buttons */

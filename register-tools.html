@@ -680,7 +680,29 @@
             
             // Handle phone back button - same behavior as Back to Menu button
             window.addEventListener('popstate', function(event) {
-                // When user presses phone back button, navigate to menu with skipSplash flag
+                // Check if a modal is open
+                const toolDetailsModal = document.getElementById('toolDetailsModal');
+                const toolPhotoGalleryModal = document.getElementById('toolPhotoGalleryModal');
+                
+                // If tool details modal is open, close it
+                if (toolDetailsModal && toolDetailsModal.classList.contains('show')) {
+                    const modal = bootstrap.Modal.getInstance(toolDetailsModal);
+                    if (modal) {
+                        modal.hide();
+                    }
+                    return; // Don't navigate away, just close modal
+                }
+                
+                // If photo gallery modal is open, close it
+                if (toolPhotoGalleryModal && toolPhotoGalleryModal.classList.contains('show')) {
+                    const modal = bootstrap.Modal.getInstance(toolPhotoGalleryModal);
+                    if (modal) {
+                        modal.hide();
+                    }
+                    return; // Don't navigate away, just close modal
+                }
+                
+                // Otherwise, navigate to menu with skipSplash flag
                 handleBackNavigation();
             });
             
@@ -1338,10 +1360,8 @@
                             <span style="color: black; font-weight: bold;">Cal Due Date:</span> 
                             <span style="color: blue; font-weight: bold;">${calDueDate}</span>
                         </div>
+                        <div style="color: #666; font-size: 0.85rem; font-style: italic; margin-top: 8px; text-align: left;">Press for Details</div>
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                            <div style="color: blue; font-weight: normal; cursor: pointer; text-align: left;">
-                                Click For Details
-                            </div>
                             ${status === 'OUT' ? `<div id="countdown-${tool.id}" class="cooldown-countdown" style="background: #FF9800; color: white; padding: 6px 8px; border-radius: 4px; font-weight: bold; text-align: center; white-space: nowrap;" onclick="event.stopPropagation();">
                                 <span style="font-weight: bold;">Check-in in:</span> <span class="countdown-value">Loading...</span>
                             </div>` : ''}
@@ -2835,7 +2855,22 @@
     : `<span style="color: #888; text-decoration: none; cursor: not-allowed; font-size: 1.18em; font-weight: bold; display: inline-block; margin-top: 10px;">Photo (0)</span>`}
 </div>`;
             body.innerHTML = html;
-            const modal = new bootstrap.Modal(document.getElementById('toolDetailsModal'));
+            const modalElement = document.getElementById('toolDetailsModal');
+            const modal = new bootstrap.Modal(modalElement);
+            
+            // Push history state when opening modal for back button support
+            window.history.pushState({ modal: 'toolDetails', source: 'registerTools' }, '', '');
+            
+            // Handle modal close - clean up history state if modal was closed via button
+            const handleModalClose = function() {
+                // Check if current state is the tool details modal state
+                if (window.history.state && window.history.state.modal === 'toolDetails') {
+                    // Replace current state instead of going back to avoid navigation issues
+                    window.history.replaceState({ page: 'register-tools' }, '', '');
+                }
+            };
+            modalElement.addEventListener('hidden.bs.modal', handleModalClose, { once: true });
+            
             modal.show();
         }
 
@@ -2916,7 +2951,29 @@
             }
             
             updatePhoto();
-            const modal = new bootstrap.Modal(document.getElementById('toolPhotoGalleryModal'));
+            const modalElement = document.getElementById('toolPhotoGalleryModal');
+            const modal = new bootstrap.Modal(modalElement);
+            
+            // Push history state when opening photo gallery modal for back button support
+            window.history.pushState({ modal: 'photoGallery', source: 'registerTools' }, '', '');
+            
+            // Handle modal close - clean up history state if modal was closed via button
+            const handlePhotoModalClose = function() {
+                // Check if current state is the photo gallery modal state
+                if (window.history.state && window.history.state.modal === 'photoGallery') {
+                    // Check if tool details modal is still open
+                    const toolDetailsModal = document.getElementById('toolDetailsModal');
+                    if (toolDetailsModal && toolDetailsModal.classList.contains('show')) {
+                        // If tool details is still open, replace with tool details state
+                        window.history.replaceState({ modal: 'toolDetails', source: 'registerTools' }, '', '');
+                    } else {
+                        // Otherwise, go back to register-tools state
+                        window.history.replaceState({ page: 'register-tools' }, '', '');
+                    }
+                }
+            };
+            modalElement.addEventListener('hidden.bs.modal', handlePhotoModalClose, { once: true });
+            
             modal.show();
         }
         
