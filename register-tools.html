@@ -870,7 +870,13 @@
         }
         
         // Function to paste tool ID to input field (supports multiple comma-separated)
-        window.pasteToolIdToInput = function pasteToolIdToInput(toolId) {
+        window.pasteToolIdToInput = function pasteToolIdToInput(toolId, event) {
+            // Prevent event propagation if event is passed
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
             const button = document.getElementById(`tool-in-btn-${toolId}`);
             
             // Check if button is disabled (countdown still active)
@@ -879,10 +885,21 @@
                 const remainingMs = countdownRemainingTimes[toolId] || 0;
                 if (remainingMs > 0) {
                     setCooldownWarnMessage(remainingMs);
-                    const warnModal = new bootstrap.Modal(document.getElementById('cooldownWarnModal'));
-                    warnModal.show();
+                    const modalElement = document.getElementById('cooldownWarnModal');
+                    if (modalElement) {
+                        // Try getOrCreateInstance first, fallback to new Modal
+                        let warnModal;
+                        try {
+                            warnModal = bootstrap.Modal.getOrCreateInstance(modalElement);
+                        } catch (e) {
+                            warnModal = new bootstrap.Modal(modalElement);
+                        }
+                        warnModal.show();
+                    } else {
+                        console.error('cooldownWarnModal element not found');
+                    }
                 }
-                return;
+                return false;
             }
             
             const toolCodeInput = document.getElementById('toolCode');
@@ -893,28 +910,32 @@
             
             const currentValue = toolCodeInput.value.trim();
             
-            // Check if TID is already in the input
+            // Check if TID is already in the input (button is selected/orange)
             const existingCodes = currentValue ? currentValue.split(',').map(c => c.trim()) : [];
             const isSelected = existingCodes.includes(toolId);
             
             if (isSelected) {
-                // TID already exists, remove it
+                // TID already exists, remove it - turn button green (deselected)
                 const newCodes = existingCodes.filter(c => c !== toolId);
                 toolCodeInput.value = newCodes.join(', ');
-                // Remove orange state
                 if (button) {
                     button.classList.remove('selected');
+                    // Ensure enabled class is present for green color
+                    if (!button.disabled) {
+                        button.classList.add('enabled');
+                    }
                 }
             } else {
-                // Add TID to input
+                // Add TID to input - turn button orange (selected)
                 if (!currentValue) {
                     toolCodeInput.value = toolId;
                 } else {
                     toolCodeInput.value = currentValue + ', ' + toolId;
                 }
-                // Add orange state
                 if (button) {
                     button.classList.add('selected');
+                    // Remove enabled class when selected (orange takes precedence)
+                    button.classList.remove('enabled');
                 }
             }
             
@@ -939,6 +960,10 @@
             const selectedButtons = document.querySelectorAll('.tool-in-btn-3d.selected');
             selectedButtons.forEach(button => {
                 button.classList.remove('selected');
+                // Restore green enabled state if button is not disabled
+                if (!button.disabled) {
+                    button.classList.add('enabled');
+                }
             });
         }
         
@@ -1804,7 +1829,7 @@
                             ${status === 'OUT' ? `<div id="countdown-${tool.id}" class="cooldown-countdown counting" onclick="event.stopPropagation();">
                                 <span style="font-weight: bold;">Time for Check-in:</span> <span class="countdown-value">Loading...</span>
                             </div>` : ''}
-                            ${status === 'OUT' ? `<button id="tool-in-btn-${tool.id}" class="tool-in-btn-3d" data-tool-id="${tool.id}" disabled onclick="event.stopPropagation(); pasteToolIdToInput('${tool.id}');">
+                            ${status === 'OUT' ? `<button id="tool-in-btn-${tool.id}" class="tool-in-btn-3d" data-tool-id="${tool.id}" disabled onclick="event.stopPropagation(); return pasteToolIdToInput('${tool.id}', event);">
                                 <i class="fas fa-sign-in-alt"></i> IN
                             </button>` : ''}
                         </div>
@@ -2489,12 +2514,12 @@
                     const inButton = document.getElementById(`tool-in-btn-${toolId}`);
                     
                     if (remainingMs <= 0) {
-                        // Countdown finished - hide countdown, enable IN button
+                        // Countdown finished - hide countdown, enable IN button (green state)
                         countdownElement.style.display = 'none';
                         if (inButton) {
                             inButton.disabled = false;
                             inButton.classList.add('enabled');
-                            inButton.classList.remove('selected');
+                            inButton.classList.remove('selected'); // Start in green (not selected) state
                         }
                         delete countdownRemainingTimes[toolId];
                         if (activeCountdowns[toolId]) {
