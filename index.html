@@ -6620,6 +6620,23 @@ if (!userCredential.user.emailVerified) {
                     adminButton.style.display = 'none';
                 }
                 document.getElementById('headerBranding').style.display = 'none';
+                
+                // Check if we should skip splash (coming from register-tools)
+                const skipSplash = sessionStorage.getItem('skipSplash');
+                if (skipSplash === 'true') {
+                    // Hide splash screen immediately if it's still visible
+                    const splashScreen = document.getElementById('splashScreen');
+                    const orangeOverlay = document.getElementById('orangeOverlay');
+                    if (splashScreen) {
+                        splashScreen.style.display = 'none';
+                    }
+                    if (orangeOverlay) {
+                        orangeOverlay.classList.add('hidden');
+                    }
+                    // Clear the flag
+                    sessionStorage.removeItem('skipSplash');
+                }
+                
                 // Always fetch fresh data from Firestore
                 db.collection('technicians').doc(user.uid)
                     .get()
@@ -7212,6 +7229,23 @@ if (!userCredential.user.emailVerified) {
             const orangeOverlay = document.getElementById('orangeOverlay');
             const splashScreen = document.getElementById('splashScreen');
             const splashVideo = document.getElementById('splashVideo');
+            
+            // Check if we should skip splash (coming from register-tools or other pages)
+            const skipSplash = sessionStorage.getItem('skipSplash');
+            if (skipSplash === 'true') {
+                // Clear the flag
+                sessionStorage.removeItem('skipSplash');
+                // Hide splash screen immediately
+                if (splashScreen) {
+                    splashScreen.style.display = 'none';
+                }
+                if (orangeOverlay) {
+                    orangeOverlay.classList.add('hidden');
+                }
+                // Don't show splash video, go directly to menu if logged in
+                console.log('Skipping splash screen - coming from register-tools');
+                return; // Exit early, don't show splash
+            }
             
             // iOS Safari autoplay workaround
             function attemptVideoPlay() {

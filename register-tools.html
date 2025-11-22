@@ -667,6 +667,8 @@
         function setupEventListeners() {
             // Back to menu button
             document.getElementById('backToMenuBtn').onclick = function() {
+                // Set flag to skip splash video
+                sessionStorage.setItem('skipSplash', 'true');
                 window.location.href = 'index.html';
             };
             
