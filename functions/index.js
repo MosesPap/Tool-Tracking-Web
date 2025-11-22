@@ -271,15 +271,13 @@ const formattedNotificationTime = `${String(notificationHour).padStart(2, '0')}:
     }
   }
 
-  // Filter admin emails: exclude admins who have tools OUT (they already got user email)
-  const adminEmailsForSummary = allAdminEmails
-    .filter(admin => !usersWithOutTools.has(admin.email))
-    .map(admin => admin.email);
+  // Send admin summary email to ALL administrators (they should receive both user email for their tools AND admin summary for all tools)
+  const adminEmailsForSummary = allAdminEmails.map(admin => admin.email);
 
   console.log(`Found ${allAdminEmails.length} total administrator(s)`);
-  console.log(`Sending summary to ${adminEmailsForSummary.length} administrator(s) (excluding those with OUT tools)`);
+  console.log(`Sending summary to ${adminEmailsForSummary.length} administrator(s) (all admins receive admin summary)`);
 
-  // Send summary email to administrators (excluding those who have OUT tools)
+  // Send summary email to ALL administrators (admins receive both user email and admin summary)
   if (adminEmailsForSummary.length > 0) {
     emailPromises.push(sendAdminSummaryEmail(
       transporter,
