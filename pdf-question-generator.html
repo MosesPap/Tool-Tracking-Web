@@ -230,21 +230,25 @@
                     <h5><i class="fas fa-cog me-2"></i>Generation Settings</h5>
                     <div class="row">
                         <div class="col-md-4 mb-3">
-                            <label class="form-label">Number of Questions</label>
-                            <input type="number" id="numQuestions" class="form-control" value="5" min="1" max="20">
+                            <label class="form-label">Level 1 Questions</label>
+                            <input type="number" id="numQuestionsL1" class="form-control" value="5" min="0" max="20">
+                            <small class="text-muted">Familiarisation level</small>
                         </div>
                         <div class="col-md-4 mb-3">
-                            <label class="form-label">Knowledge Level</label>
-                            <select id="knowledgeLevel" class="form-select">
-                                <option value="1">Level 1 - Familiarisation</option>
-                                <option value="2" selected>Level 2 - General Knowledge</option>
-                                <option value="3">Level 3 - Detailed Knowledge</option>
-                            </select>
-                            <small class="text-muted" id="levelDescription"></small>
+                            <label class="form-label">Level 2 Questions</label>
+                            <input type="number" id="numQuestionsL2" class="form-control" value="5" min="0" max="20">
+                            <small class="text-muted">General knowledge level</small>
                         </div>
                         <div class="col-md-4 mb-3">
+                            <label class="form-label">Level 3 Questions</label>
+                            <input type="number" id="numQuestionsL3" class="form-control" value="5" min="0" max="20">
+                            <small class="text-muted">Detailed knowledge level</small>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
                             <label class="form-label">Page Range</label>
-                            <div class="input-group">
+                            <div class="input-group" style="max-width: 300px;">
                                 <input type="number" id="startPage" class="form-control" placeholder="Start" value="1" min="1" max="1000">
                                 <span class="input-group-text">to</span>
                                 <input type="number" id="endPage" class="form-control" placeholder="End" value="0" min="0" max="1000">
@@ -300,7 +304,6 @@
                 <div id="questionsContainer" style="display: none;">
                     <h4 class="mt-4 mb-3">
                         <i class="fas fa-question-circle me-2"></i>Generated Questions
-                        <span class="badge bg-info ms-2" id="levelBadge"></span>
                     </h4>
                     <div id="questionsList"></div>
                     <div class="text-center mt-4">
@@ -322,7 +325,7 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
         let pdfText = '';
-        let questions = [];
+        let questions = []; // Array of {level: 1|2|3, questions: [...]}
         let availableModels = []; // Store available models from API
 
         // Load API key from localStorage
@@ -352,24 +355,6 @@
             availableModels = []; // Clear cached models when key changes
         });
 
-        // Update level description when knowledge level changes
-        const knowledgeLevelSelect = document.getElementById('knowledgeLevel');
-        const levelDescriptionEl = document.getElementById('levelDescription');
-        
-        const levelDescriptions = {
-            1: "Basic familiarity with principal elements",
-            2: "General theoretical and practical knowledge",
-            3: "Detailed theoretical and practical knowledge"
-        };
-        
-        function updateLevelDescription() {
-            const level = parseInt(knowledgeLevelSelect.value);
-            currentKnowledgeLevel = level;
-            levelDescriptionEl.textContent = levelDescriptions[level];
-        }
-        
-        knowledgeLevelSelect.addEventListener('change', updateLevelDescription);
-        updateLevelDescription(); // Initialize
 
         // File upload handling
         const uploadArea = document.getElementById('uploadArea');
@@ -552,55 +537,54 @@
             localStorage.setItem('gemini_api_key', apiKey);
 
             // Get form values with null checks
-            const numQuestionsEl = document.getElementById('numQuestions');
-            const knowledgeLevelEl = document.getElementById('knowledgeLevel');
+            const numQuestionsL1 = parseInt(document.getElementById('numQuestionsL1')?.value || 0);
+            const numQuestionsL2 = parseInt(document.getElementById('numQuestionsL2')?.value || 0);
+            const numQuestionsL3 = parseInt(document.getElementById('numQuestionsL3')?.value || 0);
             
-            if (!numQuestionsEl || !knowledgeLevelEl) {
-                alert('Error: Form elements not found. Please refresh the page.');
-                console.error('Missing form elements:', { numQuestionsEl, knowledgeLevelEl });
+            // Check if at least one level has questions
+            if (numQuestionsL1 === 0 && numQuestionsL2 === 0 && numQuestionsL3 === 0) {
+                alert('Please specify at least one question count for any level (Level 1, 2, or 3)');
                 return;
             }
-
-            const numQuestions = parseInt(numQuestionsEl.value) || 5;
-            const knowledgeLevel = parseInt(knowledgeLevelEl.value) || 2;
-                
-                // Define level objectives
-                const levelObjectives = {
-                    1: {
-                        name: "Level 1 - Familiarisation",
-                        description: "Familiarisation with the principal elements of the subject",
-                        objectives: [
-                            "The applicant should be familiar with the basic elements of the subject",
-                            "The applicant should be able to give a simple description of the whole subject using common words and examples",
-                            "The applicant should be able to use typical terms"
-                        ]
-                    },
-                    2: {
-                        name: "Level 2 - General Knowledge",
-                        description: "General knowledge of the theoretical and practical aspects of the subject",
-                        objectives: [
-                            "The applicant should be able to understand the theoretical fundamentals of the subject",
-                            "The applicant should be able to give a general description of the subject using typical examples",
-                            "The applicant should be able to use mathematical formulae in conjunction with physical laws",
-                            "The applicant should be able to read and understand sketches, drawings and schematics",
-                            "The applicant should be able to apply knowledge in a practical manner using detailed procedures"
-                        ]
-                    },
-                    3: {
-                        name: "Level 3 - Detailed Knowledge",
-                        description: "Detailed knowledge of the theoretical and practical aspects of the subject",
-                        objectives: [
-                            "The applicant should know the theory of the subject and its interrelationships with other subjects",
-                            "The applicant should be able to give a detailed description using theoretical fundamentals and specific examples",
-                            "The applicant should understand and be able to use mathematical formulae related to the subject",
-                            "The applicant should be able to read, understand and prepare sketches, simple drawings and schematics",
-                            "The applicant should be able to apply knowledge in a practical manner using manufacturer's instructions",
-                            "The applicant should be able to interpret results from various sources and measurements and apply corrective action"
-                        ]
-                    }
-                };
-                
-                const levelInfo = levelObjectives[knowledgeLevel];
+            
+            // Define level objectives
+            const levelObjectives = {
+                1: {
+                    name: "Level 1 - Familiarisation",
+                    description: "Familiarisation with the principal elements of the subject",
+                    objectives: [
+                        "The applicant should be familiar with the basic elements of the subject",
+                        "The applicant should be able to give a simple description of the whole subject using common words and examples",
+                        "The applicant should be able to use typical terms"
+                    ]
+                },
+                2: {
+                    name: "Level 2 - General Knowledge",
+                    description: "General knowledge of the theoretical and practical aspects of the subject",
+                    objectives: [
+                        "The applicant should be able to understand the theoretical fundamentals of the subject",
+                        "The applicant should be able to give a general description of the subject using typical examples",
+                        "The applicant should be able to use mathematical formulae in conjunction with physical laws",
+                        "The applicant should be able to read and understand sketches, drawings and schematics",
+                        "The applicant should be able to apply knowledge in a practical manner using detailed procedures"
+                    ]
+                },
+                3: {
+                    name: "Level 3 - Detailed Knowledge",
+                    description: "Detailed knowledge of the theoretical and practical aspects of the subject",
+                    objectives: [
+                        "The applicant should know the theory of the subject and its interrelationships with other subjects",
+                        "The applicant should be able to give a detailed description using theoretical fundamentals and specific examples",
+                        "The applicant should understand and be able to use mathematical formulae related to the subject",
+                        "The applicant should be able to read, understand and prepare sketches, simple drawings and schematics",
+                        "The applicant should be able to apply knowledge in a practical manner using manufacturer's instructions",
+                        "The applicant should be able to interpret results from various sources and measurements and apply corrective action"
+                    ]
+                }
+            };
+            
+            // Calculate total questions for text truncation
+            const totalQuestions = numQuestionsL1 + numQuestionsL2 + numQuestionsL3;
 
             document.getElementById('loadingSpinner').classList.add('active');
             document.getElementById('generateSection').style.display = 'none';
@@ -608,11 +592,10 @@
 
             try {
                 // Truncate text to prevent MAX_TOKENS error
-                // Reduce text size based on number of questions to ensure enough output tokens
-                // For 5 questions, we need ~3000-4000 output tokens, so limit input to ~20000 chars
+                // Reduce text size based on total number of questions
                 const baseLength = 20000;
                 const lengthPerQuestion = 3000;
-                const maxLength = baseLength + (numQuestions * lengthPerQuestion);
+                const maxLength = baseLength + (totalQuestions * lengthPerQuestion);
                 const adjustedLength = Math.min(maxLength, 50000); // Cap at 50K to ensure output space
                 
                 const textToUse = pdfText.length > adjustedLength 
@@ -620,8 +603,23 @@
                     : pdfText;
                 
                 console.log(`Using ${textToUse.length} characters from PDF (${pdfText.length} total available)`);
-
-                const prompt = `Based on the following text from a PDF document, generate ${numQuestions} multiple choice questions at ${levelInfo.name}.
+                
+                // Clear previous questions
+                questions = [];
+                
+                // Generate questions for each level
+                const levelsToGenerate = [
+                    { level: 1, count: numQuestionsL1 },
+                    { level: 2, count: numQuestionsL2 },
+                    { level: 3, count: numQuestionsL3 }
+                ].filter(l => l.count > 0);
+                
+                // Generate questions for each level sequentially
+                for (const { level, count } of levelsToGenerate) {
+                    const levelInfo = levelObjectives[level];
+                    console.log(`Generating ${count} questions for ${levelInfo.name}...`);
+                    
+                    const prompt = `Based on the following text from a PDF document, generate ${count} multiple choice questions at ${levelInfo.name}.
 
 KNOWLEDGE LEVEL REQUIREMENTS:
 ${levelInfo.description}
@@ -654,15 +652,13 @@ ${textToUse}
 
 Return ONLY the JSON array, no additional text or markdown formatting.`;
 
-                // Get available models (use cached ones or fetch fresh)
+                // Get available models once (outside the loop)
                 let modelsToTry = [];
                 
                 if (availableModels.length > 0) {
-                    // Use cached models from test
                     modelsToTry = availableModels;
                     console.log('Using cached available models:', modelsToTry);
                 } else {
-                    // Try to fetch models if not cached
                     try {
                         const listResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
                         if (listResponse.ok) {
@@ -681,177 +677,132 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         console.log('Could not list models:', e);
                     }
                     
-                    // Fallback to default models if still empty
                     if (modelsToTry.length === 0) {
-                        modelsToTry = [
-                            'gemini-1.5-flash',
-                            'gemini-1.5-pro', 
-                            'gemini-pro'
-                        ];
+                        modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
                         console.log('Using default models:', modelsToTry);
                     }
                 }
 
-                let data = null;
-                let lastError = null;
-                let successfulModel = null;
-
-                for (const model of modelsToTry) {
-                    try {
-                        // Try both v1 and v1beta endpoints
-                        const endpoints = [
-                            `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`,
-                            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-                        ];
-
-                        for (const url of endpoints) {
-                            try {
-                                const response = await fetch(url, {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json'
-                                    },
-                                    body: JSON.stringify({
-                                        contents: [{
-                                            parts: [{
-                                                text: prompt
-                                            }]
-                                        }],
-                                        generationConfig: {
-                                            temperature: 0.7,
-                                            maxOutputTokens: Math.max(4096, numQuestions * 1000)  // Scale with number of questions, min 4K
-                                        }
-                                    })
-                                });
-
-                                if (response.ok) {
-                                    data = await response.json();
-                                    
-                                    // Check if response indicates an error even with 200 status
-                                    if (data.error) {
-                                        lastError = data.error.message || 'API returned an error';
-                                        console.log(`Model ${model} returned error:`, data.error);
-                                        continue; // Try next endpoint
-                                    }
-                                    
-                                    successfulModel = model;
-                                    console.log(`Successfully used model: ${model} with endpoint: ${url}`);
-                                    console.log('API Response structure:', JSON.stringify(data, null, 2));
-                                    break; // Success, exit endpoint loop
-                                } else {
-                                    const errorData = await response.json().catch(() => ({}));
-                                    lastError = errorData.error?.message || `HTTP ${response.status}: ${response.statusText}`;
-                                    console.log(`Model ${model} failed with ${url}:`, lastError);
-                                }
-                            } catch (err) {
-                                lastError = err.message;
-                                console.log(`Model ${model} error with ${url}:`, err.message);
-                            }
-                        }
-
-                        if (data) break; // Success, exit model loop
-                    } catch (err) {
-                        lastError = err.message;
-                        console.log(`Model ${model} error:`, err.message);
-                        continue; // Try next model
-                    }
-                }
-
-                if (!data) {
-                    throw new Error(lastError || 'Failed to generate questions. Please check your API key and ensure the Generative AI API is enabled in your Google Cloud project.');
-                }
-
-                // Handle different response structures from Gemini API
-                let content = '';
-                console.log('Parsing response, data structure:', data);
-                
-                // Check for finish reason
-                if (data.candidates && data.candidates[0] && data.candidates[0].finishReason) {
-                    const finishReason = data.candidates[0].finishReason;
-                    if (finishReason === 'MAX_TOKENS') {
-                        console.warn('Response was truncated due to MAX_TOKENS limit. Consider reducing number of questions or text length.');
-                    }
-                }
-                
-                // Try multiple possible response structures
-                if (data.candidates && Array.isArray(data.candidates) && data.candidates.length > 0) {
-                    const candidate = data.candidates[0];
-                    console.log('Found candidate:', candidate);
+                // Generate questions for each level
+                for (const { level, count } of levelsToGenerate) {
+                    const levelInfo = levelObjectives[level];
+                    console.log(`Generating ${count} questions for ${levelInfo.name}...`);
                     
-                    // Check if content.parts exists and has data
-                    if (candidate.content && candidate.content.parts && Array.isArray(candidate.content.parts) && candidate.content.parts.length > 0) {
-                        // Standard structure: candidates[0].content.parts[0].text
-                        const part = candidate.content.parts[0];
-                        if (part.text) {
-                            content = part.text;
-                            console.log('Extracted from candidate.content.parts[0].text');
-                        } else if (part.functionCall) {
-                            // Handle function calls if any
-                            console.warn('Response contains function call, not text');
+                    const levelPrompt = `Based on the following text from a PDF document, generate ${count} multiple choice questions at ${levelInfo.name}.
+
+KNOWLEDGE LEVEL REQUIREMENTS:
+${levelInfo.description}
+
+The questions must align with these objectives:
+${levelInfo.objectives.map((obj, idx) => `${idx + 1}. ${obj}`).join('\n')}
+
+Each question should have:
+- A clear question stem appropriate for ${levelInfo.name}
+- 3 answer options (A, B, C)
+- One correct answer clearly marked
+- Questions should test knowledge at the specified level depth
+- Questions should be varied in style (factual, comprehension, application, analysis) as appropriate for the level
+
+Format the response as a JSON array with this structure:
+[
+  {
+    "question": "Question text here?",
+    "options": {
+      "A": "Option A text",
+      "B": "Option B text",
+      "C": "Option C text"
+    },
+    "correct": "A"
+  }
+]
+
+Text content:
+${textToUse}
+
+Return ONLY the JSON array, no additional text or markdown formatting.`;
+
+                    let data = null;
+                    let lastError = null;
+
+                    // Try to generate questions for this level
+                    for (const model of modelsToTry) {
+                        try {
+                            const endpoints = [
+                                `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`,
+                                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+                            ];
+
+                            for (const url of endpoints) {
+                                try {
+                                    const response = await fetch(url, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            contents: [{ parts: [{ text: levelPrompt }] }],
+                                            generationConfig: {
+                                                temperature: 0.7,
+                                                maxOutputTokens: Math.max(4096, count * 1000)
+                                            }
+                                        })
+                                    });
+
+                                    if (response.ok) {
+                                        data = await response.json();
+                                        if (data.error) {
+                                            lastError = data.error.message || 'API returned an error';
+                                            continue;
+                                        }
+                                        console.log(`Successfully used model: ${model} for Level ${level}`);
+                                        break;
+                                    } else {
+                                        const errorData = await response.json().catch(() => ({}));
+                                        lastError = errorData.error?.message || `HTTP ${response.status}`;
+                                    }
+                                } catch (err) {
+                                    lastError = err.message;
+                                }
+                            }
+
+                            if (data) break;
+                        } catch (err) {
+                            lastError = err.message;
+                            continue;
                         }
-                    } else if (candidate.text) {
-                        // Alternative: candidates[0].text
-                        content = candidate.text;
-                        console.log('Extracted from candidate.text');
-                    } else if (candidate.content && typeof candidate.content === 'string') {
-                        // Another alternative: candidates[0].content as string
-                        content = candidate.content;
-                        console.log('Extracted from candidate.content (string)');
+                    }
+
+                    if (!data) {
+                        console.error(`Failed to generate Level ${level} questions:`, lastError);
+                        continue; // Skip this level and continue with others
+                    }
+
+                    // Parse response
+                    let content = '';
+                    if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+                        content = data.candidates[0].content.parts[0].text;
+                    } else if (data.candidates?.[0]?.text) {
+                        content = data.candidates[0].text;
                     } else {
-                        // Content structure exists but no parts - might be truncated
-                        console.warn('Candidate content exists but no parts found. Response may be truncated.');
-                        console.log('Candidate content:', candidate.content);
+                        console.error(`No content in response for Level ${level}`);
+                        continue;
                     }
-                } else if (data.text) {
-                    // Direct text property
-                    content = data.text;
-                    console.log('Extracted from data.text');
-                } else if (data.content) {
-                    if (typeof data.content === 'string') {
-                        content = data.content;
-                        console.log('Extracted from data.content (string)');
-                    } else if (data.content.parts && Array.isArray(data.content.parts) && data.content.parts.length > 0) {
-                        content = data.content.parts[0].text || '';
-                        console.log('Extracted from data.content.parts[0].text');
+
+                    content = content.trim();
+                    if (content.startsWith('```')) {
+                        content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
                     }
-                } else if (data.response && data.response.text) {
-                    // Another possible structure
-                    content = data.response.text;
-                    console.log('Extracted from data.response.text');
-                } else {
-                    console.error('Unexpected response structure. Full data:', JSON.stringify(data, null, 2));
-                    throw new Error('Unexpected response format from API. Check console for details.');
+
+                    try {
+                        const levelQuestions = JSON.parse(content);
+                        questions.push({ level, levelName: levelInfo.name, questions: levelQuestions });
+                        console.log(`Successfully generated ${levelQuestions.length} questions for ${levelInfo.name}`);
+                    } catch (parseError) {
+                        console.error(`Failed to parse questions for Level ${level}:`, parseError);
+                    }
                 }
 
-                if (!content || content.trim() === '') {
-                    const finishReason = data.candidates?.[0]?.finishReason;
-                    let errorMsg = 'No content received from API. ';
-                    if (finishReason === 'MAX_TOKENS') {
-                        errorMsg += 'Response was truncated due to token limit. Try reducing the number of questions or the text length.';
-                    } else {
-                        errorMsg += 'The response may be empty or in an unexpected format.';
-                    }
-                    console.error('Content is empty. Full response:', JSON.stringify(data, null, 2));
-                    throw new Error(errorMsg);
+                if (questions.length === 0) {
+                    throw new Error('Failed to generate questions for any level. Please check your API key and try again.');
                 }
-
-                content = content.trim();
-                
-                // Clean up the response (remove markdown code blocks if present)
-                let jsonContent = content;
-                if (content.startsWith('```')) {
-                    jsonContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-                }
-
-                questions = JSON.parse(jsonContent);
-                
-                // Update level badge
-                const levelNames = {
-                    1: "Level 1 - Familiarisation",
-                    2: "Level 2 - General Knowledge",
-                    3: "Level 3 - Detailed Knowledge"
-                };
-                document.getElementById('levelBadge').textContent = levelNames[currentKnowledgeLevel] || "Unknown Level";
                 
                 displayQuestions();
             } catch (error) {
@@ -867,46 +818,61 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
             const container = document.getElementById('questionsList');
             container.innerHTML = '';
 
-            questions.forEach((q, index) => {
-                const questionCard = document.createElement('div');
-                questionCard.className = 'question-card';
-                
-                const questionHtml = `
-                    <div class="question-number">Question ${index + 1}</div>
-                    <div class="question-text">${q.question}</div>
-                    <div class="options">
-                        ${Object.entries(q.options).map(([key, value]) => 
-                            `<div class="option" data-option="${key}">
-                                <strong>${key}.</strong> ${value}
-                            </div>`
-                        ).join('')}
-                    </div>
-                    <div class="mt-3">
-                        <small class="text-muted">
-                            <strong>Correct Answer:</strong> <span class="badge bg-success">${q.correct}</span>
-                        </small>
-                    </div>
+            // Display questions grouped by level
+            questions.forEach((levelGroup) => {
+                // Add level header
+                const levelHeader = document.createElement('div');
+                levelHeader.className = 'mb-4';
+                levelHeader.innerHTML = `
+                    <h5 class="text-primary mb-3">
+                        <i class="fas fa-layer-group me-2"></i>${levelGroup.levelName}
+                        <span class="badge bg-secondary ms-2">${levelGroup.questions.length} questions</span>
+                    </h5>
                 `;
-                
-                questionCard.innerHTML = questionHtml;
-                
-                // Add click handlers to show correct/incorrect
-                const options = questionCard.querySelectorAll('.option');
-                options.forEach(option => {
-                    option.addEventListener('click', function() {
-                        const selectedOption = this.dataset.option;
-                        options.forEach(opt => {
-                            opt.classList.remove('correct', 'incorrect');
-                            if (opt.dataset.option === q.correct) {
-                                opt.classList.add('correct');
-                            } else if (opt.dataset.option === selectedOption && selectedOption !== q.correct) {
-                                opt.classList.add('incorrect');
-                            }
+                container.appendChild(levelHeader);
+
+                // Display questions for this level
+                levelGroup.questions.forEach((q, index) => {
+                    const questionCard = document.createElement('div');
+                    questionCard.className = 'question-card';
+                    
+                    const questionHtml = `
+                        <div class="question-number">Question ${index + 1}</div>
+                        <div class="question-text">${q.question}</div>
+                        <div class="options">
+                            ${Object.entries(q.options).map(([key, value]) => 
+                                `<div class="option" data-option="${key}">
+                                    <strong>${key}.</strong> ${value}
+                                </div>`
+                            ).join('')}
+                        </div>
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                <strong>Correct Answer:</strong> <span class="badge bg-success">${q.correct}</span>
+                            </small>
+                        </div>
+                    `;
+                    
+                    questionCard.innerHTML = questionHtml;
+                    
+                    // Add click handlers to show correct/incorrect
+                    const options = questionCard.querySelectorAll('.option');
+                    options.forEach(option => {
+                        option.addEventListener('click', function() {
+                            const selectedOption = this.dataset.option;
+                            options.forEach(opt => {
+                                opt.classList.remove('correct', 'incorrect');
+                                if (opt.dataset.option === q.correct) {
+                                    opt.classList.add('correct');
+                                } else if (opt.dataset.option === selectedOption && selectedOption !== q.correct) {
+                                    opt.classList.add('incorrect');
+                                }
+                            });
                         });
                     });
+                    
+                    container.appendChild(questionCard);
                 });
-                
-                container.appendChild(questionCard);
             });
 
             document.getElementById('questionsContainer').style.display = 'block';
@@ -917,32 +883,32 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 // Create Excel workbook
                 const wb = XLSX.utils.book_new();
                 
-                // Get level name
-                const levelNames = {
-                    1: "Level 1 - Familiarisation",
-                    2: "Level 2 - General Knowledge",
-                    3: "Level 3 - Detailed Knowledge"
-                };
-                const levelName = levelNames[currentKnowledgeLevel] || "Unknown Level";
-                
-                // Prepare data for Excel - horizontal format
+                // Prepare data for Excel - horizontal format, grouped by level
                 const excelData = [
-                    // Header row with level info
-                    ['Knowledge Level', levelName, '', '', ''],
-                    ['', '', '', '', ''],
-                    ['Question', 'Option A', 'Option B', 'Option C', 'Correct Answer']
+                    // Header row
+                    ['Question', 'Option A', 'Option B', 'Option C', 'Correct Answer', 'Knowledge Level']
                 ];
                 
-                // Add each question as a row
-                questions.forEach((q, index) => {
-                    const row = [
-                        q.question,
-                        q.options.A || '',
-                        q.options.B || '',
-                        q.options.C || '',
-                        q.correct
-                    ];
-                    excelData.push(row);
+                // Add questions grouped by level
+                questions.forEach((levelGroup) => {
+                    // Add level separator row
+                    excelData.push([`--- ${levelGroup.levelName} ---`, '', '', '', '', '']);
+                    
+                    // Add each question as a row
+                    levelGroup.questions.forEach((q) => {
+                        const row = [
+                            q.question,
+                            q.options.A || '',
+                            q.options.B || '',
+                            q.options.C || '',
+                            q.correct,
+                            levelGroup.levelName
+                        ];
+                        excelData.push(row);
+                    });
+                    
+                    // Add empty row between levels
+                    excelData.push(['', '', '', '', '', '']);
                 });
                 
                 // Create worksheet
@@ -954,7 +920,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     { wch: 40 },  // Option A
                     { wch: 40 },  // Option B
                     { wch: 40 },  // Option C
-                    { wch: 15 }   // Correct Answer
+                    { wch: 15 },  // Correct Answer
+                    { wch: 30 }   // Knowledge Level
                 ];
                 
                 // Add worksheet to workbook
@@ -974,13 +941,18 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 let exportText = 'PDF Question Generator - Generated Questions\n';
                 exportText += '='.repeat(50) + '\n\n';
 
-                questions.forEach((q, index) => {
-                    exportText += `Question ${index + 1}: ${q.question}\n\n`;
-                    Object.entries(q.options).forEach(([key, value]) => {
-                        exportText += `  ${key}. ${value}\n`;
+                questions.forEach((levelGroup) => {
+                    exportText += `${levelGroup.levelName}\n`;
+                    exportText += '='.repeat(50) + '\n\n';
+                    
+                    levelGroup.questions.forEach((q, index) => {
+                        exportText += `Question ${index + 1}: ${q.question}\n\n`;
+                        Object.entries(q.options).forEach(([key, value]) => {
+                            exportText += `  ${key}. ${value}\n`;
+                        });
+                        exportText += `\nCorrect Answer: ${q.correct}\n\n`;
+                        exportText += '-'.repeat(50) + '\n\n';
                     });
-                    exportText += `\nCorrect Answer: ${q.correct}\n\n`;
-                    exportText += '-'.repeat(50) + '\n\n';
                 });
 
                 const blob = new Blob([exportText], { type: 'text/plain' });
