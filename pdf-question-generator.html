@@ -782,7 +782,12 @@
                     const levelInfo = levelObjectives[level];
                     console.log(`Generating ${count} questions for ${levelInfo.name}...`);
                     
-                    const levelPrompt = `Based on the following text from a PDF document, generate ${count} multiple choice questions at ${levelInfo.name}.
+                    // For Level 3, add specific instructions about complexity
+                    const complexityNote = level === 3 
+                        ? '\nIMPORTANT FOR LEVEL 3: Generate detailed, complex questions that require deep understanding. Keep questions and options concise but comprehensive. Ensure the JSON response is complete and valid.'
+                        : '';
+                    
+                    const levelPrompt = `Based on the following text from a PDF document, generate ${count} multiple choice questions at ${levelInfo.name}.${complexityNote}
 
 KNOWLEDGE LEVEL REQUIREMENTS:
 ${levelInfo.description}
@@ -837,7 +842,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                             contents: [{ parts: [{ text: levelPrompt }] }],
                                             generationConfig: {
                                                 temperature: 0.7,
-                                                maxOutputTokens: Math.max(4096, count * 1000)
+                                                // Level 3 questions are more complex and need more tokens
+                                                maxOutputTokens: level === 3 ? Math.max(8192, count * 1500) : Math.max(4096, count * 1000)
                                             }
                                         })
                                     });
@@ -848,6 +854,16 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                             lastError = data.error.message || 'API returned an error';
                                             continue;
                                         }
+                                        
+                                        // Check for truncation issues (especially for Level 3)
+                                        if (data.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+                                            console.warn(`Response truncated for Level ${level}. May need more tokens.`);
+                                            if (level === 3) {
+                                                console.warn('Level 3 response was truncated. Try generating fewer questions at once or the response may be incomplete.');
+                                            }
+                                            // Still try to use what we got, but warn user
+                                        }
+                                        
                                         console.log(`Successfully used model: ${model} for Level ${level}`);
                                         break;
                                     } else {
@@ -923,7 +939,17 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         console.log(`Successfully generated ${levelQuestions.length} questions for ${levelInfo.name}`);
                     } catch (parseError) {
                         console.error(`Failed to parse questions for Level ${level}:`, parseError);
-                        console.error('Content that failed to parse:', content.substring(0, 500));
+                        console.error('Content that failed to parse:', content.substring(0, 1000));
+                        
+                        // For Level 3, show more detailed error info
+                        if (level === 3) {
+                            console.error('Level 3 parsing error details:', {
+                                contentLength: content.length,
+                                firstChars: content.substring(0, 200),
+                                lastChars: content.substring(Math.max(0, content.length - 200)),
+                                errorMessage: parseError.message
+                            });
+                        }
                         
                         // Try to extract questions manually if JSON parsing fails
                         try {
@@ -934,11 +960,17 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                 questions.push({ level, levelName: levelInfo.name, questions: manualQuestions });
                                 console.log(`Manually extracted ${manualQuestions.length} questions for ${levelInfo.name}`);
                             } else {
-                                console.warn(`Could not extract any questions for Level ${level}. The response may be incomplete.`);
+                                const errorMsg = level === 3 
+                                    ? `Could not extract any questions for Level 3. The response may be incomplete or truncated. Try generating fewer Level 3 questions at once, or check the console for details.`
+                                    : `Could not extract any questions for Level ${level}. The response may be incomplete.`;
+                                console.warn(errorMsg);
                                 // Still continue - other levels may have worked
                             }
                         } catch (extractError) {
                             console.error(`Failed to extract questions manually:`, extractError);
+                            if (level === 3) {
+                                console.error('Level 3 manual extraction also failed. The API response may be malformed or incomplete. Try reducing the number of Level 3 questions.');
+                            }
                             // Continue with other levels
                         }
                     }
