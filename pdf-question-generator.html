@@ -11,6 +11,8 @@
     <link rel="stylesheet" href="css/common.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client"></script>
     <style>
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -96,6 +98,21 @@
             margin-bottom: 20px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             border-left: 4px solid #667eea;
+            position: relative;
+        }
+
+        .question-card.selected {
+            border-left: 4px solid #28a745;
+            background: #f8fff9;
+        }
+
+        .question-checkbox {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
         }
 
         .question-number {
@@ -305,14 +322,44 @@
                     <h4 class="mt-4 mb-3">
                         <i class="fas fa-question-circle me-2"></i>Generated Questions
                     </h4>
+                    <div class="mb-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary" onclick="selectAllQuestions()">
+                                <i class="fas fa-check-square me-1"></i>Select All
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary ms-2" onclick="deselectAllQuestions()">
+                                <i class="fas fa-square me-1"></i>Deselect All
+                            </button>
+                            <span class="ms-3 text-muted" id="selectedCount">0 selected</span>
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-info" onclick="saveQuestions()">
+                                <i class="fas fa-save me-1"></i>Save Questions
+                            </button>
+                            <button class="btn btn-sm btn-info ms-2" onclick="loadSavedQuestions()">
+                                <i class="fas fa-folder-open me-1"></i>Load Saved
+                            </button>
+                        </div>
+                    </div>
                     <div id="questionsList"></div>
                     <div class="text-center mt-4">
                         <button class="btn btn-primary" onclick="exportQuestions()">
                             <i class="fas fa-file-excel me-2"></i>Export to Excel
                         </button>
+                        <button class="btn btn-success ms-2" onclick="createGoogleForm()" id="createFormBtn">
+                            <i class="fab fa-google me-2"></i>Create Google Form
+                            <span class="badge bg-light text-dark ms-2" id="selectedForForm">0</span>
+                        </button>
                         <button class="btn btn-secondary ms-2" onclick="clearAll()">
                             <i class="fas fa-redo me-2"></i>Start Over
                         </button>
+                    </div>
+                    <div id="googleAuthStatus" class="mt-3 text-center" style="display: none;"></div>
+                    <div class="alert alert-info mt-3" style="display: none;" id="googleFormsInfo">
+                        <small>
+                            <strong>Note:</strong> To use Google Forms creation, you need to enable the Google Forms API in your Google Cloud Console.
+                            <br>Go to <a href="https://console.cloud.google.com/apis/library/forms.googleapis.com" target="_blank">Google Cloud Console</a> and enable "Google Forms API" for your project.
+                        </small>
                     </div>
                 </div>
             </div>
@@ -327,6 +374,9 @@
         let pdfText = '';
         let questions = []; // Array of {level: 1|2|3, questions: [...]}
         let availableModels = []; // Store available models from API
+        let googleAccessToken = null; // Store Google OAuth token
+        const GOOGLE_CLIENT_ID = '813615362050-qopq5cb1ebtbhhicokg8ae0cko8krn77.apps.googleusercontent.com'; // From Firebase config
+        const GOOGLE_FORMS_API = 'https://forms.googleapis.com/v1/forms';
 
         // Load API key from localStorage
         const savedApiKey = localStorage.getItem('gemini_api_key');
@@ -813,8 +863,14 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 levelGroup.questions.forEach((q, index) => {
                     const questionCard = document.createElement('div');
                     questionCard.className = 'question-card';
+                    questionCard.dataset.level = levelGroup.level;
+                    questionCard.dataset.questionIndex = index;
+                    
+                    // Create unique ID for checkbox
+                    const checkboxId = `q-${levelGroup.level}-${index}`;
                     
                     const questionHtml = `
+                        <input type="checkbox" class="question-checkbox" id="${checkboxId}" checked onchange="updateSelectionCount()">
                         <div class="question-number">Question ${index + 1}</div>
                         <div class="question-text">${q.question}</div>
                         <div class="options">
@@ -832,6 +888,20 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     `;
                     
                     questionCard.innerHTML = questionHtml;
+                    
+                    // Add visual feedback for selection
+                    const checkbox = questionCard.querySelector('.question-checkbox');
+                    checkbox.addEventListener('change', function() {
+                        if (this.checked) {
+                            questionCard.classList.add('selected');
+                        } else {
+                            questionCard.classList.remove('selected');
+                        }
+                        updateSelectionCount();
+                    });
+                    
+                    // Initially selected
+                    questionCard.classList.add('selected');
                     
                     // Add click handlers to show correct/incorrect
                     const options = questionCard.querySelectorAll('.option');
@@ -942,6 +1012,332 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 URL.revokeObjectURL(url);
             }
         }
+
+        // Initialize Google Sign-In
+        function initializeGoogleSignIn() {
+            google.accounts.id.initialize({
+                client_id: GOOGLE_CLIENT_ID,
+                callback: handleGoogleSignIn
+            });
+        }
+
+        // Handle Google Sign-In callback
+        function handleGoogleSignIn(response) {
+            if (response.credential) {
+                // Exchange credential for access token
+                fetch('https://oauth2.googleapis.com/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        code: response.credential,
+                        client_id: GOOGLE_CLIENT_ID,
+                        grant_type: 'authorization_code',
+                        redirect_uri: window.location.origin
+                    })
+                }).then(r => r.json())
+                .then(data => {
+                    googleAccessToken = data.access_token;
+                    document.getElementById('googleAuthStatus').innerHTML = 
+                        '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>Signed in to Google. You can now create forms!</div>';
+                    document.getElementById('googleAuthStatus').style.display = 'block';
+                    createGoogleForm();
+                })
+                .catch(err => {
+                    console.error('Token exchange error:', err);
+                    // Try direct approach with Forms API
+                    authenticateAndCreateForm();
+                });
+            }
+        }
+
+        // Alternative authentication using Google Identity Services
+        async function authenticateAndCreateForm() {
+            if (questions.length === 0) {
+                alert('Please generate questions first');
+                return;
+            }
+
+            const statusEl = document.getElementById('googleAuthStatus');
+            statusEl.style.display = 'block';
+            statusEl.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin me-2"></i>Authenticating with Google...</div>';
+
+            try {
+                // Use Google Identity Services for authentication
+                const tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: GOOGLE_CLIENT_ID,
+                    scope: 'https://www.googleapis.com/auth/forms.body https://www.googleapis.com/auth/drive.file',
+                    callback: (tokenResponse) => {
+                        googleAccessToken = tokenResponse.access_token;
+                        createFormWithAPI();
+                    }
+                });
+
+                tokenClient.requestAccessToken({ prompt: 'consent' });
+            } catch (error) {
+                console.error('Auth error:', error);
+                statusEl.innerHTML = '<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>Authentication failed. Please try again.</div>';
+            }
+        }
+
+        // Create Google Form using the API
+        async function createFormWithAPI() {
+            const statusEl = document.getElementById('googleAuthStatus');
+            
+            if (!googleAccessToken) {
+                await authenticateAndCreateForm();
+                return;
+            }
+
+            statusEl.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin me-2"></i>Creating Google Form...</div>';
+
+            try {
+                // Create form structure as a quiz
+                const formData = {
+                    info: {
+                        title: `PDF Generated Quiz - ${new Date().toLocaleDateString()}`,
+                        description: 'Quiz generated from PDF document',
+                        documentTitle: `PDF Quiz ${new Date().toLocaleDateString()}`
+                    },
+                    settings: {
+                        quizSettings: {
+                            isQuiz: true
+                        }
+                    }
+                };
+
+                // Create the form
+                const createResponse = await fetch(GOOGLE_FORMS_API, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${googleAccessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (!createResponse.ok) {
+                    const error = await createResponse.json();
+                    throw new Error(error.error?.message || 'Failed to create form');
+                }
+
+                const form = await createResponse.json();
+                const formId = form.formId;
+
+                // Prepare questions for batch update
+                const requests = [];
+                let questionIndex = 0;
+
+                questions.forEach((levelGroup) => {
+                    // Add a page break/section for each level
+                    if (questionIndex > 0) {
+                        requests.push({
+                            createItem: {
+                                item: {
+                                    title: levelGroup.levelName,
+                                    pageBreakItem: {}
+                                },
+                                location: { index: questionIndex }
+                            }
+                        });
+                        questionIndex++;
+                    }
+
+                    // Add questions for this level
+                    levelGroup.questions.forEach((q) => {
+                        const choices = [
+                            { value: q.options.A || '' },
+                            { value: q.options.B || '' },
+                            { value: q.options.C || '' }
+                        ];
+
+                    requests.push({
+                        createItem: {
+                            item: {
+                                title: question.question,
+                                questionItem: {
+                                    question: {
+                                        choiceQuestion: {
+                                            type: 'RADIO',
+                                            options: [
+                                                { value: question.options.A || '' },
+                                                { value: question.options.B || '' },
+                                                { value: question.options.C || '' }
+                                            ],
+                                            shuffle: false
+                                        },
+                                        grading: {
+                                            pointValue: 1,
+                                            correctAnswers: {
+                                                answers: [{
+                                                    value: question.options[question.correct] || question.options.A
+                                                }]
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            location: { index: questionIndex }
+                        }
+                    });
+                    questionIndex++;
+                });
+
+                // Batch update the form with all questions
+                const updateResponse = await fetch(`${GOOGLE_FORMS_API}/${formId}:batchUpdate`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${googleAccessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ requests })
+                });
+
+                if (!updateResponse.ok) {
+                    const error = await updateResponse.json();
+                    throw new Error(error.error?.message || 'Failed to add questions');
+                }
+
+                // Correct answers are already set in the createItem requests above
+
+                // Get form URL
+                const formUrl = `https://docs.google.com/forms/d/${formId}/edit`;
+                const publishedUrl = `https://docs.google.com/forms/d/${formId}/viewform`;
+
+                statusEl.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle me-2"></i>Google Form created successfully!
+                        <br><br>
+                        <a href="${formUrl}" target="_blank" class="btn btn-sm btn-primary me-2">
+                            <i class="fas fa-edit me-1"></i>Edit Form
+                        </a>
+                        <a href="${publishedUrl}" target="_blank" class="btn btn-sm btn-success">
+                            <i class="fas fa-external-link-alt me-1"></i>View Published Form
+                        </a>
+                    </div>
+                `;
+
+            } catch (error) {
+                console.error('Form creation error:', error);
+                statusEl.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-times-circle me-2"></i>Error creating form: ${error.message}
+                        <br><small>Make sure you have granted the necessary permissions.</small>
+                    </div>
+                `;
+            }
+        }
+
+        // Set correct answers for quiz questions
+        async function setCorrectAnswers(formId, questionsData) {
+            try {
+                // Get form structure first
+                const formResponse = await fetch(`${GOOGLE_FORMS_API}/${formId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${googleAccessToken}`
+                    }
+                });
+
+                const form = await formResponse.json();
+                const items = form.items || [];
+                
+                let questionIndex = 0;
+                const answerRequests = [];
+
+                questionsData.forEach((levelGroup) => {
+                    // Skip page break items
+                    if (items[questionIndex]?.pageBreakItem) {
+                        questionIndex++;
+                    }
+
+                    levelGroup.questions.forEach((q) => {
+                        const item = items[questionIndex];
+                        if (item && item.questionItem) {
+                            const choices = item.questionItem.question.choiceQuestion.options;
+                            const correctIndex = choices.findIndex(opt => 
+                                opt.value.charAt(0) === q.correct || 
+                                opt.value === q.options[q.correct]
+                            );
+
+                            if (correctIndex >= 0) {
+                                answerRequests.push({
+                                    updateItem: {
+                                        item: {
+                                            itemId: item.itemId,
+                                            questionItem: {
+                                                question: {
+                                                    choiceQuestion: {
+                                                        type: 'RADIO',
+                                                        options: choices,
+                                                        shuffle: false
+                                                    },
+                                                    grading: {
+                                                        pointValue: 1,
+                                                        correctAnswers: {
+                                                            answers: [{
+                                                                value: choices[correctIndex].value
+                                                            }]
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        updateMask: 'questionItem.question.choiceQuestion,questionItem.question.grading',
+                                        location: { index: questionIndex }
+                                    }
+                                });
+                            }
+                        }
+                        questionIndex++;
+                    });
+                });
+
+                // Batch update with correct answers
+                if (answerRequests.length > 0) {
+                    await fetch(`${GOOGLE_FORMS_API}/${formId}:batchUpdate`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${googleAccessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ requests: answerRequests })
+                    });
+                }
+            } catch (error) {
+                console.error('Error setting correct answers:', error);
+                // Non-critical error, form will still be created
+            }
+        }
+
+        // Main function to create Google Form
+        async function createGoogleForm() {
+            if (questions.length === 0) {
+                alert('Please generate questions first');
+                return;
+            }
+
+            // Show info about API setup
+            document.getElementById('googleFormsInfo').style.display = 'block';
+
+            // Check if Google API is loaded
+            if (typeof google === 'undefined' || !google.accounts) {
+                alert('Google API libraries are loading. Please wait a moment and try again.');
+                return;
+            }
+
+            // Check if already authenticated
+            if (!googleAccessToken) {
+                await authenticateAndCreateForm();
+            } else {
+                await createFormWithAPI();
+            }
+        }
+
+        // Initialize Google Sign-In on page load
+        window.addEventListener('load', () => {
+            if (typeof google !== 'undefined' && google.accounts) {
+                initializeGoogleSignIn();
+            }
+        });
     </script>
 </body>
 </html>
