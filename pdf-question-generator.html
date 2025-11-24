@@ -387,6 +387,22 @@
         });
 
         async function handleFile(file) {
+            if (!file) {
+                alert('No file selected');
+                return;
+            }
+
+            if (!file.type.includes('pdf')) {
+                alert('Please select a PDF file');
+                return;
+            }
+
+            if (typeof pdfjsLib === 'undefined') {
+                alert('PDF.js library not loaded. Please refresh the page.');
+                console.error('pdfjsLib is not defined');
+                return;
+            }
+
             document.getElementById('fileName').textContent = file.name;
             document.getElementById('fileInfo').style.display = 'block';
             document.getElementById('pdfPreview').style.display = 'none';
@@ -614,44 +630,6 @@
                     { level: 3, count: numQuestionsL3 }
                 ].filter(l => l.count > 0);
                 
-                // Generate questions for each level sequentially
-                for (const { level, count } of levelsToGenerate) {
-                    const levelInfo = levelObjectives[level];
-                    console.log(`Generating ${count} questions for ${levelInfo.name}...`);
-                    
-                    const prompt = `Based on the following text from a PDF document, generate ${count} multiple choice questions at ${levelInfo.name}.
-
-KNOWLEDGE LEVEL REQUIREMENTS:
-${levelInfo.description}
-
-The questions must align with these objectives:
-${levelInfo.objectives.map((obj, idx) => `${idx + 1}. ${obj}`).join('\n')}
-
-Each question should have:
-- A clear question stem appropriate for ${levelInfo.name}
-- 3 answer options (A, B, C)
-- One correct answer clearly marked
-- Questions should test knowledge at the specified level depth
-- Questions should be varied in style (factual, comprehension, application, analysis) as appropriate for the level
-
-Format the response as a JSON array with this structure:
-[
-  {
-    "question": "Question text here?",
-    "options": {
-      "A": "Option A text",
-      "B": "Option B text",
-      "C": "Option C text"
-    },
-    "correct": "A"
-  }
-]
-
-Text content:
-${textToUse}
-
-Return ONLY the JSON array, no additional text or markdown formatting.`;
-
                 // Get available models once (outside the loop)
                 let modelsToTry = [];
                 
