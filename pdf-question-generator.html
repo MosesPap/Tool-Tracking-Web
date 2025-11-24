@@ -924,6 +924,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
             });
 
             document.getElementById('questionsContainer').style.display = 'block';
+            updateSelectionCount(); // Update count after displaying questions
         }
 
         function exportQuestions() {
@@ -1123,13 +1124,24 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 const form = await createResponse.json();
                 const formId = form.formId;
 
+                // Get selected questions only
+                const selectedQuestions = getSelectedQuestions();
+                
+                if (selectedQuestions.length === 0) {
+                    statusEl.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>Please select at least one question to include in the form.</div>';
+                    return;
+                }
+
                 // Prepare questions for batch update
                 const requests = [];
                 let questionIndex = 0;
+                let lastLevel = null;
 
-                questions.forEach((levelGroup) => {
-                    // Add a page break/section for each level
-                    if (questionIndex > 0) {
+                selectedQuestions.forEach((item) => {
+                    const { levelGroup, question, level } = item;
+                    
+                    // Add a page break/section for each level (only if level changed)
+                    if (lastLevel !== null && lastLevel !== level && questionIndex > 0) {
                         requests.push({
                             createItem: {
                                 item: {
@@ -1141,14 +1153,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         });
                         questionIndex++;
                     }
-
-                    // Add questions for this level
-                    levelGroup.questions.forEach((q) => {
-                        const choices = [
-                            { value: q.options.A || '' },
-                            { value: q.options.B || '' },
-                            { value: q.options.C || '' }
-                        ];
+                    lastLevel = level;
 
                     requests.push({
                         createItem: {
@@ -1332,11 +1337,110 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
             }
         }
 
+        // Get selected questions
+        function getSelectedQuestions() {
+            const selected = [];
+            const checkboxes = document.querySelectorAll('.question-checkbox:checked');
+            
+            checkboxes.forEach(checkbox => {
+                const card = checkbox.closest('.question-card');
+                const level = parseInt(card.dataset.level);
+                const questionIndex = parseInt(card.dataset.questionIndex);
+                
+                // Find the question in our questions array
+                const levelGroup = questions.find(q => q.level === level);
+                if (levelGroup && levelGroup.questions[questionIndex]) {
+                    selected.push({
+                        levelGroup: levelGroup,
+                        question: levelGroup.questions[questionIndex],
+                        level: level
+                    });
+                }
+            });
+            
+            return selected;
+        }
+
+        // Update selection count
+        function updateSelectionCount() {
+            const selected = document.querySelectorAll('.question-checkbox:checked').length;
+            const total = document.querySelectorAll('.question-checkbox').length;
+            document.getElementById('selectedCount').textContent = `${selected} of ${total} selected`;
+            document.getElementById('selectedForForm').textContent = selected;
+        }
+
+        // Select all questions
+        function selectAllQuestions() {
+            document.querySelectorAll('.question-checkbox').forEach(cb => {
+                cb.checked = true;
+                cb.closest('.question-card').classList.add('selected');
+            });
+            updateSelectionCount();
+        }
+
+        // Deselect all questions
+        function deselectAllQuestions() {
+            document.querySelectorAll('.question-checkbox').forEach(cb => {
+                cb.checked = false;
+                cb.closest('.question-card').classList.remove('selected');
+            });
+            updateSelectionCount();
+        }
+
+        // Save questions to localStorage
+        function saveQuestions() {
+            if (questions.length === 0) {
+                alert('No questions to save. Please generate questions first.');
+                return;
+            }
+
+            const name = prompt('Enter a name for this question set:', 
+                `Questions_${new Date().toISOString().split('T')[0]}`);
+            
+            if (!name) return;
+
+            const savedSets = JSON.parse(localStorage.getItem('savedQuestionSets') || '{}');
+            savedSets[name] = {
+                questions: questions,
+                savedAt: new Date().toISOString(),
+                totalQuestions: questions.reduce((sum, lg) => sum + lg.questions.length, 0)
+            };
+
+            localStorage.setItem('savedQuestionSets', JSON.stringify(savedSets));
+            alert(`Questions saved as "${name}"`);
+        }
+
+        // Load saved questions
+        function loadSavedQuestions() {
+            const savedSets = JSON.parse(localStorage.getItem('savedQuestionSets') || '{}');
+            
+            if (Object.keys(savedSets).length === 0) {
+                alert('No saved question sets found.');
+                return;
+            }
+
+            const names = Object.keys(savedSets);
+            const selected = prompt(`Enter the name of the question set to load:\n\n${names.join('\n')}`);
+            
+            if (!selected || !savedSets[selected]) {
+                alert('Invalid selection or name not found.');
+                return;
+            }
+
+            if (confirm(`Load "${selected}"? This will replace current questions.`)) {
+                questions = savedSets[selected].questions;
+                displayQuestions();
+                updateSelectionCount();
+                alert(`Loaded "${selected}" with ${savedSets[selected].totalQuestions} questions`);
+            }
+        }
+
         // Initialize Google Sign-In on page load
         window.addEventListener('load', () => {
             if (typeof google !== 'undefined' && google.accounts) {
                 initializeGoogleSignIn();
             }
+            updateSelectionCount();
         });
     </script>
 </body>
