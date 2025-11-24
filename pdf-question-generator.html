@@ -1311,7 +1311,18 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
 
                 if (!createResponse.ok) {
                     const error = await createResponse.json();
-                    throw new Error(error.error?.message || 'Failed to create form');
+                    const errorMessage = error.error?.message || 'Failed to create form';
+                    
+                    // Check if it's an API not enabled error
+                    if (errorMessage.includes('has not been used') || errorMessage.includes('is disabled') || errorMessage.includes('Enable it by visiting')) {
+                        // Extract the enable URL if present
+                        const urlMatch = errorMessage.match(/https:\/\/[^\s]+/);
+                        const enableUrl = urlMatch ? urlMatch[0] : `https://console.cloud.google.com/apis/api/forms.googleapis.com/overview?project=813615362050`;
+                        
+                        throw new Error('API_NOT_ENABLED:' + enableUrl);
+                    }
+                    
+                    throw new Error(errorMessage);
                 }
 
                 const form = await createResponse.json();
@@ -1416,12 +1427,35 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
 
             } catch (error) {
                 console.error('Form creation error:', error);
-                statusEl.innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="fas fa-times-circle me-2"></i>Error creating form: ${error.message}
-                        <br><small>Make sure you have granted the necessary permissions.</small>
-                    </div>
-                `;
+                
+                // Check if it's an API not enabled error
+                if (error.message.startsWith('API_NOT_ENABLED:')) {
+                    const enableUrl = error.message.replace('API_NOT_ENABLED:', '');
+                    statusEl.innerHTML = `
+                        <div class="alert alert-warning">
+                            <h5><i class="fas fa-exclamation-triangle me-2"></i>Google Forms API Needs to be Enabled</h5>
+                            <p class="mb-2"><strong>Don't worry - this is easy to fix!</strong> You don't need to be a developer. Just follow these simple steps:</p>
+                            <ol class="mb-3">
+                                <li>Click the button below to open Google Cloud Console</li>
+                                <li>Click the <strong>"Enable"</strong> button (big blue button at the top)</li>
+                                <li>Wait 1-2 minutes for it to activate</li>
+                                <li>Come back here and try creating the form again</li>
+                            </ol>
+                            <a href="${enableUrl}" target="_blank" class="btn btn-primary">
+                                <i class="fas fa-external-link-alt me-2"></i>Enable Google Forms API
+                            </a>
+                            <p class="mt-3 mb-0"><small><strong>Note:</strong> You need to be signed in to the Google account that owns this project. If you don't have access, ask the project owner to enable it for you.</small></p>
+                        </div>
+                    `;
+                } else {
+                    statusEl.innerHTML = `
+                        <div class="alert alert-danger">
+                            <h5><i class="fas fa-times-circle me-2"></i>Error creating form</h5>
+                            <p>${error.message}</p>
+                            <small>If this is an API error, you may need to enable the Google Forms API in Google Cloud Console.</small>
+                        </div>
+                    `;
+                }
             }
         }
 
