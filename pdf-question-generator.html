@@ -643,7 +643,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                         }],
                                         generationConfig: {
                                             temperature: 0.7,
-                                            maxOutputTokens: 2048
+                                            maxOutputTokens: 8192  // Increased for generating multiple questions
                                         }
                                     })
                                 });
@@ -689,15 +689,30 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 let content = '';
                 console.log('Parsing response, data structure:', data);
                 
+                // Check for finish reason
+                if (data.candidates && data.candidates[0] && data.candidates[0].finishReason) {
+                    const finishReason = data.candidates[0].finishReason;
+                    if (finishReason === 'MAX_TOKENS') {
+                        console.warn('Response was truncated due to MAX_TOKENS limit. Consider reducing number of questions or text length.');
+                    }
+                }
+                
                 // Try multiple possible response structures
                 if (data.candidates && Array.isArray(data.candidates) && data.candidates.length > 0) {
                     const candidate = data.candidates[0];
                     console.log('Found candidate:', candidate);
                     
+                    // Check if content.parts exists and has data
                     if (candidate.content && candidate.content.parts && Array.isArray(candidate.content.parts) && candidate.content.parts.length > 0) {
                         // Standard structure: candidates[0].content.parts[0].text
-                        content = candidate.content.parts[0].text || '';
-                        console.log('Extracted from candidate.content.parts[0].text');
+                        const part = candidate.content.parts[0];
+                        if (part.text) {
+                            content = part.text;
+                            console.log('Extracted from candidate.content.parts[0].text');
+                        } else if (part.functionCall) {
+                            // Handle function calls if any
+                            console.warn('Response contains function call, not text');
+                        }
                     } else if (candidate.text) {
                         // Alternative: candidates[0].text
                         content = candidate.text;
@@ -706,6 +721,10 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         // Another alternative: candidates[0].content as string
                         content = candidate.content;
                         console.log('Extracted from candidate.content (string)');
+                    } else {
+                        // Content structure exists but no parts - might be truncated
+                        console.warn('Candidate content exists but no parts found. Response may be truncated.');
+                        console.log('Candidate content:', candidate.content);
                     }
                 } else if (data.text) {
                     // Direct text property
@@ -729,8 +748,15 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 }
 
                 if (!content || content.trim() === '') {
+                    const finishReason = data.candidates?.[0]?.finishReason;
+                    let errorMsg = 'No content received from API. ';
+                    if (finishReason === 'MAX_TOKENS') {
+                        errorMsg += 'Response was truncated due to token limit. Try reducing the number of questions or the text length.';
+                    } else {
+                        errorMsg += 'The response may be empty or in an unexpected format.';
+                    }
                     console.error('Content is empty. Full response:', JSON.stringify(data, null, 2));
-                    throw new Error('No content received from API. The response may be empty or in an unexpected format. Check console for response details.');
+                    throw new Error(errorMsg);
                 }
 
                 content = content.trim();
