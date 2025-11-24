@@ -318,6 +318,7 @@
 
         let pdfText = '';
         let questions = [];
+        let availableModels = []; // Store available models from API
 
         // Load API key from localStorage
         const savedApiKey = localStorage.getItem('gemini_api_key');
@@ -340,9 +341,10 @@
             }
         });
 
-        // Save API key when changed
+        // Save API key when changed and clear cached models
         document.getElementById('apiKey').addEventListener('change', function() {
             localStorage.setItem('gemini_api_key', this.value);
+            availableModels = []; // Clear cached models when key changes
         });
 
         // File upload handling
@@ -447,20 +449,37 @@
 
                 const data = await response.json();
                 const models = data.models || [];
-                const modelNames = models.map(m => m.name).filter(name => name.includes('gemini'));
                 
-                if (modelNames.length > 0) {
-                    statusEl.innerHTML = `<i class="fas fa-check-circle text-success"></i> API Key works! Available models: ${modelNames.length}`;
+                // Get models that support generateContent and are Gemini models
+                const geminiModels = models
+                    .filter(m => {
+                        const name = m.name.toLowerCase();
+                        return name.includes('gemini') && 
+                               m.supportedGenerationMethods && 
+                               m.supportedGenerationMethods.includes('generateContent');
+                    })
+                    .map(m => {
+                        // Extract just the model name (remove 'models/' prefix)
+                        return m.name.replace('models/', '');
+                    });
+                
+                // Store available models globally
+                availableModels = geminiModels;
+                
+                if (geminiModels.length > 0) {
+                    statusEl.innerHTML = `<i class="fas fa-check-circle text-success"></i> API Key works! Available models: ${geminiModels.length}`;
                     statusEl.className = 'ms-2 text-success';
-                    console.log('Available models:', modelNames);
+                    console.log('Available Gemini models with generateContent:', geminiModels);
                 } else {
                     statusEl.innerHTML = '<i class="fas fa-exclamation-triangle text-warning"></i> API Key works but no Gemini models found';
                     statusEl.className = 'ms-2 text-warning';
+                    availableModels = [];
                 }
             } catch (error) {
                 statusEl.innerHTML = `<i class="fas fa-times-circle text-danger"></i> Error: ${error.message}`;
                 statusEl.className = 'ms-2 text-danger';
                 console.error('API Key test failed:', error);
+                availableModels = [];
             }
         }
 
@@ -520,32 +539,43 @@ ${textToUse}
 
 Return ONLY the JSON array, no additional text or markdown formatting.`;
 
-                // First, try to get available models
-                let availableModels = [];
-                try {
-                    const listResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
-                    if (listResponse.ok) {
-                        const listData = await listResponse.json();
-                        availableModels = (listData.models || [])
-                            .map(m => m.name.replace('models/', ''))
-                            .filter(name => name.includes('gemini') && name.includes('generateContent'));
-                        console.log('Available models:', availableModels);
-                    }
-                } catch (e) {
-                    console.log('Could not list models, will try defaults');
-                }
-
-                // Use Google Gemini API - try different models
-                // Default models to try if we couldn't list them
-                const defaultModels = [
-                    'gemini-1.5-flash',
-                    'gemini-1.5-pro', 
-                    'gemini-pro',
-                    'gemini-1.5-flash-latest',
-                    'gemini-1.5-pro-latest'
-                ];
+                // Get available models (use cached ones or fetch fresh)
+                let modelsToTry = [];
                 
-                const modelsToTry = availableModels.length > 0 ? availableModels : defaultModels;
+                if (availableModels.length > 0) {
+                    // Use cached models from test
+                    modelsToTry = availableModels;
+                    console.log('Using cached available models:', modelsToTry);
+                } else {
+                    // Try to fetch models if not cached
+                    try {
+                        const listResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
+                        if (listResponse.ok) {
+                            const listData = await listResponse.json();
+                            modelsToTry = (listData.models || [])
+                                .filter(m => {
+                                    const name = m.name.toLowerCase();
+                                    return name.includes('gemini') && 
+                                           m.supportedGenerationMethods && 
+                                           m.supportedGenerationMethods.includes('generateContent');
+                                })
+                                .map(m => m.name.replace('models/', ''));
+                            console.log('Fetched available models:', modelsToTry);
+                        }
+                    } catch (e) {
+                        console.log('Could not list models:', e);
+                    }
+                    
+                    // Fallback to default models if still empty
+                    if (modelsToTry.length === 0) {
+                        modelsToTry = [
+                            'gemini-1.5-flash',
+                            'gemini-1.5-pro', 
+                            'gemini-pro'
+                        ];
+                        console.log('Using default models:', modelsToTry);
+                    }
+                }
 
                 let data = null;
                 let lastError = null;
