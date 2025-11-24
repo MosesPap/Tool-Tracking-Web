@@ -357,6 +357,30 @@
                         </div>
                     </div>
                     <div id="questionsList"></div>
+                    <!-- Google Form Settings -->
+                    <div class="card mt-4 mb-4" style="background: #f8f9fa;">
+                        <div class="card-header">
+                            <h5><i class="fas fa-cog me-2"></i>Google Form Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label"><strong>Chapter Number</strong></label>
+                                    <input type="text" id="chapterNumber" class="form-control" placeholder="e.g., CH24" value="">
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label"><strong>Chapter Title</strong></label>
+                                    <input type="text" id="chapterTitle" class="form-control" placeholder="e.g., Electrical System" value="">
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label"><strong>Date</strong></label>
+                                    <input type="date" id="formDate" class="form-control" value="">
+                                </div>
+                            </div>
+                            <small class="text-muted"><i class="fas fa-info-circle me-1"></i>These will be included in Section 1 of the Google Form</small>
+                        </div>
+                    </div>
+                    
                     <div class="text-center mt-4">
                         <button class="btn btn-primary" onclick="exportQuestions()">
                             <i class="fas fa-file-excel me-2"></i>Export to Excel
@@ -1471,28 +1495,129 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     }
                 });
                 
+                // Get form metadata
+                const chapterNumber = document.getElementById('chapterNumber')?.value?.trim() || '';
+                const chapterTitle = document.getElementById('chapterTitle')?.value?.trim() || '';
+                const formDate = document.getElementById('formDate')?.value || new Date().toISOString().split('T')[0];
+                
+                // Format date for display
+                const dateObj = new Date(formDate);
+                const formattedDate = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                
+                // Create form title
+                let formTitle = '';
+                if (chapterNumber && chapterTitle) {
+                    formTitle = `${chapterNumber} ${chapterTitle} - ${formattedDate}`;
+                } else if (chapterNumber) {
+                    formTitle = `${chapterNumber} - ${formattedDate}`;
+                } else if (chapterTitle) {
+                    formTitle = `${chapterTitle} - ${formattedDate}`;
+                } else {
+                    formTitle = `Quiz - ${formattedDate}`;
+                }
+                
                 requests.push({
                     updateFormInfo: {
                         info: {
-                            title: `PDF Generated Quiz - ${new Date().toLocaleDateString()}`,
-                            description: 'Quiz generated from PDF document'
+                            title: formTitle,
+                            description: ''
                         },
                         updateMask: 'title,description'
                     }
                 });
                 
+                // Section descriptions mapping
+                const sectionDescriptions = {
+                    1: 'Simple descriptions, common terms',
+                    2: 'Theoretical fundamentals, procedures, schematics',
+                    3: 'Interrelationships, manufacturer instructions, corrective actions'
+                };
+                
                 let questionIndex = 0;
                 let lastLevel = null;
+                
+                // Add Section 1: Chapter info and name field
+                requests.push({
+                    createItem: {
+                        item: {
+                            title: 'Chapter Number',
+                            questionItem: {
+                                question: {
+                                    textQuestion: {}
+                                },
+                                required: true
+                            }
+                        },
+                        location: { index: questionIndex++ }
+                    }
+                });
+                
+                requests.push({
+                    createItem: {
+                        item: {
+                            title: 'Chapter Title',
+                            questionItem: {
+                                question: {
+                                    textQuestion: {}
+                                },
+                                required: true
+                            }
+                        },
+                        location: { index: questionIndex++ }
+                    }
+                });
+                
+                requests.push({
+                    createItem: {
+                        item: {
+                            title: 'Date',
+                            questionItem: {
+                                question: {
+                                    textQuestion: {}
+                                },
+                                required: true
+                            }
+                        },
+                        location: { index: questionIndex++ }
+                    }
+                });
+                
+                requests.push({
+                    createItem: {
+                        item: {
+                            title: 'Full Name',
+                            questionItem: {
+                                question: {
+                                    textQuestion: {}
+                                },
+                                required: true
+                            }
+                        },
+                        location: { index: questionIndex++ }
+                    }
+                });
+                
+                // Add page break after Section 1
+                requests.push({
+                    createItem: {
+                        item: {
+                            title: '',
+                            pageBreakItem: {}
+                        },
+                        location: { index: questionIndex++ }
+                    }
+                });
 
                 selectedQuestions.forEach((item) => {
                     const { levelGroup, question, level } = item;
                     
                     // Add a page break/section for each level (only if level changed)
                     if (lastLevel !== null && lastLevel !== level && questionIndex > 0) {
+                        // Add page break before new section
                         requests.push({
                             createItem: {
                                 item: {
-                                    title: levelGroup.levelName,
+                                    title: '',
                                     pageBreakItem: {}
                                 },
                                 location: { index: questionIndex }
@@ -1500,6 +1625,49 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         });
                         questionIndex++;
                     }
+                    
+                    // Add section title and description for each level (first time we see it)
+                    if (lastLevel !== level) {
+                        const sectionTitle = levelGroup.levelName;
+                        const sectionDesc = sectionDescriptions[level] || '';
+                        
+                        // Add section title as a text question (non-required, just for display)
+                        requests.push({
+                            createItem: {
+                                item: {
+                                    title: sectionTitle,
+                                    questionItem: {
+                                        question: {
+                                            textQuestion: {}
+                                        },
+                                        required: false
+                                    }
+                                },
+                                location: { index: questionIndex }
+                            }
+                        });
+                        questionIndex++;
+                        
+                        // Add section description if available
+                        if (sectionDesc) {
+                            requests.push({
+                                createItem: {
+                                    item: {
+                                        title: sectionDesc,
+                                        questionItem: {
+                                            question: {
+                                                textQuestion: {}
+                                            },
+                                            required: false
+                                        }
+                                    },
+                                    location: { index: questionIndex }
+                                }
+                            });
+                            questionIndex++;
+                        }
+                    }
+                    
                     lastLevel = level;
 
                     requests.push({
@@ -1525,7 +1693,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                                 }]
                                             }
                                         }
-                                    }
+                                    },
+                                    required: true
                                 }
                             },
                             location: { index: questionIndex }
