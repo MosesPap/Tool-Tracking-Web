@@ -650,8 +650,17 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
 
                                 if (response.ok) {
                                     data = await response.json();
+                                    
+                                    // Check if response indicates an error even with 200 status
+                                    if (data.error) {
+                                        lastError = data.error.message || 'API returned an error';
+                                        console.log(`Model ${model} returned error:`, data.error);
+                                        continue; // Try next endpoint
+                                    }
+                                    
                                     successfulModel = model;
                                     console.log(`Successfully used model: ${model} with endpoint: ${url}`);
+                                    console.log('API Response structure:', JSON.stringify(data, null, 2));
                                     break; // Success, exit endpoint loop
                                 } else {
                                     const errorData = await response.json().catch(() => ({}));
@@ -678,26 +687,50 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
 
                 // Handle different response structures from Gemini API
                 let content = '';
-                if (data.candidates && data.candidates[0]) {
-                    // Standard response structure
-                    if (data.candidates[0].content && data.candidates[0].content.parts) {
-                        content = data.candidates[0].content.parts[0].text || '';
-                    } else if (data.candidates[0].text) {
-                        content = data.candidates[0].text;
+                console.log('Parsing response, data structure:', data);
+                
+                // Try multiple possible response structures
+                if (data.candidates && Array.isArray(data.candidates) && data.candidates.length > 0) {
+                    const candidate = data.candidates[0];
+                    console.log('Found candidate:', candidate);
+                    
+                    if (candidate.content && candidate.content.parts && Array.isArray(candidate.content.parts) && candidate.content.parts.length > 0) {
+                        // Standard structure: candidates[0].content.parts[0].text
+                        content = candidate.content.parts[0].text || '';
+                        console.log('Extracted from candidate.content.parts[0].text');
+                    } else if (candidate.text) {
+                        // Alternative: candidates[0].text
+                        content = candidate.text;
+                        console.log('Extracted from candidate.text');
+                    } else if (candidate.content && typeof candidate.content === 'string') {
+                        // Another alternative: candidates[0].content as string
+                        content = candidate.content;
+                        console.log('Extracted from candidate.content (string)');
                     }
                 } else if (data.text) {
-                    // Alternative response structure
+                    // Direct text property
                     content = data.text;
-                } else if (data.content && data.content.parts) {
+                    console.log('Extracted from data.text');
+                } else if (data.content) {
+                    if (typeof data.content === 'string') {
+                        content = data.content;
+                        console.log('Extracted from data.content (string)');
+                    } else if (data.content.parts && Array.isArray(data.content.parts) && data.content.parts.length > 0) {
+                        content = data.content.parts[0].text || '';
+                        console.log('Extracted from data.content.parts[0].text');
+                    }
+                } else if (data.response && data.response.text) {
                     // Another possible structure
-                    content = data.content.parts[0].text || '';
+                    content = data.response.text;
+                    console.log('Extracted from data.response.text');
                 } else {
-                    console.error('Unexpected response structure:', data);
-                    throw new Error('Unexpected response format from API. Please try again.');
+                    console.error('Unexpected response structure. Full data:', JSON.stringify(data, null, 2));
+                    throw new Error('Unexpected response format from API. Check console for details.');
                 }
 
                 if (!content || content.trim() === '') {
-                    throw new Error('No content received from API. The response may be empty or in an unexpected format.');
+                    console.error('Content is empty. Full response:', JSON.stringify(data, null, 2));
+                    throw new Error('No content received from API. The response may be empty or in an unexpected format. Check console for response details.');
                 }
 
                 content = content.trim();
