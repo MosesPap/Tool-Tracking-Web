@@ -1437,24 +1437,24 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
 
             try {
                 // Create form - ONLY title can be set during creation
-                const formData = {
+                const initialFormData = {
                     info: {
                         title: `PDF Generated Quiz - ${new Date().toLocaleDateString()}`
                     }
                 };
 
                 // Create the form
-                const createResponse = await fetch(GOOGLE_FORMS_API, {
+                const initialCreateResponse = await fetch(GOOGLE_FORMS_API, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${googleAccessToken}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(formData)
+                    body: JSON.stringify(initialFormData)
                 });
 
-                if (!createResponse.ok) {
-                    const error = await createResponse.json();
+                if (!initialCreateResponse.ok) {
+                    const error = await initialCreateResponse.json();
                     const errorMessage = error.error?.message || 'Failed to create form';
                     
                     // Check if it's an API not enabled error
@@ -1469,8 +1469,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     throw new Error(errorMessage);
                 }
 
-                const form = await createResponse.json();
-                const formId = form.formId;
+                const initialForm = await initialCreateResponse.json();
+                const formId = initialForm.formId;
 
                 // Get selected questions only
                 const selectedQuestions = getSelectedQuestions();
@@ -1536,6 +1536,9 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 let questionIndex = 0;
                 let lastLevel = null;
                 
+                // Track item indices for setting required status later
+                const requiredItemIndices = [];
+                
                 // Add Section 1: Chapter info and name field
                 requests.push({
                     createItem: {
@@ -1544,13 +1547,13 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                             questionItem: {
                                 question: {
                                     textQuestion: {}
-                                },
-                                required: true
+                                }
                             }
                         },
-                        location: { index: questionIndex++ }
+                        location: { index: questionIndex }
                     }
                 });
+                requiredItemIndices.push(questionIndex++);
                 
                 requests.push({
                     createItem: {
@@ -1559,13 +1562,13 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                             questionItem: {
                                 question: {
                                     textQuestion: {}
-                                },
-                                required: true
+                                }
                             }
                         },
-                        location: { index: questionIndex++ }
+                        location: { index: questionIndex }
                     }
                 });
+                requiredItemIndices.push(questionIndex++);
                 
                 requests.push({
                     createItem: {
@@ -1574,13 +1577,13 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                             questionItem: {
                                 question: {
                                     textQuestion: {}
-                                },
-                                required: true
+                                }
                             }
                         },
-                        location: { index: questionIndex++ }
+                        location: { index: questionIndex }
                     }
                 });
+                requiredItemIndices.push(questionIndex++);
                 
                 requests.push({
                     createItem: {
@@ -1589,13 +1592,13 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                             questionItem: {
                                 question: {
                                     textQuestion: {}
-                                },
-                                required: true
+                                }
                             }
                         },
-                        location: { index: questionIndex++ }
+                        location: { index: questionIndex }
                     }
                 });
+                requiredItemIndices.push(questionIndex++);
                 
                 // Add page break after Section 1
                 requests.push({
@@ -1639,8 +1642,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                     questionItem: {
                                         question: {
                                             textQuestion: {}
-                                        },
-                                        required: false
+                                        }
                                     }
                                 },
                                 location: { index: questionIndex }
@@ -1657,8 +1659,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                         questionItem: {
                                             question: {
                                                 textQuestion: {}
-                                            },
-                                            required: false
+                                            }
                                         }
                                     },
                                     location: { index: questionIndex }
@@ -1693,18 +1694,17 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                                 }]
                                             }
                                         }
-                                    },
-                                    required: true
+                                    }
                                 }
                             },
                             location: { index: questionIndex }
                         }
                     });
-                    questionIndex++;
+                    requiredItemIndices.push(questionIndex++);
                 });
 
-                // Batch update the form with all questions
-                const updateResponse = await fetch(`${GOOGLE_FORMS_API}/${formId}:batchUpdate`, {
+                // First batch: Create all items
+                const batchCreateResponse = await fetch(`${GOOGLE_FORMS_API}/${formId}:batchUpdate`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${googleAccessToken}`,
@@ -1713,9 +1713,60 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     body: JSON.stringify({ requests })
                 });
 
-                if (!updateResponse.ok) {
-                    const error = await updateResponse.json();
+                if (!batchCreateResponse.ok) {
+                    const error = await batchCreateResponse.json();
                     throw new Error(error.error?.message || 'Failed to add questions');
+                }
+
+                // Get the created items to update them
+                const formFetchResponse = await fetch(`${GOOGLE_FORMS_API}/${formId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${googleAccessToken}`
+                    }
+                });
+                
+                if (!formFetchResponse.ok) {
+                    throw new Error('Failed to fetch form structure');
+                }
+                
+                const fetchedFormData = await formFetchResponse.json();
+                const items = fetchedFormData.items || [];
+                
+                // Second batch: Set required status for all questions
+                const updateRequests = [];
+                requiredItemIndices.forEach(index => {
+                    if (items[index] && items[index].questionItem) {
+                        updateRequests.push({
+                            updateItem: {
+                                item: {
+                                    questionItem: {
+                                        question: items[index].questionItem.question || {},
+                                        required: true
+                                    }
+                                },
+                                location: { index },
+                                updateMask: 'questionItem.required'
+                            }
+                        });
+                    }
+                });
+                
+                // Update required status if there are items to update
+                if (updateRequests.length > 0) {
+                    const updateResponse = await fetch(`${GOOGLE_FORMS_API}/${formId}:batchUpdate`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${googleAccessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ requests: updateRequests })
+                    });
+
+                    if (!updateResponse.ok) {
+                        const error = await updateResponse.json();
+                        console.warn('Failed to set required status:', error.error?.message);
+                        // Non-critical error, continue anyway
+                    }
                 }
 
                 // Correct answers are already set in the createItem requests above
