@@ -229,11 +229,11 @@
                 <div class="settings-section">
                     <h5><i class="fas fa-cog me-2"></i>Generation Settings</h5>
                     <div class="row">
-                        <div class="col-md-3 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">Number of Questions</label>
                             <input type="number" id="numQuestions" class="form-control" value="5" min="1" max="20">
                         </div>
-                        <div class="col-md-3 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">Knowledge Level</label>
                             <select id="knowledgeLevel" class="form-select">
                                 <option value="1">Level 1 - Familiarisation</option>
@@ -242,16 +242,7 @@
                             </select>
                             <small class="text-muted" id="levelDescription"></small>
                         </div>
-                        <div class="col-md-3 mb-3">
-                            <label class="form-label">Question Type</label>
-                            <select id="questionType" class="form-select">
-                                <option value="comprehension" selected>Comprehension</option>
-                                <option value="factual">Factual</option>
-                                <option value="analytical">Analytical</option>
-                                <option value="application">Application</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">Page Range</label>
                             <div class="input-group">
                                 <input type="number" id="startPage" class="form-control" placeholder="Start" value="1" min="1" max="1000">
@@ -546,7 +537,7 @@
         }
 
         async function generateQuestions() {
-            const apiKey = document.getElementById('apiKey').value.trim();
+            const apiKey = document.getElementById('apiKey')?.value?.trim();
             if (!apiKey) {
                 alert('Please enter your Google Gemini API key');
                 return;
@@ -560,9 +551,18 @@
             // Save API key
             localStorage.setItem('gemini_api_key', apiKey);
 
-                const numQuestions = parseInt(document.getElementById('numQuestions').value);
-                const knowledgeLevel = parseInt(document.getElementById('knowledgeLevel').value);
-                const questionType = document.getElementById('questionType').value;
+            // Get form values with null checks
+            const numQuestionsEl = document.getElementById('numQuestions');
+            const knowledgeLevelEl = document.getElementById('knowledgeLevel');
+            
+            if (!numQuestionsEl || !knowledgeLevelEl) {
+                alert('Error: Form elements not found. Please refresh the page.');
+                console.error('Missing form elements:', { numQuestionsEl, knowledgeLevelEl });
+                return;
+            }
+
+            const numQuestions = parseInt(numQuestionsEl.value) || 5;
+            const knowledgeLevel = parseInt(knowledgeLevelEl.value) || 2;
                 
                 // Define level objectives
                 const levelObjectives = {
@@ -607,10 +607,19 @@
             document.getElementById('questionsContainer').style.display = 'none';
 
             try {
-                // Truncate text if too long (Gemini has token limits)
-                // Gemini 1.5 models support up to 1M tokens, but we'll use 100K characters as safe limit
-                const maxLength = 100000; // Increased limit for Gemini 1.5 models
-                const textToUse = pdfText.length > maxLength ? pdfText.substring(0, maxLength) + '\n\n[Text truncated due to length limit]' : pdfText;
+                // Truncate text to prevent MAX_TOKENS error
+                // Reduce text size based on number of questions to ensure enough output tokens
+                // For 5 questions, we need ~3000-4000 output tokens, so limit input to ~20000 chars
+                const baseLength = 20000;
+                const lengthPerQuestion = 3000;
+                const maxLength = baseLength + (numQuestions * lengthPerQuestion);
+                const adjustedLength = Math.min(maxLength, 50000); // Cap at 50K to ensure output space
+                
+                const textToUse = pdfText.length > adjustedLength 
+                    ? pdfText.substring(0, adjustedLength) + '\n\n[Text truncated to ensure sufficient output tokens]' 
+                    : pdfText;
+                
+                console.log(`Using ${textToUse.length} characters from PDF (${pdfText.length} total available)`);
 
                 const prompt = `Based on the following text from a PDF document, generate ${numQuestions} multiple choice questions at ${levelInfo.name}.
 
@@ -625,8 +634,7 @@ Each question should have:
 - 3 answer options (A, B, C)
 - One correct answer clearly marked
 - Questions should test knowledge at the specified level depth
-
-Question type: ${questionType}
+- Questions should be varied in style (factual, comprehension, application, analysis) as appropriate for the level
 
 Format the response as a JSON array with this structure:
 [
@@ -711,7 +719,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                         }],
                                         generationConfig: {
                                             temperature: 0.7,
-                                            maxOutputTokens: 8192  // Increased for generating multiple questions
+                                            maxOutputTokens: Math.max(4096, numQuestions * 1000)  // Scale with number of questions, min 4K
                                         }
                                     })
                                 });
