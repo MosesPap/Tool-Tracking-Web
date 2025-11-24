@@ -686,6 +686,39 @@
             font-size: 0.85rem;
         }
 
+        .badge-instructor {
+            background: #17a2b8;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.85rem;
+        }
+
+        .badge-avionics {
+            background: #ffc107;
+            color: #212529;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.85rem;
+        }
+
+        .role-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .role-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .role-buttons .btn {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+        }
+
         .alert-custom {
             border-radius: 10px;
             border: none;
@@ -1489,7 +1522,7 @@
                                         <tr>
                                             <th>Name</th>
                                             <th>Email</th>
-                                            <th>Role</th>
+                                            <th>Roles</th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
@@ -2708,17 +2741,35 @@ Thank you!`;
                     const userData = doc.data();
                     
                     // Desktop table row
+                    const isAdmin = userData.isAdmin || false;
+                    const isInstructor = userData.isInstructor || false;
+                    const isAvionics = userData.isAvionics || false;
+                    
+                    const badges = [];
+                    if (isAdmin) badges.push('<span class="badge-admin"><i class="fas fa-shield-alt"></i> Admin</span>');
+                    if (isInstructor) badges.push('<span class="badge-instructor"><i class="fas fa-chalkboard-teacher"></i> Instructor</span>');
+                    if (isAvionics) badges.push('<span class="badge-avionics"><i class="fas fa-cog"></i> Avionics</span>');
+                    if (badges.length === 0) badges.push('<span class="badge-user">User</span>');
+                    
                     const row = document.createElement('tr');
                     row.innerHTML = `
                         <td>${userData.fullName || 'N/A'}</td>
                         <td>${userData.email || 'N/A'}</td>
                         <td>
-                            ${userData.isAdmin ? '<span class="badge-admin"><i class="fas fa-shield-alt"></i> Admin</span>' : '<span class="badge-user">User</span>'}
+                            <div class="role-badges">${badges.join('')}</div>
                         </td>
                         <td>
-                            <button class="btn btn-sm btn-${userData.isAdmin ? 'danger' : 'success'}" onclick="toggleAdmin('${doc.id}', ${!userData.isAdmin})">
-                                ${userData.isAdmin ? '<i class="fas fa-user-minus"></i> Remove Admin' : '<i class="fas fa-user-plus"></i> Make Admin'}
-                            </button>
+                            <div class="role-buttons">
+                                <button class="btn btn-sm btn-${isAdmin ? 'danger' : 'success'}" onclick="toggleAdmin('${doc.id}', ${!isAdmin})">
+                                    ${isAdmin ? '<i class="fas fa-shield-alt"></i> Remove Admin' : '<i class="fas fa-shield-alt"></i> Make Admin'}
+                                </button>
+                                <button class="btn btn-sm btn-${isInstructor ? 'danger' : 'info'}" onclick="toggleInstructor('${doc.id}', ${!isInstructor})">
+                                    ${isInstructor ? '<i class="fas fa-chalkboard-teacher"></i> Remove Instructor' : '<i class="fas fa-chalkboard-teacher"></i> Make Instructor'}
+                                </button>
+                                <button class="btn btn-sm btn-${isAvionics ? 'danger' : 'warning'}" onclick="toggleAvionics('${doc.id}', ${!isAvionics})">
+                                    ${isAvionics ? '<i class="fas fa-cog"></i> Remove Avionics' : '<i class="fas fa-cog"></i> Make Avionics'}
+                                </button>
+                            </div>
                         </td>
                     `;
                     tableBody.appendChild(row);
@@ -2726,15 +2777,29 @@ Thank you!`;
                     // Mobile card
                     const card = document.createElement('div');
                     card.className = 'user-card-item';
+                    const mobileBadges = [];
+                    if (isAdmin) mobileBadges.push('<span class="badge-admin"><i class="fas fa-shield-alt"></i> Admin</span>');
+                    if (isInstructor) mobileBadges.push('<span class="badge-instructor"><i class="fas fa-chalkboard-teacher"></i> Instructor</span>');
+                    if (isAvionics) mobileBadges.push('<span class="badge-avionics"><i class="fas fa-cog"></i> Avionics</span>');
+                    if (mobileBadges.length === 0) mobileBadges.push('<span class="badge-user">User</span>');
+                    
                     card.innerHTML = `
                         <h6><i class="fas fa-user"></i> ${userData.fullName || 'N/A'}</h6>
                         <p><i class="fas fa-envelope"></i> ${userData.email || 'N/A'}</p>
                         <p>
-                            ${userData.isAdmin ? '<span class="badge-admin"><i class="fas fa-shield-alt"></i> Admin</span>' : '<span class="badge-user">User</span>'}
+                            <div class="role-badges">${mobileBadges.join('')}</div>
                         </p>
-                        <button class="btn btn-${userData.isAdmin ? 'danger' : 'success'}" onclick="toggleAdmin('${doc.id}', ${!userData.isAdmin})">
-                            ${userData.isAdmin ? '<i class="fas fa-user-minus"></i> Remove Admin' : '<i class="fas fa-user-plus"></i> Make Admin'}
-                        </button>
+                        <div class="role-buttons" style="flex-direction: column; gap: 8px;">
+                            <button class="btn btn-sm btn-${isAdmin ? 'danger' : 'success'}" onclick="toggleAdmin('${doc.id}', ${!isAdmin})">
+                                ${isAdmin ? '<i class="fas fa-shield-alt"></i> Remove Admin' : '<i class="fas fa-shield-alt"></i> Make Admin'}
+                            </button>
+                            <button class="btn btn-sm btn-${isInstructor ? 'danger' : 'info'}" onclick="toggleInstructor('${doc.id}', ${!isInstructor})">
+                                ${isInstructor ? '<i class="fas fa-chalkboard-teacher"></i> Remove Instructor' : '<i class="fas fa-chalkboard-teacher"></i> Make Instructor'}
+                            </button>
+                            <button class="btn btn-sm btn-${isAvionics ? 'danger' : 'warning'}" onclick="toggleAvionics('${doc.id}', ${!isAvionics})">
+                                ${isAvionics ? '<i class="fas fa-cog"></i> Remove Avionics' : '<i class="fas fa-cog"></i> Make Avionics'}
+                            </button>
+                        </div>
                     `;
                     mobileCards.appendChild(card);
                 });
@@ -2763,6 +2828,46 @@ Thank you!`;
                 alert(`✅ User ${makeAdmin ? 'promoted to' : 'removed from'} admin successfully!`);
                 loadUsers(); // Reload users list
                 loadStatistics(); // Refresh stats
+            } catch (error) {
+                console.error('Error updating user:', error);
+                alert('Failed to update user: ' + error.message);
+            }
+        };
+
+        // Toggle Instructor Status
+        window.toggleInstructor = async function(userId, makeInstructor) {
+            const confirmMsg = makeInstructor 
+                ? 'Are you sure you want to grant instructor privileges to this user?' 
+                : 'Are you sure you want to remove instructor privileges from this user?';
+            
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                await db.collection('technicians').doc(userId).update({
+                    isInstructor: makeInstructor
+                });
+                alert(`✅ User ${makeInstructor ? 'promoted to' : 'removed from'} instructor successfully!`);
+                loadUsers(); // Reload users list
+            } catch (error) {
+                console.error('Error updating user:', error);
+                alert('Failed to update user: ' + error.message);
+            }
+        };
+
+        // Toggle Avionics Status
+        window.toggleAvionics = async function(userId, makeAvionics) {
+            const confirmMsg = makeAvionics 
+                ? 'Are you sure you want to grant avionics privileges to this user?' 
+                : 'Are you sure you want to remove avionics privileges from this user?';
+            
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                await db.collection('technicians').doc(userId).update({
+                    isAvionics: makeAvionics
+                });
+                alert(`✅ User ${makeAvionics ? 'promoted to' : 'removed from'} avionics successfully!`);
+                loadUsers(); // Reload users list
             } catch (error) {
                 console.error('Error updating user:', error);
                 alert('Failed to update user: ' + error.message);
