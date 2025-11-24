@@ -10,6 +10,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -233,12 +234,13 @@
                             <input type="number" id="numQuestions" class="form-control" value="5" min="1" max="20">
                         </div>
                         <div class="col-md-3 mb-3">
-                            <label class="form-label">Difficulty Level</label>
-                            <select id="difficulty" class="form-select">
-                                <option value="easy">Easy</option>
-                                <option value="medium" selected>Medium</option>
-                                <option value="hard">Hard</option>
+                            <label class="form-label">Knowledge Level</label>
+                            <select id="knowledgeLevel" class="form-select">
+                                <option value="1">Level 1 - Familiarisation</option>
+                                <option value="2" selected>Level 2 - General Knowledge</option>
+                                <option value="3">Level 3 - Detailed Knowledge</option>
                             </select>
+                            <small class="text-muted" id="levelDescription"></small>
                         </div>
                         <div class="col-md-3 mb-3">
                             <label class="form-label">Question Type</label>
@@ -309,7 +311,7 @@
                     <div id="questionsList"></div>
                     <div class="text-center mt-4">
                         <button class="btn btn-primary" onclick="exportQuestions()">
-                            <i class="fas fa-download me-2"></i>Export Questions
+                            <i class="fas fa-file-excel me-2"></i>Export to Excel
                         </button>
                         <button class="btn btn-secondary ms-2" onclick="clearAll()">
                             <i class="fas fa-redo me-2"></i>Start Over
@@ -553,7 +555,7 @@
                 const prompt = `Based on the following text from a PDF document, generate ${numQuestions} multiple choice questions. 
 Each question should have:
 - A clear question stem
-- 4 answer options (A, B, C, D)
+- 3 answer options (A, B, C)
 - One correct answer clearly marked
 
 Difficulty level: ${difficulty}
@@ -566,8 +568,7 @@ Format the response as a JSON array with this structure:
     "options": {
       "A": "Option A text",
       "B": "Option B text",
-      "C": "Option C text",
-      "D": "Option D text"
+      "C": "Option C text"
     },
     "correct": "A"
   }
@@ -828,25 +829,74 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
         }
 
         function exportQuestions() {
-            let exportText = 'PDF Question Generator - Generated Questions\n';
-            exportText += '='.repeat(50) + '\n\n';
-
-            questions.forEach((q, index) => {
-                exportText += `Question ${index + 1}: ${q.question}\n\n`;
-                Object.entries(q.options).forEach(([key, value]) => {
-                    exportText += `  ${key}. ${value}\n`;
+            try {
+                // Create Excel workbook
+                const wb = XLSX.utils.book_new();
+                
+                // Prepare data for Excel - horizontal format
+                const excelData = [
+                    // Header row
+                    ['Question', 'Option A', 'Option B', 'Option C', 'Correct Answer']
+                ];
+                
+                // Add each question as a row
+                questions.forEach((q, index) => {
+                    const row = [
+                        q.question,
+                        q.options.A || '',
+                        q.options.B || '',
+                        q.options.C || '',
+                        q.correct
+                    ];
+                    excelData.push(row);
                 });
-                exportText += `\nCorrect Answer: ${q.correct}\n\n`;
-                exportText += '-'.repeat(50) + '\n\n';
-            });
+                
+                // Create worksheet
+                const ws = XLSX.utils.aoa_to_sheet(excelData);
+                
+                // Set column widths for better readability
+                ws['!cols'] = [
+                    { wch: 60 },  // Question column - wider
+                    { wch: 40 },  // Option A
+                    { wch: 40 },  // Option B
+                    { wch: 40 },  // Option C
+                    { wch: 15 }   // Correct Answer
+                ];
+                
+                // Add worksheet to workbook
+                XLSX.utils.book_append_sheet(wb, ws, 'Questions');
+                
+                // Generate Excel file and download
+                const fileName = `generated_questions_${new Date().toISOString().split('T')[0]}.xlsx`;
+                XLSX.writeFile(wb, fileName);
+                
+                // Show success message
+                alert(`Questions exported successfully to ${fileName}`);
+            } catch (error) {
+                console.error('Export error:', error);
+                alert('Error exporting to Excel. Trying text format instead...');
+                
+                // Fallback to text export
+                let exportText = 'PDF Question Generator - Generated Questions\n';
+                exportText += '='.repeat(50) + '\n\n';
 
-            const blob = new Blob([exportText], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'generated_questions.txt';
-            a.click();
-            URL.revokeObjectURL(url);
+                questions.forEach((q, index) => {
+                    exportText += `Question ${index + 1}: ${q.question}\n\n`;
+                    Object.entries(q.options).forEach(([key, value]) => {
+                        exportText += `  ${key}. ${value}\n`;
+                    });
+                    exportText += `\nCorrect Answer: ${q.correct}\n\n`;
+                    exportText += '-'.repeat(50) + '\n\n';
+                });
+
+                const blob = new Blob([exportText], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'generated_questions.txt';
+                a.click();
+                URL.revokeObjectURL(url);
+            }
         }
     </script>
 </body>
