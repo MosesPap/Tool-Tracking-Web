@@ -470,20 +470,23 @@ ${textToUse}
 
 Return ONLY the JSON array, no additional text or markdown formatting.`;
 
-                // Use Google Gemini API - try different models and API versions
+                // Use Google Gemini API - try different models
+                // Note: v1beta is deprecated, using v1 only
                 const modelsToTry = [
-                    { model: 'gemini-pro', version: 'v1' },
-                    { model: 'gemini-1.5-pro', version: 'v1' },
-                    { model: 'gemini-1.5-flash', version: 'v1' },
-                    { model: 'gemini-pro', version: 'v1beta' }
+                    'gemini-1.5-flash',
+                    'gemini-1.5-pro',
+                    'gemini-pro'
                 ];
 
                 let data = null;
                 let lastError = null;
+                let successfulModel = null;
 
-                for (const { model, version } of modelsToTry) {
+                for (const model of modelsToTry) {
                     try {
-                        const url = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${apiKey}`;
+                        // Use v1 API (v1beta is deprecated)
+                        const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
+                        
                         const response = await fetch(url, {
                             method: 'POST',
                             headers: {
@@ -503,21 +506,25 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         });
 
                         if (!response.ok) {
-                            const errorData = await response.json();
-                            lastError = errorData.error?.message || 'Failed to generate questions';
+                            const errorData = await response.json().catch(() => ({}));
+                            lastError = errorData.error?.message || `HTTP ${response.status}: ${response.statusText}`;
+                            console.log(`Model ${model} failed:`, lastError);
                             continue; // Try next model
                         }
 
                         data = await response.json();
+                        successfulModel = model;
+                        console.log(`Successfully used model: ${model}`);
                         break; // Success, exit loop
                     } catch (err) {
                         lastError = err.message;
+                        console.log(`Model ${model} error:`, err.message);
                         continue; // Try next model
                     }
                 }
 
                 if (!data || !data.candidates || !data.candidates[0]) {
-                    throw new Error(lastError || 'Failed to generate questions with any available model');
+                    throw new Error(lastError || 'Failed to generate questions. Please check your API key and try again.');
                 }
 
                 const content = data.candidates[0].content.parts[0].text.trim();
