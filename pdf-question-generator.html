@@ -242,6 +242,19 @@
                     </div>
                 </div>
 
+                <!-- Import from Excel Section -->
+                <div class="settings-section mb-4" style="background: #e7f3ff; border-left: 4px solid #2196F3;">
+                    <h5><i class="fas fa-file-upload me-2"></i>Import Questions from Excel</h5>
+                    <p class="mb-2 text-muted">Already have questions in Excel? Import them directly to create Google Forms.</p>
+                    <button class="btn btn-info" onclick="document.getElementById('excelImportFile').click()">
+                        <i class="fas fa-file-upload me-2"></i>Import from Excel
+                    </button>
+                    <input type="file" id="excelImportFile" accept=".xlsx,.xls" style="display: none;" onchange="importFromExcel(event)">
+                    <small class="d-block mt-2 text-muted">
+                        <i class="fas fa-info-circle me-1"></i>Expected format: Question, Option A, Option B, Option C, Correct Answer, Knowledge Level
+                    </small>
+                </div>
+
                 <!-- Settings Section -->
                 <div class="settings-section">
                     <h5><i class="fas fa-cog me-2"></i>Generation Settings</h5>
@@ -331,12 +344,6 @@
                                 <i class="fas fa-square me-1"></i>Deselect All
                             </button>
                             <span class="ms-3 text-muted" id="selectedCount">0 selected</span>
-                        </div>
-                        <div>
-                            <button class="btn btn-sm btn-info" onclick="document.getElementById('excelImportFile').click()">
-                                <i class="fas fa-file-upload me-1"></i>Import from Excel
-                            </button>
-                            <input type="file" id="excelImportFile" accept=".xlsx,.xls" style="display: none;" onchange="importFromExcel(event)">
                         </div>
                     </div>
                     <div id="questionsList"></div>
