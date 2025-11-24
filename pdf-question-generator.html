@@ -250,9 +250,13 @@
                             </select>
                         </div>
                         <div class="col-md-3 mb-3">
-                            <label class="form-label">Max Pages to Process</label>
-                            <input type="number" id="maxPages" class="form-control" value="0" min="0" max="1000" title="0 = All pages">
-                            <small class="text-muted">0 = All pages</small>
+                            <label class="form-label">Page Range</label>
+                            <div class="input-group">
+                                <input type="number" id="startPage" class="form-control" placeholder="Start" value="1" min="1" max="1000">
+                                <span class="input-group-text">to</span>
+                                <input type="number" id="endPage" class="form-control" placeholder="End" value="0" min="0" max="1000">
+                            </div>
+                            <small class="text-muted">Leave End as 0 for all pages from start</small>
                         </div>
                     </div>
                 </div>
@@ -394,8 +398,16 @@
                 const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
                 
                 let fullText = '';
-                const maxPages = parseInt(document.getElementById('maxPages').value) || 0;
-                const pagesToProcess = maxPages > 0 ? Math.min(maxPages, pdf.numPages) : pdf.numPages;
+                let startPage = parseInt(document.getElementById('startPage').value) || 1;
+                let endPage = parseInt(document.getElementById('endPage').value) || 0;
+                
+                // Validate and set page range
+                if (startPage < 1) startPage = 1;
+                if (startPage > pdf.numPages) startPage = pdf.numPages;
+                if (endPage === 0 || endPage > pdf.numPages) endPage = pdf.numPages;
+                if (endPage < startPage) endPage = startPage;
+                
+                const pagesToProcess = endPage - startPage + 1;
                 
                 // Show progress for large PDFs
                 if (pdf.numPages > 10) {
@@ -403,7 +415,7 @@
                         <div class="alert alert-info">
                             <i class="fas fa-file-pdf me-2"></i>
                             <span id="fileName">${file.name}</span>
-                            <span class="ms-2">Processing ${pagesToProcess} of ${pdf.numPages} pages...</span>
+                            <span class="ms-2">Processing pages ${startPage}-${endPage} (${pagesToProcess} pages) of ${pdf.numPages} total...</span>
                             <button class="btn btn-sm btn-danger float-end" onclick="clearFile()">
                                 <i class="fas fa-times"></i> Remove
                             </button>
@@ -411,15 +423,15 @@
                     `;
                 }
                 
-                for (let i = 1; i <= pagesToProcess; i++) {
+                for (let i = startPage; i <= endPage; i++) {
                     const page = await pdf.getPage(i);
                     const textContent = await page.getTextContent();
                     const pageText = textContent.items.map(item => item.str).join(' ');
                     fullText += pageText + '\n\n';
                 }
                 
-                if (maxPages > 0 && maxPages < pdf.numPages) {
-                    fullText += `\n[Note: Only first ${maxPages} pages processed out of ${pdf.numPages} total pages]`;
+                if (startPage > 1 || endPage < pdf.numPages) {
+                    fullText += `\n[Note: Processed pages ${startPage}-${endPage} out of ${pdf.numPages} total pages]`;
                 }
 
                 pdfText = fullText;
@@ -660,11 +672,35 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     }
                 }
 
-                if (!data || !data.candidates || !data.candidates[0]) {
+                if (!data) {
                     throw new Error(lastError || 'Failed to generate questions. Please check your API key and ensure the Generative AI API is enabled in your Google Cloud project.');
                 }
 
-                const content = data.candidates[0].content.parts[0].text.trim();
+                // Handle different response structures from Gemini API
+                let content = '';
+                if (data.candidates && data.candidates[0]) {
+                    // Standard response structure
+                    if (data.candidates[0].content && data.candidates[0].content.parts) {
+                        content = data.candidates[0].content.parts[0].text || '';
+                    } else if (data.candidates[0].text) {
+                        content = data.candidates[0].text;
+                    }
+                } else if (data.text) {
+                    // Alternative response structure
+                    content = data.text;
+                } else if (data.content && data.content.parts) {
+                    // Another possible structure
+                    content = data.content.parts[0].text || '';
+                } else {
+                    console.error('Unexpected response structure:', data);
+                    throw new Error('Unexpected response format from API. Please try again.');
+                }
+
+                if (!content || content.trim() === '') {
+                    throw new Error('No content received from API. The response may be empty or in an unexpected format.');
+                }
+
+                content = content.trim();
                 
                 // Clean up the response (remove markdown code blocks if present)
                 let jsonContent = content;
