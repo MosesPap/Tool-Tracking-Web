@@ -380,6 +380,7 @@
         let questions = []; // Array of {level: 1|2|3, questions: [...]}
         let availableModels = []; // Store available models from API
         let googleAccessToken = null; // Store Google OAuth token
+        let authenticatedEmail = null; // Store authenticated user's email
         const GOOGLE_CLIENT_ID = '813615362050-qopq5cb1ebtbhhicokg8ae0cko8krn77.apps.googleusercontent.com'; // From Firebase config
         const GOOGLE_FORMS_API = 'https://forms.googleapis.com/v1/forms';
 
@@ -1254,19 +1255,37 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 const tokenClient = google.accounts.oauth2.initTokenClient({
                     client_id: GOOGLE_CLIENT_ID,
                     scope: 'https://www.googleapis.com/auth/forms.body https://www.googleapis.com/auth/drive.file',
-                    callback: (tokenResponse) => {
+                    callback: async (tokenResponse) => {
                         if (tokenResponse.error) {
                             console.error('OAuth error:', tokenResponse.error);
                             statusEl.innerHTML = '<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>Authentication failed: ' + tokenResponse.error + '. Please check your Google Cloud Console OAuth settings.</div>';
                             return;
                         }
                         googleAccessToken = tokenResponse.access_token;
+                        
+                        // Get user info to show which account is authenticated
+                        try {
+                            const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+                                headers: {
+                                    'Authorization': `Bearer ${googleAccessToken}`
+                                }
+                            });
+                            if (userInfoResponse.ok) {
+                                const userInfo = await userInfoResponse.json();
+                                authenticatedEmail = userInfo.email;
+                                console.log('Authenticated as:', authenticatedEmail);
+                            }
+                        } catch (e) {
+                            console.log('Could not fetch user info:', e);
+                        }
+                        
                         createFormWithAPI();
                     }
                 });
 
                 // Request access token - OAuth2 uses postMessage by default, no redirect_uri needed
-                tokenClient.requestAccessToken({ prompt: 'consent' });
+                // Use 'select_account' to let user choose the correct account
+                tokenClient.requestAccessToken({ prompt: 'select_account consent' });
             } catch (error) {
                 console.error('Auth error:', error);
                 statusEl.innerHTML = '<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>Authentication failed. Please try again.</div>';
@@ -1428,16 +1447,30 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 const formUrl = `https://docs.google.com/forms/d/${formId}/edit`;
                 const publishedUrl = `https://docs.google.com/forms/d/${formId}/viewform`;
 
+                // Build success message with account info
+                let accountInfo = '';
+                if (authenticatedEmail) {
+                    accountInfo = `<div class="mt-2 p-2 bg-light rounded"><small><i class="fas fa-user me-1"></i><strong>Form created with account:</strong> ${authenticatedEmail}</small></div>`;
+                }
+                
                 statusEl.innerHTML = `
                     <div class="alert alert-success">
                         <i class="fas fa-check-circle me-2"></i>Google Form created successfully!
-                        <br><br>
-                        <a href="${formUrl}" target="_blank" class="btn btn-sm btn-primary me-2">
-                            <i class="fas fa-edit me-1"></i>Edit Form
-                        </a>
-                        <a href="${publishedUrl}" target="_blank" class="btn btn-sm btn-success">
-                            <i class="fas fa-external-link-alt me-1"></i>View Published Form
-                        </a>
+                        ${accountInfo}
+                        <div class="mt-3">
+                            <a href="${formUrl}" target="_blank" class="btn btn-sm btn-primary me-2" onclick="window.open('${formUrl}', '_blank'); return false;">
+                                <i class="fas fa-edit me-1"></i>Edit Form
+                            </a>
+                            <a href="${publishedUrl}" target="_blank" class="btn btn-sm btn-success">
+                                <i class="fas fa-external-link-alt me-1"></i>View Published Form
+                            </a>
+                        </div>
+                        ${authenticatedEmail ? `
+                        <div class="alert alert-info mt-3 mb-0">
+                            <small><i class="fas fa-info-circle me-1"></i><strong>Important:</strong> Make sure you're logged into Google with the account <strong>${authenticatedEmail}</strong> when editing the form. 
+                            If the form opens with a different account, sign out of Google and sign back in with the correct account, then click "Edit Form" again.</small>
+                        </div>
+                        ` : ''}
                     </div>
                 `;
 
