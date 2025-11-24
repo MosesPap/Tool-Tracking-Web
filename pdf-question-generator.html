@@ -307,7 +307,10 @@
 
                 <!-- Questions Display -->
                 <div id="questionsContainer" style="display: none;">
-                    <h4 class="mt-4 mb-3"><i class="fas fa-question-circle me-2"></i>Generated Questions</h4>
+                    <h4 class="mt-4 mb-3">
+                        <i class="fas fa-question-circle me-2"></i>Generated Questions
+                        <span class="badge bg-info ms-2" id="levelBadge"></span>
+                    </h4>
                     <div id="questionsList"></div>
                     <div class="text-center mt-4">
                         <button class="btn btn-primary" onclick="exportQuestions()">
@@ -357,6 +360,25 @@
             localStorage.setItem('gemini_api_key', this.value);
             availableModels = []; // Clear cached models when key changes
         });
+
+        // Update level description when knowledge level changes
+        const knowledgeLevelSelect = document.getElementById('knowledgeLevel');
+        const levelDescriptionEl = document.getElementById('levelDescription');
+        
+        const levelDescriptions = {
+            1: "Basic familiarity with principal elements",
+            2: "General theoretical and practical knowledge",
+            3: "Detailed theoretical and practical knowledge"
+        };
+        
+        function updateLevelDescription() {
+            const level = parseInt(knowledgeLevelSelect.value);
+            currentKnowledgeLevel = level;
+            levelDescriptionEl.textContent = levelDescriptions[level];
+        }
+        
+        knowledgeLevelSelect.addEventListener('change', updateLevelDescription);
+        updateLevelDescription(); // Initialize
 
         // File upload handling
         const uploadArea = document.getElementById('uploadArea');
@@ -538,9 +560,47 @@
             // Save API key
             localStorage.setItem('gemini_api_key', apiKey);
 
-            const numQuestions = parseInt(document.getElementById('numQuestions').value);
-            const difficulty = document.getElementById('difficulty').value;
-            const questionType = document.getElementById('questionType').value;
+                const numQuestions = parseInt(document.getElementById('numQuestions').value);
+                const knowledgeLevel = parseInt(document.getElementById('knowledgeLevel').value);
+                const questionType = document.getElementById('questionType').value;
+                
+                // Define level objectives
+                const levelObjectives = {
+                    1: {
+                        name: "Level 1 - Familiarisation",
+                        description: "Familiarisation with the principal elements of the subject",
+                        objectives: [
+                            "The applicant should be familiar with the basic elements of the subject",
+                            "The applicant should be able to give a simple description of the whole subject using common words and examples",
+                            "The applicant should be able to use typical terms"
+                        ]
+                    },
+                    2: {
+                        name: "Level 2 - General Knowledge",
+                        description: "General knowledge of the theoretical and practical aspects of the subject",
+                        objectives: [
+                            "The applicant should be able to understand the theoretical fundamentals of the subject",
+                            "The applicant should be able to give a general description of the subject using typical examples",
+                            "The applicant should be able to use mathematical formulae in conjunction with physical laws",
+                            "The applicant should be able to read and understand sketches, drawings and schematics",
+                            "The applicant should be able to apply knowledge in a practical manner using detailed procedures"
+                        ]
+                    },
+                    3: {
+                        name: "Level 3 - Detailed Knowledge",
+                        description: "Detailed knowledge of the theoretical and practical aspects of the subject",
+                        objectives: [
+                            "The applicant should know the theory of the subject and its interrelationships with other subjects",
+                            "The applicant should be able to give a detailed description using theoretical fundamentals and specific examples",
+                            "The applicant should understand and be able to use mathematical formulae related to the subject",
+                            "The applicant should be able to read, understand and prepare sketches, simple drawings and schematics",
+                            "The applicant should be able to apply knowledge in a practical manner using manufacturer's instructions",
+                            "The applicant should be able to interpret results from various sources and measurements and apply corrective action"
+                        ]
+                    }
+                };
+                
+                const levelInfo = levelObjectives[knowledgeLevel];
 
             document.getElementById('loadingSpinner').classList.add('active');
             document.getElementById('generateSection').style.display = 'none';
@@ -552,13 +612,20 @@
                 const maxLength = 100000; // Increased limit for Gemini 1.5 models
                 const textToUse = pdfText.length > maxLength ? pdfText.substring(0, maxLength) + '\n\n[Text truncated due to length limit]' : pdfText;
 
-                const prompt = `Based on the following text from a PDF document, generate ${numQuestions} multiple choice questions. 
+                const prompt = `Based on the following text from a PDF document, generate ${numQuestions} multiple choice questions at ${levelInfo.name}.
+
+KNOWLEDGE LEVEL REQUIREMENTS:
+${levelInfo.description}
+
+The questions must align with these objectives:
+${levelInfo.objectives.map((obj, idx) => `${idx + 1}. ${obj}`).join('\n')}
+
 Each question should have:
-- A clear question stem
+- A clear question stem appropriate for ${levelInfo.name}
 - 3 answer options (A, B, C)
 - One correct answer clearly marked
+- Questions should test knowledge at the specified level depth
 
-Difficulty level: ${difficulty}
 Question type: ${questionType}
 
 Format the response as a JSON array with this structure:
@@ -769,6 +836,15 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 }
 
                 questions = JSON.parse(jsonContent);
+                
+                // Update level badge
+                const levelNames = {
+                    1: "Level 1 - Familiarisation",
+                    2: "Level 2 - General Knowledge",
+                    3: "Level 3 - Detailed Knowledge"
+                };
+                document.getElementById('levelBadge').textContent = levelNames[currentKnowledgeLevel] || "Unknown Level";
+                
                 displayQuestions();
             } catch (error) {
                 alert('Error generating questions: ' + error.message + '\n\nMake sure your API key is correct and you have not exceeded the free tier limits.');
@@ -833,9 +909,19 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 // Create Excel workbook
                 const wb = XLSX.utils.book_new();
                 
+                // Get level name
+                const levelNames = {
+                    1: "Level 1 - Familiarisation",
+                    2: "Level 2 - General Knowledge",
+                    3: "Level 3 - Detailed Knowledge"
+                };
+                const levelName = levelNames[currentKnowledgeLevel] || "Unknown Level";
+                
                 // Prepare data for Excel - horizontal format
                 const excelData = [
-                    // Header row
+                    // Header row with level info
+                    ['Knowledge Level', levelName, '', '', ''],
+                    ['', '', '', '', ''],
                     ['Question', 'Option A', 'Option B', 'Option C', 'Correct Answer']
                 ];
                 
