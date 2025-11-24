@@ -91,6 +91,18 @@
             font-weight: bold;
         }
 
+        .edit-question-form {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #007bff;
+        }
+
+        .edit-question-form .form-label {
+            font-weight: 600;
+            color: #495057;
+        }
+
         .question-card {
             background: white;
             border-radius: 10px;
@@ -107,12 +119,10 @@
         }
 
         .question-checkbox {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            width: 24px;
-            height: 24px;
+            width: 20px;
+            height: 20px;
             cursor: pointer;
+            margin-right: 8px;
         }
 
         .question-number {
@@ -919,20 +929,29 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     const checkboxId = `q-${levelGroup.level}-${index}`;
                     
                     const questionHtml = `
-                        <input type="checkbox" class="question-checkbox" id="${checkboxId}" checked onchange="updateSelectionCount()">
-                        <div class="question-number">Question ${index + 1}</div>
-                        <div class="question-text">${q.question}</div>
-                        <div class="options">
-                            ${Object.entries(q.options).map(([key, value]) => 
-                                `<div class="option" data-option="${key}">
-                                    <strong>${key}.</strong> ${value}
-                                </div>`
-                            ).join('')}
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="d-flex align-items-center">
+                                <input type="checkbox" class="question-checkbox" id="${checkboxId}" checked onchange="updateSelectionCount()">
+                                <div class="question-number ms-2">Question ${index + 1}</div>
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary edit-question-btn" onclick="editQuestion(${levelGroup.level}, ${index})">
+                                <i class="fas fa-edit me-1"></i>Edit
+                            </button>
                         </div>
-                        <div class="mt-3">
-                            <small class="text-muted">
-                                <strong>Correct Answer:</strong> <span class="badge bg-success">${q.correct}</span>
-                            </small>
+                        <div class="question-content" id="question-content-${levelGroup.level}-${index}">
+                            <div class="question-text">${q.question}</div>
+                            <div class="options">
+                                ${Object.entries(q.options).map(([key, value]) => 
+                                    `<div class="option" data-option="${key}">
+                                        <strong>${key}.</strong> ${value}
+                                    </div>`
+                                ).join('')}
+                            </div>
+                            <div class="mt-3">
+                                <small class="text-muted">
+                                    <strong>Correct Answer:</strong> <span class="badge bg-success">${q.correct}</span>
+                                </small>
+                            </div>
                         </div>
                     `;
                     
@@ -1661,6 +1680,121 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 cb.closest('.question-card').classList.remove('selected');
             });
             updateSelectionCount();
+        }
+
+        // Edit a question
+        function editQuestion(level, questionIndex) {
+            const levelGroup = questions.find(q => q.level === level);
+            if (!levelGroup || !levelGroup.questions[questionIndex]) {
+                alert('Question not found');
+                return;
+            }
+
+            const question = levelGroup.questions[questionIndex];
+            const contentDiv = document.getElementById(`question-content-${level}-${questionIndex}`);
+            
+            // Create editable form
+            const editHtml = `
+                <div class="edit-question-form">
+                    <div class="mb-3">
+                        <label class="form-label"><strong>Question:</strong></label>
+                        <textarea class="form-control edit-question-text" rows="3">${question.question}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label"><strong>Options:</strong></label>
+                        <div class="input-group mb-2">
+                            <span class="input-group-text">A.</span>
+                            <input type="text" class="form-control edit-option-A" value="${question.options.A || ''}">
+                        </div>
+                        <div class="input-group mb-2">
+                            <span class="input-group-text">B.</span>
+                            <input type="text" class="form-control edit-option-B" value="${question.options.B || ''}">
+                        </div>
+                        <div class="input-group mb-2">
+                            <span class="input-group-text">C.</span>
+                            <input type="text" class="form-control edit-option-C" value="${question.options.C || ''}">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label"><strong>Correct Answer:</strong></label>
+                        <select class="form-select edit-correct-answer">
+                            <option value="A" ${question.correct === 'A' ? 'selected' : ''}>A</option>
+                            <option value="B" ${question.correct === 'B' ? 'selected' : ''}>B</option>
+                            <option value="C" ${question.correct === 'C' ? 'selected' : ''}>C</option>
+                        </select>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-success" onclick="saveQuestion(${level}, ${questionIndex})">
+                            <i class="fas fa-save me-1"></i>Save
+                        </button>
+                        <button class="btn btn-sm btn-secondary" onclick="cancelEdit(${level}, ${questionIndex})">
+                            <i class="fas fa-times me-1"></i>Cancel
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            contentDiv.innerHTML = editHtml;
+        }
+
+        // Save edited question
+        function saveQuestion(level, questionIndex) {
+            const levelGroup = questions.find(q => q.level === level);
+            if (!levelGroup || !levelGroup.questions[questionIndex]) {
+                alert('Question not found');
+                return;
+            }
+
+            const contentDiv = document.getElementById(`question-content-${level}-${questionIndex}`);
+            const questionText = contentDiv.querySelector('.edit-question-text').value.trim();
+            const optionA = contentDiv.querySelector('.edit-option-A').value.trim();
+            const optionB = contentDiv.querySelector('.edit-option-B').value.trim();
+            const optionC = contentDiv.querySelector('.edit-option-C').value.trim();
+            const correctAnswer = contentDiv.querySelector('.edit-correct-answer').value;
+
+            // Validate
+            if (!questionText) {
+                alert('Question text cannot be empty');
+                return;
+            }
+            if (!optionA || !optionB || !optionC) {
+                alert('All three options must be filled');
+                return;
+            }
+
+            // Update question in array
+            levelGroup.questions[questionIndex] = {
+                question: questionText,
+                options: {
+                    A: optionA,
+                    B: optionB,
+                    C: optionC
+                },
+                correct: correctAnswer
+            };
+
+            // Re-display the question
+            displayQuestions();
+            
+            // Show success message
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                <i class="fas fa-check-circle me-2"></i>Question saved successfully!
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.getElementById('questionsContainer').insertBefore(alertDiv, document.getElementById('questionsContainer').firstChild);
+            
+            // Auto-dismiss after 3 seconds
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 3000);
+        }
+
+        // Cancel editing
+        function cancelEdit(level, questionIndex) {
+            // Just re-display questions to restore original view
+            displayQuestions();
         }
 
         // Extract questions from text when JSON parsing fails
