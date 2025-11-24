@@ -211,7 +211,17 @@
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
-                    <small class="text-muted">Get your FREE API key from <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> (No credit card required!)</small>
+                    <small class="text-muted">
+                        Get your FREE API key from <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> (No credit card required!)
+                        <br>
+                        <strong>Note:</strong> The default project works fine! Just create an API key from Google AI Studio - no need to create a new project.
+                    </small>
+                    <div class="mt-2">
+                        <button class="btn btn-sm btn-info" id="testApiKeyBtn" onclick="testApiKey()">
+                            <i class="fas fa-check-circle me-1"></i>Test API Key
+                        </button>
+                        <small id="apiKeyStatus" class="ms-2"></small>
+                    </div>
                 </div>
 
                 <!-- Settings Section -->
@@ -414,6 +424,46 @@
 
         document.getElementById('generateBtn').addEventListener('click', generateQuestions);
 
+        // Function to test API key and list available models
+        async function testApiKey() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            if (!apiKey) {
+                alert('Please enter your API key first');
+                return;
+            }
+
+            const statusEl = document.getElementById('apiKeyStatus');
+            statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+            statusEl.className = 'ms-2 text-info';
+
+            try {
+                // Try to list available models
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                const models = data.models || [];
+                const modelNames = models.map(m => m.name).filter(name => name.includes('gemini'));
+                
+                if (modelNames.length > 0) {
+                    statusEl.innerHTML = `<i class="fas fa-check-circle text-success"></i> API Key works! Available models: ${modelNames.length}`;
+                    statusEl.className = 'ms-2 text-success';
+                    console.log('Available models:', modelNames);
+                } else {
+                    statusEl.innerHTML = '<i class="fas fa-exclamation-triangle text-warning"></i> API Key works but no Gemini models found';
+                    statusEl.className = 'ms-2 text-warning';
+                }
+            } catch (error) {
+                statusEl.innerHTML = `<i class="fas fa-times-circle text-danger"></i> Error: ${error.message}`;
+                statusEl.className = 'ms-2 text-danger';
+                console.error('API Key test failed:', error);
+            }
+        }
+
         async function generateQuestions() {
             const apiKey = document.getElementById('apiKey').value.trim();
             if (!apiKey) {
@@ -470,13 +520,32 @@ ${textToUse}
 
 Return ONLY the JSON array, no additional text or markdown formatting.`;
 
+                // First, try to get available models
+                let availableModels = [];
+                try {
+                    const listResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
+                    if (listResponse.ok) {
+                        const listData = await listResponse.json();
+                        availableModels = (listData.models || [])
+                            .map(m => m.name.replace('models/', ''))
+                            .filter(name => name.includes('gemini') && name.includes('generateContent'));
+                        console.log('Available models:', availableModels);
+                    }
+                } catch (e) {
+                    console.log('Could not list models, will try defaults');
+                }
+
                 // Use Google Gemini API - try different models
-                // Note: v1beta is deprecated, using v1 only
-                const modelsToTry = [
+                // Default models to try if we couldn't list them
+                const defaultModels = [
                     'gemini-1.5-flash',
-                    'gemini-1.5-pro',
-                    'gemini-pro'
+                    'gemini-1.5-pro', 
+                    'gemini-pro',
+                    'gemini-1.5-flash-latest',
+                    'gemini-1.5-pro-latest'
                 ];
+                
+                const modelsToTry = availableModels.length > 0 ? availableModels : defaultModels;
 
                 let data = null;
                 let lastError = null;
@@ -484,38 +553,49 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
 
                 for (const model of modelsToTry) {
                     try {
-                        // Use v1 API (v1beta is deprecated)
-                        const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
-                        
-                        const response = await fetch(url, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                contents: [{
-                                    parts: [{
-                                        text: prompt
-                                    }]
-                                }],
-                                generationConfig: {
-                                    temperature: 0.7,
-                                    maxOutputTokens: 2048
-                                }
-                            })
-                        });
+                        // Try both v1 and v1beta endpoints
+                        const endpoints = [
+                            `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`,
+                            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+                        ];
 
-                        if (!response.ok) {
-                            const errorData = await response.json().catch(() => ({}));
-                            lastError = errorData.error?.message || `HTTP ${response.status}: ${response.statusText}`;
-                            console.log(`Model ${model} failed:`, lastError);
-                            continue; // Try next model
+                        for (const url of endpoints) {
+                            try {
+                                const response = await fetch(url, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({
+                                        contents: [{
+                                            parts: [{
+                                                text: prompt
+                                            }]
+                                        }],
+                                        generationConfig: {
+                                            temperature: 0.7,
+                                            maxOutputTokens: 2048
+                                        }
+                                    })
+                                });
+
+                                if (response.ok) {
+                                    data = await response.json();
+                                    successfulModel = model;
+                                    console.log(`Successfully used model: ${model} with endpoint: ${url}`);
+                                    break; // Success, exit endpoint loop
+                                } else {
+                                    const errorData = await response.json().catch(() => ({}));
+                                    lastError = errorData.error?.message || `HTTP ${response.status}: ${response.statusText}`;
+                                    console.log(`Model ${model} failed with ${url}:`, lastError);
+                                }
+                            } catch (err) {
+                                lastError = err.message;
+                                console.log(`Model ${model} error with ${url}:`, err.message);
+                            }
                         }
 
-                        data = await response.json();
-                        successfulModel = model;
-                        console.log(`Successfully used model: ${model}`);
-                        break; // Success, exit loop
+                        if (data) break; // Success, exit model loop
                     } catch (err) {
                         lastError = err.message;
                         console.log(`Model ${model} error:`, err.message);
@@ -524,7 +604,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 }
 
                 if (!data || !data.candidates || !data.candidates[0]) {
-                    throw new Error(lastError || 'Failed to generate questions. Please check your API key and try again.');
+                    throw new Error(lastError || 'Failed to generate questions. Please check your API key and ensure the Generative AI API is enabled in your Google Cloud project.');
                 }
 
                 const content = data.candidates[0].content.parts[0].text.trim();
