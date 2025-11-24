@@ -2597,6 +2597,7 @@
                 <button class="btn btn-warning" id="menuMyToolsBtn"><i class="fas fa-toolbox"></i> My Tools</button>
                 <button class="btn" id="menuWorkLocationBtn"><i class="fas fa-map-marker-alt"></i> Tools by Work Location</button>
                 <button class="btn btn-info" id="menuAdminBtn" style="display: none;"><i class="fas fa-user-shield"></i> Tool Administrator</button>
+                <button class="btn btn-primary" id="menuTrainingQuestionsBtn" style="display: none;"><i class="fas fa-question-circle"></i> Create Training Questions</button>
                 <button class="btn btn-secondary" id="menuLogoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
             </div>
         </div>
@@ -6745,6 +6746,15 @@ if (!userCredential.user.emailVerified) {
                                     menuAdminBtn.style.display = 'block';
                                 }
                             }
+                            
+                            // Check if user is instructor
+                            if (technicianData.isInstructor) {
+                                // Show Create Training Questions button in menu
+                                const menuTrainingQuestionsBtn = document.getElementById('menuTrainingQuestionsBtn');
+                                if (menuTrainingQuestionsBtn) {
+                                    menuTrainingQuestionsBtn.style.display = 'block';
+                                }
+                            }
                         } else {
                             document.getElementById('fullName').textContent = user.email;
                         }
@@ -7285,6 +7295,7 @@ if (!userCredential.user.emailVerified) {
             const menuRegisterBtn = document.getElementById('menuRegisterBtn');
             const menuLogoutBtn = document.getElementById('menuLogoutBtn');
             const menuAdminBtn = document.getElementById('menuAdminBtn');
+            const menuTrainingQuestionsBtn = document.getElementById('menuTrainingQuestionsBtn');
             
             if (menuRegisterBtn) {
                 menuRegisterBtn.addEventListener('click', function() {
@@ -7299,6 +7310,14 @@ if (!userCredential.user.emailVerified) {
                     console.log('Tool Administrator button clicked');
                     // Redirect to admin.html
                     window.location.href = 'admin.html';
+                });
+            }
+            
+            if (menuTrainingQuestionsBtn) {
+                menuTrainingQuestionsBtn.addEventListener('click', function() {
+                    console.log('Create Training Questions button clicked');
+                    // Open PDF Question Generator in a new tab/window
+                    window.open('pdf-question-generator.html', '_blank');
                 });
             }
             
