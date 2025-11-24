@@ -1285,17 +1285,10 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
             statusEl.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin me-2"></i>Creating Google Form...</div>';
 
             try {
-                // Create form structure as a quiz
+                // Create form - ONLY title can be set during creation
                 const formData = {
                     info: {
-                        title: `PDF Generated Quiz - ${new Date().toLocaleDateString()}`,
-                        description: 'Quiz generated from PDF document',
-                        documentTitle: `PDF Quiz ${new Date().toLocaleDateString()}`
-                    },
-                    settings: {
-                        quizSettings: {
-                            isQuiz: true
-                        }
+                        title: `PDF Generated Quiz - ${new Date().toLocaleDateString()}`
                     }
                 };
 
@@ -1336,8 +1329,31 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     return;
                 }
 
-                // Prepare questions for batch update
+                // Prepare batch update requests
                 const requests = [];
+                
+                // First, set quiz settings and description via batchUpdate
+                requests.push({
+                    updateSettings: {
+                        settings: {
+                            quizSettings: {
+                                isQuiz: true
+                            }
+                        },
+                        updateMask: 'quizSettings.isQuiz'
+                    }
+                });
+                
+                requests.push({
+                    updateFormInfo: {
+                        info: {
+                            title: `PDF Generated Quiz - ${new Date().toLocaleDateString()}`,
+                            description: 'Quiz generated from PDF document'
+                        },
+                        updateMask: 'title,description'
+                    }
+                });
+                
                 let questionIndex = 0;
                 let lastLevel = null;
 
