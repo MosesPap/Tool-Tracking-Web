@@ -333,12 +333,10 @@
                             <span class="ms-3 text-muted" id="selectedCount">0 selected</span>
                         </div>
                         <div>
-                            <button class="btn btn-sm btn-info" onclick="saveQuestions()">
-                                <i class="fas fa-save me-1"></i>Save Questions
+                            <button class="btn btn-sm btn-info" onclick="document.getElementById('excelImportFile').click()">
+                                <i class="fas fa-file-upload me-1"></i>Import from Excel
                             </button>
-                            <button class="btn btn-sm btn-info ms-2" onclick="loadSavedQuestions()">
-                                <i class="fas fa-folder-open me-1"></i>Load Saved
-                            </button>
+                            <input type="file" id="excelImportFile" accept=".xlsx,.xls" style="display: none;" onchange="importFromExcel(event)">
                         </div>
                     </div>
                     <div id="questionsList"></div>
@@ -820,11 +818,54 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     }
 
                     try {
-                        const levelQuestions = JSON.parse(content);
+                        // Try to fix common JSON issues before parsing
+                        let cleanedContent = content;
+                        
+                        // Remove any text before the first [
+                        const firstBracket = cleanedContent.indexOf('[');
+                        if (firstBracket > 0) {
+                            cleanedContent = cleanedContent.substring(firstBracket);
+                        }
+                        
+                        // Remove any text after the last ]
+                        const lastBracket = cleanedContent.lastIndexOf(']');
+                        if (lastBracket > 0 && lastBracket < cleanedContent.length - 1) {
+                            cleanedContent = cleanedContent.substring(0, lastBracket + 1);
+                        }
+                        
+                        // Fix common JSON issues
+                        cleanedContent = cleanedContent
+                            .replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3') // Fix unquoted keys
+                            .replace(/,\s*}/g, '}') // Remove trailing commas
+                            .replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
+                        
+                        const levelQuestions = JSON.parse(cleanedContent);
+                        
+                        // Validate it's an array
+                        if (!Array.isArray(levelQuestions)) {
+                            throw new Error('Response is not an array');
+                        }
+                        
                         questions.push({ level, levelName: levelInfo.name, questions: levelQuestions });
                         console.log(`Successfully generated ${levelQuestions.length} questions for ${levelInfo.name}`);
                     } catch (parseError) {
                         console.error(`Failed to parse questions for Level ${level}:`, parseError);
+                        console.error('Content that failed to parse:', content.substring(0, 500));
+                        
+                        // Try to extract questions manually if JSON parsing fails
+                        try {
+                            const manualQuestions = extractQuestionsFromText(content);
+                            if (manualQuestions.length > 0) {
+                                questions.push({ level, levelName: levelInfo.name, questions: manualQuestions });
+                                console.log(`Manually extracted ${manualQuestions.length} questions for ${levelInfo.name}`);
+                            } else {
+                                console.warn(`Could not extract any questions for Level ${level}. The response may be incomplete.`);
+                                // Still continue - other levels may have worked
+                            }
+                        } catch (extractError) {
+                            console.error(`Failed to extract questions manually:`, extractError);
+                            // Continue with other levels
+                        }
                     }
                 }
 
@@ -1014,12 +1055,151 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
             }
         }
 
-        // Initialize Google Sign-In
+        // Import questions from Excel file
+        async function importFromExcel(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!file.name.match(/\.(xlsx|xls)$/i)) {
+                alert('Please select an Excel file (.xlsx or .xls)');
+                return;
+            }
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const data = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+
+                // Parse Excel data - expect format: Question, Option A, Option B, Option C, Correct Answer, Knowledge Level
+                const importedQuestions = [];
+                let currentLevel = null;
+                let currentLevelName = null;
+                let levelQuestions = [];
+
+                for (let i = 0; i < data.length; i++) {
+                    const row = data[i];
+                    
+                    // Skip empty rows
+                    if (!row || row.length === 0 || !row[0]) continue;
+
+                    const firstCell = String(row[0]).trim();
+
+                    // Check if it's a level header (starts with "---" or contains "Level")
+                    if (firstCell.includes('Level') || firstCell.startsWith('---')) {
+                        // Save previous level if exists
+                        if (currentLevel !== null && levelQuestions.length > 0) {
+                            importedQuestions.push({
+                                level: currentLevel,
+                                levelName: currentLevelName,
+                                questions: levelQuestions
+                            });
+                            levelQuestions = [];
+                        }
+
+                        // Extract level from header
+                        if (firstCell.includes('Level 1') || firstCell.includes('Familiarisation')) {
+                            currentLevel = 1;
+                            currentLevelName = 'Level 1 - Familiarisation';
+                        } else if (firstCell.includes('Level 2') || firstCell.includes('General')) {
+                            currentLevel = 2;
+                            currentLevelName = 'Level 2 - General Knowledge';
+                        } else if (firstCell.includes('Level 3') || firstCell.includes('Detailed')) {
+                            currentLevel = 3;
+                            currentLevelName = 'Level 3 - Detailed Knowledge';
+                        }
+                        continue;
+                    }
+
+                    // Check if it's a header row
+                    if (firstCell.toLowerCase().includes('question') && 
+                        (row[1] && String(row[1]).toLowerCase().includes('option'))) {
+                        continue; // Skip header row
+                    }
+
+                    // Parse question row
+                    if (row[0] && row[1] && row[2] && row[3]) {
+                        const question = {
+                            question: String(row[0]).trim(),
+                            options: {
+                                A: String(row[1] || '').trim(),
+                                B: String(row[2] || '').trim(),
+                                C: String(row[3] || '').trim()
+                            },
+                            correct: String(row[4] || 'A').trim().toUpperCase()
+                        };
+
+                        // Determine level from row or use current level
+                        let questionLevel = currentLevel;
+                        if (row[5]) {
+                            const levelText = String(row[5]).trim();
+                            if (levelText.includes('Level 1') || levelText.includes('Familiarisation')) {
+                                questionLevel = 1;
+                            } else if (levelText.includes('Level 2') || levelText.includes('General')) {
+                                questionLevel = 2;
+                            } else if (levelText.includes('Level 3') || levelText.includes('Detailed')) {
+                                questionLevel = 3;
+                            }
+                        }
+
+                        if (!questionLevel) questionLevel = 2; // Default to Level 2
+
+                        // Add to appropriate level
+                        let levelGroup = importedQuestions.find(q => q.level === questionLevel);
+                        if (!levelGroup) {
+                            const levelNames = {
+                                1: 'Level 1 - Familiarisation',
+                                2: 'Level 2 - General Knowledge',
+                                3: 'Level 3 - Detailed Knowledge'
+                            };
+                            levelGroup = {
+                                level: questionLevel,
+                                levelName: levelNames[questionLevel],
+                                questions: []
+                            };
+                            importedQuestions.push(levelGroup);
+                        }
+                        levelGroup.questions.push(question);
+                    }
+                }
+
+                // Add remaining questions from current level
+                if (currentLevel !== null && levelQuestions.length > 0) {
+                    let levelGroup = importedQuestions.find(q => q.level === currentLevel);
+                    if (!levelGroup) {
+                        levelGroup = {
+                            level: currentLevel,
+                            levelName: currentLevelName,
+                            questions: []
+                        };
+                        importedQuestions.push(levelGroup);
+                    }
+                    levelGroup.questions.push(...levelQuestions);
+                }
+
+                if (importedQuestions.length === 0) {
+                    alert('No questions found in the Excel file. Please check the format.');
+                    return;
+                }
+
+                questions = importedQuestions;
+                displayQuestions();
+                updateSelectionCount();
+                
+                const totalQuestions = importedQuestions.reduce((sum, lg) => sum + lg.questions.length, 0);
+                alert(`Successfully imported ${totalQuestions} questions from ${importedQuestions.length} level(s)`);
+                
+                // Clear file input
+                event.target.value = '';
+            } catch (error) {
+                console.error('Import error:', error);
+                alert('Error importing Excel file: ' + error.message);
+            }
+        }
+
+        // Initialize Google Sign-In (not used for OAuth, but kept for compatibility)
         function initializeGoogleSignIn() {
-            google.accounts.id.initialize({
-                client_id: GOOGLE_CLIENT_ID,
-                callback: handleGoogleSignIn
-            });
+            // OAuth uses tokenClient directly, no need to initialize ID
         }
 
         // Handle Google Sign-In callback
@@ -1033,7 +1213,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         code: response.credential,
                         client_id: GOOGLE_CLIENT_ID,
                         grant_type: 'authorization_code',
-                        redirect_uri: window.location.origin
+                        redirect_uri: window.location.origin + window.location.pathname
                     })
                 }).then(r => r.json())
                 .then(data => {
@@ -1068,11 +1248,17 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     client_id: GOOGLE_CLIENT_ID,
                     scope: 'https://www.googleapis.com/auth/forms.body https://www.googleapis.com/auth/drive.file',
                     callback: (tokenResponse) => {
+                        if (tokenResponse.error) {
+                            console.error('OAuth error:', tokenResponse.error);
+                            statusEl.innerHTML = '<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>Authentication failed: ' + tokenResponse.error + '. Please check your Google Cloud Console OAuth settings.</div>';
+                            return;
+                        }
                         googleAccessToken = tokenResponse.access_token;
                         createFormWithAPI();
                     }
                 });
 
+                // Request access token - OAuth2 uses postMessage by default, no redirect_uri needed
                 tokenClient.requestAccessToken({ prompt: 'consent' });
             } catch (error) {
                 console.error('Auth error:', error);
@@ -1387,52 +1573,54 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
             updateSelectionCount();
         }
 
-        // Save questions to localStorage
-        function saveQuestions() {
-            if (questions.length === 0) {
-                alert('No questions to save. Please generate questions first.');
-                return;
+        // Extract questions from text when JSON parsing fails
+        function extractQuestionsFromText(text) {
+            const extracted = [];
+            const lines = text.split('\n');
+            let currentQuestion = null;
+            let optionCount = 0;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+
+                // Look for question patterns
+                if (line.match(/^\d+[\.\)]\s*[A-Z]/) || line.match(/^[Qq]uestion\s*\d+[\.:]/) || 
+                    (line.length > 20 && !line.match(/^[A-C][\.\)]/))) {
+                    if (currentQuestion && currentQuestion.question && optionCount >= 2) {
+                        extracted.push(currentQuestion);
+                    }
+                    currentQuestion = {
+                        question: line.replace(/^\d+[\.\)]\s*/, '').replace(/^[Qq]uestion\s*\d+[\.:]\s*/, ''),
+                        options: {},
+                        correct: 'A'
+                    };
+                    optionCount = 0;
+                }
+                // Look for option patterns
+                else if (line.match(/^[A-C][\.\)]\s*/) && currentQuestion) {
+                    const option = line.charAt(0);
+                    const optionText = line.substring(line.indexOf(')') + 1).trim();
+                    if (optionText) {
+                        currentQuestion.options[option] = optionText;
+                        optionCount++;
+                    }
+                }
+                // Look for correct answer
+                else if (line.match(/[Cc]orrect\s*[Aa]nswer/i) && currentQuestion) {
+                    const match = line.match(/[A-C]/);
+                    if (match) {
+                        currentQuestion.correct = match[0];
+                    }
+                }
             }
 
-            const name = prompt('Enter a name for this question set:', 
-                `Questions_${new Date().toISOString().split('T')[0]}`);
-            
-            if (!name) return;
-
-            const savedSets = JSON.parse(localStorage.getItem('savedQuestionSets') || '{}');
-            savedSets[name] = {
-                questions: questions,
-                savedAt: new Date().toISOString(),
-                totalQuestions: questions.reduce((sum, lg) => sum + lg.questions.length, 0)
-            };
-
-            localStorage.setItem('savedQuestionSets', JSON.stringify(savedSets));
-            alert(`Questions saved as "${name}"`);
-        }
-
-        // Load saved questions
-        function loadSavedQuestions() {
-            const savedSets = JSON.parse(localStorage.getItem('savedQuestionSets') || '{}');
-            
-            if (Object.keys(savedSets).length === 0) {
-                alert('No saved question sets found.');
-                return;
+            // Add last question
+            if (currentQuestion && currentQuestion.question && optionCount >= 2) {
+                extracted.push(currentQuestion);
             }
 
-            const names = Object.keys(savedSets);
-            const selected = prompt(`Enter the name of the question set to load:\n\n${names.join('\n')}`);
-            
-            if (!selected || !savedSets[selected]) {
-                alert('Invalid selection or name not found.');
-                return;
-            }
-
-            if (confirm(`Load "${selected}"? This will replace current questions.`)) {
-                questions = savedSets[selected].questions;
-                displayQuestions();
-                updateSelectionCount();
-                alert(`Loaded "${selected}" with ${savedSets[selected].totalQuestions} questions`);
-            }
+            return extracted;
         }
 
         // Initialize Google Sign-In on page load
