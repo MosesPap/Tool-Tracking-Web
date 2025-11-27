@@ -7403,18 +7403,11 @@ if (!userCredential.user.emailVerified) {
                     loginSection.classList.add('d-none');
                 }
                 
-                // Force show menu - auth handler already handled it, just ensure it stays visible
-                // The auth.onAuthStateChanged handler above should have already shown the menu
-                // But ensure it's visible here too as backup
-                setTimeout(() => {
-                    const menuEl = document.getElementById('toolScannerMenu');
-                    if (menuEl && menuEl.style.display !== 'block') {
-                        hideAllMainScreens();
-                        menuEl.style.display = 'block';
-                        console.log('Menu shown via skipSplash backup check');
-                    }
-                }, 100);
-                
+                // Only show menu if user is authenticated
+                // Don't show menu here - let auth.onAuthStateChanged handle it
+                // This prevents showing menu when user is logged out
+                console.log('skipSplash detected but waiting for auth state to confirm user is logged in');
+                // Just hide splash, auth handler will show menu when user is confirmed
                 // CRITICAL: Return immediately to prevent ANY splash screen logic from running
                 return; // Exit early, don't show splash
             }
