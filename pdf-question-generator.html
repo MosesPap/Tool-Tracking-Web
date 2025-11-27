@@ -252,6 +252,55 @@
                     </div>
                 </div>
 
+                <!-- API Usage Analytics -->
+                <div class="analytics-section mt-3 mb-4" style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 5px;">
+                    <h5><i class="fas fa-chart-line me-2"></i>API Usage Analytics (Free Tier)</h5>
+                    <div class="row mt-2">
+                        <div class="col-md-4">
+                            <div class="card bg-light mb-2">
+                                <div class="card-body p-2">
+                                    <small class="text-muted d-block">Requests Per Minute</small>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span id="rpmUsed" class="fw-bold">0</span>
+                                        <span class="text-muted">/ <span id="rpmLimit">15</span></span>
+                                    </div>
+                                    <div class="progress mt-1" style="height: 5px;">
+                                        <div id="rpmProgress" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light mb-2">
+                                <div class="card-body p-2">
+                                    <small class="text-muted d-block">Requests Today</small>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span id="dailyUsed" class="fw-bold">0</span>
+                                        <span class="text-muted">/ <span id="dailyLimit">1500</span></span>
+                                    </div>
+                                    <div class="progress mt-1" style="height: 5px;">
+                                        <div id="dailyProgress" class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light mb-2">
+                                <div class="card-body p-2">
+                                    <small class="text-muted d-block">Total Requests</small>
+                                    <div>
+                                        <span id="totalRequests" class="fw-bold">0</span>
+                                    </div>
+                                    <small class="text-muted" id="resetTime"></small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary mt-2" onclick="resetAnalytics()">
+                        <i class="fas fa-redo me-1"></i>Reset Analytics
+                    </button>
+                </div>
+
                 <!-- Import from Excel Section -->
                 <div class="settings-section mb-4" style="background: #e7f3ff; border-left: 4px solid #2196F3;">
                     <h5><i class="fas fa-file-upload me-2"></i>Import Questions from Excel</h5>
@@ -353,6 +402,9 @@
                             <button class="btn btn-sm btn-outline-secondary ms-2" onclick="deselectAllQuestions()">
                                 <i class="fas fa-square me-1"></i>Deselect All
                             </button>
+                            <button class="btn btn-sm btn-danger ms-2" onclick="deleteSelectedQuestions()">
+                                <i class="fas fa-trash me-1"></i>Delete Selected
+                            </button>
                             <span class="ms-3 text-muted" id="selectedCount">0 selected</span>
                         </div>
                     </div>
@@ -417,6 +469,12 @@
         let authenticatedEmail = null; // Store authenticated user's email
         const GOOGLE_CLIENT_ID = '813615362050-qopq5cb1ebtbhhicokg8ae0cko8krn77.apps.googleusercontent.com'; // From Firebase config
         const GOOGLE_FORMS_API = 'https://forms.googleapis.com/v1/forms';
+        
+        // API Usage Analytics Constants
+        const FREE_TIER_LIMITS = {
+            requestsPerMinute: 15,
+            requestsPerDay: 1500
+        };
 
         // Load API key from localStorage
         const savedApiKey = localStorage.getItem('gemini_api_key');
@@ -444,6 +502,238 @@
             localStorage.setItem('gemini_api_key', this.value);
             availableModels = []; // Clear cached models when key changes
         });
+
+        // Initialize analytics on page load
+        updateAnalyticsDisplay();
+        setInterval(updateAnalyticsDisplay, 1000); // Update every second
+
+        // ========== API USAGE ANALYTICS ==========
+        function trackApiCall() {
+            const now = Date.now();
+            const today = new Date().toDateString();
+            
+            // Get existing data
+            let analytics = JSON.parse(localStorage.getItem('api_analytics') || '{}');
+            
+            // Initialize if needed
+            if (!analytics.requests) analytics.requests = [];
+            if (!analytics.dailyCount) analytics.dailyCount = {};
+            if (!analytics.lastReset) analytics.lastReset = today;
+            
+            // Reset daily count if new day
+            if (analytics.lastReset !== today) {
+                analytics.dailyCount = {};
+                analytics.lastReset = today;
+            }
+            
+            // Add new request
+            analytics.requests.push(now);
+            analytics.dailyCount[today] = (analytics.dailyCount[today] || 0) + 1;
+            
+            // Clean up old requests (keep only last 2 minutes for RPM calculation)
+            const twoMinutesAgo = now - 120000;
+            analytics.requests = analytics.requests.filter(timestamp => timestamp > twoMinutesAgo);
+            
+            // Save back to localStorage
+            localStorage.setItem('api_analytics', JSON.stringify(analytics));
+            
+            // Update display
+            updateAnalyticsDisplay();
+        }
+
+        function getAnalytics() {
+            const analytics = JSON.parse(localStorage.getItem('api_analytics') || '{}');
+            const now = Date.now();
+            const oneMinuteAgo = now - 60000;
+            const today = new Date().toDateString();
+            
+            // Count requests in last minute
+            const requestsLastMinute = (analytics.requests || []).filter(timestamp => timestamp > oneMinuteAgo).length;
+            
+            // Count requests today
+            const requestsToday = analytics.dailyCount?.[today] || 0;
+            
+            // Total requests (all time)
+            const totalRequests = Object.values(analytics.dailyCount || {}).reduce((sum, count) => sum + count, 0);
+            
+            return {
+                rpm: requestsLastMinute,
+                daily: requestsToday,
+                total: totalRequests,
+                lastReset: analytics.lastReset || today
+            };
+        }
+
+        function updateAnalyticsDisplay() {
+            const stats = getAnalytics();
+            
+            // Update RPM
+            const rpmUsed = stats.rpm;
+            const rpmLimit = FREE_TIER_LIMITS.requestsPerMinute;
+            const rpmPercent = Math.min((rpmUsed / rpmLimit) * 100, 100);
+            document.getElementById('rpmUsed').textContent = rpmUsed;
+            document.getElementById('rpmLimit').textContent = rpmLimit;
+            const rpmProgress = document.getElementById('rpmProgress');
+            rpmProgress.style.width = rpmPercent + '%';
+            rpmProgress.className = rpmPercent >= 100 ? 'progress-bar bg-danger' : 
+                                   rpmPercent >= 80 ? 'progress-bar bg-warning' : 
+                                   'progress-bar bg-success';
+            
+            // Update Daily
+            const dailyUsed = stats.daily;
+            const dailyLimit = FREE_TIER_LIMITS.requestsPerDay;
+            const dailyPercent = Math.min((dailyUsed / dailyLimit) * 100, 100);
+            document.getElementById('dailyUsed').textContent = dailyUsed;
+            document.getElementById('dailyLimit').textContent = dailyLimit;
+            const dailyProgress = document.getElementById('dailyProgress');
+            dailyProgress.style.width = dailyPercent + '%';
+            dailyProgress.className = dailyPercent >= 100 ? 'progress-bar bg-danger' : 
+                                     dailyPercent >= 80 ? 'progress-bar bg-warning' : 
+                                     'progress-bar bg-success';
+            
+            // Update Total
+            document.getElementById('totalRequests').textContent = stats.total;
+            
+            // Calculate reset time (next day at midnight)
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(0, 0, 0, 0);
+            const hoursUntilReset = Math.floor((tomorrow - new Date()) / (1000 * 60 * 60));
+            const minutesUntilReset = Math.floor(((tomorrow - new Date()) % (1000 * 60 * 60)) / (1000 * 60));
+            document.getElementById('resetTime').textContent = `Resets in ${hoursUntilReset}h ${minutesUntilReset}m`;
+        }
+
+        function resetAnalytics() {
+            if (confirm('Are you sure you want to reset all analytics data? This cannot be undone.')) {
+                localStorage.removeItem('api_analytics');
+                updateAnalyticsDisplay();
+                alert('Analytics data has been reset.');
+            }
+        }
+
+        // ========== DUPLICATE DETECTION ==========
+        function isDuplicateQuestion(newQuestion, existingQuestions) {
+            // Normalize question text for comparison (lowercase, remove extra spaces)
+            const normalize = (text) => text.toLowerCase().trim().replace(/\s+/g, ' ');
+            const newQText = normalize(newQuestion.question);
+            
+            // Check against all existing questions across all levels
+            for (const levelGroup of existingQuestions) {
+                for (const existingQ of levelGroup.questions) {
+                    const existingQText = normalize(existingQ.question);
+                    
+                    // Check if question text is the same or very similar (90% similarity)
+                    if (newQText === existingQText || calculateSimilarity(newQText, existingQText) > 0.9) {
+                        // Also check if answers are the same
+                        const newOptions = Object.values(newQuestion.options).map(v => normalize(v)).sort().join('|');
+                        const existingOptions = Object.values(existingQ.options).map(v => normalize(v)).sort().join('|');
+                        
+                        if (newOptions === existingOptions) {
+                            return true; // Duplicate question with same answers
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        function calculateSimilarity(str1, str2) {
+            // Simple similarity calculation using longest common subsequence
+            const longer = str1.length > str2.length ? str1 : str2;
+            const shorter = str1.length > str2.length ? str2 : str1;
+            if (longer.length === 0) return 1.0;
+            const editDistance = levenshteinDistance(longer, shorter);
+            return (longer.length - editDistance) / longer.length;
+        }
+
+        function levenshteinDistance(str1, str2) {
+            const matrix = [];
+            for (let i = 0; i <= str2.length; i++) {
+                matrix[i] = [i];
+            }
+            for (let j = 0; j <= str1.length; j++) {
+                matrix[0][j] = j;
+            }
+            for (let i = 1; i <= str2.length; i++) {
+                for (let j = 1; j <= str1.length; j++) {
+                    if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                        matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                        matrix[i][j] = Math.min(
+                            matrix[i - 1][j - 1] + 1,
+                            matrix[i][j - 1] + 1,
+                            matrix[i - 1][j] + 1
+                        );
+                    }
+                }
+            }
+            return matrix[str2.length][str1.length];
+        }
+
+        // ========== DELETE FUNCTIONALITY ==========
+        function deleteQuestion(level, questionIndex) {
+            if (!confirm('Are you sure you want to delete this question?')) {
+                return;
+            }
+            
+            const levelGroup = questions.find(q => q.level === level);
+            if (!levelGroup || !levelGroup.questions[questionIndex]) {
+                alert('Question not found');
+                return;
+            }
+            
+            levelGroup.questions.splice(questionIndex, 1);
+            
+            // Remove level group if no questions left
+            if (levelGroup.questions.length === 0) {
+                const index = questions.findIndex(q => q.level === level);
+                if (index > -1) {
+                    questions.splice(index, 1);
+                }
+            }
+            
+            displayQuestions();
+        }
+
+        function deleteSelectedQuestions() {
+            const checkboxes = document.querySelectorAll('.question-checkbox:checked');
+            if (checkboxes.length === 0) {
+                alert('Please select at least one question to delete.');
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to delete ${checkboxes.length} selected question(s)?`)) {
+                return;
+            }
+            
+            // Collect questions to delete (in reverse order to maintain indices)
+            const toDelete = [];
+            checkboxes.forEach(checkbox => {
+                const card = checkbox.closest('.question-card');
+                const level = parseInt(card.dataset.level);
+                const questionIndex = parseInt(card.dataset.questionIndex);
+                toDelete.push({ level, questionIndex });
+            });
+            
+            // Sort by level and index in reverse order
+            toDelete.sort((a, b) => {
+                if (a.level !== b.level) return b.level - a.level;
+                return b.questionIndex - a.questionIndex;
+            });
+            
+            // Delete questions
+            toDelete.forEach(({ level, questionIndex }) => {
+                const levelGroup = questions.find(q => q.level === level);
+                if (levelGroup && levelGroup.questions[questionIndex]) {
+                    levelGroup.questions.splice(questionIndex, 1);
+                }
+            });
+            
+            // Remove empty level groups
+            questions = questions.filter(q => q.questions.length > 0);
+            
+            displayQuestions();
+        }
 
 
         // File upload handling
@@ -959,8 +1249,21 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         // Randomly shuffle options for each question to ensure balanced distribution of correct answers
                         levelQuestions = shuffleQuestionOptions(levelQuestions);
                         
-                        questions.push({ level, levelName: levelInfo.name, questions: levelQuestions });
-                        console.log(`Successfully generated ${levelQuestions.length} questions for ${levelInfo.name}`);
+                        // Filter out duplicates before adding
+                        const existingQuestions = questions; // All questions generated so far
+                        const uniqueQuestions = levelQuestions.filter(q => !isDuplicateQuestion(q, existingQuestions));
+                        const duplicatesRemoved = levelQuestions.length - uniqueQuestions.length;
+                        
+                        if (duplicatesRemoved > 0) {
+                            console.warn(`Removed ${duplicatesRemoved} duplicate question(s) from Level ${level}`);
+                        }
+                        
+                        if (uniqueQuestions.length > 0) {
+                            questions.push({ level, levelName: levelInfo.name, questions: uniqueQuestions });
+                            console.log(`Successfully generated ${uniqueQuestions.length} questions for ${levelInfo.name}${duplicatesRemoved > 0 ? ` (${duplicatesRemoved} duplicates removed)` : ''}`);
+                        } else {
+                            console.warn(`All questions for Level ${level} were duplicates. Skipping this level.`);
+                        }
                     } catch (parseError) {
                         console.error(`Failed to parse questions for Level ${level}:`, parseError);
                         console.error('Content that failed to parse:', content.substring(0, 1000));
@@ -981,8 +1284,22 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                             if (manualQuestions.length > 0) {
                                 // Randomly shuffle options for manually extracted questions too
                                 manualQuestions = shuffleQuestionOptions(manualQuestions);
-                                questions.push({ level, levelName: levelInfo.name, questions: manualQuestions });
-                                console.log(`Manually extracted ${manualQuestions.length} questions for ${levelInfo.name}`);
+                                
+                                // Filter out duplicates
+                                const existingQuestions = questions;
+                                const uniqueManualQuestions = manualQuestions.filter(q => !isDuplicateQuestion(q, existingQuestions));
+                                const duplicatesRemoved = manualQuestions.length - uniqueManualQuestions.length;
+                                
+                                if (duplicatesRemoved > 0) {
+                                    console.warn(`Removed ${duplicatesRemoved} duplicate question(s) from manually extracted Level ${level} questions`);
+                                }
+                                
+                                if (uniqueManualQuestions.length > 0) {
+                                    questions.push({ level, levelName: levelInfo.name, questions: uniqueManualQuestions });
+                                    console.log(`Manually extracted ${uniqueManualQuestions.length} questions for ${levelInfo.name}`);
+                                } else {
+                                    console.warn(`All manually extracted questions for Level ${level} were duplicates.`);
+                                }
                             } else {
                                 const errorMsg = level === 3 
                                     ? `Could not extract any questions for Level 3. The response may be incomplete or truncated. Try generating fewer Level 3 questions at once, or check the console for details.`
@@ -1047,9 +1364,14 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                 <input type="checkbox" class="question-checkbox" id="${checkboxId}" checked onchange="updateSelectionCount()">
                                 <div class="question-number ms-2">Question ${index + 1}</div>
                             </div>
-                            <button class="btn btn-sm btn-outline-primary edit-question-btn" onclick="editQuestion(${levelGroup.level}, ${index})">
-                                <i class="fas fa-edit me-1"></i>Edit
-                            </button>
+                            <div>
+                                <button class="btn btn-sm btn-outline-primary edit-question-btn" onclick="editQuestion(${levelGroup.level}, ${index})">
+                                    <i class="fas fa-edit me-1"></i>Edit
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteQuestion(${levelGroup.level}, ${index})" title="Delete this question">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
                         </div>
                         <div class="question-content" id="question-content-${levelGroup.level}-${index}">
                             <div class="question-text">${q.question}</div>
