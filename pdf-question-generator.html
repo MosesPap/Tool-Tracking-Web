@@ -674,7 +674,10 @@
         // Use exact same logic as register-tools.html
         function handleBackNavigation() {
             // Set flag to skip splash video - do this FIRST before any navigation
+            // Must be 'true' string to match index.html check
             sessionStorage.setItem('skipSplash', 'true');
+            // Also set a flag to ensure menu is shown
+            sessionStorage.setItem('showMenu', 'true');
             // Use href (same as register-tools.html) - replace might cause issues
             window.location.href = 'index.html';
         }
