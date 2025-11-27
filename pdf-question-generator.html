@@ -223,15 +223,20 @@
 <body>
     <div class="main-container">
         <div class="card">
-            <div class="card-header">
-                <i class="fas fa-file-pdf me-2"></i>
-                PDF Question Generator
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-file-pdf me-2"></i>
+                    PDF Question Generator
+                </div>
+                <button class="btn btn-sm btn-outline-light" onclick="goToMainMenu()" title="Return to Main Menu">
+                    <i class="fas fa-arrow-left me-1"></i>Back to Menu
+                </button>
             </div>
             <div class="card-body p-4">
                 <!-- API Key Section -->
                 <div class="api-key-section" style="background: #d4edda; border-color: #28a745;">
                     <h5><i class="fas fa-key me-2"></i>Google Gemini API Configuration (FREE!)</h5>
-                    <p class="mb-2"><strong>Free to use!</strong> Google Gemini offers a generous free tier. Enter your API key to generate questions. Your key is stored locally and never sent to our servers.</p>
+                    <p class="mb-2"><strong>Free to use!</strong> Google Gemini offers a generous free tier. Enter your API key to generate questions. Your key is saved securely and synced across all your devices when you're logged in.</p>
                     <div class="input-group mb-2">
                         <span class="input-group-text"><i class="fas fa-lock"></i></span>
                         <input type="password" id="apiKey" class="form-control" placeholder="AIza..." value="">
@@ -458,6 +463,26 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Firebase SDK for syncing API key across devices -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script>
+        // Initialize Firebase (same config as index.html)
+        const firebaseConfig = {
+            apiKey: "AIzaSyDmI0v_pVt_qFJlsqmw8QlIOi-4VLjyn54",
+            authDomain: "tool-tracking-system-15e84.firebaseapp.com",
+            projectId: "tool-tracking-system-15e84",
+            storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
+            messagingSenderId: "813615362050",
+            appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
+        };
+        
+        // Initialize Firebase if not already initialized
+        if (typeof firebase !== 'undefined' && !firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+    </script>
     <script>
         // Set up PDF.js worker
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -476,10 +501,86 @@
             requestsPerDay: 1500
         };
 
-        // Load API key from localStorage
-        const savedApiKey = localStorage.getItem('gemini_api_key');
-        if (savedApiKey) {
-            document.getElementById('apiKey').value = savedApiKey;
+        // Initialize Firebase (if not already initialized)
+        let firebaseInitialized = false;
+        let auth = null;
+        let db = null;
+        let currentUser = null;
+
+        // Check if Firebase is available (from index.html)
+        if (typeof firebase !== 'undefined') {
+            try {
+                // Firebase should already be initialized from index.html
+                // Just get references to auth and db
+                auth = firebase.auth();
+                db = firebase.firestore();
+                firebaseInitialized = true;
+                
+                // Listen for auth state changes
+                auth.onAuthStateChanged((user) => {
+                    currentUser = user;
+                    if (user) {
+                        loadApiKeyFromFirestore(user.uid);
+                    } else {
+                        // Fallback to localStorage if not logged in
+                        loadApiKeyFromLocalStorage();
+                    }
+                });
+            } catch (error) {
+                console.warn('Firebase not available, using localStorage only:', error);
+                loadApiKeyFromLocalStorage();
+            }
+        } else {
+            // Firebase not available, use localStorage only
+            loadApiKeyFromLocalStorage();
+        }
+
+        // Load API key from Firestore (synced across devices)
+        async function loadApiKeyFromFirestore(userId) {
+            try {
+                const userDoc = await db.collection('technicians').doc(userId).get();
+                if (userDoc.exists) {
+                    const userData = userDoc.data();
+                    if (userData.geminiApiKey) {
+                        document.getElementById('apiKey').value = userData.geminiApiKey;
+                        localStorage.setItem('gemini_api_key', userData.geminiApiKey);
+                        console.log('API key loaded from Firestore');
+                        return;
+                    }
+                }
+                // Fallback to localStorage if not in Firestore
+                loadApiKeyFromLocalStorage();
+            } catch (error) {
+                console.error('Error loading API key from Firestore:', error);
+                loadApiKeyFromLocalStorage();
+            }
+        }
+
+        // Load API key from localStorage (fallback)
+        function loadApiKeyFromLocalStorage() {
+            const savedApiKey = localStorage.getItem('gemini_api_key');
+            if (savedApiKey) {
+                document.getElementById('apiKey').value = savedApiKey;
+            }
+        }
+
+        // Save API key to both Firestore and localStorage
+        async function saveApiKey(apiKey) {
+            // Save to localStorage immediately
+            localStorage.setItem('gemini_api_key', apiKey);
+            
+            // Save to Firestore if user is logged in
+            if (firebaseInitialized && currentUser) {
+                try {
+                    await db.collection('technicians').doc(currentUser.uid).set({
+                        geminiApiKey: apiKey
+                    }, { merge: true });
+                    console.log('API key saved to Firestore (synced across devices)');
+                } catch (error) {
+                    console.error('Error saving API key to Firestore:', error);
+                    // Continue anyway - at least localStorage is saved
+                }
+            }
         }
 
         // Toggle API key visibility
@@ -498,9 +599,20 @@
         });
 
         // Save API key when changed and clear cached models
-        document.getElementById('apiKey').addEventListener('change', function() {
-            localStorage.setItem('gemini_api_key', this.value);
+        document.getElementById('apiKey').addEventListener('change', async function() {
+            const apiKey = this.value.trim();
+            if (apiKey) {
+                await saveApiKey(apiKey);
+            }
             availableModels = []; // Clear cached models when key changes
+        });
+        
+        // Also save on blur (when user leaves the field)
+        document.getElementById('apiKey').addEventListener('blur', async function() {
+            const apiKey = this.value.trim();
+            if (apiKey) {
+                await saveApiKey(apiKey);
+            }
         });
 
         // Initialize analytics on page load
@@ -627,7 +739,18 @@
                 const minutesUntilReset = Math.floor(((tomorrow - new Date()) % (1000 * 60 * 60)) / (1000 * 60));
                 resetTimeEl.textContent = `Resets in ${hoursUntilReset}h ${minutesUntilReset}m`;
                 
-                console.log('Analytics display updated:', stats);
+                // Only log if values actually changed (not every second)
+                if (updateAnalyticsDisplay.lastStats) {
+                    const changed = updateAnalyticsDisplay.lastStats.rpm !== stats.rpm || 
+                                   updateAnalyticsDisplay.lastStats.daily !== stats.daily ||
+                                   updateAnalyticsDisplay.lastStats.total !== stats.total;
+                    if (changed) {
+                        console.log('Analytics updated:', stats);
+                    }
+                } else {
+                    console.log('Analytics initialized:', stats);
+                }
+                updateAnalyticsDisplay.lastStats = stats;
             } catch (error) {
                 console.error('Error updating analytics display:', error);
             }
@@ -1095,8 +1218,8 @@
                 return;
             }
 
-            // Save API key
-            localStorage.setItem('gemini_api_key', apiKey);
+            // Save API key (to both Firestore and localStorage)
+            await saveApiKey(apiKey);
 
             // Get form values with null checks
             const numQuestionsL1 = parseInt(document.getElementById('numQuestionsL1')?.value || 0);
