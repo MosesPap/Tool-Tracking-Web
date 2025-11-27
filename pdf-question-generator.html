@@ -538,16 +538,45 @@
         // Load API key from Firestore (synced across devices)
         async function loadApiKeyFromFirestore(userId) {
             try {
+                // First, try to load from current user's document
                 const userDoc = await db.collection('technicians').doc(userId).get();
                 if (userDoc.exists) {
                     const userData = userDoc.data();
+                    // Check if user is an instructor
+                    if (userData.isInstructor && userData.geminiApiKey) {
+                        document.getElementById('apiKey').value = userData.geminiApiKey;
+                        localStorage.setItem('gemini_api_key', userData.geminiApiKey);
+                        console.log('API key loaded from current instructor document');
+                        return;
+                    }
+                    // If not instructor but has key, use it
                     if (userData.geminiApiKey) {
                         document.getElementById('apiKey').value = userData.geminiApiKey;
                         localStorage.setItem('gemini_api_key', userData.geminiApiKey);
-                        console.log('API key loaded from Firestore');
+                        console.log('API key loaded from current user document');
                         return;
                     }
                 }
+                
+                // If current user is an instructor but doesn't have key, try to load from any instructor
+                if (userDoc.exists && userDoc.data().isInstructor) {
+                    const instructorsQuery = await db.collection('technicians')
+                        .where('isInstructor', '==', true)
+                        .limit(1)
+                        .get();
+                    
+                    if (!instructorsQuery.empty) {
+                        const instructorDoc = instructorsQuery.docs[0];
+                        const instructorData = instructorDoc.data();
+                        if (instructorData.geminiApiKey) {
+                            document.getElementById('apiKey').value = instructorData.geminiApiKey;
+                            localStorage.setItem('gemini_api_key', instructorData.geminiApiKey);
+                            console.log('API key loaded from another instructor document');
+                            return;
+                        }
+                    }
+                }
+                
                 // Fallback to localStorage if not in Firestore
                 loadApiKeyFromLocalStorage();
             } catch (error) {
@@ -572,10 +601,32 @@
             // Save to Firestore if user is logged in
             if (firebaseInitialized && currentUser) {
                 try {
+                    // First, save to current user's document
                     await db.collection('technicians').doc(currentUser.uid).set({
                         geminiApiKey: apiKey
                     }, { merge: true });
-                    console.log('API key saved to Firestore (synced across devices)');
+                    console.log('API key saved to current user document');
+                    
+                    // Check if current user is an instructor
+                    const userDoc = await db.collection('technicians').doc(currentUser.uid).get();
+                    if (userDoc.exists && userDoc.data().isInstructor) {
+                        // If user is an instructor, save to ALL instructor documents
+                        const instructorsQuery = await db.collection('technicians')
+                            .where('isInstructor', '==', true)
+                            .get();
+                        
+                        const updatePromises = [];
+                        instructorsQuery.forEach((doc) => {
+                            updatePromises.push(
+                                db.collection('technicians').doc(doc.id).set({
+                                    geminiApiKey: apiKey
+                                }, { merge: true })
+                            );
+                        });
+                        
+                        await Promise.all(updatePromises);
+                        console.log(`API key saved to ${instructorsQuery.size} instructor document(s) (synced across all instructors)`);
+                    }
                 } catch (error) {
                     console.error('Error saving API key to Firestore:', error);
                     // Continue anyway - at least localStorage is saved
