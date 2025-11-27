@@ -761,8 +761,11 @@
         });
 
         pdfFileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleFile(e.target.files[0]);
+            if (e.target.files && e.target.files.length > 0) {
+                const file = e.target.files[0];
+                if (file) {
+                    handleFile(file);
+                }
             }
         });
 
@@ -837,9 +840,19 @@
                 document.getElementById('extractedText').textContent = previewText;
                 document.getElementById('pdfPreview').style.display = 'block';
                 document.getElementById('generateSection').style.display = 'block';
+                
+                // Clear input value after processing to allow selecting the same file again
+                // Use setTimeout to ensure the change event has fully processed
+                setTimeout(() => {
+                    pdfFileInput.value = '';
+                }, 100);
             } catch (error) {
                 alert('Error reading PDF: ' + error.message);
                 console.error(error);
+                // Clear input on error too
+                setTimeout(() => {
+                    pdfFileInput.value = '';
+                }, 100);
             }
         }
 
@@ -1430,7 +1443,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
             updateSelectionCount(); // Update count after displaying questions
         }
 
-        function exportQuestions() {
+        async function exportQuestions() {
             try {
                 // Create Excel workbook
                 const wb = XLSX.utils.book_new();
@@ -1479,12 +1492,44 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 // Add worksheet to workbook
                 XLSX.utils.book_append_sheet(wb, ws, 'Questions');
                 
-                // Generate Excel file and download
+                // Generate Excel file and let user choose save location
                 const fileName = `generated_questions_${new Date().toISOString().split('T')[0]}.xlsx`;
-                XLSX.writeFile(wb, fileName);
                 
-                // Show success message
-                alert(`Questions exported successfully to ${fileName}`);
+                // Try to use File System Access API to let user choose folder (Chrome/Edge)
+                if ('showSaveFilePicker' in window) {
+                    try {
+                        const fileHandle = await window.showSaveFilePicker({
+                            suggestedName: fileName,
+                            types: [{
+                                description: 'Excel files',
+                                accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+                            }]
+                        });
+                        
+                        // Convert workbook to array buffer
+                        const excelBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+                        
+                        // Write to the selected file
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+                        await writable.close();
+                        
+                        // Show success message
+                        alert(`Questions exported successfully to ${fileHandle.name}`);
+                    } catch (error) {
+                        // User cancelled or error occurred, fall back to automatic download
+                        if (error.name !== 'AbortError') {
+                            console.warn('File System Access API failed, using fallback:', error);
+                        }
+                        // Fall through to automatic download
+                        XLSX.writeFile(wb, fileName);
+                        alert(`Questions exported successfully to ${fileName} (saved to Downloads folder)`);
+                    }
+                } else {
+                    // Fallback for browsers that don't support File System Access API
+                    XLSX.writeFile(wb, fileName);
+                    alert(`Questions exported successfully to ${fileName} (saved to Downloads folder)\n\nNote: To choose a custom folder, use Chrome or Edge browser.`);
+                }
             } catch (error) {
                 console.error('Export error:', error);
                 alert('Error exporting to Excel. Trying text format instead...');
