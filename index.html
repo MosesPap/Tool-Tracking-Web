@@ -6798,10 +6798,8 @@ if (!userCredential.user.emailVerified) {
                         document.getElementById('fullName').textContent = user.email;
                         updatePreviousToolsTabCount();
                     });
-                // Always show only the main menu after login or refresh
-                hideAllMainScreens();
-                document.getElementById('toolScannerMenu').style.display = 'block';
-                updateLoggedInTechnician();
+                // Redirect to main-menu.html after login
+                window.location.href = 'main-menu.html';
             } else {
                 loginSection.style.display = 'block';
                 appSection.style.display = 'none';
@@ -7354,20 +7352,8 @@ if (!userCredential.user.emailVerified) {
                     e.stopImmediatePropagation();
                     console.log('Create Training Questions button clicked');
                     
-                    // Force navigation within the same window
-                    // Use replace to avoid opening new window/tab
-                    const targetUrl = 'pdf-question-generator.html';
-                    
-                    // Try multiple methods to ensure it works
-                    if (window.location.replace) {
-                        window.location.replace(targetUrl);
-                    } else if (window.location.assign) {
-                        window.location.assign(targetUrl);
-                    } else {
-                        window.location.href = targetUrl;
-                    }
-                    
-                    return false;
+                    // Navigate to pdf-question-generator.html
+                    window.location.href = 'pdf-question-generator.html';
                 });
             }
             

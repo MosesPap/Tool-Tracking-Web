@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <title>ToolScanner Menu - Tool Tracking</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/common.css">
+    <style>
+        /* Reset body and html margins for full-width title bars */
+        body, html {
+            margin: 0;
+            padding: 0;
+        }
+        
+        /* Full-width title bar styles */
+        .full-width-title-bar {
+            width: 100vw !important;
+            margin-left: calc(50% - 50vw) !important;
+            margin-right: calc(50% - 50vw) !important;
+            margin-top: 0 !important;
+        }
+        
+        /* Button styles - matching index.html */
+        .btn-primary {
+            background-color: #FF9800 !important;
+            border-color: #FF9800 !important;
+            color: white !important;
+            font-weight: bold;
+            border-radius: 24px !important;
+            padding: 12px 24px !important;
+            box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
+            transition: all 0.3s ease;
+            border: none;
+        }
+        
+        .btn-primary:hover {
+            background-color: #F57C00 !important;
+            border-color: #F57C00 !important;
+            color: white !important;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(255, 152, 0, 0.4);
+        }
+        
+        .btn-primary:active {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(255, 152, 0, 0.4);
+        }
+        
+        .btn-warning {
+            background-color: #FF9800 !important;
+            border-color: #FF9800 !important;
+            color: white !important;
+            font-weight: bold;
+            border-radius: 24px !important;
+            padding: 12px 24px !important;
+            box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
+            transition: all 0.3s ease;
+            border: none;
+        }
+        
+        .btn-warning:hover {
+            background-color: #F57C00 !important;
+            border-color: #F57C00 !important;
+            color: white !important;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(255, 152, 0, 0.4);
+        }
+        
+        .btn-warning:active {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(255, 152, 0, 0.4);
+        }
+        
+        /* 3D Grey button styles for My Tools - darker than other buttons */
+        #menuMyToolsBtn {
+            background: linear-gradient(135deg, #9e9e9e 0%, #757575 100%) !important;
+            border-color: #757575 !important;
+            color: white !important;
+            font-weight: bold;
+            border-radius: 24px !important;
+            padding: 12px 24px !important;
+            box-shadow: 0 4px 8px rgba(117, 117, 117, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2) !important;
+            transition: all 0.3s ease;
+            border: 2px solid #616161 !important;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        #menuMyToolsBtn:hover {
+            background: linear-gradient(135deg, #8e8e8e 0%, #616161 100%) !important;
+            border-color: #616161 !important;
+            color: white !important;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 8px 16px rgba(117, 117, 117, 0.5),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.3) !important;
+        }
+        
+        #menuMyToolsBtn:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 6px 12px rgba(117, 117, 117, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2) !important;
+        }
+        
+        /* 3D Grey button styles for Work Location */
+        #menuWorkLocationBtn {
+            background: linear-gradient(135deg, #9e9e9e 0%, #757575 100%) !important;
+            border-color: #757575 !important;
+            color: white !important;
+            font-weight: bold;
+            border-radius: 24px !important;
+            padding: 12px 24px !important;
+            box-shadow: 0 4px 8px rgba(117, 117, 117, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2) !important;
+            transition: all 0.3s ease;
+            border: 2px solid #616161 !important;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        #menuWorkLocationBtn:hover {
+            background: linear-gradient(135deg, #8e8e8e 0%, #616161 100%) !important;
+            border-color: #616161 !important;
+            color: white !important;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 8px 16px rgba(117, 117, 117, 0.5),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.3) !important;
+        }
+        
+        #menuWorkLocationBtn:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 6px 12px rgba(117, 117, 117, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2) !important;
+        }
+        
+        /* Menu button container */
+        .d-grid.col-6 {
+            max-width: 85% !important;
+            width: 85% !important;
+            flex: 0 0 85% !important;
+        }
+        
+        /* Increase font size and padding for all menu buttons */
+        .btn {
+            font-size: 1.5rem !important;
+            padding: 16px 32px !important;
+            min-height: 60px !important;
+        }
+        
+        /* Increase icon size */
+        .btn i {
+            font-size: 1.3rem !important;
+            margin-right: 8px !important;
+        }
+        
+        @media (max-width: 768px) {
+            .d-grid.col-6 {
+                max-width: 100% !important;
+                width: 100% !important;
+                flex: 0 0 100% !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- ToolScanner Menu Section -->
+    <div id="toolScannerMenu">
+        <!-- Orange Top Bar with Title and Settings -->
+        <div class="full-width-title-bar" style="background: #FF9800; color: white; min-width: 100vw; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
+            <h2 style="margin: 0 0 0 20px; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px;">ToolScanner Menu</h2>
+            <button id="settingsBtn" class="btn btn-link p-0" style="position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-size: 2rem; color: white; z-index: 2;" title="Settings">
+                <i class="fas fa-cog" style="color: white;"></i>
+            </button>
+        </div>
+        <div class="container py-4">
+            <!-- Welcome Message -->
+            <div style="margin: 8px 0 10px 0; text-align: left;">
+                <span style="font-size: 1.5rem; color: #333; font-weight: bold;">Welcome, <span id="fullName" class="technician-name"></span></span>
+            </div>
+            <div class="d-grid gap-3 col-6 mx-auto">
+                <button class="btn btn-success" id="menuRegisterBtn"><i class="fas fa-plus"></i> Register Tools</button>
+                <button class="btn btn-danger" id="menuOutBtn"><i class="fas fa-sign-out-alt"></i> View OUT Tools</button>
+                <button class="btn btn-warning" id="menuMyToolsBtn"><i class="fas fa-toolbox"></i> My Tools</button>
+                <button class="btn" id="menuWorkLocationBtn"><i class="fas fa-map-marker-alt"></i> Tools by Work Location</button>
+                <button class="btn btn-info" id="menuAdminBtn" style="display: none;"><i class="fas fa-user-shield"></i> Tool Administrator</button>
+                <button class="btn btn-primary" id="menuTrainingQuestionsBtn" style="display: none;"><i class="fas fa-question-circle"></i> Create Training Questions</button>
+                <button class="btn btn-secondary" id="menuLogoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Code Modal -->
+    <div class="modal fade" id="adminCodeModal" tabindex="-1" aria-labelledby="adminCodeModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="adminCodeModalLabel">Enter Admin Code</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="adminCodeInput" class="form-label">Admin Code</label>
+                        <input type="password" id="adminCodeInput" class="form-control mb-2" placeholder="Enter admin code">
+                        <div id="adminCodeError" class="text-danger" style="display: none;"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="verifyAdminCodeBtn">Verify</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDmI0v_pVt_qFJlsqmw8QlIOi-4VLjyn54",
+            authDomain: "tool-tracking-system-15e84.firebaseapp.com",
+            projectId: "tool-tracking-system-15e84",
+            storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
+            messagingSenderId: "813615362050",
+            appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // Configure Firebase Auth
+        auth.useDeviceLanguage();
+        auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+        // Variables
+        let previousOutToolsCount = 0;
+        let previousOutToolsData = [];
+
+        // Check authentication state
+        auth.onAuthStateChanged(function(user) {
+            if (user && !user.emailVerified) {
+                // Force sign out if user is not verified
+                auth.signOut();
+                window.location.href = 'index.html';
+                return;
+            }
+            
+            if (user) {
+                // User is logged in - fetch data and show menu
+                db.collection('technicians').doc(user.uid)
+                    .get()
+                    .then(doc => {
+                        if (doc.exists) {
+                            const technicianData = doc.data();
+                            const name = technicianData.fullName || user.email;
+                            localStorage.setItem('techniciansId', doc.id);
+                            localStorage.setItem('fullName', name);
+                            document.getElementById('fullName').textContent = name;
+                            
+                            // Check if user is admin
+                            if (technicianData.isAdmin) {
+                                const menuAdminBtn = document.getElementById('menuAdminBtn');
+                                if (menuAdminBtn) {
+                                    menuAdminBtn.style.display = 'block';
+                                }
+                            }
+                            
+                            // Check if user is instructor
+                            if (technicianData.isInstructor) {
+                                const menuTrainingQuestionsBtn = document.getElementById('menuTrainingQuestionsBtn');
+                                if (menuTrainingQuestionsBtn) {
+                                    menuTrainingQuestionsBtn.style.display = 'block';
+                                }
+                            }
+                        } else {
+                            document.getElementById('fullName').textContent = user.email;
+                        }
+                        updatePreviousOutToolsCount();
+                    }).catch(error => {
+                        console.error('Error fetching technician data:', error);
+                        document.getElementById('fullName').textContent = user.email;
+                        updatePreviousOutToolsCount();
+                    });
+            } else {
+                // User is not logged in - redirect to index.html
+                window.location.href = 'index.html';
+            }
+        });
+
+        // Update previous OUT tools count
+        async function updatePreviousOutToolsCount() {
+            try {
+                const user = auth.currentUser;
+                if (!user) return;
+
+                const fullName = localStorage.getItem('fullName') || user.email;
+                const techniciansId = localStorage.getItem('techniciansId') || user.uid;
+
+                // Query for tools checked out by this technician that are still OUT
+                const outToolsSnapshot = await db.collection('tools')
+                    .where('checkedOutBy', '==', fullName)
+                    .where('status', '==', 'OUT')
+                    .get();
+
+                if (!outToolsSnapshot.empty) {
+                    previousOutToolsCount = outToolsSnapshot.size;
+                    previousOutToolsData = outToolsSnapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+
+                    // Update button text with previous OUT tools count
+                    const menuOutBtn = document.getElementById('menuOutBtn');
+                    if (menuOutBtn) {
+                        menuOutBtn.innerHTML = `<i class="fas fa-sign-out-alt"></i> View OUT Tools (${previousOutToolsCount})`;
+                        menuOutBtn.disabled = previousOutToolsCount === 0;
+                    }
+                } else {
+                    previousOutToolsCount = 0;
+                    previousOutToolsData = [];
+                    const menuOutBtn = document.getElementById('menuOutBtn');
+                    if (menuOutBtn) {
+                        menuOutBtn.innerHTML = `<i class="fas fa-sign-out-alt"></i> View OUT Tools (0)`;
+                        menuOutBtn.disabled = true;
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching previous OUT tools count:', error);
+                previousOutToolsCount = 0;
+                previousOutToolsData = [];
+                const menuOutBtn = document.getElementById('menuOutBtn');
+                if (menuOutBtn) {
+                    menuOutBtn.innerHTML = `<i class="fas fa-sign-out-alt"></i> View OUT Tools (0)`;
+                    menuOutBtn.disabled = true;
+                }
+            }
+        }
+
+        // Menu button event handlers
+        document.addEventListener('DOMContentLoaded', function() {
+            // Register Tools button
+            const menuRegisterBtn = document.getElementById('menuRegisterBtn');
+            if (menuRegisterBtn) {
+                menuRegisterBtn.addEventListener('click', function() {
+                    window.location.href = 'register-tools.html';
+                });
+            }
+
+            // View OUT Tools button
+            const menuOutBtn = document.getElementById('menuOutBtn');
+            if (menuOutBtn) {
+                menuOutBtn.addEventListener('click', function() {
+                    window.location.href = 'previous-out.html';
+                });
+            }
+
+            // My Tools button
+            const menuMyToolsBtn = document.getElementById('menuMyToolsBtn');
+            if (menuMyToolsBtn) {
+                menuMyToolsBtn.addEventListener('click', function() {
+                    window.location.href = 'my-tools.html';
+                });
+            }
+
+            // Tools by Work Location button
+            const menuWorkLocationBtn = document.getElementById('menuWorkLocationBtn');
+            if (menuWorkLocationBtn) {
+                menuWorkLocationBtn.addEventListener('click', function() {
+                    // This functionality is in index.html - redirect there for now
+                    // Or we can implement it here if needed
+                    window.location.href = 'index.html?section=workLocation';
+                });
+            }
+
+            // Tool Administrator button
+            const menuAdminBtn = document.getElementById('menuAdminBtn');
+            if (menuAdminBtn) {
+                menuAdminBtn.addEventListener('click', function() {
+                    window.location.href = 'admin.html';
+                });
+            }
+
+            // Create Training Questions button
+            const menuTrainingQuestionsBtn = document.getElementById('menuTrainingQuestionsBtn');
+            if (menuTrainingQuestionsBtn) {
+                menuTrainingQuestionsBtn.addEventListener('click', function() {
+                    window.location.href = 'pdf-question-generator.html';
+                });
+            }
+
+            // Logout button
+            const menuLogoutBtn = document.getElementById('menuLogoutBtn');
+            if (menuLogoutBtn) {
+                menuLogoutBtn.addEventListener('click', function() {
+                    auth.signOut().then(() => {
+                        localStorage.removeItem('fullName');
+                        localStorage.removeItem('techniciansId');
+                        window.location.href = 'index.html';
+                    }).catch(error => {
+                        console.error('Error signing out:', error);
+                    });
+                });
+            }
+
+            // Settings button
+            const settingsBtn = document.getElementById('settingsBtn');
+            if (settingsBtn) {
+                settingsBtn.onclick = function() {
+                    document.getElementById('adminCodeInput').value = '';
+                    document.getElementById('adminCodeError').style.display = 'none';
+                    const modal = new bootstrap.Modal(document.getElementById('adminCodeModal'));
+                    modal.show();
+                };
+            }
+
+            // Verify admin code
+            const verifyAdminCodeBtn = document.getElementById('verifyAdminCodeBtn');
+            if (verifyAdminCodeBtn) {
+                verifyAdminCodeBtn.onclick = function() {
+                    const adminCode = document.getElementById('adminCodeInput').value;
+                    const errorDiv = document.getElementById('adminCodeError');
+                    
+                    if (adminCode === 'AVIONICS2024') {
+                        // Correct code - navigate to admin page
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('adminCodeModal'));
+                        modal.hide();
+                        window.location.href = 'admin.html';
+                    } else {
+                        errorDiv.textContent = 'Invalid admin code. Please try again.';
+                        errorDiv.style.display = 'block';
+                    }
+                };
+            }
+        });
+    </script>
+</body>
+</html>
+

@@ -621,7 +621,7 @@
                     // Show collection selection modal first (matching index.html behavior)
                     await showCollectionSelectionDialog();
                 } else {
-                    window.location.href = 'index.html';
+                    window.location.href = 'main-menu.html';
                 }
             });
 
@@ -710,8 +710,7 @@
 
         // Handle back navigation
         function handleBackNavigation() {
-            sessionStorage.setItem('skipSplash', 'true');
-            window.location.href = 'index.html';
+            window.location.href = 'main-menu.html';
         }
 
         // Show collection selection dialog (matching index.html)
