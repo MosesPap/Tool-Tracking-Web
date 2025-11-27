@@ -621,6 +621,8 @@
 
         // Back button function - must be in global scope for onclick
         window.goToMainMenu = function() {
+            // Set flag to skip splash video and login screen
+            sessionStorage.setItem('skipSplash', 'true');
             window.location.href = 'index.html';
         };
 
