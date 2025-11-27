@@ -353,7 +353,7 @@
                     <h4>Drop your PDF file here</h4>
                     <p class="text-muted">or click to browse</p>
                     <input type="file" id="pdfFile" accept=".pdf" style="display: none;">
-                    <button class="btn btn-primary mt-3" onclick="document.getElementById('pdfFile').click()">
+                    <button class="btn btn-primary mt-3" id="selectPdfButton">
                         <i class="fas fa-file-pdf me-2"></i>Select PDF File
                     </button>
                 </div>
@@ -739,8 +739,24 @@
         // File upload handling
         const uploadArea = document.getElementById('uploadArea');
         const pdfFileInput = document.getElementById('pdfFile');
+        const selectPdfButton = document.getElementById('selectPdfButton');
 
-        uploadArea.addEventListener('click', () => pdfFileInput.click());
+        // Handle upload area click (but not if clicking the button)
+        uploadArea.addEventListener('click', (e) => {
+            // Don't trigger if clicking the button
+            if (e.target.closest('#selectPdfButton')) {
+                return;
+            }
+            pdfFileInput.click();
+        });
+        
+        // Handle button click separately
+        if (selectPdfButton) {
+            selectPdfButton.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent upload area click
+                pdfFileInput.click();
+            });
+        }
 
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -841,11 +857,8 @@
                 document.getElementById('pdfPreview').style.display = 'block';
                 document.getElementById('generateSection').style.display = 'block';
                 
-                // Clear input value after processing to allow selecting the same file again
-                // Use setTimeout to ensure the change event has fully processed
-                setTimeout(() => {
-                    pdfFileInput.value = '';
-                }, 100);
+                // Don't clear input value immediately - let user see the file is loaded
+                // Only clear when they explicitly remove it via clearFile()
             } catch (error) {
                 alert('Error reading PDF: ' + error.message);
                 console.error(error);
@@ -942,7 +955,8 @@
                 return shuffled;
             }
             
-            return questions.map(q => {
+            // First, shuffle each question's options randomly
+            let shuffledQuestions = questions.map(q => {
                 // Get current options as array with their keys
                 const options = [
                     { key: 'A', value: q.options.A || '' },
@@ -978,6 +992,65 @@
                     correct: newCorrectKey
                 };
             });
+            
+            // Now ensure even distribution of correct answers across A, B, C
+            const totalQuestions = shuffledQuestions.length;
+            if (totalQuestions > 0) {
+                // Count current distribution
+                const counts = { A: 0, B: 0, C: 0 };
+                shuffledQuestions.forEach(q => {
+                    counts[q.correct] = (counts[q.correct] || 0) + 1;
+                });
+                
+                // Target: roughly equal distribution (within 1 of each other)
+                const targetPerLetter = Math.floor(totalQuestions / 3);
+                const remainder = totalQuestions % 3;
+                const targets = {
+                    A: targetPerLetter + (remainder > 0 ? 1 : 0),
+                    B: targetPerLetter + (remainder > 1 ? 1 : 0),
+                    C: targetPerLetter
+                };
+                
+                // If distribution is very uneven (difference > 2), rebalance
+                const maxCount = Math.max(counts.A, counts.B, counts.C);
+                const minCount = Math.min(counts.A, counts.B, counts.C);
+                
+                if (maxCount - minCount > 2) {
+                    // Rebalance by swapping options to achieve even distribution
+                    const letters = ['A', 'B', 'C'];
+                    let rebalancedCounts = { A: 0, B: 0, C: 0 };
+                    
+                    shuffledQuestions = shuffledQuestions.map((q, index) => {
+                        // Calculate what the correct answer should be for even distribution
+                        const desiredLetter = letters[index % 3];
+                        
+                        // If current correct answer doesn't match desired distribution, swap options
+                        if (q.correct !== desiredLetter && counts[q.correct] > targets[q.correct] && rebalancedCounts[desiredLetter] < targets[desiredLetter]) {
+                            // Swap the option values so the correct answer becomes the desired letter
+                            const currentCorrectValue = q.options[q.correct];
+                            const desiredValue = q.options[desiredLetter];
+                            
+                            // Swap the values
+                            const newOptions = { ...q.options };
+                            newOptions[desiredLetter] = currentCorrectValue;
+                            newOptions[q.correct] = desiredValue;
+                            
+                            counts[q.correct]--;
+                            rebalancedCounts[desiredLetter]++;
+                            
+                            return {
+                                question: q.question,
+                                options: newOptions,
+                                correct: desiredLetter
+                            };
+                        }
+                        rebalancedCounts[q.correct] = (rebalancedCounts[q.correct] || 0) + 1;
+                        return q;
+                    });
+                }
+            }
+            
+            return shuffledQuestions;
         }
 
         async function generateQuestions() {
@@ -1176,6 +1249,9 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                     });
 
                                     if (response.ok) {
+                                        // Track API call for analytics
+                                        trackApiCall();
+                                        
                                         data = await response.json();
                                         if (data.error) {
                                             lastError = data.error.message || 'API returned an error';
