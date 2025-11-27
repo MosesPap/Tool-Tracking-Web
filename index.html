@@ -6718,17 +6718,8 @@ if (!userCredential.user.emailVerified) {
                     }
                     hideAllMainScreens();
                     document.getElementById('toolScannerMenu').style.display = 'block';
-                    // Clear the flags
+                    // Clear the flag
                     sessionStorage.removeItem('skipSplash');
-                    sessionStorage.removeItem('showMenu');
-                }
-                
-                // Also check for showMenu flag (for navigation from pdf-question-generator)
-                const showMenu = sessionStorage.getItem('showMenu');
-                if (showMenu === 'true') {
-                    hideAllMainScreens();
-                    document.getElementById('toolScannerMenu').style.display = 'block';
-                    sessionStorage.removeItem('showMenu');
                 }
                 
                 // Always fetch fresh data from Firestore
@@ -7370,38 +7361,55 @@ if (!userCredential.user.emailVerified) {
                 if (orangeOverlay) {
                     orangeOverlay.classList.add('hidden');
                 }
-                // Hide login section and show menu immediately if user is authenticated
+                // Hide login section immediately
                 const loginSection = document.getElementById('loginSection');
                 if (loginSection) {
                     loginSection.style.display = 'none';
                     loginSection.classList.add('d-none');
                 }
+                
+                // Wait for auth state to be ready, then show menu
+                // This ensures user doesn't get logged out when navigating from other pages
                 const user = auth.currentUser;
                 if (user) {
+                    // User is already authenticated, show menu immediately
                     hideAllMainScreens();
                     document.getElementById('toolScannerMenu').style.display = 'block';
+                    console.log('Skipping splash screen - showing menu for authenticated user');
+                } else {
+                    // User not immediately available - wait for auth state to initialize
+                    // This prevents false logout when navigating from pdf-question-generator
+                    let authChecked = false;
+                    const unsubscribe = auth.onAuthStateChanged((authUser) => {
+                        if (!authChecked && authUser) {
+                            authChecked = true;
+                            hideAllMainScreens();
+                            document.getElementById('toolScannerMenu').style.display = 'block';
+                            console.log('Skipping splash screen - showing menu after auth state ready');
+                            unsubscribe(); // Stop listening after showing menu
+                        } else if (!authChecked) {
+                            // Wait a bit more for auth to initialize
+                            setTimeout(() => {
+                                if (!authChecked) {
+                                    authChecked = true;
+                                    const finalUser = auth.currentUser;
+                                    if (finalUser) {
+                                        hideAllMainScreens();
+                                        document.getElementById('toolScannerMenu').style.display = 'block';
+                                        console.log('Skipping splash screen - showing menu after timeout');
+                                    } else {
+                                        console.log('No user found - may need to login');
+                                    }
+                                    unsubscribe();
+                                }
+                            }, 1000);
+                        }
+                    });
                 }
-                // Also check for showMenu flag
-                const showMenu = sessionStorage.getItem('showMenu');
-                if (showMenu === 'true' && user) {
-                    hideAllMainScreens();
-                    document.getElementById('toolScannerMenu').style.display = 'block';
-                    sessionStorage.removeItem('showMenu');
-                }
+                
                 // Don't show splash video, go directly to menu if logged in
-                console.log('Skipping splash screen - coming from register-tools or previous-out');
+                console.log('Skipping splash screen - coming from register-tools, previous-out, or pdf-question-generator');
                 return; // Exit early, don't show splash
-            }
-            
-            // Check for showMenu flag even if skipSplash wasn't set
-            const showMenuStandalone = sessionStorage.getItem('showMenu');
-            if (showMenuStandalone === 'true') {
-                const user = auth.currentUser;
-                if (user) {
-                    hideAllMainScreens();
-                    document.getElementById('toolScannerMenu').style.display = 'block';
-                    sessionStorage.removeItem('showMenu');
-                }
             }
             
             // iOS Safari autoplay workaround
