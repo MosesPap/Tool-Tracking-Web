@@ -620,11 +620,16 @@
         setInterval(updateAnalyticsDisplay, 1000); // Update every second
 
         // Back button function - must be in global scope for onclick
-        window.goToMainMenu = function() {
-            // Set flag to skip splash video and login screen
+        // Use exact same logic as register-tools.html
+        function handleBackNavigation() {
+            // Set flag to skip splash video
             sessionStorage.setItem('skipSplash', 'true');
             window.location.href = 'index.html';
-        };
+        }
+        
+        // Make it available globally for onclick
+        window.goToMainMenu = handleBackNavigation;
+        window.handleBackNavigation = handleBackNavigation;
 
         // ========== API USAGE ANALYTICS ==========
         function trackApiCall() {
