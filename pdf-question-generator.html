@@ -622,8 +622,9 @@
         // Back button function - must be in global scope for onclick
         // Use exact same logic as register-tools.html
         function handleBackNavigation() {
-            // Set flag to skip splash video
+            // Set flag to skip splash video - do this FIRST before any navigation
             sessionStorage.setItem('skipSplash', 'true');
+            // Use href (same as register-tools.html) - replace might cause issues
             window.location.href = 'index.html';
         }
         
