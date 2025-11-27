@@ -2117,23 +2117,40 @@
         (function() {
             const skipSplash = sessionStorage.getItem('skipSplash');
             if (skipSplash === 'true') {
-                // Hide login section immediately if it exists
-                document.addEventListener('DOMContentLoaded', function() {
-                    const loginSection = document.getElementById('loginSection');
-                    const splashScreen = document.getElementById('splashScreen');
-                    const orangeOverlay = document.getElementById('orangeOverlay');
-                    
-                    if (loginSection) {
-                        loginSection.style.display = 'none';
-                        loginSection.classList.add('d-none');
+                // Hide elements immediately - don't wait for DOMContentLoaded
+                const hideElements = function() {
+                    try {
+                        const loginSection = document.getElementById('loginSection');
+                        const splashScreen = document.getElementById('splashScreen');
+                        const orangeOverlay = document.getElementById('orangeOverlay');
+                        
+                        if (loginSection) {
+                            loginSection.style.display = 'none';
+                            loginSection.classList.add('d-none');
+                        }
+                        if (splashScreen) {
+                            splashScreen.style.display = 'none';
+                        }
+                        if (orangeOverlay) {
+                            orangeOverlay.classList.add('hidden');
+                            orangeOverlay.style.display = 'none';
+                        }
+                    } catch(e) {
+                        console.error('Error hiding elements:', e);
                     }
-                    if (splashScreen) {
-                        splashScreen.style.display = 'none';
-                    }
-                    if (orangeOverlay) {
-                        orangeOverlay.classList.add('hidden');
-                    }
-                });
+                };
+                
+                // Try immediately
+                hideElements();
+                
+                // Also try on DOMContentLoaded as fallback
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', hideElements);
+                }
+                
+                // Also try after short delay to catch any late-rendering
+                setTimeout(hideElements, 50);
+                setTimeout(hideElements, 200);
             }
         })();
     </script>
@@ -6718,8 +6735,10 @@ if (!userCredential.user.emailVerified) {
                     }
                     hideAllMainScreens();
                     document.getElementById('toolScannerMenu').style.display = 'block';
-                    // Clear the flag
-                    sessionStorage.removeItem('skipSplash');
+                    // Clear the flag only if it exists (might have been cleared already)
+                    if (sessionStorage.getItem('skipSplash') === 'true') {
+                        sessionStorage.removeItem('skipSplash');
+                    }
                 }
                 
                 // Always fetch fresh data from Firestore
@@ -7352,8 +7371,6 @@ if (!userCredential.user.emailVerified) {
             // Check if we should skip splash (coming from register-tools or other pages)
             const skipSplash = sessionStorage.getItem('skipSplash');
             if (skipSplash === 'true') {
-                // Clear the flag
-                sessionStorage.removeItem('skipSplash');
                 // Hide splash screen immediately
                 if (splashScreen) {
                     splashScreen.style.display = 'none';
@@ -7368,43 +7385,17 @@ if (!userCredential.user.emailVerified) {
                     loginSection.classList.add('d-none');
                 }
                 
-                // Wait for auth state to be ready, then show menu
-                // This ensures user doesn't get logged out when navigating from other pages
+                // Check if user is authenticated and show menu immediately
                 const user = auth.currentUser;
                 if (user) {
-                    // User is already authenticated, show menu immediately
                     hideAllMainScreens();
                     document.getElementById('toolScannerMenu').style.display = 'block';
-                    console.log('Skipping splash screen - showing menu for authenticated user');
+                    sessionStorage.removeItem('skipSplash');
+                    console.log('Skipping splash screen - showing menu immediately');
                 } else {
-                    // User not immediately available - wait for auth state to initialize
-                    // This prevents false logout when navigating from pdf-question-generator
-                    let authChecked = false;
-                    const unsubscribe = auth.onAuthStateChanged((authUser) => {
-                        if (!authChecked && authUser) {
-                            authChecked = true;
-                            hideAllMainScreens();
-                            document.getElementById('toolScannerMenu').style.display = 'block';
-                            console.log('Skipping splash screen - showing menu after auth state ready');
-                            unsubscribe(); // Stop listening after showing menu
-                        } else if (!authChecked) {
-                            // Wait a bit more for auth to initialize
-                            setTimeout(() => {
-                                if (!authChecked) {
-                                    authChecked = true;
-                                    const finalUser = auth.currentUser;
-                                    if (finalUser) {
-                                        hideAllMainScreens();
-                                        document.getElementById('toolScannerMenu').style.display = 'block';
-                                        console.log('Skipping splash screen - showing menu after timeout');
-                                    } else {
-                                        console.log('No user found - may need to login');
-                                    }
-                                    unsubscribe();
-                                }
-                            }, 1000);
-                        }
-                    });
+                    // User not immediately available - wait for auth state
+                    // The auth.onAuthStateChanged handler will show menu when ready
+                    console.log('Waiting for auth state - menu will be shown when auth confirms');
                 }
                 
                 // Don't show splash video, go directly to menu if logged in
