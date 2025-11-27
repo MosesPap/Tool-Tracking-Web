@@ -670,15 +670,14 @@
         updateAnalyticsDisplay();
         setInterval(updateAnalyticsDisplay, 1000); // Update every second
         
-        // Back button function - must be in global scope for onclick
-        // Use EXACT same logic as register-tools.html and previous-out.html
+        // Back button function - EXACT copy from register-tools.html
         function handleBackNavigation() {
-            // Set flag to skip splash video - do this FIRST before any navigation
+            // Set flag to skip splash video
             sessionStorage.setItem('skipSplash', 'true');
             window.location.href = 'index.html';
         }
         
-        // Make it available globally for onclick
+        // Make it available globally for onclick - EXACT same as register-tools
         window.goToMainMenu = handleBackNavigation;
         window.handleBackNavigation = handleBackNavigation;
 
