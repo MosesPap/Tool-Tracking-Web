@@ -2117,6 +2117,7 @@
         (function() {
             const skipSplash = sessionStorage.getItem('skipSplash');
             if (skipSplash === 'true') {
+                console.log('skipSplash detected in immediate script');
                 // Hide elements immediately - don't wait for DOMContentLoaded
                 const hideElements = function() {
                     try {
@@ -2130,10 +2131,12 @@
                         }
                         if (splashScreen) {
                             splashScreen.style.display = 'none';
+                            splashScreen.style.visibility = 'hidden';
                         }
                         if (orangeOverlay) {
                             orangeOverlay.classList.add('hidden');
                             orangeOverlay.style.display = 'none';
+                            orangeOverlay.style.visibility = 'hidden';
                         }
                     } catch(e) {
                         console.error('Error hiding elements:', e);
@@ -2146,11 +2149,14 @@
                 // Also try on DOMContentLoaded as fallback
                 if (document.readyState === 'loading') {
                     document.addEventListener('DOMContentLoaded', hideElements);
+                } else {
+                    hideElements();
                 }
                 
                 // Also try after short delay to catch any late-rendering
                 setTimeout(hideElements, 50);
                 setTimeout(hideElements, 200);
+                setTimeout(hideElements, 500);
             }
         })();
     </script>
@@ -6725,6 +6731,7 @@ if (!userCredential.user.emailVerified) {
                     const loginSection = document.getElementById('loginSection');
                     if (splashScreen) {
                         splashScreen.style.display = 'none';
+                        splashScreen.classList.add('splash-hidden');
                     }
                     if (orangeOverlay) {
                         orangeOverlay.classList.add('hidden');
@@ -6740,14 +6747,13 @@ if (!userCredential.user.emailVerified) {
                     const menuElement = document.getElementById('toolScannerMenu');
                     if (menuElement) {
                         menuElement.style.display = 'block';
-                        console.log('Menu shown via skipSplash flag');
+                        console.log('Menu shown via skipSplash flag in auth handler');
                     } else {
                         console.error('toolScannerMenu element not found!');
                     }
                     // Clear the flag
                     sessionStorage.removeItem('skipSplash');
-                    // Return early to prevent any other logic from running
-                    return;
+                    // Continue with normal flow - don't return, we still need to fetch user data
                 }
                 
                 // Always fetch fresh data from Firestore
@@ -7380,12 +7386,15 @@ if (!userCredential.user.emailVerified) {
             // Check if we should skip splash (coming from register-tools or other pages)
             const skipSplash = sessionStorage.getItem('skipSplash');
             if (skipSplash === 'true') {
+                console.log('skipSplash detected - hiding splash and showing menu');
                 // Hide splash screen immediately
                 if (splashScreen) {
                     splashScreen.style.display = 'none';
+                    splashScreen.classList.add('splash-hidden');
                 }
                 if (orangeOverlay) {
                     orangeOverlay.classList.add('hidden');
+                    orangeOverlay.style.display = 'none';
                 }
                 // Hide login section immediately
                 const loginSection = document.getElementById('loginSection');
@@ -7394,21 +7403,19 @@ if (!userCredential.user.emailVerified) {
                     loginSection.classList.add('d-none');
                 }
                 
-                // Check if user is authenticated and show menu immediately
-                const user = auth.currentUser;
-                if (user) {
-                    hideAllMainScreens();
-                    document.getElementById('toolScannerMenu').style.display = 'block';
-                    sessionStorage.removeItem('skipSplash');
-                    console.log('Skipping splash screen - showing menu immediately');
-                } else {
-                    // User not immediately available - wait for auth state
-                    // The auth.onAuthStateChanged handler will show menu when ready
-                    console.log('Waiting for auth state - menu will be shown when auth confirms');
-                }
+                // Force show menu - auth handler already handled it, just ensure it stays visible
+                // The auth.onAuthStateChanged handler above should have already shown the menu
+                // But ensure it's visible here too as backup
+                setTimeout(() => {
+                    const menuEl = document.getElementById('toolScannerMenu');
+                    if (menuEl && menuEl.style.display !== 'block') {
+                        hideAllMainScreens();
+                        menuEl.style.display = 'block';
+                        console.log('Menu shown via skipSplash backup check');
+                    }
+                }, 100);
                 
-                // Don't show splash video, go directly to menu if logged in
-                console.log('Skipping splash screen - coming from register-tools, previous-out, or pdf-question-generator');
+                // CRITICAL: Return immediately to prevent ANY splash screen logic from running
                 return; // Exit early, don't show splash
             }
             
@@ -7460,6 +7467,14 @@ if (!userCredential.user.emailVerified) {
             }
             
             // Show orange overlay for 0.5s, then attempt video splash
+            // BUT skip if skipSplash flag is set
+            const skipSplashCheck = sessionStorage.getItem('skipSplash');
+            if (skipSplashCheck === 'true') {
+                // Already handled above, don't show splash video
+                console.log('Skipping splash video - skipSplash flag is set');
+                return; // Exit early, don't show splash
+            }
+            
             setTimeout(() => {
                 orangeOverlay.classList.add('hidden');
                 
