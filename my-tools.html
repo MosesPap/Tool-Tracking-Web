@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <title>My Tools - Tool Tracking</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/common.css">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+    <script src="js/common.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+
+        .mytools-title {
+            color: orange;
+            font-weight: bold;
+            font-size: 2.2rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        .mytools-back {
+            background: orange;
+            color: white;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 24px;
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+        }
+
+        .mytools-collection {
+            background: orange;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+            border-radius: 6px 6px 0 0;
+            padding: 6px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 1.5rem;
+        }
+
+        .mytools-location {
+            background: #cbe7ff;
+            color: #222;
+            font-weight: bold;
+            font-size: 1.1rem;
+            border-radius: 0 0 6px 6px;
+            padding: 6px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .mytools-tool-item {
+            padding: 12px 12px 8px 12px;
+            border-radius: 0 0 6px 6px;
+            margin-bottom: 0.5rem;
+            font-size: 1.08rem;
+        }
+
+        .mytools-tool-bg1 {
+            background: #fff;
+        }
+
+        .mytools-tool-bg2 {
+            background: #fff7e6;
+        }
+
+        .mytools-tool-name {
+            font-weight: bold;
+            font-size: 1.13rem;
+            display: block !important;
+            margin-bottom: 4px !important;
+            width: 100% !important;
+            clear: both !important;
+        }
+
+        .mytools-tool-tid {
+            font-weight: bold;
+            display: block !important;
+            margin-bottom: 4px !important;
+            width: 100% !important;
+            clear: both !important;
+        }
+
+        .mytools-tool-part {
+            font-size: 1.01rem;
+            color: #444;
+        }
+
+        .mytools-status-in {
+            color: #388E3C;
+            font-weight: bold;
+            font-size: 1.05rem;
+        }
+
+        .mytools-status-out {
+            color: #d32f2f;
+            font-weight: bold;
+            font-size: 1.05rem;
+        }
+
+        .mytools-status-broken {
+            color: #ff6f00;
+            font-weight: bold;
+            font-size: 1.05rem;
+        }
+
+        .mytools-status-lost {
+            color: #ff8f00;
+            font-weight: bold;
+            font-size: 1.05rem;
+        }
+
+        .mytools-status-calibration {
+            color: #1976d2;
+            font-weight: bold;
+            font-size: 1.05rem;
+        }
+
+        .mytools-tool-extra {
+            font-size: 1.01rem;
+            color: #222;
+            margin-top: 2px;
+        }
+
+        .mytools-tool-cal {
+            color: #388E3C;
+            font-size: 1.01rem;
+            margin-top: 2px;
+        }
+
+        /* Responsive font sizes for mobile */
+        @media (max-width: 768px) {
+            #myToolsScreenBody .mytools-tool-item * {
+                font-size: 1.1rem !important;
+            }
+
+            #myToolsScreenBody .mytools-tool-item .mytools-tool-name {
+                font-size: 1.3rem !important;
+            }
+
+            #myToolsScreenBody .mytools-tool-item [class*="mytools-status-"] {
+                font-size: 1.0rem !important;
+                padding: 5px 10px !important;
+            }
+        }
+
+        /* Larger fonts for desktop */
+        @media (min-width: 1025px) {
+            #myToolsScreenBody .mytools-tool-item * {
+                font-size: 1.5rem !important;
+            }
+
+            #myToolsScreenBody .mytools-tool-item .mytools-tool-name {
+                font-size: 1.8rem !important;
+            }
+
+            #myToolsScreenBody .mytools-tool-item [class*="mytools-status-"] {
+                font-size: 1.3rem !important;
+                padding: 6px 12px !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-4">
+        <button id="myToolsBackBtn" class="mytools-back" onclick="handleBackNavigation()">
+            <i class="fas fa-arrow-left"></i> Back to Menu
+        </button>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <h2 class="mytools-title" style="margin:0;">MY TOOLS</h2>
+            <div style="display:flex;gap:8px;">
+                <button id="myToolsAddCollectionPhotoBtn" style="background:#4CAF50;color:white;border:none;border-radius:16px;padding:8px 16px;font-size:0.9rem;font-weight:bold;cursor:pointer;">
+                    <i class="fas fa-camera"></i> Add Collection Photo
+                </button>
+                <button id="myToolsCollectionPhotosBtn" style="background:#9C27B0;color:white;border:none;border-radius:16px;padding:8px 16px;font-size:0.9rem;font-weight:bold;cursor:pointer;">
+                    <i class="fas fa-images"></i> Collection Photos
+                </button>
+            </div>
+        </div>
+        <div id="myToolsScreenBody"></div>
+    </div>
+
+    <!-- Checkout Info Modal for My Tools -->
+    <div class="modal fade" id="checkoutInfoModal" tabindex="-1" aria-labelledby="checkoutInfoModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="checkoutInfoModalTitle">Tool Checkout Information</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="checkoutInfoModalBody">
+                    <!-- Checkout info will be populated here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tool Photo Gallery Modal -->
+    <div class="modal fade" id="toolPhotoGalleryModal" tabindex="-1" aria-labelledby="toolPhotoGalleryModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-fullscreen">
+            <div class="modal-content bg-dark text-white">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title" id="toolPhotoGalleryModalLabel">Tool Photos</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body d-flex flex-column align-items-center justify-content-center position-relative" id="toolPhotoGalleryContent">
+                    <!-- Photo will be shown here -->
+                </div>
+                <div class="modal-footer justify-content-center border-0 bg-dark">
+                    <span id="toolPhotoCounter" class="text-white"></span>
+                    <button type="button" class="btn btn-danger ms-3" id="toolPhotoDeleteBtn">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Photo Upload Loading Modal -->
+    <div class="modal fade" id="photoUploadLoadingModal" tabindex="-1" aria-labelledby="photoUploadLoadingModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="photoUploadLoadingModalLabel">Uploading Photo</h5>
+                </div>
+                <div class="modal-body text-center">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div id="photoUploadProgress">Processing image...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Photo Upload Choice Modal -->
+    <div class="modal fade" id="photoUploadChoiceModal" tabindex="-1" aria-labelledby="photoUploadChoiceModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                <div class="modal-header" style="background: #FF9800; color: white; border-radius: 16px 16px 0 0; border: none; padding: 20px;">
+                    <h5 class="modal-title" id="photoUploadChoiceModalLabel" style="font-weight: bold; font-size: 1.3rem;">
+                        <i class="fas fa-camera"></i> Add Photo
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="padding: 24px;">
+                    <div style="margin-bottom: 16px;">
+                        <strong style="font-size: 1.1rem; color: #333;">Other tools with this part number that have photos:</strong>
+                        <div id="photoUploadToolsList" style="margin-top: 8px; padding: 12px; background: #f5f5f5; border-radius: 8px;"></div>
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <strong style="font-size: 1.1rem; color: #333;">Select photos to use (click to select/deselect):</strong>
+                        <div id="photoUploadThumbnails" style="margin-top: 8px; padding: 12px; background: #f5f5f5; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 8px; max-height: 250px; overflow-y: auto;"></div>
+                        <div id="selectedPhotosCount" style="margin-top: 8px; text-align: center; color: #666; font-size: 0.9rem;">
+                            <span id="selectedCount">0</span> photo(s) selected
+                        </div>
+                    </div>
+                    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #ddd;">
+                        <div class="d-grid gap-2" id="selectedPhotosActions" style="margin-bottom: 12px;">
+                            <button type="button" class="btn" id="addSelectedPhotosMyToolBtn" style="background: #2196F3; color: white; font-weight: bold; border-radius: 12px; padding: 12px; font-size: 1rem;" disabled>
+                                <i class="fas fa-user-check"></i> Add Selected to MY Tool
+                            </button>
+                            <button type="button" class="btn" id="addSelectedPhotosAllToolsBtn" style="background: #673AB7; color: white; font-weight: bold; border-radius: 12px; padding: 12px; font-size: 1rem;" disabled>
+                                <i class="fas fa-users"></i> Add Selected to ALL Tools 🔐
+                            </button>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn" id="addNewPhotoMyToolBtn" style="background: #4CAF50; color: white; font-weight: bold; border-radius: 12px; padding: 12px; font-size: 1rem;">
+                                <i class="fas fa-camera"></i> Add New Photo to MY Tool
+                            </button>
+                            <button type="button" class="btn" id="addNewPhotoAllToolsBtn" style="background: #FF5722; color: white; font-weight: bold; border-radius: 12px; padding: 12px; font-size: 1rem;">
+                                <i class="fas fa-camera-retro"></i> Add New Photo to ALL Tools 🔐
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Photo Delete Choice Modal -->
+    <div class="modal fade" id="photoDeleteChoiceModal" tabindex="-1" aria-labelledby="photoDeleteChoiceModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="photoDeleteChoiceModalLabel">Delete Photo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p><strong>This photo is used by the following tool owners:</strong></p>
+                    <div id="photoDeleteOwnersList"></div>
+                    <div class="d-grid gap-2 mt-3">
+                        <button type="button" class="btn btn-warning" id="deleteMyToolOnlyBtn">
+                            <i class="fas fa-user"></i> Delete from MY Tool Only
+                        </button>
+                        <button type="button" class="btn btn-danger" id="deleteFromAllToolsBtn">
+                            <i class="fas fa-users"></i> Delete from ALL Tools 🔐
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Global variables
+        let lastViewedCollectionName = null;
+        let photoUploadToAllTools = false;
+        let currentPhotoUploadToolId = null;
+        let currentPhotoUploadPartNumber = null;
+        let photoUploadAutoShareTargets = [];
+        let currentToolPhotoUrls = [];
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Check authentication
+            auth.onAuthStateChanged(async function(user) {
+                if (user) {
+                    await showMyTools();
+                } else {
+                    window.location.href = 'index.html';
+                }
+            });
+
+            // Setup event listeners
+            setupEventListeners();
+        });
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Collection photo buttons
+            document.getElementById('myToolsAddCollectionPhotoBtn').onclick = function() {
+                showCollectionSelectionForPhotos();
+            };
+
+            document.getElementById('myToolsCollectionPhotosBtn').onclick = function() {
+                showCollectionSelectionForPhotos();
+            };
+
+            // Handle browser back button
+            window.addEventListener('popstate', function(event) {
+                if (event.state && event.state.modal) {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById(event.state.modal));
+                    if (modal) modal.hide();
+                } else {
+                    handleBackNavigation();
+                }
+            });
+        }
+
+        // Handle back navigation
+        function handleBackNavigation() {
+            sessionStorage.setItem('skipSplash', 'true');
+            window.location.href = 'index.html';
+        }
+
+        // My Tools Screen with app-like formatting
+        async function showMyTools() {
+            const user = auth.currentUser;
+            if (!user) return;
+            const fullName = localStorage.getItem('fullName') || user.email;
+            const myToolsScreenBody = document.getElementById('myToolsScreenBody');
+            myToolsScreenBody.innerHTML = '<div class="text-center">Loading...</div>';
+
+            // Update collection photo button counts
+            await updateCollectionPhotoButtonCounts();
+
+            try {
+                // Query all tools where owner matches the logged-in user
+                const snapshot = await db.collection('tools')
+                    .where('owner', '==', fullName)
+                    .get();
+
+                if (snapshot.empty) {
+                    myToolsScreenBody.innerHTML = '<div class="text-center">No tools found for you.</div>';
+                } else {
+                    // Group by collectionCode and location
+                    const tools = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    const grouped = {};
+                    tools.forEach(tool => {
+                        const collection = tool.collectionCode || 'N/A';
+                        const location = tool.location || 'N/A';
+                        if (!grouped[collection]) grouped[collection] = {};
+                        if (!grouped[collection][location]) grouped[collection][location] = [];
+                        grouped[collection][location].push(tool);
+                    });
+
+                    let html = '';
+                    Object.keys(grouped).forEach(collection => {
+                        html += `<div class="mytools-collection"><span>Collection:</span><span>${collection}</span></div>`;
+                        Object.keys(grouped[collection]).forEach(location => {
+                            const toolsAtLocation = grouped[collection][location];
+                            html += `<div class="mytools-location"><span>Location:</span><span>${location} (Total: ${toolsAtLocation.length} tools)</span></div>`;
+                            toolsAtLocation.forEach((tool, idx) => {
+                                const bgClass = idx % 2 === 0 ? 'mytools-tool-bg1' : 'mytools-tool-bg2';
+                                html += `<div class="mytools-tool-item ${bgClass}">`
+                                    + `<div style="cursor:pointer;" onclick="showToolDetailsFromMyTools(${JSON.stringify(tool).replace(/"/g, '&quot;')})">`
+                                    + `<div class="mytools-tool-name" style="display: block !important; width: 100% !important; margin-bottom: 4px; clear: both;">${idx + 1}. ${tool.toolName || 'Unknown Tool'}</div>`
+                                    + `<div class="mytools-tool-tid" style="display: block !important; width: 100% !important; margin-bottom: 4px; clear: both;">TID: ${tool.id}</div>`
+                                    + `<span style="display:flex;align-items:center;justify-content:space-between;">
+                                        <span style="font-size:1.01rem;color:#444;">Part #: ${tool.partNumber || ''}</span>
+                                        <span style="font-size:1.01rem;font-weight:bold;color:#222;">WorkOn: <span style="color:#888;font-weight:bold;">${(typeof tool.WorkOn === 'string' && tool.WorkOn.trim()) ? tool.WorkOn : 'N/A'}</span></span>
+                                    </span><br>`
+                                    + `<span class="mytools-status-${getStatusClass(tool.status)}">Status: ${tool.status || ''}</span>`;
+                                if (tool.status === 'OUT') {
+                                    html += `<div class="mytools-tool-extra">Technician: ${tool.technician || ''}</div>`;
+                                    if (tool.timestamp && tool.timestamp.toDate) {
+                                        const outTime = tool.timestamp.toDate().toLocaleString('en-GB', {
+                                            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                                        });
+                                        html += `<div class="mytools-tool-extra">Checked out: ${outTime}</div>`;
+                                    }
+                                }
+                                if (tool.calDueDate && tool.calDueDate.toDate) {
+                                    const calDue = tool.calDueDate.toDate().toLocaleDateString('en-GB');
+                                    html += `<div class="mytools-tool-cal">Cal Due: <span style="font-weight: bold;">${calDue}</span></div>`;
+                                }
+                                html += `</div>`;
+                                html += `<div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;">`;
+                                html += `<button onclick="event.stopPropagation(); createPhotoUploadInput('${tool.id}', '${tool.partNumber || tool.id}')" style="background:#FF9800;color:white;border:none;border-radius:16px;padding:6px 12px;font-size:0.9rem;font-weight:bold;cursor:pointer;"><i class="fas fa-camera"></i> Add Photo</button>`;
+                                if (tool.photoUrls && tool.photoUrls.length > 0) {
+                                    html += `<button onclick="event.stopPropagation(); showToolPhotoGallery(this)" data-photo-urls='${JSON.stringify(tool.photoUrls)}' data-tool-id='${tool.id}' data-part-number='${tool.partNumber || tool.id}' style="background:#1976d2;color:white;border:none;border-radius:16px;padding:6px 12px;font-size:0.9rem;font-weight:bold;cursor:pointer;"><i class="fas fa-images"></i> Photos (${tool.photoUrls.length})</button>`;
+                                }
+                                html += `</div>`;
+                                html += `</div>`;
+                            });
+                        });
+                    });
+                    myToolsScreenBody.innerHTML = html;
+                }
+            } catch (error) {
+                myToolsScreenBody.innerHTML = `<div class="text-danger text-center">Error loading your tools: ${error.message}</div>`;
+            }
+        }
+
+        // Helper to get status CSS class
+        function getStatusClass(status) {
+            const upperStatus = status ? status.toUpperCase() : 'IN';
+            switch (upperStatus) {
+                case 'OUT': return 'out';
+                case 'BROKEN': return 'broken';
+                case 'LOST': return 'lost';
+                case 'CALIBRATION': return 'calibration';
+                default: return 'in';
+            }
+        }
+
+        // Show tool details from My Tools
+        async function showToolDetailsFromMyTools(tool) {
+            const formatTimestamp = (timestamp) => {
+                if (!timestamp) return 'N/A';
+                if (timestamp.toDate) {
+                    return timestamp.toDate().toLocaleString('en-GB', {
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                    });
+                }
+                if (timestamp.seconds) {
+                    return new Date(timestamp.seconds * 1000).toLocaleString('en-GB', {
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                    });
+                }
+                return timestamp;
+            };
+
+            const modal = new bootstrap.Modal(document.getElementById('checkoutInfoModal'));
+            const modalTitle = document.getElementById('checkoutInfoModalTitle');
+            const modalBody = document.getElementById('checkoutInfoModalBody');
+
+            modalTitle.textContent = 'Loading...';
+            modalBody.innerHTML = '<div class="text-center">Loading checkout information...</div>';
+            modal.show();
+
+            try {
+                const status = tool.status || 'N/A';
+                let title = '';
+                let field1Label = '';
+                let field1Value = '';
+                let field2Label = '';
+                let field2Value = '';
+
+                if (status === 'OUT') {
+                    title = 'Tool Checkout Information';
+                    field1Label = 'Checked Out By:';
+                    field2Label = 'ChkOut Date:';
+
+                    const toolDoc = await db.collection('tools').doc(tool.id).get();
+                    if (toolDoc.exists) {
+                        const toolData = toolDoc.data();
+                        field1Value = toolData.technician || 'N/A';
+                        field2Value = formatTimestamp(toolData.timestamp);
+                    } else {
+                        field1Value = 'N/A';
+                        field2Value = 'N/A';
+                    }
+                } else if (status === 'IN') {
+                    title = 'Last Tool Movement Information';
+                    field1Label = 'Technician:';
+                    field2Label = 'Date:';
+                    try {
+                        const logSnapshot = await db.collection('logtoolmovements')
+                            .where('toolId', '==', tool.id)
+                            .orderBy('timestamp', 'desc')
+                            .limit(1)
+                            .get();
+                        if (!logSnapshot.empty) {
+                            const lastLogEntry = logSnapshot.docs[0].data();
+                            field1Value = lastLogEntry.technician || 'N/A';
+                            field2Value = formatTimestamp(lastLogEntry.timestamp);
+                        } else {
+                            field1Value = tool.technician || 'N/A';
+                            field2Value = formatTimestamp(tool.timestamp);
+                        }
+                    } catch (logError) {
+                        console.error('Error querying logtoolmovements:', logError);
+                        field1Value = tool.technician || 'N/A';
+                        field2Value = formatTimestamp(tool.timestamp);
+                    }
+                } else {
+                    title = 'Tool Information';
+                    field1Label = 'Status:';
+                    field1Value = tool.status || 'N/A';
+                    field2Label = 'Technician:';
+                    field2Value = tool.technician || 'N/A';
+                }
+
+                modalTitle.textContent = title;
+                modalBody.innerHTML = `
+                    <div class="mb-3">
+                        <strong style="color: #222; font-size: 1.1em;">${field1Label}</strong>
+                        <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${field1Value}</div>
+                    </div>
+                    <div class="mb-3">
+                        <strong style="color: #222; font-size: 1.1em;">${field2Label}</strong>
+                        <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${field2Value}</div>
+                    </div>
+                `;
+
+                window.history.pushState({ modal: 'checkoutInfo' }, '', '');
+            } catch (error) {
+                console.error('Error fetching checkout information:', error);
+                modalTitle.textContent = 'Error';
+                modalBody.innerHTML = `
+                    <div class="text-center text-danger">
+                        Error loading checkout information. Please try again.<br>
+                        <small>Status: ${tool.status || 'N/A'}<br>
+                        Tool ID: ${tool.id || 'N/A'}</small>
+                    </div>
+                `;
+            }
+        }
+
+        // Update collection photo button counts
+        async function updateCollectionPhotoButtonCounts() {
+            try {
+                const myToolsBtn = document.getElementById('myToolsCollectionPhotosBtn');
+                if (myToolsBtn) {
+                    const user = auth.currentUser;
+                    if (user) {
+                        const fullName = localStorage.getItem('fullName') || user.email;
+                        const snapshot = await db.collection('tools')
+                            .where('owner', '==', fullName)
+                            .get();
+
+                        if (!snapshot.empty) {
+                            const collections = [...new Set(snapshot.docs.map(doc => doc.data().collectionCode).filter(Boolean))];
+                            let totalPhotos = 0;
+
+                            for (const collectionName of collections) {
+                                const collectionQuery = await db.collection('collections').where('collectionName', '==', collectionName).get();
+                                if (!collectionQuery.empty) {
+                                    const collectionDoc = collectionQuery.docs[0];
+                                    totalPhotos += (collectionDoc.data().photoUrls || []).length;
+                                }
+                            }
+
+                            myToolsBtn.innerHTML = `<i class="fas fa-images"></i> Collection Photos (${totalPhotos})`;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error updating collection photo button counts:', error);
+            }
+        }
+
+        // Show collection selection for photos
+        async function showCollectionSelectionForPhotos() {
+            const user = auth.currentUser;
+            if (!user) return;
+            const fullName = localStorage.getItem('fullName') || user.email;
+
+            try {
+                const snapshot = await db.collection('tools')
+                    .where('owner', '==', fullName)
+                    .get();
+
+                if (snapshot.empty) {
+                    alert('No collections found.');
+                    return;
+                }
+
+                const collections = [...new Set(snapshot.docs.map(doc => doc.data().collectionCode).filter(Boolean))];
+                collections.sort();
+
+                if (collections.length === 0) {
+                    alert('No collections found.');
+                    return;
+                }
+
+                const collectionsWithPhotos = [];
+                for (const collectionName of collections) {
+                    const collectionQuery = await db.collection('collections').where('collectionName', '==', collectionName).get();
+                    let photoCount = 0;
+                    if (!collectionQuery.empty) {
+                        const collectionDoc = collectionQuery.docs[0];
+                        photoCount = (collectionDoc.data().photoUrls || []).length;
+                    }
+                    collectionsWithPhotos.push({ name: collectionName, photoCount });
+                }
+
+                const modalHtml = `
+                    <div class="modal fade" id="collectionPhotoSelectionModal" tabindex="-1" aria-labelledby="collectionPhotoSelectionModalLabel" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header bg-primary text-white">
+                                    <h5 class="modal-title" id="collectionPhotoSelectionModalLabel">Select Collection</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="d-grid gap-2">
+                                        ${collectionsWithPhotos.map(collection => `
+                                            <button type="button" class="btn btn-outline-primary" onclick="selectCollectionForPhotos('${collection.name}')">
+                                                ${collection.name} <span class="badge bg-secondary ms-2">${collection.photoCount} photos</span>
+                                            </button>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                const existingModal = document.getElementById('collectionPhotoSelectionModal');
+                if (existingModal) {
+                    existingModal.remove();
+                }
+
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+                const modal = new bootstrap.Modal(document.getElementById('collectionPhotoSelectionModal'));
+                modal.show();
+
+                document.getElementById('collectionPhotoSelectionModal').addEventListener('hidden.bs.modal', function() {
+                    this.remove();
+                });
+
+            } catch (error) {
+                console.error('Error loading collections:', error);
+                alert('Error loading collections: ' + error.message);
+            }
+        }
+
+        // Select collection for photos
+        function selectCollectionForPhotos(collectionName) {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('collectionPhotoSelectionModal'));
+            if (modal) modal.hide();
+
+            const activeElement = document.activeElement;
+            if (activeElement && activeElement.id === 'myToolsAddCollectionPhotoBtn') {
+                createCollectionPhotoUploadInput(collectionName);
+            } else {
+                const tempElement = document.createElement('div');
+                tempElement.setAttribute('data-collection-name', collectionName);
+                showCollectionPhotoGallery(tempElement);
+            }
+        }
+
+        // Create collection photo upload input
+        function createCollectionPhotoUploadInput(collectionName) {
+            const modalHtml = `
+                <div class="modal fade" id="collectionPhotoSourceModal" tabindex="-1" aria-labelledby="collectionPhotoSourceModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-sm">
+                        <div class="modal-content">
+                            <div class="modal-header bg-primary text-white">
+                                <h5 class="modal-title" id="collectionPhotoSourceModalLabel">Add Collection Photo</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <div class="d-grid gap-3">
+                                    <button type="button" class="btn btn-primary btn-lg" onclick="takeCollectionPhotoWithCamera('${collectionName}')">
+                                        <i class="fas fa-camera"></i> Take Photo
+                                    </button>
+                                    <button type="button" class="btn btn-secondary btn-lg" onclick="selectCollectionPhotoFromGallery('${collectionName}')">
+                                        <i class="fas fa-images"></i> Choose from Gallery
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const existingModal = document.getElementById('collectionPhotoSourceModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            const modal = new bootstrap.Modal(document.getElementById('collectionPhotoSourceModal'));
+            modal.show();
+
+            document.getElementById('collectionPhotoSourceModal').addEventListener('hidden.bs.modal', function() {
+                this.remove();
+            });
+        }
+
+        // Take collection photo with camera
+        function takeCollectionPhotoWithCamera(collectionName) {
+            const sourceModal = bootstrap.Modal.getInstance(document.getElementById('collectionPhotoSourceModal'));
+            if (sourceModal) sourceModal.hide();
+
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.capture = 'environment';
+            input.style.display = 'none';
+
+            input.onchange = function(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    uploadCollectionPhoto(collectionName, file);
+                }
+                document.body.removeChild(input);
+            };
+
+            document.body.appendChild(input);
+            input.click();
+        }
+
+        // Select collection photo from gallery
+        function selectCollectionPhotoFromGallery(collectionName) {
+            const sourceModal = bootstrap.Modal.getInstance(document.getElementById('collectionPhotoSourceModal'));
+            if (sourceModal) sourceModal.hide();
+
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.style.display = 'none';
+
+            input.onchange = function(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    uploadCollectionPhoto(collectionName, file);
+                }
+                document.body.removeChild(input);
+            };
+
+            document.body.appendChild(input);
+            input.click();
+        }
+
+        // Upload collection photo
+        async function uploadCollectionPhoto(collectionName, file) {
+            try {
+                const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                loadingModal.show();
+                document.getElementById('photoUploadProgress').textContent = 'Processing image...';
+
+                const compressedBlob = await compressImage(file);
+                if (!compressedBlob) {
+                    loadingModal.hide();
+                    alert('Failed to compress image');
+                    return;
+                }
+
+                document.getElementById('photoUploadProgress').textContent = 'Uploading to storage...';
+
+                const collectionQuery = await db.collection('collections').where('collectionName', '==', collectionName).get();
+                let currentPhotoUrls = [];
+                let collectionDocId = null;
+
+                if (!collectionQuery.empty) {
+                    const collectionDoc = collectionQuery.docs[0];
+                    collectionDocId = collectionDoc.id;
+                    currentPhotoUrls = collectionDoc.data().photoUrls || [];
+                }
+
+                const photoNumber = currentPhotoUrls.length + 1;
+                const fileName = `${collectionName}_photo${photoNumber}.jpg`;
+
+                const photoRef = storage.ref('Collection%20Photo/' + fileName);
+                const uploadTask = photoRef.put(compressedBlob);
+
+                uploadTask.on('state_changed',
+                    (snapshot) => {
+                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                        document.getElementById('photoUploadProgress').textContent = `Uploading... ${Math.round(progress)}%`;
+                    },
+                    (error) => {
+                        console.error('Upload error:', error);
+                        loadingModal.hide();
+                        alert('Upload failed: ' + error.message);
+                    },
+                    async () => {
+                        try {
+                            document.getElementById('photoUploadProgress').textContent = 'Updating database...';
+
+                            const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                            const newPhotoUrls = [...currentPhotoUrls, downloadURL];
+
+                            if (collectionDocId) {
+                                await db.collection('collections').doc(collectionDocId).update({
+                                    photoUrls: newPhotoUrls
+                                });
+                            } else {
+                                await db.collection('collections').add({
+                                    collectionName: collectionName,
+                                    photoUrls: newPhotoUrls,
+                                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                                });
+                            }
+
+                            loadingModal.hide();
+                            alert('Collection photo uploaded successfully!');
+
+                            await showMyTools();
+                            await updateCollectionPhotoButtonCounts();
+
+                        } catch (error) {
+                            console.error('Error updating collection:', error);
+                            loadingModal.hide();
+                            alert('Error updating collection: ' + error.message);
+                        }
+                    }
+                );
+
+            } catch (error) {
+                console.error('Collection photo upload failed:', error);
+                const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
+                if (loadingModal) loadingModal.hide();
+                alert('Upload failed: ' + error.message);
+            }
+        }
+
+        // Show collection photo gallery
+        async function showCollectionPhotoGallery(element) {
+            const collectionName = element.getAttribute('data-collection-name');
+
+            try {
+                const collectionQuery = await db.collection('collections').where('collectionName', '==', collectionName).get();
+                let photoUrls = [];
+
+                if (!collectionQuery.empty) {
+                    const collectionDoc = collectionQuery.docs[0];
+                    photoUrls = collectionDoc.data().photoUrls || [];
+                }
+
+                if (photoUrls.length === 0) {
+                    alert('No photos found for this collection.');
+                    return;
+                }
+
+                showCollectionPhotoFullscreen(photoUrls[0], 0, JSON.stringify(photoUrls));
+
+            } catch (error) {
+                console.error('Error loading collection photos:', error);
+                alert('Error loading collection photos: ' + error.message);
+            }
+        }
+
+        // Show collection photo in fullscreen
+        function showCollectionPhotoFullscreen(photoUrl, photoIndex, allPhotoUrls) {
+            const photoUrls = JSON.parse(allPhotoUrls);
+            if (!photoUrls || photoUrls.length === 0) return;
+
+            let currentPhotoIndex = photoIndex;
+
+            let modal = document.getElementById('collectionPhotoFullscreenModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.className = 'modal fade';
+                modal.id = 'collectionPhotoFullscreenModal';
+                modal.tabIndex = -1;
+                modal.innerHTML = `
+                    <div class="modal-dialog modal-fullscreen">
+                        <div class="modal-content bg-dark text-white">
+                            <div class="modal-header border-0">
+                                <h5 class="modal-title">Collection Photos</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body d-flex flex-column align-items-center justify-content-center position-relative" id="collectionPhotoFullscreenContent">
+                            </div>
+                            <div class="modal-footer justify-content-center border-0 bg-dark">
+                                <span id="collectionPhotoCounter" class="text-white"></span>
+                                <button type="button" class="btn btn-danger ms-3" id="collectionPhotoDeleteBtn">
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+                document.body.appendChild(modal);
+            }
+
+            const contentElement = document.getElementById('collectionPhotoFullscreenContent');
+            const counter = document.getElementById('collectionPhotoCounter');
+
+            function updatePhoto() {
+                contentElement.innerHTML = `<img src="${photoUrls[currentPhotoIndex]}" class="img-fluid rounded shadow" style="max-height:80vh;max-width:100vw;object-fit:contain;">`;
+
+                const prevArrow = document.createElement('button');
+                prevArrow.type = 'button';
+                prevArrow.className = 'btn btn-light position-absolute';
+                prevArrow.style = 'left: 20px; top: 50%; transform: translateY(-50%); z-index: 1000; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;';
+                prevArrow.innerHTML = '<i class="fas fa-chevron-left"></i>';
+                prevArrow.onclick = function() {
+                    if (currentPhotoIndex > 0) {
+                        currentPhotoIndex--;
+                        updatePhoto();
+                    }
+                };
+
+                const nextArrow = document.createElement('button');
+                nextArrow.type = 'button';
+                nextArrow.className = 'btn btn-light position-absolute';
+                nextArrow.style = 'right: 20px; top: 50%; transform: translateY(-50%); z-index: 1000; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;';
+                nextArrow.innerHTML = '<i class="fas fa-chevron-right"></i>';
+                nextArrow.onclick = function() {
+                    if (currentPhotoIndex < photoUrls.length - 1) {
+                        currentPhotoIndex++;
+                        updatePhoto();
+                    }
+                };
+
+                contentElement.appendChild(prevArrow);
+                contentElement.appendChild(nextArrow);
+
+                counter.textContent = `${currentPhotoIndex + 1} / ${photoUrls.length}`;
+
+                prevArrow.style.display = currentPhotoIndex === 0 ? 'none' : 'flex';
+                nextArrow.style.display = currentPhotoIndex === photoUrls.length - 1 ? 'none' : 'flex';
+
+                const deleteBtn = document.getElementById('collectionPhotoDeleteBtn');
+                if (deleteBtn) {
+                    deleteBtn.onclick = function() {
+                        deleteCollectionPhoto(currentPhotoIndex, photoUrls[currentPhotoIndex]);
+                    };
+                }
+            }
+
+            updatePhoto();
+
+            const bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+        }
+
+        // Delete collection photo
+        async function deleteCollectionPhoto(photoIndex, photoUrl) {
+            if (!confirm('Are you sure you want to delete this photo? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                loadingModal.show();
+                document.getElementById('photoUploadProgress').textContent = 'Deleting photo...';
+
+                const collectionName = lastViewedCollectionName;
+                if (!collectionName) {
+                    throw new Error('Collection name not found');
+                }
+
+                const collectionDoc = await db.collection('collections').doc(collectionName).get();
+
+                if (!collectionDoc.exists) {
+                    throw new Error('Collection document not found');
+                }
+
+                const currentPhotoUrls = collectionDoc.data().photoUrls || [];
+                const updatedPhotoUrls = currentPhotoUrls.filter((url, index) => index !== photoIndex);
+
+                await db.collection('collections').doc(collectionName).update({
+                    photoUrls: updatedPhotoUrls
+                });
+
+                try {
+                    const urlParts = photoUrl.split('/');
+                    const encodedPath = urlParts[urlParts.length - 1].split('?')[0];
+                    const decodedPath = decodeURIComponent(encodedPath);
+                    const photoRef = storage.ref().child(decodedPath);
+                    await photoRef.delete();
+                } catch (storageError) {
+                    console.warn('Could not delete from storage:', storageError);
+                }
+
+                loadingModal.hide();
+                alert('Photo deleted successfully!');
+
+                const galleryModal = bootstrap.Modal.getInstance(document.getElementById('collectionPhotoFullscreenModal'));
+                if (galleryModal) galleryModal.hide();
+
+                await showMyTools();
+                await updateCollectionPhotoButtonCounts();
+
+            } catch (error) {
+                console.error('Collection photo delete failed:', error);
+                const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
+                if (loadingModal) loadingModal.hide();
+                alert('Delete failed: ' + error.message);
+            }
+        }
+
+        // Image compression function
+        function compressImage(file) {
+            return new Promise((resolve) => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+
+                img.onload = function() {
+                    let newWidth = img.width;
+                    let newHeight = img.height;
+                    const maxSize = 1200;
+
+                    if (newWidth > maxSize || newHeight > maxSize) {
+                        if (newWidth > newHeight) {
+                            newHeight = (newHeight * maxSize) / newWidth;
+                            newWidth = maxSize;
+                        } else {
+                            newWidth = (newWidth * maxSize) / newHeight;
+                            newHeight = maxSize;
+                        }
+                    }
+
+                    canvas.width = newWidth;
+                    canvas.height = newHeight;
+
+                    ctx.drawImage(img, 0, 0, newWidth, newHeight);
+
+                    let quality = 0.95;
+
+                    function tryCompression() {
+                        canvas.toBlob((result) => {
+                            if (result.size <= 800 * 1024 || quality <= 0.1) {
+                                resolve(result);
+                            } else {
+                                quality -= 0.05;
+                                tryCompression();
+                            }
+                        }, 'image/jpeg', quality);
+                    }
+
+                    tryCompression();
+                };
+
+                img.onerror = function() {
+                    console.error('Failed to load image');
+                    resolve(null);
+                };
+
+                img.src = URL.createObjectURL(file);
+            });
+        }
+
+        // Create photo upload input (simplified version - full implementation would include all the photo sharing logic)
+        async function createPhotoUploadInput(toolId, partNumber) {
+            currentPhotoUploadToolId = toolId;
+            currentPhotoUploadPartNumber = partNumber;
+            photoUploadToAllTools = false;
+            photoUploadAutoShareTargets = [];
+
+            showPhotoSourceModal(toolId, partNumber);
+        }
+
+        // Show photo source selection modal
+        function showPhotoSourceModal(toolId, partNumber) {
+            const modalHtml = `
+                <div class="modal fade" id="photoSourceModal" tabindex="-1" aria-labelledby="photoSourceModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-sm">
+                        <div class="modal-content">
+                            <div class="modal-header bg-primary text-white">
+                                <h5 class="modal-title" id="photoSourceModalLabel">Add Photo</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <div class="d-grid gap-3">
+                                    <button type="button" class="btn btn-primary btn-lg" onclick="takePhotoWithCamera('${toolId}', '${partNumber}')">
+                                        <i class="fas fa-camera"></i> Take Photo
+                                    </button>
+                                    <button type="button" class="btn btn-secondary btn-lg" onclick="selectPhotoFromGallery('${toolId}', '${partNumber}')">
+                                        <i class="fas fa-images"></i> Choose from Gallery
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const existingModal = document.getElementById('photoSourceModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            const modal = new bootstrap.Modal(document.getElementById('photoSourceModal'));
+            modal.show();
+
+            document.getElementById('photoSourceModal').addEventListener('hidden.bs.modal', function() {
+                this.remove();
+            });
+        }
+
+        // Take photo with camera
+        function takePhotoWithCamera(toolId, partNumber) {
+            const sourceModal = bootstrap.Modal.getInstance(document.getElementById('photoSourceModal'));
+            if (sourceModal) sourceModal.hide();
+
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.capture = 'environment';
+            input.style.display = 'none';
+
+            input.onchange = function(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    uploadToolPhoto(toolId, partNumber, file);
+                }
+                document.body.removeChild(input);
+            };
+
+            document.body.appendChild(input);
+            input.click();
+        }
+
+        // Select photo from gallery
+        function selectPhotoFromGallery(toolId, partNumber) {
+            const sourceModal = bootstrap.Modal.getInstance(document.getElementById('photoSourceModal'));
+            if (sourceModal) sourceModal.hide();
+
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.style.display = 'none';
+
+            input.onchange = function(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    uploadToolPhoto(toolId, partNumber, file);
+                }
+                document.body.removeChild(input);
+            };
+
+            document.body.appendChild(input);
+            input.click();
+        }
+
+        // Upload tool photo
+        async function uploadToolPhoto(toolId, partNumber, file) {
+            try {
+                const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                loadingModal.show();
+                document.getElementById('photoUploadProgress').textContent = 'Processing image...';
+
+                const compressedBlob = await compressImage(file);
+                if (!compressedBlob) {
+                    loadingModal.hide();
+                    alert('Failed to compress image');
+                    return;
+                }
+
+                document.getElementById('photoUploadProgress').textContent = 'Uploading to storage...';
+
+                const toolDoc = await db.collection('tools').doc(toolId).get();
+                const currentPhotoUrls = toolDoc.exists ? (toolDoc.data().photoUrls || []) : [];
+                const photoNumber = currentPhotoUrls.length + 1;
+
+                const fileName = `${partNumber}_photo${photoNumber}.jpg`;
+
+                const photoRef = storage.ref('Tool_Photos/' + fileName);
+                const uploadTask = photoRef.put(compressedBlob);
+
+                uploadTask.on('state_changed',
+                    (snapshot) => {
+                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                        document.getElementById('photoUploadProgress').textContent = `Uploading... ${Math.round(progress)}%`;
+                    },
+                    (error) => {
+                        console.error('Upload error:', error);
+                        loadingModal.hide();
+                        alert('Upload failed: ' + error.message);
+                    },
+                    async () => {
+                        try {
+                            document.getElementById('photoUploadProgress').textContent = 'Updating database...';
+
+                            const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+
+                            const newPhotoUrls = [...currentPhotoUrls, downloadURL];
+                            await db.collection('tools').doc(toolId).update({
+                                photoUrls: newPhotoUrls
+                            });
+
+                            loadingModal.hide();
+                            alert('✅ Photo uploaded successfully! Added to YOUR tool only.');
+
+                            photoUploadToAllTools = false;
+                            currentPhotoUploadToolId = null;
+                            currentPhotoUploadPartNumber = null;
+                            photoUploadAutoShareTargets = [];
+
+                            await showMyTools();
+
+                        } catch (error) {
+                            console.error('Error updating tool:', error);
+                            loadingModal.hide();
+                            alert('Error updating tool: ' + error.message);
+                        }
+                    }
+                );
+
+            } catch (error) {
+                console.error('Photo upload failed:', error);
+                const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
+                if (loadingModal) loadingModal.hide();
+                alert('Upload failed: ' + error.message);
+            }
+        }
+
+        // Show tool photo gallery
+        function showToolPhotoGallery(el) {
+            const photoUrls = JSON.parse(el.getAttribute('data-photo-urls'));
+            const toolId = el.getAttribute('data-tool-id');
+            const partNumber = el.getAttribute('data-part-number');
+            if (!photoUrls || photoUrls.length === 0) return;
+            let currentPhotoIndex = 0;
+            const galleryContent = document.getElementById('toolPhotoGalleryContent');
+            const counter = document.getElementById('toolPhotoCounter');
+            const prevBtn = document.getElementById('toolPhotoPrevBtn');
+            const nextBtn = document.getElementById('toolPhotoNextBtn');
+
+            function updatePhoto() {
+                galleryContent.innerHTML = `<img src="${photoUrls[currentPhotoIndex]}" class="img-fluid rounded shadow" style="max-height:80vh;max-width:100vw;object-fit:contain;">`;
+
+                const prevArrow = document.createElement('button');
+                prevArrow.type = 'button';
+                prevArrow.className = 'btn btn-light position-absolute';
+                prevArrow.id = 'toolPhotoPrevBtn';
+                prevArrow.style = 'left: 20px; top: 50%; transform: translateY(-50%); z-index: 1000; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;';
+                prevArrow.innerHTML = '<i class="fas fa-chevron-left"></i>';
+                prevArrow.onclick = function() {
+                    if (currentPhotoIndex > 0) {
+                        currentPhotoIndex--;
+                        updatePhoto();
+                    }
+                };
+
+                const nextArrow = document.createElement('button');
+                nextArrow.type = 'button';
+                nextArrow.className = 'btn btn-light position-absolute';
+                nextArrow.id = 'toolPhotoNextBtn';
+                nextArrow.style = 'right: 20px; top: 50%; transform: translateY(-50%); z-index: 1000; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;';
+                nextArrow.innerHTML = '<i class="fas fa-chevron-right"></i>';
+                nextArrow.onclick = function() {
+                    if (currentPhotoIndex < photoUrls.length - 1) {
+                        currentPhotoIndex++;
+                        updatePhoto();
+                    }
+                };
+
+                galleryContent.appendChild(prevArrow);
+                galleryContent.appendChild(nextArrow);
+
+                counter.textContent = `${currentPhotoIndex + 1} / ${photoUrls.length}`;
+
+                prevArrow.style.display = currentPhotoIndex === 0 ? 'none' : 'flex';
+                nextArrow.style.display = currentPhotoIndex === photoUrls.length - 1 ? 'none' : 'flex';
+
+                const deleteBtn = document.getElementById('toolPhotoDeleteBtn');
+                if (deleteBtn) {
+                    deleteBtn.onclick = function() {
+                        deletePhoto(toolId, partNumber, currentPhotoIndex, photoUrls[currentPhotoIndex]);
+                    };
+                }
+            }
+
+            updatePhoto();
+            const modal = new bootstrap.Modal(document.getElementById('toolPhotoGalleryModal'));
+            modal.show();
+            window.history.pushState({ modal: 'toolPhotoGallery' }, '', '');
+        }
+
+        // Delete photo function (simplified - full version would include admin code verification for deleting from all tools)
+        async function deletePhoto(toolId, partNumber, photoIndex, photoUrl) {
+            if (!confirm('⚠️ Are you sure you want to delete this photo from YOUR tool?\n\nThis action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                loadingModal.show();
+                document.getElementById('photoUploadProgress').textContent = 'Deleting photo...';
+
+                const toolDoc = await db.collection('tools').doc(toolId).get();
+                const currentPhotoUrls = toolDoc.exists ? (toolDoc.data().photoUrls || []) : [];
+
+                const updatedPhotoUrls = currentPhotoUrls.filter((url, index) => index !== photoIndex);
+
+                await db.collection('tools').doc(toolId).update({
+                    photoUrls: updatedPhotoUrls
+                });
+
+                try {
+                    const urlParts = photoUrl.split('/');
+                    const encodedPath = urlParts[urlParts.length - 1].split('?')[0];
+                    const decodedPath = decodeURIComponent(encodedPath);
+                    const photoRef = storage.ref().child(decodedPath);
+                    await photoRef.delete();
+                } catch (storageError) {
+                    console.warn('Could not delete from storage:', storageError);
+                }
+
+                loadingModal.hide();
+                alert('Photo deleted successfully!');
+
+                const galleryModal = bootstrap.Modal.getInstance(document.getElementById('toolPhotoGalleryModal'));
+                if (galleryModal) galleryModal.hide();
+
+                await showMyTools();
+
+            } catch (error) {
+                console.error('Photo delete failed:', error);
+                const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
+                if (loadingModal) loadingModal.hide();
+                alert('Delete failed: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
+
