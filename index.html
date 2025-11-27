@@ -7314,10 +7314,26 @@ if (!userCredential.user.emailVerified) {
             }
             
             if (menuTrainingQuestionsBtn) {
-                menuTrainingQuestionsBtn.addEventListener('click', function() {
+                menuTrainingQuestionsBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
                     console.log('Create Training Questions button clicked');
-                    // Open PDF Question Generator in a new tab/window
-                    window.open('pdf-question-generator.html', '_blank');
+                    
+                    // Force navigation within the same window
+                    // Use replace to avoid opening new window/tab
+                    const targetUrl = 'pdf-question-generator.html';
+                    
+                    // Try multiple methods to ensure it works
+                    if (window.location.replace) {
+                        window.location.replace(targetUrl);
+                    } else if (window.location.assign) {
+                        window.location.assign(targetUrl);
+                    } else {
+                        window.location.href = targetUrl;
+                    }
+                    
+                    return false;
                 });
             }
             
