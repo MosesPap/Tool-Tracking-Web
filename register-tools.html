@@ -725,22 +725,45 @@
             }
             
             function initializePage() {
-                auth.onAuthStateChanged(function(user) {
-                    console.log('Auth state changed, user:', user ? user.email : 'null');
-                    if (!user) {
-                        // Redirect to index.html if not authenticated
-                        console.log('No user, redirecting to index.html');
-                        window.location.href = 'index.html';
-                        return;
-                    }
-                    
+                // First check current user synchronously (should be available if coming from main-menu.html)
+                const currentUser = auth.currentUser;
+                if (currentUser) {
+                    // User is authenticated, proceed with page initialization
+                    console.log('User authenticated:', currentUser.email);
                     // Update technician name using common.js function
                     if (typeof updateLoggedInTechnician === 'function') {
                         updateLoggedInTechnician();
                     }
-                    
-                    // Also set it directly as backup
-                    const fullName = localStorage.getItem('fullName') || user.email;
+                } else {
+                    // No user immediately available - wait a moment for Firebase to initialize
+                    // This handles the case where we navigate quickly from main-menu.html
+                    setTimeout(() => {
+                        if (auth.currentUser) {
+                            // User found after brief delay, proceed
+                            if (typeof updateLoggedInTechnician === 'function') {
+                                updateLoggedInTechnician();
+                            }
+                        } else {
+                            // Still no user after delay, redirect to login
+                            console.log('No user after initialization, redirecting to index.html');
+                            window.location.href = 'index.html';
+                        }
+                    }, 300);
+                }
+                
+                // Listen for future auth state changes (e.g., logout)
+                auth.onAuthStateChanged(function(user) {
+                    console.log('Auth state changed, user:', user ? user.email : 'null');
+                    if (!user && currentUser) {
+                        // User was logged in but now logged out
+                        console.log('User logged out, redirecting to index.html');
+                        window.location.href = 'index.html';
+                    }
+                });
+                
+                // Also set it directly as backup if user exists
+                if (currentUser) {
+                    const fullName = localStorage.getItem('fullName') || currentUser.email;
                     console.log('Setting technician name to:', fullName);
                     const registerScreenNameElem = document.getElementById('registerScreenName');
                     if (registerScreenNameElem) {
