@@ -682,6 +682,10 @@
         let currentToolPhotoUrls = [];
         let bulkScanMessageTimeout = null;
         
+        // Store authenticated user globally (updated by auth state listener)
+        let authenticatedUser = null;
+        let authStateReady = false;
+        
         // Initialize page on load
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOMContentLoaded - Register Tools page');
@@ -843,6 +847,10 @@
                     // This will update the user when Firebase restores the session
                     let firstAuthFire = true;
                     auth.onAuthStateChanged(function(user) {
+                        // Store user globally for use in processToolSubmission
+                        authenticatedUser = user;
+                        authStateReady = true;
+                        
                         if (firstAuthFire) {
                             firstAuthFire = false;
                             if (user) {
@@ -903,6 +911,8 @@
                 // Also check immediately (in case auth state is already available)
                 const currentUser = auth.currentUser;
                 if (currentUser) {
+                    authenticatedUser = currentUser;
+                    authStateReady = true;
                     console.log('User immediately available');
                     completeInitialization(currentUser);
                 }
@@ -1458,8 +1468,8 @@
             document.getElementById('toolCode').value = '';
             
             try {
-                // Get user - use Promise with auth.onAuthStateChanged to wait for user
-                let user = auth.currentUser;
+                // Get user - use stored authenticatedUser first
+                let user = authenticatedUser || auth.currentUser;
                 console.log('Bulk mode - Initial user check:', user ? user.email : 'null');
                 
                 // If user is null, wait for auth state using Promise
@@ -1470,50 +1480,48 @@
                     if (storedFullName) {
                         user = await new Promise((resolve) => {
                             let resolved = false;
-                            const timeout = setTimeout(() => {
-                                if (!resolved) {
-                                    resolved = true;
-                                    resolve(null);
-                                }
-                            }, 3000);
                             
-                            const immediateUser = auth.currentUser;
-                            if (immediateUser) {
-                                clearTimeout(timeout);
-                                if (!resolved) {
-                                    resolved = true;
-                                    resolve(immediateUser);
-                                }
+                            // If auth state is already ready, use stored user
+                            if (authStateReady && authenticatedUser) {
+                                console.log('Bulk mode - Auth state ready, using stored user');
+                                resolve(authenticatedUser);
                                 return;
                             }
                             
-                            // Poll for user while also listening to auth state
+                            const timeout = setTimeout(() => {
+                                if (!resolved) {
+                                    resolved = true;
+                                    const finalUser = authenticatedUser || auth.currentUser;
+                                    resolve(finalUser);
+                                }
+                            }, 5000);
+                            
+                            // Poll for user
                             let pollCount = 0;
                             const pollInterval = setInterval(() => {
                                 pollCount++;
-                                const pollUser = auth.currentUser;
-                                if (pollUser && !resolved) {
+                                if (authenticatedUser && !resolved) {
                                     clearTimeout(timeout);
                                     clearInterval(pollInterval);
-                                    if (unsubscribe) unsubscribe();
                                     resolved = true;
-                                    console.log('Bulk mode - User found via polling:', pollUser.email);
-                                    resolve(pollUser);
-                                } else if (pollCount >= 40) {
+                                    console.log('Bulk mode - User found via stored authenticatedUser:', authenticatedUser.email);
+                                    resolve(authenticatedUser);
+                                } else {
+                                    const currentUser = auth.currentUser;
+                                    if (currentUser && !resolved) {
+                                        clearTimeout(timeout);
+                                        clearInterval(pollInterval);
+                                        resolved = true;
+                                        authenticatedUser = currentUser;
+                                        console.log('Bulk mode - User found via currentUser polling:', currentUser.email);
+                                        resolve(currentUser);
+                                    }
+                                }
+                                
+                                if (pollCount >= 50) {
                                     clearInterval(pollInterval);
                                 }
                             }, 100);
-                            
-                            unsubscribe = auth.onAuthStateChanged((authUser) => {
-                                if (!resolved && authUser) {
-                                    clearTimeout(timeout);
-                                    clearInterval(pollInterval);
-                                    if (unsubscribe) unsubscribe();
-                                    resolved = true;
-                                    console.log('Bulk mode - User found via auth listener:', authUser.email);
-                                    resolve(authUser);
-                                }
-                            });
                         });
                     }
                 }
@@ -1714,74 +1722,67 @@
         window.processToolSubmission = async function processToolSubmission(code) {
             console.log('processToolSubmission called with code:', code);
             try {
-                // Get user - use Promise to wait for auth state if needed
-                let user = auth.currentUser;
+                // First check the stored authenticated user
+                let user = authenticatedUser || auth.currentUser;
                 console.log('Initial user check:', user ? user.email : 'null');
+                console.log('authStateReady:', authStateReady);
+                console.log('authenticatedUser:', authenticatedUser ? authenticatedUser.email : 'null');
                 
-                // If user is null, wait for auth state to be ready using Promise
+                // If user is null, wait for auth state to be ready
                 if (!user) {
                     console.log('User is null, waiting for Firebase auth state...');
                     const storedFullName = localStorage.getItem('fullName');
                     
                     if (storedFullName) {
-                        // Use Promise to wait for auth state change
-                        // First, try to wait for auth to be ready
+                        // Wait for auth state to be ready (either from listener or polling)
                         user = await new Promise((resolve) => {
                             let resolved = false;
-                            let unsubscribe = null;
+                            
+                            // If auth state is already ready, check immediately
+                            if (authStateReady && authenticatedUser) {
+                                console.log('Auth state already ready, using stored user');
+                                resolve(authenticatedUser);
+                                return;
+                            }
                             
                             const timeout = setTimeout(() => {
                                 if (!resolved) {
                                     resolved = true;
-                                    if (unsubscribe) unsubscribe();
-                                    console.error('Timeout waiting for Firebase auth state');
-                                    // Last attempt - check currentUser one more time
-                                    const finalUser = auth.currentUser;
+                                    // Final check
+                                    const finalUser = authenticatedUser || auth.currentUser;
+                                    console.log('Timeout - final user check:', finalUser ? finalUser.email : 'null');
                                     resolve(finalUser);
                                 }
-                            }, 4000); // 4 second timeout
+                            }, 5000); // 5 second timeout
                             
-                            // Check immediately
-                            const immediateUser = auth.currentUser;
-                            if (immediateUser) {
-                                clearTimeout(timeout);
-                                if (!resolved) {
-                                    resolved = true;
-                                    console.log('User found immediately:', immediateUser.email);
-                                    resolve(immediateUser);
-                                }
-                                return;
-                            }
-                            
-                            // Poll for user while also listening to auth state
+                            // Poll for auth state to be ready
                             let pollCount = 0;
                             const pollInterval = setInterval(() => {
                                 pollCount++;
-                                const pollUser = auth.currentUser;
-                                if (pollUser && !resolved) {
+                                // Check stored user first
+                                if (authenticatedUser && !resolved) {
                                     clearTimeout(timeout);
                                     clearInterval(pollInterval);
-                                    if (unsubscribe) unsubscribe();
                                     resolved = true;
-                                    console.log('User found via polling:', pollUser.email);
-                                    resolve(pollUser);
-                                } else if (pollCount >= 40 && !resolved) {
-                                    // Stop polling after 4 seconds
+                                    console.log('User found via stored authenticatedUser:', authenticatedUser.email);
+                                    resolve(authenticatedUser);
+                                } else {
+                                    // Also check currentUser
+                                    const currentUser = auth.currentUser;
+                                    if (currentUser && !resolved) {
+                                        clearTimeout(timeout);
+                                        clearInterval(pollInterval);
+                                        resolved = true;
+                                        authenticatedUser = currentUser; // Store it
+                                        console.log('User found via currentUser polling:', currentUser.email);
+                                        resolve(currentUser);
+                                    }
+                                }
+                                
+                                if (pollCount >= 50) {
                                     clearInterval(pollInterval);
                                 }
                             }, 100);
-                            
-                            // Also listen for auth state change (in case it fires)
-                            unsubscribe = auth.onAuthStateChanged((authUser) => {
-                                if (!resolved && authUser) {
-                                    clearTimeout(timeout);
-                                    clearInterval(pollInterval);
-                                    if (unsubscribe) unsubscribe();
-                                    resolved = true;
-                                    console.log('User found via auth state listener:', authUser.email);
-                                    resolve(authUser);
-                                }
-                            });
                         });
                     }
                 }
