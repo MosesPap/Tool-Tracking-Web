@@ -1544,6 +1544,17 @@
                 const user = auth.currentUser;
                 console.log('User:', user);
                 
+                // Check if we're online
+                if (!isOnline) {
+                    console.log('Offline mode - saving tool to offline storage');
+                    if (typeof handleOfflineToolSubmission === 'function') {
+                        await handleOfflineToolSubmission(code, user);
+                    } else {
+                        alert('Offline mode not available. Please check your internet connection.');
+                    }
+                    return;
+                }
+                
                 console.log('Online mode - processing normally');
                 const toolRef = db.collection('tools').doc(code);
                 const doc = await toolRef.get({ source: 'server' });
@@ -1830,20 +1841,38 @@
 
                     const card = document.createElement('div');
                     card.className = `register-tool-card ${statusClass}`;
+                    if (tool.isOffline) {
+                        card.style.border = '2px dashed #ffc107';
+                        card.style.background = '#fff3cd';
+                    }
                     
                     card.onclick = function() {
-                        showToolDetails(buildToolDetailsObject(tool.doc, data), 'registerTools');
+                        if (tool.isOffline) {
+                            // Show offline tool details
+                            if (typeof showOfflineToolDetails === 'function') {
+                                showOfflineToolDetails(tool);
+                            } else {
+                                alert('Offline tool details not available');
+                            }
+                        } else {
+                            showToolDetails(buildToolDetailsObject(tool.doc, data), 'registerTools');
+                        }
                     };
                     
+                    const offlineIndicator = tool.isOffline ? ' (Offline)' : '';
                     const workOnValue = data.WorkOn ? data.WorkOn : 'N/A';
+                    const serialNumber = data.serialNumber || data.partNumber || 'N/A';
                     const partNumber = data.partNumber || 'N/A';
                     const calDueDate = data.calDueDate && data.calDueDate.toDate 
                         ? data.calDueDate.toDate().toLocaleDateString('en-GB')
                         : 'N/A';
                     
+                    // Determine status color
+                    const statusColor = status === 'IN' ? 'green' : 'red';
+                    
                     card.innerHTML = `
                         <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 4px; color: #000; text-align: left; line-height: 1.2;">
-                            ${index + 1}. ${data.toolName || 'Unknown Tool'}
+                            ${index + 1}. ${data.toolName || 'Unknown Tool'}${offlineIndicator}
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; line-height: 1.2;">
                             <div style="color: #666; font-size: 0.9rem;">
@@ -1870,7 +1899,7 @@
                                 <span style="color: #666; font-weight: bold;">${tool.id}</span>
                             </div>
                             <div style="text-align: center;">
-                                <span style="color: #666; font-weight: bold;">${partNumber}</span>
+                                <span style="color: #666; font-weight: bold;">${serialNumber}</span>
                             </div>
                             <div style="text-align: right;">
                                 <span class="badge bg-${status === 'IN' ? 'success' : 'danger'}" style="font-weight: bold; border-radius: 15px; padding: 4px 8px;">${status}</span>
@@ -1880,14 +1909,13 @@
                             <span style="color: black; font-weight: bold;">Cal Due Date:</span> 
                             <span style="color: blue; font-weight: bold;">${calDueDate}</span>
                         </div>
-                        <div style="color: #666; font-size: 0.85rem; font-style: italic; margin-top: 8px; text-align: left;">Press for Details</div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px;">
-                            ${status === 'OUT' ? `<div id="countdown-${tool.id}" class="cooldown-countdown counting" onclick="event.stopPropagation();">
-                                <span style="font-weight: bold;">Time for Check-in:</span> <span class="countdown-value">Loading...</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                            <div style="color: blue; font-weight: normal; cursor: pointer; text-align: left;">
+                                Click For Details
+                            </div>
+                            ${status === 'OUT' ? `<div id="countdown-${tool.id}" class="cooldown-countdown" style="background: #FF9800; color: white; padding: 6px 8px; border-radius: 4px; font-weight: bold; text-align: center; white-space: nowrap;" onclick="event.stopPropagation();">
+                                <span style="font-weight: bold;">Check-in in:</span> <span class="countdown-value">Loading...</span>
                             </div>` : ''}
-                            ${status === 'OUT' ? `<button id="tool-in-btn-${tool.id}" class="tool-in-btn-3d" data-tool-id="${tool.id}" disabled onclick="event.stopPropagation(); return pasteToolIdToInput('${tool.id}', event);">
-                                <i class="fas fa-sign-in-alt"></i> IN
-                            </button>` : ''}
                         </div>
                     `;
                     toolsContainer.appendChild(card);
@@ -3631,10 +3659,7 @@
         }
         
         // Update previous out tools count (placeholder - will be implemented in common.js)
-        async function updatePreviousOutToolsCount() {
-            // This function will be implemented in common.js
-            console.log('updatePreviousOutToolsCount called');
-        }
+        // updatePreviousOutToolsCount is implemented in common.js - no need to redefine it here
         
         // Photo delete function (placeholder - will be implemented when needed)
         async function deletePhoto(toolId, partNumber, photoIndex, photoUrl) {
