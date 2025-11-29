@@ -1719,68 +1719,27 @@
         window.processToolSubmission = async function processToolSubmission(code) {
             console.log('processToolSubmission called with code:', code);
             try {
-                // First check the stored authenticated user
+                // Get user - check authenticatedUser first, then currentUser, then wait
                 let user = authenticatedUser || auth.currentUser;
                 console.log('Initial user check:', user ? user.email : 'null');
-                console.log('authStateReady:', authStateReady);
-                console.log('authenticatedUser:', authenticatedUser ? authenticatedUser.email : 'null');
                 
-                // If user is null, wait for auth state to be ready
+                // If no user, wait for Firebase to restore session by polling auth.currentUser
                 if (!user) {
-                    console.log('User is null, waiting for Firebase auth state...');
+                    console.log('User is null, polling auth.currentUser until Firebase restores session...');
                     const storedFullName = localStorage.getItem('fullName');
                     
                     if (storedFullName) {
-                        // Wait for auth state to be ready (either from listener or polling)
-                        user = await new Promise((resolve) => {
-                            let resolved = false;
-                            
-                            // If auth state is already ready, check immediately
-                            if (authStateReady && authenticatedUser) {
-                                console.log('Auth state already ready, using stored user');
-                                resolve(authenticatedUser);
-                                return;
+                        // Poll auth.currentUser - Firebase will restore it eventually
+                        for (let i = 0; i < 100; i++) { // Try for 10 seconds (100 * 100ms)
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            user = auth.currentUser;
+                            if (user) {
+                                console.log('User found via polling after', (i + 1) * 100, 'ms:', user.email);
+                                authenticatedUser = user; // Store it
+                                authStateReady = true;
+                                break;
                             }
-                            
-                            const timeout = setTimeout(() => {
-                                if (!resolved) {
-                                    resolved = true;
-                                    // Final check
-                                    const finalUser = authenticatedUser || auth.currentUser;
-                                    console.log('Timeout - final user check:', finalUser ? finalUser.email : 'null');
-                                    resolve(finalUser);
-                                }
-                            }, 5000); // 5 second timeout
-                            
-                            // Poll for auth state to be ready
-                            let pollCount = 0;
-                            const pollInterval = setInterval(() => {
-                                pollCount++;
-                                // Check stored user first
-                                if (authenticatedUser && !resolved) {
-                                    clearTimeout(timeout);
-                                    clearInterval(pollInterval);
-                                    resolved = true;
-                                    console.log('User found via stored authenticatedUser:', authenticatedUser.email);
-                                    resolve(authenticatedUser);
-                                } else {
-                                    // Also check currentUser
-                                    const currentUser = auth.currentUser;
-                                    if (currentUser && !resolved) {
-                                        clearTimeout(timeout);
-                                        clearInterval(pollInterval);
-                                        resolved = true;
-                                        authenticatedUser = currentUser; // Store it
-                                        console.log('User found via currentUser polling:', currentUser.email);
-                                        resolve(currentUser);
-                                    }
-                                }
-                                
-                                if (pollCount >= 50) {
-                                    clearInterval(pollInterval);
-                                }
-                            }, 100);
-                        });
+                        }
                     }
                 }
                 
