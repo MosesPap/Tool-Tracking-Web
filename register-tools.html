@@ -823,85 +823,65 @@
                 
                 // Check if user is in localStorage (coming from main-menu.html)
                 const storedFullName = localStorage.getItem('fullName');
+                
+                // Initialize UI immediately with stored data (so user sees their name)
+                // Then wait for Firebase auth to restore session in background
                 if (storedFullName) {
-                    console.log('Found stored user name, waiting for Firebase auth to confirm...');
+                    console.log('=== REGISTER TOOLS: Found stored user, initializing UI immediately ===');
+                    const mockUser = {
+                        uid: localStorage.getItem('techniciansId') || 'temp',
+                        email: storedFullName
+                    };
+                    completeInitialization(mockUser);
                 }
                 
-                // Wait for auth state - same approach as main-menu.html
-                // Don't initialize UI until we have a real Firebase user
-                console.log('=== REGISTER TOOLS: Waiting for Firebase auth state... ===');
-                
-                // Listen for auth state changes - this is the PRIMARY way to check auth
-                // Same approach as main-menu.html - wait for auth state to fire
-                console.log('=== REGISTER TOOLS: Setting up auth listener (same as main-menu.html) ===');
-                
-                // Set up listener immediately - Firebase will fire it when ready
-                const unsubscribe = auth.onAuthStateChanged(function(user) {
-                        // Store user globally
-                        authenticatedUser = user;
-                        authStateReady = true;
-                        
-                        if (authStateChecked && initializationComplete) {
-                            // Already initialized, only handle logout
-                            if (!user) {
-                                console.log('User logged out after initialization');
-                                window.location.href = 'main-menu.html';
-                            }
-                            return;
-                        }
-                        
-                        authStateChecked = true;
-                        console.log('=== Auth state changed in register-tools, user:', user ? user.email : 'null ===');
-                        
-                        if (user && !user.emailVerified) {
-                            // Force sign out if user is not verified
-                            auth.signOut();
-                            window.location.href = 'index.html';
-                            return;
-                        }
-                        
-                        if (user) {
-                            // User is authenticated, proceed with initialization
-                            console.log('=== User authenticated, initializing page... ===');
-                            completeInitialization(user);
-                        } else {
-                            // No user - check if we have stored data
-                            const storedFullName = localStorage.getItem('fullName');
-                            if (storedFullName) {
-                                // Wait a bit more - Firebase might still be restoring session
-                                console.log('=== No user yet but have stored name, waiting 3 seconds... ===');
-                                setTimeout(() => {
-                                    const retryUser = auth.currentUser;
-                                    if (retryUser) {
-                                        console.log('=== User found on retry:', retryUser.email, '===');
-                                        authenticatedUser = retryUser;
-                                        authStateReady = true;
-                                        if (!initializationComplete) {
-                                            completeInitialization(retryUser);
-                                        }
-                                    } else {
-                                        console.log('=== Still no user after retry, redirecting to main-menu ===');
-                                        window.location.href = 'main-menu.html';
-                                    }
-                                }, 3000);
-                            } else {
-                                // No user and no stored data, redirect to main menu
-                                console.log('No user and no stored data, redirecting to main-menu.html');
-                                window.location.href = 'main-menu.html';
-                            }
-                        }
-                    });
+                // Set up auth listener to capture real Firebase user when it becomes available
+                console.log('=== REGISTER TOOLS: Setting up auth listener ===');
+                auth.onAuthStateChanged(function(user) {
+                    // Store user globally - this is what processToolSubmission and loadTools will use
+                    authenticatedUser = user;
+                    authStateReady = true;
                     
-                    // Also check immediately (in case auth state is already available)
-                    const currentUser = auth.currentUser;
-                    if (currentUser) {
-                        console.log('=== User immediately available:', currentUser.email, '===');
-                        authenticatedUser = currentUser;
-                        authStateReady = true;
-                        if (!initializationComplete) {
-                            completeInitialization(currentUser);
+                    console.log('=== Auth state changed, user:', user ? user.email : 'null ===');
+                    
+                    if (user && !user.emailVerified) {
+                        auth.signOut();
+                        window.location.href = 'index.html';
+                        return;
+                    }
+                    
+                    if (user) {
+                        console.log('=== Firebase user confirmed:', user.email, '===');
+                        // User is available - reload tools if UI is already initialized
+                        if (initializationComplete && typeof loadTools === 'function') {
+                            console.log('=== Reloading tools now that Firebase user is available ===');
+                            setTimeout(() => loadTools(), 500);
                         }
                     }
+                    
+                    // Handle logout after initialization
+                    if (initializationComplete && !user) {
+                        console.log('User logged out, redirecting...');
+                        window.location.href = 'main-menu.html';
+                    }
+                });
+                
+                // Also check immediately
+                const currentUser = auth.currentUser;
+                if (currentUser) {
+                    console.log('=== User immediately available:', currentUser.email, '===');
+                    authenticatedUser = currentUser;
+                    authStateReady = true;
+                    if (!initializationComplete) {
+                        completeInitialization(currentUser);
+                    } else if (typeof loadTools === 'function') {
+                        setTimeout(() => loadTools(), 500);
+                    }
+                } else if (!storedFullName) {
+                    // No stored data and no user - redirect
+                    console.log('No user and no stored data, redirecting to main-menu.html');
+                    window.location.href = 'main-menu.html';
+                }
                 });
             }
         });
