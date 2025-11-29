@@ -823,62 +823,45 @@
                     console.log('Found stored user name, waiting for Firebase auth to confirm...');
                 }
                 
-                // If we have storedFullName, wait for Firebase to restore the real user session
-                // This prevents the redirect loop when navigating from main-menu.html
+                // If we have storedFullName, proceed immediately with UI initialization
+                // Don't wait for Firebase - we'll wait only when processing tools
+                // This prevents the redirect loop and makes the page load faster
                 if (storedFullName) {
-                    console.log('=== REGISTER TOOLS: Found stored user name, waiting for Firebase to restore session... ===');
+                    console.log('=== REGISTER TOOLS: Found stored user name, initializing UI immediately... ===');
                     console.log('storedFullName:', storedFullName);
                     
-                    // Wait for Firebase to restore the user session (up to 3 seconds)
-                    let userFound = false;
-                    let waitAttempts = 0;
-                    const maxWaitAttempts = 30; // 3 seconds total
+                    // Initialize UI immediately with stored data
+                    // We'll get the real user from Firebase when processing tools
+                    const mockUser = {
+                        uid: localStorage.getItem('techniciansId') || 'temp',
+                        email: storedFullName
+                    };
+                    console.log('Initializing UI immediately (will wait for real user when processing tools)...');
+                    completeInitialization(mockUser);
                     
-                    const waitForUser = async () => {
-                        while (waitAttempts < maxWaitAttempts && !userFound) {
-                            await new Promise(resolve => setTimeout(resolve, 100));
-                            const user = auth.currentUser;
+                    // Set up auth listener in background (non-blocking)
+                    // This will update the user when Firebase restores the session
+                    let firstAuthFire = true;
+                    auth.onAuthStateChanged(function(user) {
+                        if (firstAuthFire) {
+                            firstAuthFire = false;
                             if (user) {
-                                console.log('=== Real Firebase user found:', user.email, '===');
-                                userFound = true;
-                                completeInitialization(user);
-                                return;
+                                console.log('=== Real Firebase user confirmed in background:', user.email, '===');
+                                // User is now available - update if needed
+                                // But don't re-initialize, just note that user is ready
+                            } else {
+                                console.log('=== No user in Firebase yet, but UI is ready ===');
                             }
-                            waitAttempts++;
+                            return;
                         }
                         
-                        // If still no user after waiting, use auth state listener
-                        if (!userFound) {
-                            console.log('=== No user after waiting, setting up auth listener ===');
-                            let firstAuthFire = true;
-                            auth.onAuthStateChanged(function(user) {
-                                if (firstAuthFire) {
-                                    firstAuthFire = false;
-                                    if (user) {
-                                        console.log('=== User found via auth listener:', user.email, '===');
-                                        completeInitialization(user);
-                                    } else {
-                                        console.log('=== Still no user, but proceeding with initialization anyway ===');
-                                        // Create a minimal user object for UI initialization
-                                        const mockUser = {
-                                            uid: localStorage.getItem('techniciansId') || 'temp',
-                                            email: storedFullName
-                                        };
-                                        completeInitialization(mockUser);
-                                    }
-                                    return;
-                                }
-                                
-                                // After first fire, only handle logout
-                                if (initializationComplete && !user) {
-                                    console.log('User logged out after initialization, redirecting...');
-                                    window.location.href = 'main-menu.html';
-                                }
-                            });
+                        // After first fire, only handle logout
+                        if (initializationComplete && !user) {
+                            console.log('User logged out after initialization, redirecting...');
+                            window.location.href = 'main-menu.html';
                         }
-                    };
-                    
-                    waitForUser();
+                    });
+                    console.log('=== REGISTER TOOLS: UI initialization complete, page ready immediately ===');
                     return; // Don't continue with the auth check below
                 }
                 
@@ -1703,37 +1686,35 @@
         window.processToolSubmission = async function processToolSubmission(code) {
             console.log('processToolSubmission called with code:', code);
             try {
-                // Get user - wait for Firebase to restore session if needed
+                // Get user - wait for Firebase to restore session if needed (but faster now)
                 let user = auth.currentUser;
                 console.log('Initial user check:', user ? user.email : 'null');
                 
-                // If user is null, wait a bit for Firebase to restore session
+                // If user is null, wait briefly for Firebase to restore session
+                // Reduced wait time since we initialize UI immediately
                 if (!user) {
-                    console.log('User is null, waiting for Firebase to restore session...');
-                    // Wait up to 2 seconds for Firebase to restore the session
-                    for (let i = 0; i < 20; i++) {
+                    console.log('User is null, waiting briefly for Firebase to restore session...');
+                    // Wait up to 1 second (10 attempts x 100ms) - faster than before
+                    for (let i = 0; i < 10; i++) {
                         await new Promise(resolve => setTimeout(resolve, 100));
                         user = auth.currentUser;
                         if (user) {
-                            console.log('User found after waiting:', user.email);
+                            console.log('User found after brief wait:', user.email);
                             break;
                         }
                     }
                 }
                 
-                // If still no user, try to get from localStorage and wait longer
+                // If still no user, try one more quick check
                 if (!user) {
                     const storedFullName = localStorage.getItem('fullName');
                     if (storedFullName) {
-                        console.log('Still no user but have stored name, waiting longer...');
-                        // Wait another 2 seconds
-                        for (let i = 0; i < 20; i++) {
-                            await new Promise(resolve => setTimeout(resolve, 100));
-                            user = auth.currentUser;
-                            if (user) {
-                                console.log('User found after extended wait:', user.email);
-                                break;
-                            }
+                        console.log('Still no user but have stored name, doing one final check...');
+                        // One more quick check (500ms)
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        user = auth.currentUser;
+                        if (user) {
+                            console.log('User found on final check:', user.email);
                         }
                     }
                 }
