@@ -730,17 +730,21 @@
                 
                 // Function to complete page initialization
                 function completeInitialization(user) {
-                    if (!user || initializationComplete) return;
+                    if (initializationComplete) {
+                        console.log('Already initialized, skipping...');
+                        return;
+                    }
                     initializationComplete = true;
                     
-                    console.log('User authenticated:', user.email);
+                    console.log('Initializing page for user:', user.email || user.uid || 'user');
+                    
                     // Update technician name using common.js function
                     if (typeof updateLoggedInTechnician === 'function') {
                         updateLoggedInTechnician();
                     }
                     
                     // Also set it directly as backup
-                    const fullName = localStorage.getItem('fullName') || user.email;
+                    const fullName = localStorage.getItem('fullName') || user.email || 'User';
                     console.log('Setting technician name to:', fullName);
                     const registerScreenNameElem = document.getElementById('registerScreenName');
                     if (registerScreenNameElem) {
@@ -764,14 +768,18 @@
                     
                     // Always show location selection modal on page load
                     console.log('Showing location selection modal');
+                    // Use a longer delay to ensure DOM is ready and Bootstrap is loaded
                     setTimeout(() => {
+                        console.log('Attempting to show location selection modal...');
                         if (typeof showLocationSelectionModalForRegisterTools === 'function') {
                             try {
+                                console.log('Calling showLocationSelectionModalForRegisterTools...');
                                 showLocationSelectionModalForRegisterTools();
                             } catch (error) {
                                 console.error('Error showing location selection modal:', error);
                                 // Try showing helicopter model selection directly
                                 if (typeof showHelicopterModelSelectionModal === 'function') {
+                                    console.log('Trying helicopter model selection modal directly...');
                                     showHelicopterModelSelectionModal();
                                 }
                             }
@@ -781,9 +789,11 @@
                             if (typeof showHelicopterModelSelectionModal === 'function') {
                                 console.log('Trying to show helicopter model selection modal directly');
                                 showHelicopterModelSelectionModal();
+                            } else {
+                                console.error('showHelicopterModelSelectionModal function also not found!');
                             }
                         }
-                    }, 300);
+                    }, 500); // Increased delay to 500ms
                 }
                 
                 // Check if user is in localStorage (coming from main-menu.html)
@@ -792,10 +802,37 @@
                     console.log('Found stored user name, waiting for Firebase auth to confirm...');
                 }
                 
-                // Listen for auth state changes - this is the PRIMARY way to check auth
-                // Firebase needs time to restore the session, so we MUST wait for onAuthStateChanged
-                console.log('Setting up auth state listener...');
+                // If we have storedFullName, trust that user is logged in and proceed immediately
+                // This prevents the redirect loop when navigating from main-menu.html
+                if (storedFullName) {
+                    console.log('Found stored user name, proceeding with initialization immediately...');
+                    // Create a mock user object for initialization
+                    // We'll get the real user from Firebase when it's ready
+                    const mockUser = {
+                        uid: localStorage.getItem('techniciansId') || 'temp',
+                        email: storedFullName // Use fullName as placeholder
+                    };
+                    completeInitialization(mockUser);
+                    
+                    // Also set up auth listener for future changes (logout, etc.)
+                    auth.onAuthStateChanged(function(user) {
+                        if (initializationComplete && !user) {
+                            // User logged out after initialization
+                            console.log('User logged out after initialization');
+                            window.location.href = 'main-menu.html';
+                        } else if (user && !initializationComplete) {
+                            // User found, complete initialization with real user
+                            console.log('Real user found, updating initialization');
+                            completeInitialization(user);
+                        }
+                    });
+                    return; // Don't continue with the auth check below
+                }
                 
+                // If no storedFullName, then we need to check auth properly
+                console.log('No stored user name, checking Firebase auth...');
+                
+                // Listen for auth state changes - this is the PRIMARY way to check auth
                 const unsubscribe = auth.onAuthStateChanged(function(user) {
                     if (authStateChecked && initializationComplete) {
                         // Already initialized, only handle logout
@@ -821,45 +858,17 @@
                         console.log('User authenticated, initializing page...');
                         completeInitialization(user);
                     } else {
-                        // No user - but check localStorage first (user might be coming from main-menu)
-                        if (storedFullName) {
-                            console.log('No user in Firebase but stored name exists, waiting 3 seconds for Firebase to restore session...');
-                            // Wait longer for Firebase to restore the session
-                            setTimeout(() => {
-                                const retryUser = auth.currentUser;
-                                if (retryUser) {
-                                    console.log('User found after waiting!');
-                                    completeInitialization(retryUser);
-                                } else {
-                                    console.log('Still no user after waiting, but we have stored name. Checking one more time...');
-                                    // One final check after another 2 seconds
-                                    setTimeout(() => {
-                                        const finalUser = auth.currentUser;
-                                        if (finalUser) {
-                                            console.log('User found on final check!');
-                                            completeInitialization(finalUser);
-                                        } else {
-                                            console.log('No user after all retries, redirecting to main-menu.html');
-                                            window.location.href = 'main-menu.html';
-                                        }
-                                    }, 2000);
-                                }
-                            }, 3000); // Wait 3 seconds first
-                        } else {
-                            // No stored user data either, redirect to main menu
-                            console.log('No user and no stored data, redirecting to main-menu.html');
-                            window.location.href = 'main-menu.html';
-                        }
+                        // No user and no stored data, redirect to main menu
+                        console.log('No user and no stored data, redirecting to main-menu.html');
+                        window.location.href = 'main-menu.html';
                     }
                 });
                 
                 // Also check immediately (in case auth state is already available)
-                // But don't rely on this - onAuthStateChanged is the source of truth
                 const currentUser = auth.currentUser;
                 if (currentUser) {
-                    console.log('User immediately available (bonus check)');
-                    // Don't call completeInitialization here - let onAuthStateChanged handle it
-                    // This prevents double initialization
+                    console.log('User immediately available');
+                    completeInitialization(currentUser);
                 }
             }
         });
