@@ -1937,34 +1937,17 @@
 
         // Load today's tools
         async function loadTools() {
-            // Use authenticatedUser first, then fall back to auth.currentUser
-            let user = authenticatedUser || auth.currentUser;
+            // Get technician name from localStorage - we don't need Firebase user for this!
+            const technicianName = localStorage.getItem('fullName');
             
-            // If still no user, wait a bit for Firebase to restore session
-            if (!user) {
-                console.log('loadTools: No user yet, waiting for Firebase auth state...');
-                const storedFullName = localStorage.getItem('fullName');
-                if (storedFullName) {
-                    // Wait up to 3 seconds for user to be available
-                    for (let i = 0; i < 30; i++) {
-                        await new Promise(resolve => setTimeout(resolve, 100));
-                        user = authenticatedUser || auth.currentUser;
-                        if (user) {
-                            console.log('loadTools: User found after waiting:', user.email);
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            if (!user) {
-                console.log('loadTools: No user logged in after waiting');
+            if (!technicianName) {
+                console.log('loadTools: No technician name in localStorage');
                 return;
             }
+            
+            console.log('loadTools: Using technician name from localStorage:', technicianName);
 
             try {
-                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-                const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
 
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
