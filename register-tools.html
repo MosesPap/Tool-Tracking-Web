@@ -734,6 +734,13 @@
                         console.log('Already initialized, skipping...');
                         return;
                     }
+                    
+                    // Allow initialization even with mock user
+                    if (!user) {
+                        console.error('completeInitialization called without user!');
+                        return;
+                    }
+                    
                     initializationComplete = true;
                     
                     console.log('Initializing page for user:', user.email || user.uid || 'user');
@@ -767,30 +774,44 @@
                     }
                     
                     // Always show location selection modal on page load
-                    console.log('Showing location selection modal');
+                    console.log('=== About to show location selection modal ===');
                     // Use a longer delay to ensure DOM is ready and Bootstrap is loaded
                     setTimeout(() => {
-                        console.log('Attempting to show location selection modal...');
+                        console.log('=== Attempting to show location selection modal (500ms delay) ===');
+                        console.log('showLocationSelectionModalForRegisterTools exists?', typeof showLocationSelectionModalForRegisterTools);
+                        console.log('showHelicopterModelSelectionModal exists?', typeof showHelicopterModelSelectionModal);
+                        
                         if (typeof showLocationSelectionModalForRegisterTools === 'function') {
                             try {
-                                console.log('Calling showLocationSelectionModalForRegisterTools...');
+                                console.log('=== Calling showLocationSelectionModalForRegisterTools() ===');
                                 showLocationSelectionModalForRegisterTools();
+                                console.log('=== Modal function called successfully ===');
                             } catch (error) {
-                                console.error('Error showing location selection modal:', error);
+                                console.error('=== ERROR calling showLocationSelectionModalForRegisterTools:', error);
                                 // Try showing helicopter model selection directly
                                 if (typeof showHelicopterModelSelectionModal === 'function') {
-                                    console.log('Trying helicopter model selection modal directly...');
-                                    showHelicopterModelSelectionModal();
+                                    console.log('=== Trying helicopter model selection modal directly ===');
+                                    try {
+                                        showHelicopterModelSelectionModal();
+                                        console.log('=== Helicopter modal function called successfully ===');
+                                    } catch (err) {
+                                        console.error('=== ERROR calling showHelicopterModelSelectionModal:', err);
+                                    }
                                 }
                             }
                         } else {
-                            console.error('showLocationSelectionModalForRegisterTools function not found!');
+                            console.error('=== showLocationSelectionModalForRegisterTools function not found! ===');
                             // Try showing helicopter model selection directly
                             if (typeof showHelicopterModelSelectionModal === 'function') {
-                                console.log('Trying to show helicopter model selection modal directly');
-                                showHelicopterModelSelectionModal();
+                                console.log('=== Trying to show helicopter model selection modal directly ===');
+                                try {
+                                    showHelicopterModelSelectionModal();
+                                    console.log('=== Helicopter modal function called successfully ===');
+                                } catch (err) {
+                                    console.error('=== ERROR calling showHelicopterModelSelectionModal:', err);
+                                }
                             } else {
-                                console.error('showHelicopterModelSelectionModal function also not found!');
+                                console.error('=== showHelicopterModelSelectionModal function also not found! ===');
                             }
                         }
                     }, 500); // Increased delay to 500ms
@@ -805,27 +826,38 @@
                 // If we have storedFullName, trust that user is logged in and proceed immediately
                 // This prevents the redirect loop when navigating from main-menu.html
                 if (storedFullName) {
-                    console.log('Found stored user name, proceeding with initialization immediately...');
+                    console.log('=== REGISTER TOOLS: Found stored user name, proceeding with initialization immediately... ===');
+                    console.log('storedFullName:', storedFullName);
+                    
                     // Create a mock user object for initialization
                     // We'll get the real user from Firebase when it's ready
                     const mockUser = {
                         uid: localStorage.getItem('techniciansId') || 'temp',
                         email: storedFullName // Use fullName as placeholder
                     };
+                    console.log('Calling completeInitialization with mock user...');
                     completeInitialization(mockUser);
                     
-                    // Also set up auth listener for future changes (logout, etc.)
+                    // Set up auth listener but IGNORE the first fire (it might be null while Firebase restores session)
+                    let firstAuthFire = true;
                     auth.onAuthStateChanged(function(user) {
+                        if (firstAuthFire) {
+                            firstAuthFire = false;
+                            console.log('First auth state change (ignored):', user ? user.email : 'null');
+                            // Don't do anything on first fire - Firebase might still be restoring session
+                            return;
+                        }
+                        
+                        // After first fire, only handle logout
                         if (initializationComplete && !user) {
                             // User logged out after initialization
-                            console.log('User logged out after initialization');
+                            console.log('User logged out after initialization, redirecting...');
                             window.location.href = 'main-menu.html';
-                        } else if (user && !initializationComplete) {
-                            // User found, complete initialization with real user
-                            console.log('Real user found, updating initialization');
-                            completeInitialization(user);
+                        } else if (user && initializationComplete) {
+                            console.log('Firebase user confirmed after initialization:', user.email);
                         }
                     });
+                    console.log('=== REGISTER TOOLS: Initialization complete, page should be ready ===');
                     return; // Don't continue with the auth check below
                 }
                 
