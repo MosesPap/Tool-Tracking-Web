@@ -883,10 +883,16 @@
                         }
                     }
                     
-                    // Handle logout after initialization
+                    // Handle logout after initialization - but only if we don't have storedFullName
+                    // (Firebase might still be restoring the session)
                     if (initializationComplete && !user) {
-                        console.log('User logged out, redirecting...');
-                        window.location.href = 'main-menu.html';
+                        const hasStoredName = localStorage.getItem('fullName');
+                        if (!hasStoredName) {
+                            console.log('User logged out and no stored name, redirecting...');
+                            window.location.href = 'main-menu.html';
+                        } else {
+                            console.log('User is null but we have stored name, waiting for Firebase to restore...');
+                        }
                     }
                 });
                 
