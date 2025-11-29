@@ -2309,6 +2309,7 @@
         </div>
 
         <!-- Main App Section - REMOVED: Now in register-tools.html -->
+        <div id="appSection" style="display: none !important; visibility: hidden !important;">
             <!-- Orange Top Bar with Title -->
             <div class="full-width-title-bar" style="background: #FF9800; color: white; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
                 <h2 style="margin: 0 0 0 20px; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px; padding-right: 160px;">Register Tools</h2>
@@ -3327,11 +3328,14 @@
         auth.useDeviceLanguage();
         
         // Set custom error messages for unverified emails
+        // First auth handler - REMOVED: Now redirects immediately in second handler
+        // Keep only the email verification check
         auth.onAuthStateChanged(function(user) {
             if (user && !user.emailVerified) {
                 // Force sign out if user is not verified
                 auth.signOut();
             }
+            // Don't do anything else - let the second handler handle redirects
         });
 
         // Ensure user stays logged in across refreshes and browser restarts
@@ -6580,92 +6584,31 @@ if (!userCredential.user.emailVerified) {
         // Tab change handler
         // (removed previous-tab event listener as the tab is no longer present)
 
-        // On auth state change, show menu after login (not register tools)
+        // Check auth state immediately on page load
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+            console.log('User already authenticated on page load, redirecting immediately...');
+            window.location.replace('main-menu.html');
+        }
+        
+        // Listen for auth state changes
         auth.onAuthStateChanged(function(user) {
             if (user) {
-                loginSection.style.display = 'none';
-                signUpSection.classList.add('d-none');
-                adminSection.style.display = 'none';
-                const adminButton = document.getElementById('adminButton');
-                if (adminButton) {
-                    adminButton.style.display = 'none';
-                }
-                document.getElementById('headerBranding').style.display = 'none';
-                
-                // Check if we should skip splash (coming from register-tools, previous-out, or pdf-question-generator)
-                const skipSplash = sessionStorage.getItem('skipSplash');
-                if (skipSplash === 'true') {
-                    console.log('skipSplash detected in auth handler - showing menu immediately');
-                    // Hide splash screen immediately if it's still visible
-                    const splashScreen = document.getElementById('splashScreen');
-                    const orangeOverlay = document.getElementById('orangeOverlay');
-                    const loginSection = document.getElementById('loginSection');
-                    if (splashScreen) {
-                        splashScreen.style.display = 'none';
-                        splashScreen.classList.add('splash-hidden');
-                    }
-                    if (orangeOverlay) {
-                        orangeOverlay.classList.add('hidden');
-                        orangeOverlay.style.display = 'none';
-                    }
-                    // Hide login section and show menu immediately
-                    if (loginSection) {
-                        loginSection.style.display = 'none';
-                        loginSection.classList.add('d-none');
-                    }
-                    // Force show menu - don't wait for anything
-                    // skipSplash flag is no longer needed - always redirect to main-menu.html
-                    sessionStorage.removeItem('skipSplash');
-                    window.location.href = 'main-menu.html';
-                    return;
-                }
-                
-                // Always fetch fresh data from Firestore
-                db.collection('technicians').doc(user.uid)
-                    .get()
-                    .then(doc => {
-                        if (doc.exists) {
-                            const technicianData = doc.data();
-                            const name = technicianData.fullName || user.email;
-                            // Store the document ID
-                            localStorage.setItem('techniciansId', doc.id);
-                            localStorage.setItem('fullName', name);
-                            document.getElementById('fullName').textContent = name;
-                            
-                            // Check if user is admin
-                            if (technicianData.isAdmin) {
-                                const adminButton = document.getElementById('adminButton');
-                                if (adminButton) {
-                                    adminButton.style.display = 'inline-block';
-                                }
-                                // Show Tool Administrator button in menu
-                                const menuAdminBtn = document.getElementById('menuAdminBtn');
-                                if (menuAdminBtn) {
-                                    menuAdminBtn.style.display = 'block';
-                                }
-                            }
-                            
-                            // Check if user is instructor
-                            if (technicianData.isInstructor) {
-                                // Show Create Training Questions button in menu
-                                const menuTrainingQuestionsBtn = document.getElementById('menuTrainingQuestionsBtn');
-                                if (menuTrainingQuestionsBtn) {
-                                    menuTrainingQuestionsBtn.style.display = 'block';
-                                }
-                            }
-                        } else {
-                            document.getElementById('fullName').textContent = user.email;
-                        }
-                    }).catch(error => {
-                        console.error('Error fetching technician data:', error);
-                        document.getElementById('fullName').textContent = user.email;
-                    });
-                // Redirect to main-menu.html after login
-                window.location.href = 'main-menu.html';
+                // Redirect IMMEDIATELY - don't update any UI elements
+                // All user data fetching will happen in main-menu.html
+                console.log('User authenticated, redirecting to main-menu.html immediately');
+                window.location.replace('main-menu.html'); // Use replace() to prevent back button issues
+                return; // Exit immediately to prevent any UI updates
             } else {
                 // User not logged in - show login section
-                loginSection.style.display = 'block';
-                document.getElementById('headerBranding').style.display = 'block';
+                const loginSection = document.getElementById('loginSection');
+                if (loginSection) {
+                    loginSection.style.display = 'block';
+                }
+                const headerBranding = document.getElementById('headerBranding');
+                if (headerBranding) {
+                    headerBranding.style.display = 'block';
+                }
                 localStorage.removeItem('fullName');
             }
         });
