@@ -749,14 +749,18 @@
                     
                     console.log('Initializing page for user:', user.email || user.uid || 'user');
                     
-                    // Update technician name using common.js function
+                    // Set technician name directly - use fullName from localStorage, NOT technicianName
+                    const fullName = localStorage.getItem('fullName') || user.email || user.uid || 'User';
+                    console.log('Setting technician name to:', fullName);
+                    console.log('Checking for technicianName in localStorage:', localStorage.getItem('technicianName'));
+                    console.log('Using fullName instead of technicianName');
+                    
+                    // Update technician name using common.js function (but it might use wrong value)
                     if (typeof updateLoggedInTechnician === 'function') {
                         updateLoggedInTechnician();
                     }
                     
-                    // Also set it directly as backup
-                    const fullName = localStorage.getItem('fullName') || user.email || user.uid || 'User';
-                    console.log('Setting technician name to:', fullName);
+                    // ALWAYS set it directly to ensure we use fullName, not technicianName
                     console.log('Looking for registerScreenName element...');
                     const registerScreenNameElem = document.getElementById('registerScreenName');
                     console.log('registerScreenNameElem found?', registerScreenNameElem ? 'YES' : 'NO');
@@ -776,6 +780,17 @@
                             }
                         }, 100);
                     }
+                    
+                    // Also ensure it stays correct after station selection
+                    // Set up a mutation observer or interval to keep it correct
+                    setInterval(() => {
+                        const nameElem = document.getElementById('registerScreenName');
+                        const correctName = localStorage.getItem('fullName');
+                        if (nameElem && correctName && nameElem.textContent !== correctName) {
+                            console.log('Correcting name display from', nameElem.textContent, 'to', correctName);
+                            nameElem.textContent = correctName;
+                        }
+                    }, 1000);
                     
                     // Set up event listeners (including back button)
                     setupEventListeners();
@@ -3198,6 +3213,14 @@
             clearWorkLocationFlash();
             clearAllCountdowns();
             updateWorkLocationLabel();
+            
+            // Ensure name is correct (use fullName, not technicianName)
+            const correctName = localStorage.getItem('fullName');
+            const nameElem = document.getElementById('registerScreenName');
+            if (nameElem && correctName) {
+                nameElem.textContent = correctName;
+            }
+            
             loadTools();
             showNotificationsInSequence();
         }
