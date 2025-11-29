@@ -1458,35 +1458,63 @@
             document.getElementById('toolCode').value = '';
             
             try {
-                // Get user - wait for Firebase to restore session if needed
+                // Get user - use Promise with auth.onAuthStateChanged to wait for user
                 let user = auth.currentUser;
                 console.log('Bulk mode - Initial user check:', user ? user.email : 'null');
                 
-                // If user is null, wait a bit for Firebase to restore session
+                // If user is null, wait for auth state using Promise
                 if (!user) {
-                    console.log('Bulk mode - User is null, waiting for Firebase to restore session...');
-                    for (let i = 0; i < 20; i++) {
-                        await new Promise(resolve => setTimeout(resolve, 100));
-                        user = auth.currentUser;
-                        if (user) {
-                            console.log('Bulk mode - User found after waiting:', user.email);
-                            break;
-                        }
-                    }
-                }
-                
-                if (!user) {
+                    console.log('Bulk mode - User is null, waiting for Firebase auth state...');
                     const storedFullName = localStorage.getItem('fullName');
+                    
                     if (storedFullName) {
-                        console.log('Bulk mode - Still no user but have stored name, waiting longer...');
-                        for (let i = 0; i < 20; i++) {
-                            await new Promise(resolve => setTimeout(resolve, 100));
-                            user = auth.currentUser;
-                            if (user) {
-                                console.log('Bulk mode - User found after extended wait:', user.email);
-                                break;
+                        user = await new Promise((resolve) => {
+                            let resolved = false;
+                            const timeout = setTimeout(() => {
+                                if (!resolved) {
+                                    resolved = true;
+                                    resolve(null);
+                                }
+                            }, 3000);
+                            
+                            const immediateUser = auth.currentUser;
+                            if (immediateUser) {
+                                clearTimeout(timeout);
+                                if (!resolved) {
+                                    resolved = true;
+                                    resolve(immediateUser);
+                                }
+                                return;
                             }
-                        }
+                            
+                            // Poll for user while also listening to auth state
+                            let pollCount = 0;
+                            const pollInterval = setInterval(() => {
+                                pollCount++;
+                                const pollUser = auth.currentUser;
+                                if (pollUser && !resolved) {
+                                    clearTimeout(timeout);
+                                    clearInterval(pollInterval);
+                                    if (unsubscribe) unsubscribe();
+                                    resolved = true;
+                                    console.log('Bulk mode - User found via polling:', pollUser.email);
+                                    resolve(pollUser);
+                                } else if (pollCount >= 40) {
+                                    clearInterval(pollInterval);
+                                }
+                            }, 100);
+                            
+                            unsubscribe = auth.onAuthStateChanged((authUser) => {
+                                if (!resolved && authUser) {
+                                    clearTimeout(timeout);
+                                    clearInterval(pollInterval);
+                                    if (unsubscribe) unsubscribe();
+                                    resolved = true;
+                                    console.log('Bulk mode - User found via auth listener:', authUser.email);
+                                    resolve(authUser);
+                                }
+                            });
+                        });
                     }
                 }
                 
@@ -1686,36 +1714,75 @@
         window.processToolSubmission = async function processToolSubmission(code) {
             console.log('processToolSubmission called with code:', code);
             try {
-                // Get user - wait for Firebase to restore session if needed (but faster now)
+                // Get user - use Promise to wait for auth state if needed
                 let user = auth.currentUser;
                 console.log('Initial user check:', user ? user.email : 'null');
                 
-                // If user is null, wait briefly for Firebase to restore session
-                // Reduced wait time since we initialize UI immediately
+                // If user is null, wait for auth state to be ready using Promise
                 if (!user) {
-                    console.log('User is null, waiting briefly for Firebase to restore session...');
-                    // Wait up to 1 second (10 attempts x 100ms) - faster than before
-                    for (let i = 0; i < 10; i++) {
-                        await new Promise(resolve => setTimeout(resolve, 100));
-                        user = auth.currentUser;
-                        if (user) {
-                            console.log('User found after brief wait:', user.email);
-                            break;
-                        }
-                    }
-                }
-                
-                // If still no user, try one more quick check
-                if (!user) {
+                    console.log('User is null, waiting for Firebase auth state...');
                     const storedFullName = localStorage.getItem('fullName');
+                    
                     if (storedFullName) {
-                        console.log('Still no user but have stored name, doing one final check...');
-                        // One more quick check (500ms)
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                        user = auth.currentUser;
-                        if (user) {
-                            console.log('User found on final check:', user.email);
-                        }
+                        // Use Promise to wait for auth state change
+                        // First, try to wait for auth to be ready
+                        user = await new Promise((resolve) => {
+                            let resolved = false;
+                            let unsubscribe = null;
+                            
+                            const timeout = setTimeout(() => {
+                                if (!resolved) {
+                                    resolved = true;
+                                    if (unsubscribe) unsubscribe();
+                                    console.error('Timeout waiting for Firebase auth state');
+                                    // Last attempt - check currentUser one more time
+                                    const finalUser = auth.currentUser;
+                                    resolve(finalUser);
+                                }
+                            }, 4000); // 4 second timeout
+                            
+                            // Check immediately
+                            const immediateUser = auth.currentUser;
+                            if (immediateUser) {
+                                clearTimeout(timeout);
+                                if (!resolved) {
+                                    resolved = true;
+                                    console.log('User found immediately:', immediateUser.email);
+                                    resolve(immediateUser);
+                                }
+                                return;
+                            }
+                            
+                            // Poll for user while also listening to auth state
+                            let pollCount = 0;
+                            const pollInterval = setInterval(() => {
+                                pollCount++;
+                                const pollUser = auth.currentUser;
+                                if (pollUser && !resolved) {
+                                    clearTimeout(timeout);
+                                    clearInterval(pollInterval);
+                                    if (unsubscribe) unsubscribe();
+                                    resolved = true;
+                                    console.log('User found via polling:', pollUser.email);
+                                    resolve(pollUser);
+                                } else if (pollCount >= 40 && !resolved) {
+                                    // Stop polling after 4 seconds
+                                    clearInterval(pollInterval);
+                                }
+                            }, 100);
+                            
+                            // Also listen for auth state change (in case it fires)
+                            unsubscribe = auth.onAuthStateChanged((authUser) => {
+                                if (!resolved && authUser) {
+                                    clearTimeout(timeout);
+                                    clearInterval(pollInterval);
+                                    if (unsubscribe) unsubscribe();
+                                    resolved = true;
+                                    console.log('User found via auth state listener:', authUser.email);
+                                    resolve(authUser);
+                                }
+                            });
+                        });
                     }
                 }
                 
