@@ -1141,7 +1141,14 @@
 
             // Check if bulk scan mode is enabled
             if (bulkScanMode) {
-                await processToolInBulkMode(code);
+                console.log('Bulk scan mode enabled, processing tool in bulk mode');
+                const bulkFunc = window.processToolInBulkMode || processToolInBulkMode;
+                if (typeof bulkFunc === 'function') {
+                    await bulkFunc(code);
+                } else {
+                    console.error('ERROR: processToolInBulkMode function not found!');
+                    alert('Error: Bulk scan function not found. Please refresh the page.');
+                }
                 return;
             }
 
@@ -1151,7 +1158,16 @@
                 showLocationSelectionModalForToolSubmission(code);
             } else {
                 console.log('Work location already selected, processing tool submission');
-                processToolSubmission(code);
+                console.log('processToolSubmission function exists?', typeof processToolSubmission);
+                console.log('window.processToolSubmission function exists?', typeof window.processToolSubmission);
+                if (typeof processToolSubmission === 'function') {
+                    await processToolSubmission(code);
+                } else if (typeof window.processToolSubmission === 'function') {
+                    await window.processToolSubmission(code);
+                } else {
+                    console.error('ERROR: processToolSubmission function not found!');
+                    alert('Error: Tool processing function not found. Please refresh the page.');
+                }
             }
         }
         
@@ -1408,7 +1424,8 @@
             }
         }
         
-        async function processToolInBulkMode(code) {
+        // Make processToolInBulkMode globally accessible
+        window.processToolInBulkMode = async function processToolInBulkMode(code) {
             // Clear any existing message at start of new scan
             const messageDiv = document.getElementById('bulkScanMessage');
             if (messageDiv && bulkScanMessageTimeout) {
@@ -1627,7 +1644,8 @@
         }
         
         // Process tool submission after location selection
-        async function processToolSubmission(code) {
+        // Make processToolSubmission globally accessible
+        window.processToolSubmission = async function processToolSubmission(code) {
             console.log('processToolSubmission called with code:', code);
             try {
                 const user = auth.currentUser;
@@ -2807,7 +2825,21 @@
                     console.log('Location selected:', location);
                     
                     modal.hide();
-                    processToolSubmission(toolCode);
+                    console.log('Calling processToolSubmission with toolCode:', toolCode);
+                    console.log('processToolSubmission function exists?', typeof processToolSubmission);
+                    console.log('window.processToolSubmission function exists?', typeof window.processToolSubmission);
+                    
+                    // Call the function - use window.processToolSubmission if available
+                    const processFunc = window.processToolSubmission || processToolSubmission;
+                    if (typeof processFunc === 'function') {
+                        processFunc(toolCode).catch(error => {
+                            console.error('Error in processToolSubmission:', error);
+                            alert('Error processing tool: ' + error.message);
+                        });
+                    } else {
+                        console.error('ERROR: processToolSubmission function not found!');
+                        alert('Error: Tool processing function not found. Please refresh the page.');
+                    }
                 };
             });
             
