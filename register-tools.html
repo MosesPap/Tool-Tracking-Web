@@ -823,41 +823,62 @@
                     console.log('Found stored user name, waiting for Firebase auth to confirm...');
                 }
                 
-                // If we have storedFullName, trust that user is logged in and proceed immediately
+                // If we have storedFullName, wait for Firebase to restore the real user session
                 // This prevents the redirect loop when navigating from main-menu.html
                 if (storedFullName) {
-                    console.log('=== REGISTER TOOLS: Found stored user name, proceeding with initialization immediately... ===');
+                    console.log('=== REGISTER TOOLS: Found stored user name, waiting for Firebase to restore session... ===');
                     console.log('storedFullName:', storedFullName);
                     
-                    // Create a mock user object for initialization
-                    // We'll get the real user from Firebase when it's ready
-                    const mockUser = {
-                        uid: localStorage.getItem('techniciansId') || 'temp',
-                        email: storedFullName // Use fullName as placeholder
-                    };
-                    console.log('Calling completeInitialization with mock user...');
-                    completeInitialization(mockUser);
+                    // Wait for Firebase to restore the user session (up to 3 seconds)
+                    let userFound = false;
+                    let waitAttempts = 0;
+                    const maxWaitAttempts = 30; // 3 seconds total
                     
-                    // Set up auth listener but IGNORE the first fire (it might be null while Firebase restores session)
-                    let firstAuthFire = true;
-                    auth.onAuthStateChanged(function(user) {
-                        if (firstAuthFire) {
-                            firstAuthFire = false;
-                            console.log('First auth state change (ignored):', user ? user.email : 'null');
-                            // Don't do anything on first fire - Firebase might still be restoring session
-                            return;
+                    const waitForUser = async () => {
+                        while (waitAttempts < maxWaitAttempts && !userFound) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            const user = auth.currentUser;
+                            if (user) {
+                                console.log('=== Real Firebase user found:', user.email, '===');
+                                userFound = true;
+                                completeInitialization(user);
+                                return;
+                            }
+                            waitAttempts++;
                         }
                         
-                        // After first fire, only handle logout
-                        if (initializationComplete && !user) {
-                            // User logged out after initialization
-                            console.log('User logged out after initialization, redirecting...');
-                            window.location.href = 'main-menu.html';
-                        } else if (user && initializationComplete) {
-                            console.log('Firebase user confirmed after initialization:', user.email);
+                        // If still no user after waiting, use auth state listener
+                        if (!userFound) {
+                            console.log('=== No user after waiting, setting up auth listener ===');
+                            let firstAuthFire = true;
+                            auth.onAuthStateChanged(function(user) {
+                                if (firstAuthFire) {
+                                    firstAuthFire = false;
+                                    if (user) {
+                                        console.log('=== User found via auth listener:', user.email, '===');
+                                        completeInitialization(user);
+                                    } else {
+                                        console.log('=== Still no user, but proceeding with initialization anyway ===');
+                                        // Create a minimal user object for UI initialization
+                                        const mockUser = {
+                                            uid: localStorage.getItem('techniciansId') || 'temp',
+                                            email: storedFullName
+                                        };
+                                        completeInitialization(mockUser);
+                                    }
+                                    return;
+                                }
+                                
+                                // After first fire, only handle logout
+                                if (initializationComplete && !user) {
+                                    console.log('User logged out after initialization, redirecting...');
+                                    window.location.href = 'main-menu.html';
+                                }
+                            });
                         }
-                    });
-                    console.log('=== REGISTER TOOLS: Initialization complete, page should be ready ===');
+                    };
+                    
+                    waitForUser();
                     return; // Don't continue with the auth check below
                 }
                 
@@ -1454,12 +1475,46 @@
             document.getElementById('toolCode').value = '';
             
             try {
-                const user = auth.currentUser;
+                // Get user - wait for Firebase to restore session if needed
+                let user = auth.currentUser;
+                console.log('Bulk mode - Initial user check:', user ? user.email : 'null');
+                
+                // If user is null, wait a bit for Firebase to restore session
                 if (!user) {
-                    showBulkScanMessage('Not authenticated', false);
+                    console.log('Bulk mode - User is null, waiting for Firebase to restore session...');
+                    for (let i = 0; i < 20; i++) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        user = auth.currentUser;
+                        if (user) {
+                            console.log('Bulk mode - User found after waiting:', user.email);
+                            break;
+                        }
+                    }
+                }
+                
+                if (!user) {
+                    const storedFullName = localStorage.getItem('fullName');
+                    if (storedFullName) {
+                        console.log('Bulk mode - Still no user but have stored name, waiting longer...');
+                        for (let i = 0; i < 20; i++) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            user = auth.currentUser;
+                            if (user) {
+                                console.log('Bulk mode - User found after extended wait:', user.email);
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (!user) {
+                    console.error('Bulk mode - ERROR: No user found after waiting.');
+                    showBulkScanMessage('Not authenticated. Please refresh page.', false);
                     bulkProcessingCodes.delete(code);
                     return;
                 }
+                
+                console.log('Bulk mode - User confirmed:', user.email);
                 
                 // Check if already processed in this session
                 if (bulkScannedTools.some(t => t.code === code)) {
@@ -1648,8 +1703,48 @@
         window.processToolSubmission = async function processToolSubmission(code) {
             console.log('processToolSubmission called with code:', code);
             try {
-                const user = auth.currentUser;
-                console.log('User:', user);
+                // Get user - wait for Firebase to restore session if needed
+                let user = auth.currentUser;
+                console.log('Initial user check:', user ? user.email : 'null');
+                
+                // If user is null, wait a bit for Firebase to restore session
+                if (!user) {
+                    console.log('User is null, waiting for Firebase to restore session...');
+                    // Wait up to 2 seconds for Firebase to restore the session
+                    for (let i = 0; i < 20; i++) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        user = auth.currentUser;
+                        if (user) {
+                            console.log('User found after waiting:', user.email);
+                            break;
+                        }
+                    }
+                }
+                
+                // If still no user, try to get from localStorage and wait longer
+                if (!user) {
+                    const storedFullName = localStorage.getItem('fullName');
+                    if (storedFullName) {
+                        console.log('Still no user but have stored name, waiting longer...');
+                        // Wait another 2 seconds
+                        for (let i = 0; i < 20; i++) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            user = auth.currentUser;
+                            if (user) {
+                                console.log('User found after extended wait:', user.email);
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (!user) {
+                    console.error('ERROR: No user found after waiting. Cannot process tool.');
+                    alert('Error: You are not logged in. Please refresh the page and log in again.');
+                    return;
+                }
+                
+                console.log('User confirmed:', user.email);
                 
                 // Check if we're online
                 if (!isOnline) {
