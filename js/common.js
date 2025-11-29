@@ -371,6 +371,79 @@ function checkAuthAndRedirect() {
     });
 }
 
+// ============================================
+// Standard Authentication Pattern for All Pages
+// ============================================
+// This function provides a consistent way to check authentication
+// and initialize pages. Use this in all page files.
+function checkAuthAndInitialize(callback) {
+    let authChecked = false;
+    let initializationStarted = false;
+    
+    // Check if user data exists in localStorage (from main-menu)
+    const storedFullName = localStorage.getItem('fullName');
+    
+    // Wait for Firebase auth state
+    const unsubscribe = auth.onAuthStateChanged(function(user) {
+        if (authChecked && initializationStarted) {
+            // Already initialized, only handle logout
+            if (!user) {
+                console.log('User logged out after initialization');
+                window.location.href = 'main-menu.html';
+            }
+            return;
+        }
+        
+        authChecked = true;
+        
+        if (user && !user.emailVerified) {
+            // Force sign out if user is not verified
+            auth.signOut();
+            window.location.href = 'index.html';
+            return;
+        }
+        
+        if (user) {
+            // User authenticated - initialize page
+            initializationStarted = true;
+            console.log('User authenticated:', user.email);
+            if (callback) callback(user);
+        } else {
+            // No user - but check localStorage first
+            if (storedFullName) {
+                // Wait a bit longer for Firebase to sync
+                console.log('No user in Firebase but stored name exists, waiting...');
+                setTimeout(() => {
+                    const retryUser = auth.currentUser;
+                    if (retryUser) {
+                        initializationStarted = true;
+                        console.log('User found after retry');
+                        if (callback) callback(retryUser);
+                    } else {
+                        console.log('Still no user after retry, redirecting to main-menu.html');
+                        window.location.href = 'main-menu.html';
+                    }
+                }, 1000);
+            } else {
+                // No stored data, redirect to main menu
+                console.log('No user and no stored data, redirecting to main-menu.html');
+                window.location.href = 'main-menu.html';
+            }
+        }
+    });
+    
+    // Also check immediately (in case auth state is already available)
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+        console.log('User immediately available');
+        initializationStarted = true;
+        if (callback) callback(currentUser);
+    }
+    
+    // Return unsubscribe function in case page needs to clean up
+    return unsubscribe;
+}
+
 // Initialize common functionality on page load
 document.addEventListener('DOMContentLoaded', async function() {
     // Initialize IndexedDB
