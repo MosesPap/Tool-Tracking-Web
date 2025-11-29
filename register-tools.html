@@ -755,11 +755,26 @@
                     }
                     
                     // Also set it directly as backup
-                    const fullName = localStorage.getItem('fullName') || user.email || 'User';
+                    const fullName = localStorage.getItem('fullName') || user.email || user.uid || 'User';
                     console.log('Setting technician name to:', fullName);
+                    console.log('Looking for registerScreenName element...');
                     const registerScreenNameElem = document.getElementById('registerScreenName');
+                    console.log('registerScreenNameElem found?', registerScreenNameElem ? 'YES' : 'NO');
                     if (registerScreenNameElem) {
                         registerScreenNameElem.textContent = fullName;
+                        console.log('Name set successfully to:', fullName);
+                    } else {
+                        console.error('registerScreenName element NOT FOUND!');
+                        // Try again after a short delay
+                        setTimeout(() => {
+                            const retryElem = document.getElementById('registerScreenName');
+                            if (retryElem) {
+                                retryElem.textContent = fullName;
+                                console.log('Name set on retry to:', fullName);
+                            } else {
+                                console.error('registerScreenName element still not found on retry!');
+                            }
+                        }, 100);
                     }
                     
                     // Set up event listeners (including back button)
@@ -823,6 +838,7 @@
                 
                 // Check if user is in localStorage (coming from main-menu.html)
                 const storedFullName = localStorage.getItem('fullName');
+                console.log('=== REGISTER TOOLS: storedFullName =', storedFullName);
                 
                 // Initialize UI immediately with stored data (so user sees their name)
                 // Then wait for Firebase auth to restore session in background
@@ -832,7 +848,11 @@
                         uid: localStorage.getItem('techniciansId') || 'temp',
                         email: storedFullName
                     };
+                    console.log('=== Calling completeInitialization with mockUser:', mockUser);
                     completeInitialization(mockUser);
+                    console.log('=== completeInitialization called ===');
+                } else {
+                    console.log('=== REGISTER TOOLS: No storedFullName found ===');
                 }
                 
                 // Set up auth listener to capture real Firebase user when it becomes available
@@ -856,6 +876,10 @@
                         if (initializationComplete && typeof loadTools === 'function') {
                             console.log('=== Reloading tools now that Firebase user is available ===');
                             setTimeout(() => loadTools(), 500);
+                        } else if (!initializationComplete) {
+                            // Initialize with real user if not already initialized
+                            console.log('=== Initializing with real Firebase user ===');
+                            completeInitialization(user);
                         }
                     }
                     
@@ -868,6 +892,7 @@
                 
                 // Also check immediately
                 const currentUser = auth.currentUser;
+                console.log('=== Immediate auth.currentUser check:', currentUser ? currentUser.email : 'null ===');
                 if (currentUser) {
                     console.log('=== User immediately available:', currentUser.email, '===');
                     authenticatedUser = currentUser;
