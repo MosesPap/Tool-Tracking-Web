@@ -352,62 +352,98 @@
             }
         }
 
-        // Menu button event handlers
-        document.addEventListener('DOMContentLoaded', function() {
+        // Function to setup menu button handlers
+        function setupMenuButtons() {
+            console.log('Setting up menu buttons...');
+            
             // Register Tools button
             const menuRegisterBtn = document.getElementById('menuRegisterBtn');
             if (menuRegisterBtn) {
-                menuRegisterBtn.addEventListener('click', function() {
+                console.log('Found menuRegisterBtn');
+                menuRegisterBtn.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Register Tools button clicked');
                     window.location.href = 'register-tools.html';
-                });
+                };
+            } else {
+                console.error('menuRegisterBtn not found!');
             }
 
             // View OUT Tools button
             const menuOutBtn = document.getElementById('menuOutBtn');
             if (menuOutBtn) {
-                menuOutBtn.addEventListener('click', function() {
+                console.log('Found menuOutBtn');
+                menuOutBtn.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('View OUT Tools button clicked');
                     window.location.href = 'previous-out.html';
-                });
+                };
+            } else {
+                console.error('menuOutBtn not found!');
             }
 
             // My Tools button
             const menuMyToolsBtn = document.getElementById('menuMyToolsBtn');
             if (menuMyToolsBtn) {
-                menuMyToolsBtn.addEventListener('click', function() {
+                console.log('Found menuMyToolsBtn');
+                menuMyToolsBtn.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('My Tools button clicked');
                     window.location.href = 'my-tools.html';
-                });
+                };
+            } else {
+                console.error('menuMyToolsBtn not found!');
             }
 
             // Tools by Work Location button
             const menuWorkLocationBtn = document.getElementById('menuWorkLocationBtn');
             if (menuWorkLocationBtn) {
-                menuWorkLocationBtn.addEventListener('click', function() {
-                    // This functionality is in index.html - redirect there for now
-                    // Or we can implement it here if needed
+                console.log('Found menuWorkLocationBtn');
+                menuWorkLocationBtn.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Tools by Work Location button clicked');
                     window.location.href = 'index.html?section=workLocation';
-                });
+                };
+            } else {
+                console.error('menuWorkLocationBtn not found!');
             }
 
             // Tool Administrator button
             const menuAdminBtn = document.getElementById('menuAdminBtn');
             if (menuAdminBtn) {
-                menuAdminBtn.addEventListener('click', function() {
+                console.log('Found menuAdminBtn');
+                menuAdminBtn.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Tool Administrator button clicked');
                     window.location.href = 'admin.html';
-                });
+                };
             }
 
             // Create Training Questions button
             const menuTrainingQuestionsBtn = document.getElementById('menuTrainingQuestionsBtn');
             if (menuTrainingQuestionsBtn) {
-                menuTrainingQuestionsBtn.addEventListener('click', function() {
+                console.log('Found menuTrainingQuestionsBtn');
+                menuTrainingQuestionsBtn.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Create Training Questions button clicked');
                     window.location.href = 'pdf-question-generator.html';
-                });
+                };
             }
 
             // Logout button
             const menuLogoutBtn = document.getElementById('menuLogoutBtn');
             if (menuLogoutBtn) {
-                menuLogoutBtn.addEventListener('click', function() {
+                console.log('Found menuLogoutBtn');
+                menuLogoutBtn.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Logout button clicked');
                     auth.signOut().then(() => {
                         localStorage.removeItem('fullName');
                         localStorage.removeItem('techniciansId');
@@ -415,13 +451,19 @@
                     }).catch(error => {
                         console.error('Error signing out:', error);
                     });
-                });
+                };
+            } else {
+                console.error('menuLogoutBtn not found!');
             }
 
             // Settings button
             const settingsBtn = document.getElementById('settingsBtn');
             if (settingsBtn) {
-                settingsBtn.onclick = function() {
+                console.log('Found settingsBtn');
+                settingsBtn.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Settings button clicked');
                     document.getElementById('adminCodeInput').value = '';
                     document.getElementById('adminCodeError').style.display = 'none';
                     const modal = new bootstrap.Modal(document.getElementById('adminCodeModal'));
@@ -447,7 +489,20 @@
                     }
                 };
             }
-        });
+            
+            console.log('Menu buttons setup complete');
+        }
+
+        // Setup buttons when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', setupMenuButtons);
+        } else {
+            // DOM is already loaded
+            setupMenuButtons();
+        }
+        
+        // Also try after a short delay as fallback
+        setTimeout(setupMenuButtons, 100);
     </script>
 </body>
 </html>
