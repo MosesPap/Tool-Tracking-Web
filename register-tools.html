@@ -727,50 +727,26 @@
             function initializePage() {
                 // First check current user synchronously (should be available if coming from main-menu.html)
                 const currentUser = auth.currentUser;
-                if (currentUser) {
-                    // User is authenticated, proceed with page initialization
-                    console.log('User authenticated:', currentUser.email);
+                
+                // Function to complete page initialization
+                function completeInitialization(user) {
+                    if (!user) return;
+                    
+                    console.log('User authenticated:', user.email);
                     // Update technician name using common.js function
                     if (typeof updateLoggedInTechnician === 'function') {
                         updateLoggedInTechnician();
                     }
-                } else {
-                    // No user immediately available - wait a moment for Firebase to initialize
-                    // This handles the case where we navigate quickly from main-menu.html
-                    setTimeout(() => {
-                        if (auth.currentUser) {
-                            // User found after brief delay, proceed
-                            if (typeof updateLoggedInTechnician === 'function') {
-                                updateLoggedInTechnician();
-                            }
-                        } else {
-                            // Still no user after delay, redirect to login
-                            console.log('No user after initialization, redirecting to index.html');
-                            window.location.href = 'index.html';
-                        }
-                    }, 300);
-                }
-                
-                // Listen for future auth state changes (e.g., logout)
-                auth.onAuthStateChanged(function(user) {
-                    console.log('Auth state changed, user:', user ? user.email : 'null');
-                    if (!user && currentUser) {
-                        // User was logged in but now logged out
-                        console.log('User logged out, redirecting to index.html');
-                        window.location.href = 'index.html';
-                    }
-                });
-                
-                // Also set it directly as backup if user exists
-                if (currentUser) {
-                    const fullName = localStorage.getItem('fullName') || currentUser.email;
+                    
+                    // Also set it directly as backup
+                    const fullName = localStorage.getItem('fullName') || user.email;
                     console.log('Setting technician name to:', fullName);
                     const registerScreenNameElem = document.getElementById('registerScreenName');
                     if (registerScreenNameElem) {
                         registerScreenNameElem.textContent = fullName;
                     }
                     
-                    // Set up event listeners first
+                    // Set up event listeners (including back button)
                     setupEventListeners();
                     
                     // Check if work location is already selected (check both local and global)
@@ -789,11 +765,53 @@
                     console.log('Showing location selection modal');
                     setTimeout(() => {
                         if (typeof showLocationSelectionModalForRegisterTools === 'function') {
-                            showLocationSelectionModalForRegisterTools();
+                            try {
+                                showLocationSelectionModalForRegisterTools();
+                            } catch (error) {
+                                console.error('Error showing location selection modal:', error);
+                                // Try showing helicopter model selection directly
+                                if (typeof showHelicopterModelSelectionModal === 'function') {
+                                    showHelicopterModelSelectionModal();
+                                }
+                            }
                         } else {
                             console.error('showLocationSelectionModalForRegisterTools function not found!');
+                            // Try showing helicopter model selection directly
+                            if (typeof showHelicopterModelSelectionModal === 'function') {
+                                console.log('Trying to show helicopter model selection modal directly');
+                                showHelicopterModelSelectionModal();
+                            }
                         }
-                    }, 500);
+                    }, 300);
+                }
+                
+                if (currentUser) {
+                    // User is authenticated, proceed with page initialization
+                    completeInitialization(currentUser);
+                } else {
+                    // No user immediately available - wait a moment for Firebase to initialize
+                    // This handles the case where we navigate quickly from main-menu.html
+                    setTimeout(() => {
+                        const user = auth.currentUser;
+                        if (user) {
+                            // User found after brief delay, proceed
+                            completeInitialization(user);
+                        } else {
+                            // Still no user after delay, redirect to login
+                            console.log('No user after initialization, redirecting to index.html');
+                            window.location.href = 'index.html';
+                        }
+                    }, 300);
+                }
+                
+                // Listen for future auth state changes (e.g., logout)
+                auth.onAuthStateChanged(function(user) {
+                    console.log('Auth state changed, user:', user ? user.email : 'null');
+                    if (!user && currentUser) {
+                        // User was logged in but now logged out
+                        console.log('User logged out, redirecting to index.html');
+                        window.location.href = 'index.html';
+                    }
                 });
             }
         });
@@ -806,9 +824,25 @@
         
         function setupEventListeners() {
             // Back to menu button
-            document.getElementById('backToMenuBtn').onclick = function() {
-                handleBackNavigation();
-            };
+            const backToMenuBtn = document.getElementById('backToMenuBtn');
+            if (backToMenuBtn) {
+                backToMenuBtn.onclick = function() {
+                    console.log('Back to Menu button clicked');
+                    handleBackNavigation();
+                };
+            } else {
+                console.error('backToMenuBtn element not found!');
+                // Retry after a short delay
+                setTimeout(() => {
+                    const retryBtn = document.getElementById('backToMenuBtn');
+                    if (retryBtn) {
+                        retryBtn.onclick = function() {
+                            console.log('Back to Menu button clicked (retry)');
+                            handleBackNavigation();
+                        };
+                    }
+                }, 100);
+            }
             
             // Handle phone back button - same behavior as Back to Menu button
             window.addEventListener('popstate', function(event) {
