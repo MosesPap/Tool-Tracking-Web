@@ -3906,7 +3906,10 @@ if (!userCredential.user.emailVerified) {
             if (html5QrCode) {
                 html5QrCode.clear();
             }
-            localStorage.removeItem('fullName'); // Clear stored name on logout
+            // Clear all auth-related data
+            localStorage.removeItem('fullName');
+            localStorage.removeItem('authVerified');
+            localStorage.removeItem('techniciansId');
             document.getElementById('headerBranding').style.display = 'block';
             // Hide all app sections
             document.getElementById('toolScannerMenu').style.display = 'none';

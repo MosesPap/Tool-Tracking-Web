@@ -615,33 +615,60 @@
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', async function() {
-            // First check current user synchronously (should be available if coming from main-menu.html)
-            const currentUser = auth.currentUser;
-            if (currentUser) {
-                // User is authenticated, proceed with page initialization
-                console.log('User authenticated:', currentUser.email);
+            let initializationComplete = false;
+            
+            // Function to complete page initialization
+            async function completeInitialization() {
+                if (initializationComplete) return;
+                initializationComplete = true;
+                
+                console.log('Initializing my-tools page');
                 // Show collection selection modal first (matching index.html behavior)
                 await showCollectionSelectionDialog();
-            } else {
-                // No user immediately available - wait a moment for Firebase to initialize
-                // This handles the case where we navigate quickly from main-menu.html
-                setTimeout(async () => {
-                    if (auth.currentUser) {
-                        // User found after brief delay, proceed
-                        await showCollectionSelectionDialog();
-                    } else {
-                        // Still no user after delay, redirect to main menu
-                        console.log('No user after initialization, redirecting to main-menu.html');
-                        window.location.href = 'main-menu.html';
-                    }
-                }, 300);
             }
             
-            // Listen for future auth state changes (e.g., logout)
+            // SEAMLESS NAVIGATION: Check localStorage first - if flag exists, proceed IMMEDIATELY
+            const authVerified = localStorage.getItem('authVerified');
+            const storedFullName = localStorage.getItem('fullName');
+            
+            if (authVerified === 'true' && storedFullName) {
+                // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
+                console.log('Auth verified flag found - proceeding immediately');
+                await completeInitialization();
+                
+                // Verify auth in background (non-blocking)
+                auth.onAuthStateChanged(async function(user) {
+                    if (user) {
+                        localStorage.setItem('authVerified', 'true');
+                    } else {
+                        console.log('Background auth check failed - redirecting');
+                        localStorage.removeItem('authVerified');
+                        localStorage.removeItem('fullName');
+                        window.location.href = 'main-menu.html';
+                    }
+                });
+                
+                return; // Exit - page initialized, no delays
+            }
+            
+            // No stored flag - wait for Firebase auth
+            console.log('No auth flag found - waiting for Firebase auth');
             auth.onAuthStateChanged(async function(user) {
-                if (!user && currentUser) {
-                    // User was logged in but now logged out
-                    console.log('User logged out, redirecting to main-menu.html');
+                if (user && !user.emailVerified) {
+                    auth.signOut();
+                    localStorage.removeItem('authVerified');
+                    window.location.href = 'main-menu.html';
+                    return;
+                }
+                
+                if (user) {
+                    localStorage.setItem('authVerified', 'true');
+                    if (!localStorage.getItem('fullName')) {
+                        localStorage.setItem('fullName', user.email);
+                    }
+                    await completeInitialization();
+                } else {
+                    localStorage.removeItem('authVerified');
                     window.location.href = 'main-menu.html';
                 }
             });

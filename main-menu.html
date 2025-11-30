@@ -262,7 +262,10 @@
             }
             
             if (user) {
-                // User is logged in - fetch data and show menu
+                // User is logged in - set auth verification flag for seamless navigation
+                localStorage.setItem('authVerified', 'true');
+                
+                // Fetch data and show menu
                 db.collection('technicians').doc(user.uid)
                     .get()
                     .then(doc => {
@@ -445,8 +448,10 @@
                     e.stopPropagation();
                     console.log('Logout button clicked');
                     auth.signOut().then(() => {
+                        // Clear all auth-related data
                         localStorage.removeItem('fullName');
                         localStorage.removeItem('techniciansId');
+                        localStorage.removeItem('authVerified');
                         window.location.href = 'index.html';
                     }).catch(error => {
                         console.error('Error signing out:', error);

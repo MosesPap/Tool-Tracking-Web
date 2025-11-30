@@ -507,32 +507,79 @@
         let db = null;
         let currentUser = null;
 
-        // Check if Firebase is available (from index.html)
-        if (typeof firebase !== 'undefined') {
-            try {
-                // Firebase should already be initialized from index.html
-                // Just get references to auth and db
-                auth = firebase.auth();
-                db = firebase.firestore();
-                firebaseInitialized = true;
-                
-                // Listen for auth state changes
-                auth.onAuthStateChanged((user) => {
-                    currentUser = user;
-                    if (user) {
-                        loadApiKeyFromFirestore(user.uid);
-                    } else {
-                        // Fallback to localStorage if not logged in
-                        loadApiKeyFromLocalStorage();
-                    }
-                });
-            } catch (error) {
-                console.warn('Firebase not available, using localStorage only:', error);
-                loadApiKeyFromLocalStorage();
+        // SEAMLESS NAVIGATION: Check localStorage first - if flag exists, proceed IMMEDIATELY
+        const authVerified = localStorage.getItem('authVerified');
+        const storedFullName = localStorage.getItem('fullName');
+        
+        if (authVerified === 'true' && storedFullName) {
+            // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
+            console.log('Auth verified flag found - proceeding immediately');
+            // Load API key from localStorage first (instant)
+            loadApiKeyFromLocalStorage();
+            
+            // Then try to load from Firestore in background
+            if (typeof firebase !== 'undefined') {
+                try {
+                    auth = firebase.auth();
+                    db = firebase.firestore();
+                    firebaseInitialized = true;
+                    
+                    // Verify auth in background and load from Firestore if available
+                    auth.onAuthStateChanged((user) => {
+                        currentUser = user;
+                        if (user) {
+                            loadApiKeyFromFirestore(user.uid);
+                            localStorage.setItem('authVerified', 'true');
+                        } else {
+                            console.log('Background auth check failed - redirecting');
+                            localStorage.removeItem('authVerified');
+                            localStorage.removeItem('fullName');
+                            window.location.href = 'main-menu.html';
+                        }
+                    });
+                } catch (error) {
+                    console.warn('Firebase not available, using localStorage only:', error);
+                }
             }
         } else {
-            // Firebase not available, use localStorage only
-            loadApiKeyFromLocalStorage();
+            // No stored flag - wait for Firebase auth
+            console.log('No auth flag found - waiting for Firebase auth');
+            if (typeof firebase !== 'undefined') {
+                try {
+                    auth = firebase.auth();
+                    db = firebase.firestore();
+                    firebaseInitialized = true;
+                    
+                    // Listen for auth state changes
+                    auth.onAuthStateChanged((user) => {
+                        currentUser = user;
+                        if (user && !user.emailVerified) {
+                            auth.signOut();
+                            localStorage.removeItem('authVerified');
+                            window.location.href = 'main-menu.html';
+                            return;
+                        }
+                        
+                        if (user) {
+                            localStorage.setItem('authVerified', 'true');
+                            if (!localStorage.getItem('fullName')) {
+                                localStorage.setItem('fullName', user.email);
+                            }
+                            loadApiKeyFromFirestore(user.uid);
+                        } else {
+                            localStorage.removeItem('authVerified');
+                            // Fallback to localStorage if not logged in
+                            loadApiKeyFromLocalStorage();
+                        }
+                    });
+                } catch (error) {
+                    console.warn('Firebase not available, using localStorage only:', error);
+                    loadApiKeyFromLocalStorage();
+                }
+            } else {
+                // Firebase not available, use localStorage only
+                loadApiKeyFromLocalStorage();
+            }
         }
 
         // Load API key from Firestore (synced across devices)

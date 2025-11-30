@@ -726,123 +726,104 @@
             
             function initializePage() {
                 let initializationComplete = false;
-                let authStateChecked = false;
                 
                 // Function to complete page initialization
                 function completeInitialization(user) {
-                    if (!user || initializationComplete) return;
+                    if (initializationComplete) return;
                     initializationComplete = true;
                     
-                    console.log('User authenticated:', user.email);
-                    // Update technician name using common.js function
-                    if (typeof updateLoggedInTechnician === 'function') {
-                        updateLoggedInTechnician();
-                    }
+                    console.log('Initializing page, user:', user ? user.email : 'using stored data');
                     
-                    // Also set it directly as backup
-                    const fullName = localStorage.getItem('fullName') || user.email;
-                    console.log('Setting technician name to:', fullName);
+                    // Update technician name
+                    const fullName = localStorage.getItem('fullName') || (user ? user.email : 'Unknown');
                     const registerScreenNameElem = document.getElementById('registerScreenName');
                     if (registerScreenNameElem) {
                         registerScreenNameElem.textContent = fullName;
                     }
                     
+                    // Update using common.js function if available
+                    if (typeof updateLoggedInTechnician === 'function') {
+                        updateLoggedInTechnician();
+                    }
+                    
                     // Set up event listeners (including back button)
                     setupEventListeners();
                     
-                    // Check if work location is already selected (check both local and global)
+                    // Check if work location is already selected
                     const currentLocation = selectedWorkLocation || window.selectedWorkLocation || localStorage.getItem('selectedWorkLocation');
-                    console.log('Current work location:', currentLocation);
-                    
-                    // Always show location selection modal when navigating to register tools
                     if (currentLocation) {
-                        // Set the global variable and update label if location exists
                         selectedWorkLocation = currentLocation;
                         window.selectedWorkLocation = currentLocation;
                         updateWorkLocationLabel();
                     }
                     
-                    // Always show location selection modal on page load
-                    console.log('Showing location selection modal');
+                    // Show location selection modal
                     setTimeout(() => {
                         if (typeof showLocationSelectionModalForRegisterTools === 'function') {
                             try {
                                 showLocationSelectionModalForRegisterTools();
                             } catch (error) {
                                 console.error('Error showing location selection modal:', error);
-                                // Try showing helicopter model selection directly
                                 if (typeof showHelicopterModelSelectionModal === 'function') {
                                     showHelicopterModelSelectionModal();
                                 }
                             }
                         } else {
-                            console.error('showLocationSelectionModalForRegisterTools function not found!');
-                            // Try showing helicopter model selection directly
                             if (typeof showHelicopterModelSelectionModal === 'function') {
-                                console.log('Trying to show helicopter model selection modal directly');
                                 showHelicopterModelSelectionModal();
                             }
                         }
-                    }, 300);
+                    }, 100);
                 }
                 
-                // Check if user is in localStorage (coming from main-menu.html)
+                // SEAMLESS NAVIGATION: Check localStorage first - if flag exists, proceed IMMEDIATELY
+                const authVerified = localStorage.getItem('authVerified');
                 const storedFullName = localStorage.getItem('fullName');
-                if (storedFullName) {
-                    console.log('Found stored user name, waiting for Firebase auth to confirm...');
+                
+                if (authVerified === 'true' && storedFullName) {
+                    // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
+                    console.log('Auth verified flag found - proceeding immediately');
+                    completeInitialization(null); // Pass null, we'll use stored data
+                    
+                    // Verify auth in background (non-blocking)
+                    auth.onAuthStateChanged(function(user) {
+                        if (user) {
+                            // Auth confirmed - update flag if needed
+                            localStorage.setItem('authVerified', 'true');
+                        } else {
+                            // Auth failed - clear flags and redirect
+                            console.log('Background auth check failed - redirecting');
+                            localStorage.removeItem('authVerified');
+                            localStorage.removeItem('fullName');
+                            window.location.href = 'main-menu.html';
+                        }
+                    });
+                    
+                    return; // Exit - page initialized, no delays
                 }
                 
-                // Listen for auth state changes - this is the primary way to check auth
-                const unsubscribe = auth.onAuthStateChanged(function(user) {
-                    if (authStateChecked && initializationComplete) {
-                        // Already initialized, only handle logout
-                        if (!user) {
-                            console.log('User logged out after initialization');
-                            window.location.href = 'index.html';
-                        }
-                        return;
-                    }
-                    
-                    authStateChecked = true;
-                    console.log('Auth state changed, user:', user ? user.email : 'null');
-                    
+                // No stored flag - wait for Firebase auth (only if no stored data)
+                console.log('No auth flag found - waiting for Firebase auth');
+                auth.onAuthStateChanged(function(user) {
                     if (user && !user.emailVerified) {
-                        // Force sign out if user is not verified
                         auth.signOut();
-                        window.location.href = 'index.html';
+                        localStorage.removeItem('authVerified');
+                        window.location.href = 'main-menu.html';
                         return;
                     }
                     
                     if (user) {
-                        // User is authenticated, proceed with initialization
+                        localStorage.setItem('authVerified', 'true');
+                        if (!localStorage.getItem('fullName')) {
+                            localStorage.setItem('fullName', user.email);
+                        }
                         completeInitialization(user);
                     } else {
-                        // No user - but wait a bit longer if we have stored user data
-                        if (storedFullName) {
-                            console.log('No user in Firebase but stored name exists, waiting...');
-                            setTimeout(() => {
-                                const retryUser = auth.currentUser;
-                                if (retryUser) {
-                                    completeInitialization(retryUser);
-                                } else {
-                                    console.log('Still no user after retry, redirecting to main-menu.html');
-                                    window.location.href = 'main-menu.html';
-                                }
-                            }, 1000);
-                        } else {
-                            // No stored user data either, redirect to main menu (not index.html to avoid login loop)
-                            console.log('No user and no stored data, redirecting to main-menu.html');
-                            window.location.href = 'main-menu.html';
-                        }
+                        // No user - redirect to main menu
+                        localStorage.removeItem('authVerified');
+                        window.location.href = 'main-menu.html';
                     }
                 });
-                
-                // Also check immediately (in case auth state is already available)
-                const currentUser = auth.currentUser;
-                if (currentUser) {
-                    console.log('User immediately available');
-                    completeInitialization(currentUser);
-                }
             }
         });
         
