@@ -225,28 +225,19 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+    <!-- Common Firebase configuration and utilities -->
+    <script src="js/common.js"></script>
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        // Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyDmI0v_pVt_qFJlsqmw8QlIOi-4VLjyn54",
-            authDomain: "tool-tracking-system-15e84.firebaseapp.com",
-            projectId: "tool-tracking-system-15e84",
-            storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
-            messagingSenderId: "813615362050",
-            appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
-        };
-
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-
-        // Configure Firebase Auth
-        auth.useDeviceLanguage();
-        auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+        // Use global Firebase instances from common.js
+        // This ensures all pages use the same Firebase Auth instance with LOCAL persistence
+        const auth = window.auth || firebase.auth();
+        const db = window.db || firebase.firestore();
+        
+        console.log('[MAIN-MENU] Using auth instance:', auth === window.auth ? 'global (common.js)' : 'local (fallback)');
+        console.log('[MAIN-MENU] Using db instance:', db === window.db ? 'global (common.js)' : 'local (fallback)');
 
         // Variables
         let previousOutToolsCount = 0;
