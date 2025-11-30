@@ -1750,33 +1750,38 @@
         window.processToolSubmission = async function processToolSubmission(code) {
             console.log('processToolSubmission called with code:', code);
             try {
-                // Get user - check authenticatedUser first, then currentUser
-                let user = authenticatedUser || auth.currentUser;
-                console.log('Initial user check:', user ? user.email : 'null');
+                // Get technician name from localStorage - we have it from login!
+                const technicianName = localStorage.getItem('fullName');
+                if (!technicianName) {
+                    console.error('ERROR: No technician name in localStorage');
+                    alert('Error: You are not logged in. Please go back to main menu and log in again.');
+                    return;
+                }
                 
-                // If no user, wait for Firebase to restore session
-                // Firebase auth persistence should restore it, but it might take time
+                console.log('Using technician name from localStorage:', technicianName);
+                
+                // We still need Firebase user for authentication to write to Firestore
+                // But we can use technicianName from localStorage for the technician field
+                let user = authenticatedUser || auth.currentUser;
+                
+                // If no user, wait briefly for Firebase to restore (for authentication only)
                 if (!user) {
-                    console.log('User is null, waiting for Firebase to restore session...');
-                    const storedFullName = localStorage.getItem('fullName');
+                    console.log('No Firebase user yet, waiting briefly for auth to restore...');
                     const storedTechnicianId = localStorage.getItem('techniciansId');
                     
-                    if (storedFullName) {
-                        console.log('Have stored name, waiting for Firebase auth to restore...');
-                        // Wait longer - up to 15 seconds, checking every 200ms
-                        for (let i = 0; i < 75; i++) {
-                            await new Promise(resolve => setTimeout(resolve, 200));
+                    if (storedTechnicianId) {
+                        // Wait up to 5 seconds for Firebase auth to restore
+                        for (let i = 0; i < 50; i++) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
                             user = auth.currentUser;
                             if (user) {
-                                console.log('User found via polling after', (i + 1) * 200, 'ms:', user.email);
+                                console.log('Firebase user found after', (i + 1) * 100, 'ms:', user.email);
                                 authenticatedUser = user;
                                 authStateReady = true;
                                 break;
                             }
-                            // Also check authenticatedUser in case listener updated it
                             if (authenticatedUser) {
                                 user = authenticatedUser;
-                                console.log('User found via authenticatedUser:', user.email);
                                 break;
                             }
                         }
@@ -1784,33 +1789,12 @@
                 }
                 
                 if (!user) {
-                    // Last resort: Try to get user by techniciansId from localStorage
-                    const storedTechnicianId = localStorage.getItem('techniciansId');
-                    if (storedTechnicianId) {
-                        console.log('No Firebase user, but have techniciansId. Trying to query Firestore...');
-                        try {
-                            // Query technicians collection to get user email
-                            const technicianDoc = await db.collection('technicians').doc(storedTechnicianId).get();
-                            if (technicianDoc.exists) {
-                                const techData = technicianDoc.data();
-                                console.log('Found technician data:', techData);
-                                // Try to sign in with email (if we have it) or use the data we have
-                                // But we still need Firebase Auth to write to Firestore
-                                console.error('ERROR: Firebase Auth not restored. Cannot write to Firestore without authentication.');
-                                alert('Error: Authentication not restored. Please refresh the page or go back to main menu and try again.');
-                                return;
-                            }
-                        } catch (err) {
-                            console.error('Error querying technician:', err);
-                        }
-                    }
-                    console.error('ERROR: No user found after waiting. Firebase auth not restored.');
-                    console.error('This might be a Firebase auth persistence issue.');
+                    console.error('ERROR: Firebase Auth not restored. Cannot write to Firestore without authentication.');
                     alert('Error: Authentication not restored. Please refresh the page or go back to main menu and try again.');
                     return;
                 }
                 
-                console.log('User confirmed:', user.email);
+                console.log('Firebase user confirmed for authentication:', user.email);
                 
                 // Check if we're online
                 if (!isOnline) {
@@ -1831,14 +1815,8 @@
                 if (doc.exists) {
                     const data = doc.data();
                     
-                    // Get current technician name - use localStorage first, then Firestore
-                    let technicianName = localStorage.getItem('fullName');
-                    if (!technicianName && user) {
-                        const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-                        technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
-                    } else if (!technicianName) {
-                        technicianName = 'Unknown Technician';
-                    }
+                    // Use technician name from localStorage (already set above)
+                    // technicianName is already set from localStorage at the start of the function
 
                     // Only show warning if tool is OUT and checked out by a different technician
                     if (data.status === 'OUT' && data.technician !== technicianName) {
