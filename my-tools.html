@@ -459,6 +459,152 @@
         </div>
     </div>
 
+    <!-- Collection Checkup Screen -->
+    <div id="collectionCheckupScreen" style="display:none;">
+        <!-- Orange Title Bar -->
+        <div style="background: #FF9800; color: white; padding: 1rem 0; width: 100%; position: relative;">
+            <div class="container">
+                <h2 style="color: white; font-weight: bold; font-size: 2rem; margin: 0; text-align: center;">Collection Checkup</h2>
+            </div>
+        </div>
+        
+        <div class="container py-4">
+            <button id="backToMyToolsByCollectionBtn" class="btn btn-outline-secondary mb-3">
+                <i class="fas fa-arrow-left"></i> Back to Collection
+            </button>
+            
+            <!-- Show Results and History buttons -->
+            <div class="row mb-3" id="checkupActionButtons" style="display:none;">
+                <div class="col-6">
+                    <button id="showResultsBtn" class="btn btn-primary w-100">
+                        <i class="fas fa-chart-bar"></i> Show Results
+                    </button>
+                </div>
+                <div class="col-6">
+                    <button id="checkupHistoryBtn" class="btn btn-secondary w-100">
+                        <i class="fas fa-history"></i> History
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Collection Header with Progress -->
+            <div id="checkupCollectionHeader" class="mb-3" style="background: #FF9800; color: white; padding: 12px; border-radius: 8px;">
+                <div class="row align-items-center">
+                    <div class="col-6">
+                        <div id="checkupLocationTitle" style="font-size: 1.2rem; font-weight: bold;">All Locations</div>
+                    </div>
+                    <div class="col-3 text-center">
+                        <button id="selectAllBtn" class="btn btn-success btn-sm">
+                            <i class="fas fa-check-double"></i> Select All
+                        </button>
+                    </div>
+                    <div class="col-3 text-end">
+                        <div><strong>Progress:</strong></div>
+                        <div id="checkupProgress" style="font-size: 1.1rem; font-weight: bold;">0/0</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tools List -->
+            <div id="checkupToolsList" style="height: calc(100vh - 400px); overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px; margin-bottom: 80px;"></div>
+            
+            <!-- Location Filter Bar -->
+            <div id="checkupLocationFilter" class="mt-3" style="background: #f5f5f5; padding: 8px; border-radius: 8px; position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000; border-top: 2px solid #FF9800;">
+                <div class="d-flex gap-2 overflow-x-auto" id="checkupLocationButtons"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Checkup Results Modal -->
+    <div class="modal fade" id="checkupResultsModal" tabindex="-1" aria-labelledby="checkupResultsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="checkupResultsModalLabel">Checkup Results</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="checkupResultsContent">
+                    <!-- Results content will be populated here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="saveCheckupResultsBtn">
+                        <i class="fas fa-save"></i> Save Results
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Checkup Save Success Modal -->
+    <div class="modal fade" id="checkupSaveSuccessModal" tabindex="-1" aria-labelledby="checkupSaveSuccessModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="checkupSaveSuccessModalLabel">Checkup Results Saved</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Checkup results have been successfully saved to the database.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Checkup History Screen -->
+    <div id="checkupHistoryScreen" style="display:none;">
+        <!-- Orange Title Bar -->
+        <div style="background: #FF9800; color: white; padding: 1rem 0; width: 100%; position: relative;">
+            <div class="container">
+                <h2 style="color: white; font-weight: bold; font-size: 2rem; margin: 0; text-align: center;">Checkup History - <span id="checkupHistoryTechName"></span></h2>
+            </div>
+        </div>
+        
+        <div class="container py-4">
+            <button id="checkupHistoryBackBtn" class="btn" style="background:#FF9800;color:white;font-weight:bold;font-size:1.2em;border-radius:24px;padding:8px 32px 8px 32px;margin-bottom:1rem;">
+                Back
+            </button>
+            <div class="row mb-3">
+                <div class="col-8 col-md-6 mb-2">
+                    <input id="checkupHistorySearch" class="form-control" placeholder="Search by date or collection..." />
+                </div>
+                <div class="col-4 col-md-3 mb-2">
+                    <select id="checkupHistoryCollectionFilter" class="form-select">
+                        <option value="All">All</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-3 mb-2 d-flex gap-2">
+                    <button id="checkupHistoryRefreshBtn" class="btn w-100" style="background:#FF9800;color:white;font-weight:bold;font-size:1em;border-radius:24px;">Refresh History</button>
+                </div>
+            </div>
+            <div class="mb-3">
+                <button id="checkupHistoryCleanupBtn" class="btn w-100" style="background:#f44336;color:white;font-weight:bold;font-size:1em;border-radius:24px;">Cleanup Old Records (&gt;1 month)</button>
+            </div>
+            <div id="checkupHistoryList"></div>
+        </div>
+    </div>
+
+    <!-- Checkup History Details Modal -->
+    <div class="modal fade" id="checkupDetailsModal" tabindex="-1" aria-labelledby="checkupDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="checkupDetailsModalLabel">Checkup Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="checkupDetailsContent">
+                    <!-- Details will be populated here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Checkout Info Modal for My Tools -->
     <div class="modal fade" id="checkoutInfoModal" tabindex="-1" aria-labelledby="checkoutInfoModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-sm">
@@ -606,6 +752,20 @@
         // Global variables
         let lastViewedCollectionName = null;
         let lastViewedCollectionTools = [];
+        
+        // Checkup functionality variables
+        let checkupCheckedTools = new Set();
+        let checkupSelectedLocation = 'All';
+        let checkupLocationStats = {};
+        
+        // Helper function to escape HTML
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
         let photoUploadToAllTools = false;
         let currentPhotoUploadToolId = null;
         let currentPhotoUploadPartNumber = null;
@@ -800,8 +960,7 @@
             const checkupBtn = document.getElementById('collectionCheckupBtn');
             if (checkupBtn) {
                 checkupBtn.onclick = function() {
-                    // Collection checkup functionality (can be added later if needed)
-                    alert('Collection Checkup feature coming soon');
+                    showCollectionCheckupScreen();
                 };
             }
 
@@ -2851,6 +3010,619 @@
                 alert('Error loading locations. Please try again.');
             }
         }
+
+        // ============================================
+        // COLLECTION CHECKUP FUNCTIONALITY
+        // ============================================
+        
+        function showCollectionCheckupScreen() {
+            document.getElementById('myToolsByCollectionScreen').style.display = 'none';
+            document.getElementById('collectionCheckupScreen').style.display = 'block';
+            
+            // Reset checkup state
+            checkupCheckedTools = new Set();
+            // Set initial location to first available location instead of 'All'
+            const tools = lastViewedCollectionTools;
+            const locations = [...new Set(tools.map(t => t.location || 'No Location'))].sort();
+            checkupSelectedLocation = locations.length > 0 ? locations[0] : 'No Location';
+            
+            // Update the main title bar
+            const mainTitle = document.querySelector('#collectionCheckupScreen h2');
+            if (mainTitle && lastViewedCollectionName) {
+                mainTitle.textContent = `${lastViewedCollectionName} Collection Checkup`;
+            }
+            
+            // Set initial location title
+            const locationTitle = document.getElementById('checkupLocationTitle');
+            if (locationTitle) {
+                locationTitle.textContent = checkupSelectedLocation;
+            }
+            
+            if (!lastViewedCollectionTools.length) {
+                document.getElementById('checkupToolsList').innerHTML = '<div class="text-center text-danger">No tools found for checkup.</div>';
+                document.getElementById('checkupActionButtons').style.display = 'none';
+                return;
+            }
+            
+            // Show action buttons
+            document.getElementById('checkupActionButtons').style.display = 'block';
+            
+            // Render tools and location filter
+            renderCheckupTools();
+            renderCheckupLocationFilter();
+            updateCheckupProgress();
+        }
+
+        function renderCheckupTools() {
+            const list = document.getElementById('checkupToolsList');
+            const tools = lastViewedCollectionTools;
+            
+            // Filter tools by selected location
+            const filteredTools = tools.filter(t => (t.location || 'No Location') === checkupSelectedLocation);
+            
+            if (filteredTools.length === 0) {
+                list.innerHTML = '<div class="text-center text-muted">No tools in selected location.</div>';
+                return;
+            }
+            
+            let html = '';
+            filteredTools.forEach((tool, index) => {
+                const isChecked = checkupCheckedTools.has(tool.id);
+                const status = (tool.status || '').toUpperCase();
+                
+                // Determine background color based on status and checked state
+                let bgColor = '#f5f5f5'; // Default gray
+                if (isChecked) {
+                    bgColor = '#e8f5e8'; // Light green for checked
+                } else if (status === 'OUT') {
+                    bgColor = '#ffebee'; // Light red for out
+                } else if (status === 'BROKEN') {
+                    bgColor = '#fff3e0'; // Light orange for broken
+                } else if (status === 'LOST') {
+                    bgColor = '#ffe0b2'; // Light amber for lost
+                } else if (status === 'CALIBRATION') {
+                    bgColor = '#e3f2fd'; // Light blue for calibration
+                }
+                
+                html += `
+                    <div class="card mb-2" style="background-color: ${bgColor}; border: 1px solid #ddd;">
+                        <div class="card-body p-3">
+                            <div class="row align-items-center">
+                                <div class="col-auto">
+                                    <input type="checkbox" class="form-check-input" id="checkupTool${tool.id}" 
+                                           ${isChecked ? 'checked' : ''} 
+                                           onchange="toggleCheckupTool('${tool.id}', this.checked)"
+                                           style="transform: scale(1.2);">
+                                </div>
+                                <div class="col">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h6 class="mb-1"><strong>${index + 1}. ${escapeHtml(tool.toolName || 'Unknown Tool')}</strong></h6>
+                                            <div class="text-muted small">Part #: ${escapeHtml(tool.partNumber || 'N/A')}</div>
+                                            <div class="text-muted small">Location: ${escapeHtml(tool.location || 'No Location')}</div>
+                                            <div class="small">
+                                                <strong>Status: </strong>
+                                                <span style="color: ${getStatusColor(status)};">${escapeHtml(tool.status || 'N/A')}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            list.innerHTML = html;
+        }
+
+        function renderCheckupLocationFilter() {
+            const tools = lastViewedCollectionTools;
+            const locations = [...new Set(tools.map(t => t.location || 'No Location'))].sort();
+            
+            let html = '';
+            locations.forEach(loc => {
+                const isSelected = checkupSelectedLocation === loc;
+                html += `
+                    <button class="btn btn-sm ${isSelected ? 'btn-orange' : 'btn-outline-secondary'}" 
+                            onclick="selectCheckupLocation('${escapeHtml(loc)}')"
+                            style="${isSelected ? 'background-color:#FF9800;color:white;border-color:#FF9800;' : 'background-color:transparent;color:#6c757d;border-color:#6c757d;'}">
+                        ${escapeHtml(loc)}
+                    </button>
+                `;
+            });
+            
+            document.getElementById('checkupLocationButtons').innerHTML = html;
+        }
+
+        function selectCheckupLocation(location) {
+            checkupSelectedLocation = location;
+            
+            // Update the location title
+            const locationTitle = document.getElementById('checkupLocationTitle');
+            if (locationTitle) {
+                locationTitle.textContent = location;
+            }
+            
+            renderCheckupTools();
+            renderCheckupLocationFilter();
+            updateCheckupProgress();
+        }
+
+        function toggleCheckupTool(toolId, checked) {
+            if (checked) {
+                checkupCheckedTools.add(toolId);
+            } else {
+                checkupCheckedTools.delete(toolId);
+            }
+            updateCheckupProgress();
+        }
+
+        function updateCheckupProgress() {
+            const totalTools = lastViewedCollectionTools.length;
+            const checkedCount = checkupCheckedTools.size;
+            document.getElementById('checkupProgress').textContent = `${checkedCount}/${totalTools}`;
+        }
+
+        // Select All functionality
+        document.getElementById('selectAllBtn').onclick = function() {
+            const tools = lastViewedCollectionTools.filter(t => (t.location || 'No Location') === checkupSelectedLocation);
+            
+            tools.forEach(tool => {
+                checkupCheckedTools.add(tool.id);
+            });
+            
+            renderCheckupTools();
+            updateCheckupProgress();
+        };
+
+        // Show Results functionality
+        document.getElementById('showResultsBtn').onclick = function() {
+            showCheckupResults();
+        };
+
+        function showCheckupResults() {
+            const tools = lastViewedCollectionTools;
+            const totalTools = tools.length;
+            const checkedCount = checkupCheckedTools.size;
+            const uncheckedCount = totalTools - checkedCount;
+            
+            // Calculate location stats
+            const locationStats = {};
+            const locations = [...new Set(tools.map(t => t.location || 'No Location'))];
+            locations.forEach(loc => {
+                const locationTools = tools.filter(t => (t.location || 'No Location') === loc);
+                const locationChecked = locationTools.filter(t => checkupCheckedTools.has(t.id)).length;
+                locationStats[loc] = {
+                    total: locationTools.length,
+                    checked: locationChecked,
+                    unchecked: locationTools.length - locationChecked
+                };
+            });
+            
+            let html = `
+                <div class="mb-4">
+                    <h6><strong>Overall Summary:</strong></h6>
+                    <div class="row">
+                        <div class="col-4">
+                            <div class="text-center">
+                                <div class="h4 text-primary">${totalTools}</div>
+                                <small class="text-muted">Total Tools</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-center">
+                                <div class="h4 text-success">${checkedCount}</div>
+                                <small class="text-muted">Checked</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-center">
+                                <div class="h4 text-warning">${uncheckedCount}</div>
+                                <small class="text-muted">Unchecked</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h6><strong>By Location:</strong></h6>
+        `;
+        
+        Object.entries(locationStats).forEach(([location, stats]) => {
+            html += `
+                <div class="card mb-2">
+                    <div class="card-body p-3">
+                        <h6 class="card-title">${escapeHtml(location)}</h6>
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <div class="text-primary">${stats.total}</div>
+                                <small class="text-muted">Total</small>
+                            </div>
+                            <div class="col-4">
+                                <div class="text-success">${stats.checked}</div>
+                                <small class="text-muted">Checked</small>
+                            </div>
+                            <div class="col-4">
+                                <div class="text-warning">${stats.unchecked}</div>
+                                <small class="text-muted">Unchecked</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        
+        document.getElementById('checkupResultsContent').innerHTML = html;
+        
+        const modal = new bootstrap.Modal(document.getElementById('checkupResultsModal'));
+        modal.show();
+    }
+
+    // Save Results functionality
+    document.getElementById('saveCheckupResultsBtn').onclick = function() {
+        saveCheckupResults();
+    };
+
+    async function saveCheckupResults() {
+        const tools = lastViewedCollectionTools;
+        const totalTools = tools.length;
+        const checkedCount = checkupCheckedTools.size;
+        const uncheckedCount = totalTools - checkedCount;
+        
+        // Calculate location stats
+        const locationStats = {};
+        const locations = [...new Set(tools.map(t => t.location || 'No Location'))];
+        locations.forEach(loc => {
+            const locationTools = tools.filter(t => (t.location || 'No Location') === loc);
+            const locationChecked = locationTools.filter(t => checkupCheckedTools.has(t.id)).length;
+            locationStats[loc] = {
+                total: locationTools.length,
+                checked: locationChecked,
+                unchecked: locationTools.length - locationChecked
+            };
+        });
+        
+        try {
+            const user = auth.currentUser;
+            const fullName = localStorage.getItem('fullName') || user.email;
+            
+            const checkupData = {
+                technicianName: fullName,
+                collectionCode: lastViewedCollectionName,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                totalTools: totalTools,
+                checkedTools: checkedCount,
+                uncheckedTools: uncheckedCount,
+                locationStats: locationStats,
+                checkedToolIds: Array.from(checkupCheckedTools),
+                allToolIds: tools.map(t => t.id),
+                checkupDate: new Date().toLocaleString('en-GB')
+            };
+            
+            // Create custom document ID
+            const technicianNameWithoutSpaces = fullName.replace(/\s+/g, '');
+            const timestamp = new Date();
+            const timestampString = timestamp.toLocaleString('en-GB', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            }).replace(/[/:]/g, '').replace(/\s+/g, '-');
+            
+            const documentId = `${technicianNameWithoutSpaces}_${timestampString}`;
+            
+            await db.collection('checkupResults').doc(documentId).set(checkupData);
+            
+            // Close results modal and show success modal
+            const resultsModal = bootstrap.Modal.getInstance(document.getElementById('checkupResultsModal'));
+            resultsModal.hide();
+            
+            const successModal = new bootstrap.Modal(document.getElementById('checkupSaveSuccessModal'));
+            successModal.show();
+            
+        } catch (error) {
+            console.error('Error saving checkup results:', error);
+            alert('Error saving checkup results: ' + error.message);
+        }
+    }
+
+    // History button
+    document.getElementById('checkupHistoryBtn').onclick = function() {
+        showCheckupHistoryScreen();
+    };
+
+    function getStatusColor(status) {
+        switch (status) {
+            case 'OUT': return '#d32f2f';
+            case 'BROKEN': return '#ff6f00';
+            case 'LOST': return '#ff8f00';
+            case 'CALIBRATION': return '#1976d2';
+            default: return '#388e3c';
+        }
+    }
+
+    document.getElementById('backToMyToolsByCollectionBtn').onclick = function() {
+        document.getElementById('collectionCheckupScreen').style.display = 'none';
+        document.getElementById('myToolsByCollectionScreen').style.display = 'block';
+    };
+
+    function showCheckupHistoryScreen() {
+        // Hide all other main screens
+        document.getElementById('myToolsByCollectionScreen').style.display = 'none';
+        document.getElementById('collectionCheckupScreen').style.display = 'none';
+        document.getElementById('checkupHistoryScreen').style.display = 'block';
+        // Set technician name
+        const user = auth.currentUser;
+        const fullName = localStorage.getItem('fullName') || (user ? user.email : '');
+        document.getElementById('checkupHistoryTechName').textContent = fullName;
+        // Load history
+        loadCheckupHistory();
+    }
+
+    document.getElementById('checkupHistoryBackBtn').onclick = function() {
+        document.getElementById('checkupHistoryScreen').style.display = 'none';
+        document.getElementById('collectionCheckupScreen').style.display = 'block';
+    };
+
+    document.getElementById('checkupHistoryRefreshBtn').onclick = function() {
+        loadCheckupHistory();
+    };
+
+    document.getElementById('checkupHistoryCleanupBtn').onclick = function() {
+        cleanupOldCheckupHistory();
+    };
+
+    document.getElementById('checkupHistorySearch').oninput = function() {
+        renderCheckupHistoryList(window._checkupHistoryRaw || []);
+    };
+    document.getElementById('checkupHistoryCollectionFilter').onchange = function() {
+        renderCheckupHistoryList(window._checkupHistoryRaw || []);
+    };
+
+    async function loadCheckupHistory() {
+        const user = auth.currentUser;
+        if (!user) return;
+        const fullName = localStorage.getItem('fullName') || user.email;
+        const listDiv = document.getElementById('checkupHistoryList');
+        listDiv.innerHTML = '<div class="text-center">Loading...</div>';
+        try {
+            const snap = await db.collection('checkupResults')
+                .where('technicianName', '==', fullName)
+                .orderBy('timestamp', 'desc')
+                .get();
+            const records = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            window._checkupHistoryRaw = records;
+            // Populate collection filter
+            const collections = Array.from(new Set(records.map(r => r.collectionCode || 'All')));
+            const filter = document.getElementById('checkupHistoryCollectionFilter');
+            filter.innerHTML = '<option value="All">All</option>' + collections.map(c => `<option value="${c}">${escapeHtml(c)}</option>`).join('');
+            renderCheckupHistoryList(records);
+        } catch (e) {
+            listDiv.innerHTML = `<div class='text-danger text-center'>Error loading history: ${escapeHtml(e.message)}</div>`;
+        }
+    }
+
+    function renderCheckupHistoryList(records) {
+        const search = document.getElementById('checkupHistorySearch').value.trim().toLowerCase();
+        const filter = document.getElementById('checkupHistoryCollectionFilter').value;
+        let filtered = records;
+        if (filter && filter !== 'All') {
+            filtered = filtered.filter(r => (r.collectionCode || 'All') === filter);
+        }
+        if (search) {
+            filtered = filtered.filter(r =>
+                (r.collectionCode || '').toLowerCase().includes(search) ||
+                (r.checkupDate || '').toLowerCase().includes(search)
+            );
+        }
+        const listDiv = document.getElementById('checkupHistoryList');
+        if (!filtered.length) {
+            listDiv.innerHTML = '<div class="text-center text-muted">No checkup history found.</div>';
+            return;
+        }
+        let html = '';
+        filtered.forEach(r => {
+            const checked = r.checkedTools || 0;
+            const total = r.totalTools || 0;
+            const isAll = (r.collectionCode || '').toLowerCase().includes('all');
+            html += `<div style="background:#fff;border-radius:16px;padding:16px 12px;margin-bottom:16px;box-shadow:0 2px 4px rgba(0,0,0,0.07);border:1px solid #ddd;">
+                <div style="font-size:1.15em;font-weight:bold;color:#000;">${escapeHtml(r.checkupDate || 'Unknown')}</div>
+                <div style="color:#888;font-size:1.05em;">Collection: <span style="color:${isAll ? '#888' : '#FF9800'};font-weight:bold;">${escapeHtml(r.collectionCode || 'All Collections')}</span></div>
+                <div style="font-size:1.1em;font-weight:bold;color:${checked===total?'#388E3C':'#388E3C'};float:right;">${checked}/${total} <span style="font-weight:normal;color:#888;font-size:0.95em;">Tools Checked</span></div>
+                <hr style="margin:8px 0;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <a href="#" style="color:#1976d2;font-weight:bold;font-size:1.1em;" onclick="event.preventDefault();showCheckupDetails('${r.id}')">View Details</a>
+                    <a href="#" style="color:#f44336;font-weight:bold;font-size:1.1em;" onclick="event.preventDefault();deleteCheckupHistoryRecord('${r.id}')">Delete</a>
+                </div>
+            </div>`;
+        });
+        listDiv.innerHTML = html;
+    }
+
+    async function deleteCheckupHistoryRecord(id) {
+        if (!confirm('Delete this checkup record?')) return;
+        try {
+            await db.collection('checkupResults').doc(id).delete();
+            loadCheckupHistory();
+        } catch (e) {
+            alert('Error deleting record: ' + e.message);
+        }
+    }
+
+    async function cleanupOldCheckupHistory() {
+        if (!confirm('Delete all checkup records older than 1 month?')) return;
+        const user = auth.currentUser;
+        if (!user) return;
+        const fullName = localStorage.getItem('fullName') || user.email;
+        const cutoff = new Date();
+        cutoff.setMonth(cutoff.getMonth() - 1);
+        try {
+            const snap = await db.collection('checkupResults')
+                .where('technicianName', '==', fullName)
+                .where('timestamp', '<', cutoff)
+                .get();
+            const batch = db.batch();
+            snap.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            loadCheckupHistory();
+        } catch (e) {
+            alert('Error cleaning up: ' + e.message);
+        }
+    }
+
+    function showCheckupDetails(id) {
+        const record = (window._checkupHistoryRaw || []).find(r => r.id === id);
+        if (!record) {
+            alert('Checkup record not found.');
+            return;
+        }
+
+        // Show loading state
+        document.getElementById('checkupDetailsContent').innerHTML = '<div class="text-center">Loading...</div>';
+        const modal = new bootstrap.Modal(document.getElementById('checkupDetailsModal'));
+        modal.show();
+
+        // Get unchecked tool IDs
+        const checked = record.checkedToolIds || [];
+        const all = record.allToolIds || [];
+        const unchecked = all.filter(id => !checked.includes(id));
+
+        // Fetch tool details for unchecked tools and all tools (for location stats)
+        (async () => {
+            let missingTools = [];
+            let allTools = [];
+            if (all.length > 0) {
+                const dbTools = firebase.firestore().collection('tools');
+                for (let i = 0; i < all.length; i += 10) {
+                    const batch = all.slice(i, i + 10);
+                    const snap = await dbTools.where(firebase.firestore.FieldPath.documentId(), 'in', batch).get();
+                    allTools = allTools.concat(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                }
+            }
+            if (unchecked.length > 0) {
+                // Batch Firestore gets (max 10 per batch)
+                const dbTools = firebase.firestore().collection('tools');
+                for (let i = 0; i < unchecked.length; i += 10) {
+                    const batch = unchecked.slice(i, i + 10);
+                    const snap = await dbTools.where(firebase.firestore.FieldPath.documentId(), 'in', batch).get();
+                    missingTools = missingTools.concat(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                }
+            }
+
+            // Group all tools by location for stats
+            const allByLocation = {};
+            allTools.forEach(tool => {
+                const loc = tool.location || 'Unknown';
+                if (!allByLocation[loc]) allByLocation[loc] = [];
+                allByLocation[loc].push(tool);
+            });
+            // Group missing tools by location
+            const missingByLocation = {};
+            missingTools.forEach(tool => {
+                const loc = tool.location || 'Unknown';
+                if (!missingByLocation[loc]) missingByLocation[loc] = [];
+                missingByLocation[loc].push(tool);
+            });
+            // Group checked tools by location for stats
+            const checkedSet = new Set(checked);
+            const checkedByLocation = {};
+            allTools.forEach(tool => {
+                if (checkedSet.has(tool.id)) {
+                    const loc = tool.location || 'Unknown';
+                    if (!checkedByLocation[loc]) checkedByLocation[loc] = [];
+                    checkedByLocation[loc].push(tool);
+                }
+            });
+
+            // Build HTML
+            let html = `
+                <div style="font-size:1.3em;font-weight:bold;margin-bottom:10px;">
+                    <span style="background:#f8f8f8;padding:8px 18px;border-radius:12px;display:inline-block;">
+                        Checked: ${checked.length}<br>Unchecked: ${unchecked.length}
+                    </span>
+                </div>
+            `;
+
+            if (Object.keys(allByLocation).length > 0) {
+                // Sort locations alphabetically
+                const sortedLocs = Object.keys(allByLocation).sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
+                html += `<style>
+                    .expand-arrow { display:inline-block; transition:transform 0.2s; font-size:1.2em; margin-right:6px; }
+                    .expand-arrow.open { transform:rotate(90deg); }
+                    .location-summary-card { cursor:pointer; }
+                    .missing-tools-section { display:none; }
+                    .missing-tools-section.open { display:block; }
+                </style>`;
+                sortedLocs.forEach((loc, idx) => {
+                    const total = allByLocation[loc].length;
+                    const checkedCount = checkedByLocation[loc] ? checkedByLocation[loc].length : 0;
+                    const uncheckedCount = total - checkedCount;
+                    const hasMissing = missingByLocation[loc] && missingByLocation[loc].length > 0;
+                    const sectionId = `missingToolsSection_${id.replace(/[^a-zA-Z0-9]/g, '')}_${idx}`;
+                    const arrowId = `expandArrow_${id.replace(/[^a-zA-Z0-9]/g, '')}_${idx}`;
+                    html += `
+                        <div class="location-summary-card" onclick="toggleMissingToolsSection('${sectionId}', '${arrowId}')" style="background:#e3f2fd;border-radius:14px;padding:10px 12px 8px 12px;margin-bottom:8px;">
+                            <span id="${arrowId}" class="expand-arrow">&#9654;</span>
+                            <span style="font-weight:bold;color:#1976d2;font-size:1.1em;">${escapeHtml(loc)}</span>
+                            <div style="color:#333;font-size:1.0em;">Total: ${total} &nbsp; Checked: ${checkedCount} &nbsp; Unchecked: ${uncheckedCount}</div>
+                        </div>
+                    `;
+                    // Always show the section, but only fill it if there are missing tools
+                    html += `<div id="${sectionId}" class="missing-tools-section" style="margin-bottom:12px;">`;
+                    if (hasMissing) {
+                        html += `<div style="color:#d32f2f;font-weight:bold;font-size:1.1em;margin:8px 0 4px 0;">Missing Tools (Not Checked):</div>`;
+                        missingByLocation[loc].forEach(tool => {
+                            html += `
+                                <div style="background:#ffebee;border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+                                    <div style="color:#d32f2f;font-weight:bold;font-size:1.15em;line-height:1.2;">
+                                        <span style="font-size:1.2em;">&#9888;</span> ${escapeHtml(tool.toolName || tool.id)}
+                                    </div>
+                                    <div style="color:#888;font-size:1em;margin-top:4px;">
+                                        Part #: ${escapeHtml(tool.partNumber || tool.id)}<br>
+                                        Location: ${escapeHtml(tool.location || 'Unknown')}<br>
+                                        Status: ${escapeHtml(tool.status || 'N/A')}
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    } else {
+                        html += `<div style="color:#388e3c;font-size:1em;margin:8px 0 4px 0;">No missing tools in this location.</div>`;
+                    }
+                    html += `</div>`;
+                });
+            } else {
+                html += `<div class="text-success" style="font-weight:bold;font-size:1.1em;">All tools checked!</div>`;
+            }
+
+            // Add the toggleMissingToolsSection function to window
+            window.toggleMissingToolsSection = function(sectionId, arrowId) {
+                var section = document.getElementById(sectionId);
+                var arrow = document.getElementById(arrowId);
+                if (section) {
+                    var isOpen = section.classList.contains('open');
+                    if (isOpen) {
+                        section.classList.remove('open');
+                        if (arrow) arrow.classList.remove('open');
+                    } else {
+                        section.classList.add('open');
+                        if (arrow) arrow.classList.add('open');
+                    }
+                }
+            };
+
+            document.getElementById('checkupDetailsContent').innerHTML = html;
+        })();
+    }
+
+        // ============================================
+        // END COLLECTION CHECKUP FUNCTIONALITY
+        // ============================================
 
         // Show location photo file upload dialog
         async function showLocationPhotoFileUploadDialog(collectionName, selectedLocation) {
