@@ -3387,14 +3387,12 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
+        // Wrap in IIFE to avoid variable declaration conflicts with common.js
+        (function() {
         // Use global Firebase instances from common.js
-        // common.js loads before this script, so window.auth should be available
-        // Use let instead of const to avoid declaration conflicts
-        let auth = window.auth;
-        let db = window.db;
-        let storage = window.storage;
-        
-        if (!auth || !db || !storage) {
+        // common.js loads before this script and declares 'auth' in global scope
+        // We wrap our code in IIFE to create our own scope
+        if (!window.auth || !window.db || !window.storage) {
             console.error('[INDEX] ✗ Firebase instances not available from common.js!');
             console.error('[INDEX] window.auth:', window.auth);
             console.error('[INDEX] window.db:', window.db);
@@ -3411,22 +3409,17 @@
                 };
                 firebase.initializeApp(firebaseConfig);
             }
-            const fallbackAuth = firebase.auth();
-            const fallbackDb = firebase.firestore();
-            const fallbackStorage = firebase.storage();
-            // Use fallback if window.auth not available
-            if (!auth) {
-                Object.defineProperty(window, 'auth', { value: fallbackAuth, writable: false });
-            }
-            if (!db) {
-                Object.defineProperty(window, 'db', { value: fallbackDb, writable: false });
-            }
-            if (!storage) {
-                Object.defineProperty(window, 'storage', { value: fallbackStorage, writable: false });
-            }
+            window.auth = window.auth || firebase.auth();
+            window.db = window.db || firebase.firestore();
+            window.storage = window.storage || firebase.storage();
         } else {
             console.log('[INDEX] ✓ Using global Firebase instances from common.js');
         }
+        
+        // Create local references in our own scope (IIFE)
+        const auth = window.auth;
+        const db = window.db;
+        const storage = window.storage;
         
         // Set custom error messages for unverified emails
         auth.onAuthStateChanged(function(user) {
@@ -12312,6 +12305,7 @@ if (!userCredential.user.emailVerified) {
             }
         }
         });
+        })(); // End IIFE - closes the function scope to avoid variable conflicts with common.js
     </script>
 </body>
 </html> 
