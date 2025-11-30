@@ -175,6 +175,149 @@
             transform: perspective(1000px) rotateX(2deg);
             transition: all 0.3s ease;
         }
+        
+        /* Back to Menu button 3D interactive Grey - matching index.html */
+        #backToMenuBtn {
+            position: absolute;
+            right: 18px;
+            top: 50%;
+            transform: translateY(-50%) perspective(1000px) rotateX(0deg);
+            z-index: 10;
+            padding: 6px 12px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            border-radius: 12px;
+            border: 2px solid #bdbdbd;
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
+            color: #333;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        
+        #backToMenuBtn:hover {
+            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%);
+            border-color: #adadad;
+            transform: translateY(calc(-50% - 2px)) perspective(1000px) rotateX(5deg);
+            box-shadow: 0 4px 12px rgba(189, 189, 189, 0.4),
+                        0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        #backToMenuBtn:active {
+            transform: translateY(calc(-50% + 0px)) perspective(1000px) rotateX(2deg);
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
+        }
+        
+        /* Register Tool Card 3D Interactive Design - matching index.html */
+        .register-tool-card {
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            max-width: 380px;
+            margin-left: auto;
+            margin-right: auto;
+            transform: perspective(1000px) rotateX(0deg);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Responsive card widths */
+        @media (min-width: 576px) {
+            .register-tool-card {
+                max-width: 450px;
+            }
+        }
+        
+        @media (min-width: 768px) {
+            .register-tool-card {
+                max-width: 500px;
+            }
+        }
+        
+        @media (min-width: 992px) {
+            .register-tool-card {
+                max-width: 600px;
+            }
+        }
+        
+        @media (min-width: 1200px) {
+            .register-tool-card {
+                max-width: 700px;
+            }
+        }
+        
+        /* 3D Interactive Hover Effect */
+        .register-tool-card:hover {
+            transform: translateY(-2px) perspective(1000px) rotateX(3deg);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15),
+                        0 2px 6px rgba(0, 0, 0, 0.1),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+        
+        .register-tool-card:active {
+            transform: translateY(0px) perspective(1000px) rotateX(1deg);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Status-based background colors with 3D effect */
+        .register-tool-card.out { 
+            background: #FFCDD2; 
+            border-color: #EF9A9A;
+        }
+        .register-tool-card.out:hover {
+            background: #FFB3BA;
+            border-color: #E57373;
+        }
+        
+        .register-tool-card.broken { 
+            background: #FFF3E0; 
+            border-color: #FFCC80;
+        }
+        .register-tool-card.broken:hover {
+            background: #FFE0B2;
+            border-color: #FFB74D;
+        }
+        
+        .register-tool-card.lost { 
+            background: #FFE0B2; 
+            border-color: #FFB74D;
+        }
+        .register-tool-card.lost:hover {
+            background: #FFCC80;
+            border-color: #FFA726;
+        }
+        
+        .register-tool-card.calibration { 
+            background: #E3F2FD; 
+            border-color: #90CAF9;
+        }
+        .register-tool-card.calibration:hover {
+            background: #BBDEFB;
+            border-color: #64B5F6;
+        }
+        
+        .register-tool-card.in { 
+            background: #E8F5E9; 
+            border-color: #A5D6A7;
+        }
+        .register-tool-card.in:hover {
+            background: #C8E6C9;
+            border-color: #81C784;
+        }
+        
+        /* Reduce spacing between elements in register tool cards */
+        #toolList .register-tool-card > div,
+        #collectionDisplaySection .register-tool-card > div,
+        #searchResults .register-tool-card > div {
+            line-height: 1.2 !important;
+        }
     </style>
 </head>
 <body>
