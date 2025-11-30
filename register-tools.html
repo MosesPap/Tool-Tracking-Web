@@ -555,7 +555,7 @@
     </div>
 
     <!-- Helicopter Model Selection Modal -->
-    <div class="modal fade" id="helicopterModelSelectionModal" tabindex="-1" aria-labelledby="helicopterModelSelectionModalLabel" aria-hidden="true">
+    <div class="modal fade" id="helicopterModelSelectionModal" tabindex="-1" aria-labelledby="helicopterModelSelectionModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
                 <div class="modal-header" style="background: #FF9800; color: white; border-radius: 16px 16px 0 0; border: none; padding: 20px;">
@@ -3240,7 +3240,27 @@
         }
 
         function showHelicopterModelSelectionModal() {
-            const modal = new bootstrap.Modal(document.getElementById('helicopterModelSelectionModal'));
+            const modalElement = document.getElementById('helicopterModelSelectionModal');
+            const modal = new bootstrap.Modal(modalElement);
+            
+            // Properly manage aria-hidden attribute to fix accessibility warning
+            modalElement.addEventListener('shown.bs.modal', function() {
+                // Remove aria-hidden when modal is shown
+                modalElement.removeAttribute('aria-hidden');
+                modalElement.setAttribute('aria-modal', 'true');
+                // Set focus to the first button to ensure proper focus management
+                const firstButton = modalElement.querySelector('.helicopter-model-option');
+                if (firstButton) {
+                    firstButton.focus();
+                }
+            }, { once: true });
+            
+            modalElement.addEventListener('hidden.bs.modal', function() {
+                // Restore aria-hidden when modal is hidden
+                modalElement.setAttribute('aria-hidden', 'true');
+                modalElement.removeAttribute('aria-modal');
+            }, { once: true });
+            
             document.querySelectorAll('.helicopter-model-option').forEach(btn => {
                 btn.classList.remove('active');
                 btn.style.background = '#f8f9fa';

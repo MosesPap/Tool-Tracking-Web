@@ -219,20 +219,36 @@ function showNotification(message, type = 'info') {
 // IndexedDB operations
 async function initIndexedDB() {
     return new Promise((resolve, reject) => {
-        const request = window.indexedDB.open('ToolTrackingDB', 1);
+        // Check if IndexedDB is available and not null
+        if (typeof window === 'undefined' || !window.indexedDB || window.indexedDB === null) {
+            console.log('IndexedDB is not available in this environment - skipping initialization');
+            resolve(null); // Resolve with null instead of rejecting
+            return;
+        }
         
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => {
-            indexedDB = request.result;
-            resolve(indexedDB);
-        };
-        
-        request.onupgradeneeded = (event) => {
-            const db = event.target.result;
-            if (!db.objectStoreNames.contains('offlineTools')) {
-                db.createObjectStore('offlineTools', { keyPath: 'id' });
-            }
-        };
+        try {
+            const request = window.indexedDB.open('ToolTrackingDB', 1);
+            
+            request.onerror = () => {
+                console.warn('IndexedDB open failed:', request.error);
+                resolve(null); // Resolve with null instead of rejecting
+            };
+            
+            request.onsuccess = () => {
+                indexedDB = request.result;
+                resolve(indexedDB);
+            };
+            
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains('offlineTools')) {
+                    db.createObjectStore('offlineTools', { keyPath: 'id' });
+                }
+            };
+        } catch (error) {
+            console.warn('IndexedDB initialization error:', error);
+            resolve(null); // Resolve with null instead of rejecting
+        }
     });
 }
 

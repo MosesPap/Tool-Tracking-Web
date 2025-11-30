@@ -630,7 +630,7 @@
                 initializePage(auth, db);
             }
             
-            function initializePage(auth, db) {
+            async function initializePage(auth, db) {
                 console.log('[MY-TOOLS] ====== initializePage() called ======');
                 console.log('[MY-TOOLS] Timestamp:', new Date().toISOString());
                 console.log('[MY-TOOLS] localStorage.authVerified:', localStorage.getItem('authVerified'));
@@ -641,34 +641,34 @@
                 
                 // Function to complete page initialization
                 async function completeInitialization() {
-                if (initializationComplete) {
-                    console.log('[MY-TOOLS] completeInitialization() already called, skipping');
-                    return;
+                    if (initializationComplete) {
+                        console.log('[MY-TOOLS] completeInitialization() already called, skipping');
+                        return;
+                    }
+                    initializationComplete = true;
+                    
+                    console.log('[MY-TOOLS] ====== completeInitialization() called ======');
+                    console.log('[MY-TOOLS] Timestamp:', new Date().toISOString());
+                    // Show collection selection modal first (matching index.html behavior)
+                    console.log('[MY-TOOLS] Calling showCollectionSelectionDialog()...');
+                    await showCollectionSelectionDialog();
+                    console.log('[MY-TOOLS] Collection selection dialog shown');
+                    console.log('[MY-TOOLS] completeInitialization() completed');
                 }
-                initializationComplete = true;
                 
-                console.log('[MY-TOOLS] ====== completeInitialization() called ======');
-                console.log('[MY-TOOLS] Timestamp:', new Date().toISOString());
-                // Show collection selection modal first (matching index.html behavior)
-                console.log('[MY-TOOLS] Calling showCollectionSelectionDialog()...');
-                await showCollectionSelectionDialog();
-                console.log('[MY-TOOLS] Collection selection dialog shown');
-                console.log('[MY-TOOLS] completeInitialization() completed');
-            }
-            
-            // SEAMLESS NAVIGATION: Check localStorage first - if flag exists, proceed IMMEDIATELY
-            const authVerified = localStorage.getItem('authVerified');
-            const storedFullName = localStorage.getItem('fullName');
-            
-            console.log('[MY-TOOLS] Checking auth flags...');
-            console.log('[MY-TOOLS] authVerified:', authVerified);
-            console.log('[MY-TOOLS] storedFullName:', storedFullName);
-            
-            if (authVerified === 'true' && storedFullName) {
-                // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
-                console.log('[MY-TOOLS] ✓ Auth verified flag found - proceeding immediately');
-                console.log('[MY-TOOLS] Calling completeInitialization() immediately...');
-                await completeInitialization();
+                // SEAMLESS NAVIGATION: Check localStorage first - if flag exists, proceed IMMEDIATELY
+                const authVerified = localStorage.getItem('authVerified');
+                const storedFullName = localStorage.getItem('fullName');
+                
+                console.log('[MY-TOOLS] Checking auth flags...');
+                console.log('[MY-TOOLS] authVerified:', authVerified);
+                console.log('[MY-TOOLS] storedFullName:', storedFullName);
+                
+                if (authVerified === 'true' && storedFullName) {
+                    // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
+                    console.log('[MY-TOOLS] ✓ Auth verified flag found - proceeding immediately');
+                    console.log('[MY-TOOLS] Calling completeInitialization() immediately...');
+                    await completeInitialization();
                 
                 // Verify auth in background (non-blocking) - but wait a bit for Firebase to restore session
                 console.log('[MY-TOOLS] Scheduling background auth verification (300ms delay)...');
@@ -843,9 +843,40 @@
         async function showCollectionSelectionDialog() {
             const auth = window.auth || firebase.auth();
             const db = window.db || firebase.firestore();
-            const user = auth.currentUser;
-            if (!user) return;
-            const fullName = localStorage.getItem('fullName') || user.email;
+            
+            // Wait for user to be available (Firebase may need time to restore session)
+            let user = auth.currentUser;
+            if (!user) {
+                console.log('[MY-TOOLS] showCollectionSelectionDialog: auth.currentUser is null, waiting for user...');
+                // Wait up to 2 seconds for Firebase to restore the session
+                let waitCount = 0;
+                while (!user && waitCount < 20) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    user = auth.currentUser;
+                    waitCount++;
+                }
+                
+                if (!user) {
+                    console.log('[MY-TOOLS] showCollectionSelectionDialog: Still no user after waiting, checking localStorage...');
+                    // If still no user but we have localStorage flag, use that
+                    const storedFullName = localStorage.getItem('fullName');
+                    if (storedFullName && localStorage.getItem('authVerified') === 'true') {
+                        console.log('[MY-TOOLS] showCollectionSelectionDialog: Using stored fullName from localStorage:', storedFullName);
+                        // Continue with storedFullName - we'll use it below
+                    } else {
+                        console.log('[MY-TOOLS] showCollectionSelectionDialog: No user and no stored credentials, cannot show dialog');
+                        return;
+                    }
+                } else {
+                    console.log('[MY-TOOLS] showCollectionSelectionDialog: User found after waiting:', user.email);
+                }
+            }
+            
+            const fullName = localStorage.getItem('fullName') || (user ? user.email : null);
+            if (!fullName) {
+                console.error('[MY-TOOLS] showCollectionSelectionDialog: No fullName available');
+                return;
+            }
             const modal = new bootstrap.Modal(document.getElementById('collectionSelectModal'));
             const body = document.getElementById('collectionSelectBody');
             body.innerHTML = '<div class="text-center">Loading...</div>';
