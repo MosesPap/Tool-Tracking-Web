@@ -20,15 +20,6 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
 
-// Handle Firebase IndexedDB warnings gracefully (non-critical, usually happens in some browser contexts)
-if (typeof window !== 'undefined') {
-    // Check if IndexedDB is available
-    if (!window.indexedDB) {
-        // IndexedDB not available - this is expected in some environments
-        // Firebase will fall back to other storage mechanisms
-    }
-}
-
 // Make Firebase instances globally accessible so all pages use the same instances
 // This ensures LOCAL persistence works correctly across page navigations
 window.auth = auth;
@@ -37,7 +28,45 @@ window.storage = storage;
 
 // Configure Firebase Auth
 auth.useDeviceLanguage();
-auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+// Set persistence with error handling for IndexedDB issues
+// Check if IndexedDB is available and functional before setting LOCAL persistence
+(function() {
+    let persistenceType = firebase.auth.Auth.Persistence.LOCAL; // Try LOCAL first
+    
+    // Check if IndexedDB is available
+    if (typeof window === 'undefined' || !window.indexedDB || window.indexedDB === null) {
+        persistenceType = firebase.auth.Auth.Persistence.SESSION;
+        console.log('[COMMON] IndexedDB not available, using SESSION persistence');
+    }
+    
+    // Set persistence with error handling
+    auth.setPersistence(persistenceType).catch((error) => {
+        // If LOCAL persistence fails (e.g., IndexedDB error), fall back to SESSION
+        if (persistenceType === firebase.auth.Auth.Persistence.LOCAL) {
+            console.warn('[COMMON] LOCAL persistence failed, falling back to SESSION:', error.message);
+            return auth.setPersistence(firebase.auth.Auth.Persistence.SESSION).catch((fallbackError) => {
+                console.error('[COMMON] Failed to set SESSION persistence:', fallbackError);
+            });
+        }
+        console.error('[COMMON] Failed to set persistence:', error);
+    });
+})();
+
+// Suppress Firebase IndexedDB warnings by intercepting console.warn
+if (typeof window !== 'undefined' && window.console) {
+    const originalWarn = console.warn;
+    console.warn = function(...args) {
+        // Filter out Firebase IndexedDB warnings
+        const message = args.join(' ');
+        if (message.includes('IndexedDB') && message.includes('app/idb-get')) {
+            // Suppress this specific warning - it's non-critical
+            return;
+        }
+        // Call original warn for other messages
+        originalWarn.apply(console, args);
+    };
+}
 
 // Set custom error messages for unverified emails
 auth.onAuthStateChanged(function(user) {
