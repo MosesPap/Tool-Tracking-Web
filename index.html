@@ -12064,6 +12064,36 @@ if (!userCredential.user.emailVerified) {
         document.getElementById('checkupDetailsContent').innerHTML = html;
       })();
     }
+        
+        // Expose functions that are called from HTML onclick handlers to global scope
+        // This is necessary because the IIFE creates a local scope, but HTML onclick handlers run in global scope
+        window.signInWithGoogle = signInWithGoogle;
+        window.showSignUp = showSignUp;
+        window.showLogin = showLogin;
+        window.showAdminLogin = showAdminLogin;
+        window.login = login;
+        window.signUp = signUp;
+        window.resetPassword = resetPassword;
+        window.startScanner = startScanner;
+        window.startEnhancedScanner = startEnhancedScanner;
+        window.submitCode = submitCode;
+        window.toggleBulkScanMode = toggleBulkScanMode;
+        window.showLastScannedToolDetails = showLastScannedToolDetails;
+        window.stopCamera = stopCamera;
+        window.showTodayAnalytics = showTodayAnalytics;
+        window.saveTechnicianToFirestore = saveTechnicianToFirestore;
+        window.updateLoggedInTechnician = updateLoggedInTechnician;
+        window.hideAllMainScreens = hideAllMainScreens;
+        window.loadTools = loadTools;
+        window.syncOfflineTools = syncOfflineTools;
+        window.updateOnlineStatus = updateOnlineStatus;
+        window.showNotification = showNotification;
+        window.handleOfflineToolSubmission = handleOfflineToolSubmission;
+        window.initIndexedDB = initIndexedDB;
+        window.getOfflineTools = getOfflineTools;
+        window.saveToolOffline = saveToolOffline;
+        window.removeOfflineTool = removeOfflineTool;
+        
         })(); // End IIFE - closes the function scope to avoid variable conflicts with common.js
     </script>
 
