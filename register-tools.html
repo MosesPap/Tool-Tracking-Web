@@ -10,6 +10,64 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
     <style>
+        /* Debug Panel Styles */
+        #debugPanel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            z-index: 99999;
+            padding: 20px;
+            overflow-y: auto;
+            display: none;
+        }
+        #debugPanel.active {
+            display: block;
+        }
+        #debugPanel .debug-header {
+            position: sticky;
+            top: 0;
+            background: #000;
+            padding: 10px;
+            margin: -20px -20px 10px -20px;
+            border-bottom: 2px solid #00ff00;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #debugPanel .debug-header h3 {
+            margin: 0;
+            color: #00ff00;
+        }
+        #debugPanel .debug-header button {
+            background: #ff0000;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        #debugPanel .debug-content {
+            line-height: 1.6;
+        }
+        #debugPanel .log-entry {
+            margin: 2px 0;
+            padding: 2px 0;
+        }
+        #debugPanel .log-timestamp {
+            color: #888;
+            margin-right: 10px;
+        }
+        #debugPanel .log-success { color: #00ff00; }
+        #debugPanel .log-error { color: #ff0000; }
+        #debugPanel .log-warning { color: #ffaa00; }
+        #debugPanel .log-info { color: #00aaff; }
+        
         /* 3D Grey IN button for OUT tools */
         .tool-in-btn-3d {
             font-weight: bold;
@@ -120,6 +178,15 @@
     </style>
 </head>
 <body>
+    <!-- Debug Panel -->
+    <div id="debugPanel">
+        <div class="debug-header">
+            <h3>🔍 DEBUG MODE - Register Tools</h3>
+            <button onclick="toggleDebugPanel()">Close Debug</button>
+        </div>
+        <div class="debug-content" id="debugContent"></div>
+    </div>
+    
     <!-- Register Tools Screen -->
     <div id="appSection">
         <!-- Orange Top Bar with Title -->
@@ -725,26 +792,26 @@
             }
             
             function initializePage() {
-                console.log('[REGISTER-TOOLS] ====== initializePage() called ======');
-                console.log('[REGISTER-TOOLS] Timestamp:', new Date().toISOString());
-                console.log('[REGISTER-TOOLS] localStorage.authVerified:', localStorage.getItem('authVerified'));
-                console.log('[REGISTER-TOOLS] localStorage.fullName:', localStorage.getItem('fullName'));
-                console.log('[REGISTER-TOOLS] localStorage.techniciansId:', localStorage.getItem('techniciansId'));
-                console.log('[REGISTER-TOOLS] auth.currentUser (sync):', auth ? (auth.currentUser ? auth.currentUser.email : 'null') : 'auth not initialized');
+                debugLog('[REGISTER-TOOLS] ====== initializePage() called ======');
+                debugLog(`[REGISTER-TOOLS] Timestamp: ${new Date().toISOString()}`);
+                debugLog(`[REGISTER-TOOLS] localStorage.authVerified: ${localStorage.getItem('authVerified')}`);
+                debugLog(`[REGISTER-TOOLS] localStorage.fullName: ${localStorage.getItem('fullName')}`);
+                debugLog(`[REGISTER-TOOLS] localStorage.techniciansId: ${localStorage.getItem('techniciansId')}`);
+                debugLog(`[REGISTER-TOOLS] auth.currentUser (sync): ${auth ? (auth.currentUser ? auth.currentUser.email : 'null') : 'auth not initialized'}`);
                 
                 let initializationComplete = false;
                 
                 // Function to complete page initialization
                 function completeInitialization(user) {
                     if (initializationComplete) {
-                        console.log('[REGISTER-TOOLS] completeInitialization() already called, skipping');
+                        debugLog('[REGISTER-TOOLS] completeInitialization() already called, skipping', 'warning');
                         return;
                     }
                     initializationComplete = true;
                     
-                    console.log('[REGISTER-TOOLS] ====== completeInitialization() called ======');
-                    console.log('[REGISTER-TOOLS] User provided:', user ? user.email : 'using stored data');
-                    console.log('[REGISTER-TOOLS] Timestamp:', new Date().toISOString());
+                    debugLog('[REGISTER-TOOLS] ====== completeInitialization() called ======');
+                    debugLog(`[REGISTER-TOOLS] User provided: ${user ? user.email : 'using stored data'}`);
+                    debugLog(`[REGISTER-TOOLS] Timestamp: ${new Date().toISOString()}`);
                     
                     // Update technician name
                     const fullName = localStorage.getItem('fullName') || (user ? user.email : 'Unknown');
@@ -856,10 +923,12 @@
                                     const doubleCheckUser = auth.currentUser;
                                     console.log('[REGISTER-TOOLS] Double-check auth.currentUser:', doubleCheckUser ? doubleCheckUser.email : 'null');
                                     if (!doubleCheckUser) {
-                                        console.log('[REGISTER-TOOLS] ✗ User confirmed logged out - redirecting to main-menu.html');
-                                        localStorage.removeItem('authVerified');
-                                        localStorage.removeItem('fullName');
-                                        window.location.href = 'main-menu.html';
+                                debugLog('[REGISTER-TOOLS] ✗ User confirmed logged out - redirecting to main-menu.html', 'error');
+                                localStorage.removeItem('authVerified');
+                                localStorage.removeItem('fullName');
+                                if (!window.safeRedirect('main-menu.html')) {
+                                    // Redirect blocked by debug mode
+                                }
                                     } else {
                                         console.log('[REGISTER-TOOLS] ✓ User found in double-check, staying on page');
                                     }
@@ -880,10 +949,14 @@
                 auth.onAuthStateChanged(function(user) {
                     console.log('[REGISTER-TOOLS] onAuthStateChanged fired (no flag path), user:', user ? user.email : 'null');
                     if (user && !user.emailVerified) {
-                        console.log('[REGISTER-TOOLS] ✗ User email not verified, signing out...');
+                        debugLog('[REGISTER-TOOLS] ✗ User email not verified, signing out...', 'error');
                         auth.signOut();
                         localStorage.removeItem('authVerified');
-                        window.location.href = 'main-menu.html';
+                        if (DEBUG_MODE) {
+                            debugLog('[DEBUG] Redirect blocked - would go to: main-menu.html', 'warning');
+                        } else {
+                            window.location.href = 'main-menu.html';
+                        }
                         return;
                     }
                     
@@ -896,9 +969,13 @@
                         }
                         completeInitialization(user);
                     } else {
-                        console.log('[REGISTER-TOOLS] ✗ No user found, redirecting to main-menu.html');
+                        debugLog('[REGISTER-TOOLS] ✗ No user found, redirecting to main-menu.html', 'error');
                         localStorage.removeItem('authVerified');
-                        window.location.href = 'main-menu.html';
+                        if (DEBUG_MODE) {
+                            debugLog('[DEBUG] Redirect blocked - would go to: main-menu.html', 'warning');
+                        } else {
+                            window.location.href = 'main-menu.html';
+                        }
                     }
                 });
             }
@@ -907,7 +984,11 @@
         // Function to handle back navigation (used by both button and phone back button)
         function handleBackNavigation() {
             // Set flag to skip splash video
-            window.location.href = 'main-menu.html';
+            if (!window.safeRedirect) {
+                window.location.href = 'main-menu.html';
+            } else {
+                window.safeRedirect('main-menu.html');
+            }
         }
         
         function setupEventListeners() {
