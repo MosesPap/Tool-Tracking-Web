@@ -33,37 +33,36 @@
             margin-bottom: 0.5rem;
         }
 
+        /* Back to Menu button 3D interactive Grey */
         .mytools-back {
-            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
-            color: white;
+            position: relative;
+            padding: 6px 12px;
+            font-size: 0.9rem;
             font-weight: bold;
-            border: 2px solid #F57C00;
             border-radius: 12px;
-            padding: 8px 24px;
-            font-size: 1.2rem;
-            margin-bottom: 1rem;
-            box-shadow: 0 2px 4px rgba(255, 152, 0, 0.4),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
-            transform: perspective(1000px) rotateX(2deg);
+            border: 2px solid #bdbdbd;
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
+            color: #333;
+            text-decoration: none;
             transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
             cursor: pointer;
+            white-space: nowrap;
+            transform: perspective(1000px) rotateX(0deg);
+            margin-bottom: 1rem;
         }
 
         .mytools-back:hover {
-            background: linear-gradient(135deg, #FFB74D 0%, #FF9800 100%);
-            border-color: #FF9800;
-            transform: perspective(1000px) rotateX(0deg) translateY(-2px);
-            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.5),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%);
+            border-color: #adadad;
+            transform: perspective(1000px) rotateX(5deg) translateY(-2px);
+            box-shadow: 0 4px 12px rgba(189, 189, 189, 0.4),
+                        0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
         .mytools-back:active {
             transform: perspective(1000px) rotateX(2deg) translateY(0px);
-            box-shadow: 0 2px 4px rgba(255, 152, 0, 0.4),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
         }
 
         .mytools-collection {
