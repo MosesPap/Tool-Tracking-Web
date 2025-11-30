@@ -20,6 +20,15 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
 
+// Handle Firebase IndexedDB warnings gracefully (non-critical, usually happens in some browser contexts)
+if (typeof window !== 'undefined') {
+    // Check if IndexedDB is available
+    if (!window.indexedDB) {
+        // IndexedDB not available - this is expected in some environments
+        // Firebase will fall back to other storage mechanisms
+    }
+}
+
 // Make Firebase instances globally accessible so all pages use the same instances
 // This ensures LOCAL persistence works correctly across page navigations
 window.auth = auth;

@@ -436,7 +436,7 @@
     </div>
 
     <!-- Admin Names Modal -->
-    <div class="modal fade" id="adminNamesModal" tabindex="-1" aria-labelledby="adminNamesModalLabel" aria-hidden="true">
+    <div class="modal fade" id="adminNamesModal" tabindex="-1" aria-labelledby="adminNamesModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="true">
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header bg-primary text-white">
@@ -447,7 +447,7 @@
             <!-- Admin names will be populated here -->
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" tabindex="0">Close</button>
           </div>
         </div>
       </div>
@@ -1385,11 +1385,34 @@
                 return;
             }
             
+            const modalElement = document.getElementById('adminNamesModal');
+            if (!modalElement) {
+                console.error('adminNamesModal element not found');
+                return;
+            }
+            
+            // Get or create modal instance
+            let modal = bootstrap.Modal.getInstance(modalElement);
+            if (!modal) {
+                modal = new bootstrap.Modal(modalElement);
+            }
+            
+            // Fix ARIA attributes when modal is shown
+            const handleModalShown = function() {
+                modalElement.removeAttribute('aria-hidden');
+                modalElement.setAttribute('aria-modal', 'true');
+                // Ensure focus is on the modal, not a button
+                const closeBtn = modalElement.querySelector('.btn-close');
+                if (closeBtn) {
+                    closeBtn.focus();
+                }
+            };
+            modalElement.addEventListener('shown.bs.modal', handleModalShown, { once: true });
+            
             // Check if db is available (from common.js)
             if (typeof db === 'undefined') {
                 console.error('Firebase db not available');
                 adminBody.innerHTML = '<p class="text-center text-danger">Database not available. Please refresh the page.</p>';
-                const modal = new bootstrap.Modal(document.getElementById('adminNamesModal'));
                 modal.show();
                 return;
             }
@@ -1418,12 +1441,10 @@
                     adminBody.innerHTML = html;
                 }
                 
-                const modal = new bootstrap.Modal(document.getElementById('adminNamesModal'));
                 modal.show();
             } catch (error) {
                 console.error('Error fetching admin names:', error);
                 adminBody.innerHTML = '<p class="text-center text-danger">Error loading administrators. Please try again.</p>';
-                const modal = new bootstrap.Modal(document.getElementById('adminNamesModal'));
                 modal.show();
             }
         }
