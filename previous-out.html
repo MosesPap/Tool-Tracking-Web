@@ -894,22 +894,27 @@
                             return false; // Exclude tools without valid timestamps
                         }
                         
-                        // Normalize tool date to start of day in local timezone
-                        const toolDateLocal = new Date(toolDate.getFullYear(), toolDate.getMonth(), toolDate.getDate());
-                        toolDateLocal.setHours(0, 0, 0, 0);
+                        // Convert tool date to local date string (YYYY-MM-DD format) for reliable comparison
+                        // This avoids timezone issues when comparing dates
+                        const toolYear = toolDate.getFullYear();
+                        const toolMonth = toolDate.getMonth();
+                        const toolDay = toolDate.getDate();
+                        const toolDateStr = `${toolYear}-${String(toolMonth + 1).padStart(2, '0')}-${String(toolDay).padStart(2, '0')}`;
                         
-                        // Normalize today to start of day in local timezone
-                        const todayLocal = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                        todayLocal.setHours(0, 0, 0, 0);
+                        // Get today's date string in local timezone (using currentTime which is already in local timezone)
+                        const todayYear = currentTime.getFullYear();
+                        const todayMonth = currentTime.getMonth();
+                        const todayDay = currentTime.getDate();
+                        const todayDateStr = `${todayYear}-${String(todayMonth + 1).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`;
                         
-                        // Strict comparison: only include tools from dates STRICTLY BEFORE today
-                        // This ensures today's tools are excluded
-                        const isPrevious = toolDateLocal.getTime() < todayLocal.getTime();
+                        // Compare date strings lexicographically - only include tools from dates STRICTLY BEFORE today
+                        // This ensures today's tools are excluded (toolDateStr < todayDateStr means previous day)
+                        const isPrevious = toolDateStr < todayDateStr;
                         
                         console.log('loadPreviousOutTools: Tool', doc.id, 
                             'toolDate (UTC):', toolDate.toISOString(), 
-                            'toolDateLocal:', toolDateLocal.toDateString(),
-                            'todayLocal:', todayLocal.toDateString(), 
+                            'toolDate (local):', toolDateStr,
+                            'today (local):', todayDateStr, 
                             'isPrevious:', isPrevious);
                         
                         return isPrevious;
