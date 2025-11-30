@@ -719,40 +719,44 @@
                     });
                 }, 300); // Give Firebase 300ms to restore session
                 
-                console.log('[MY-TOOLS] Returning from DOMContentLoaded - page initialized immediately');
+                console.log('[MY-TOOLS] Returning from initializePage() - page initialized immediately');
                 return; // Exit - page initialized, no delays
+                } else {
+                    // No stored flag - wait for Firebase auth
+                    console.log('[MY-TOOLS] ✗ No auth flag found - waiting for Firebase auth');
+                    console.log('[MY-TOOLS] Setting up onAuthStateChanged listener (no flag path)...');
+                    auth.onAuthStateChanged(async function(user) {
+                        console.log('[MY-TOOLS] onAuthStateChanged fired (no flag path), user:', user ? user.email : 'null');
+                        if (user && !user.emailVerified) {
+                            console.log('[MY-TOOLS] ✗ User email not verified, signing out...');
+                            auth.signOut();
+                            localStorage.removeItem('authVerified');
+                            window.location.href = 'main-menu.html';
+                            return;
+                        }
+                        
+                        if (user) {
+                            console.log('[MY-TOOLS] ✓ User authenticated, setting flags and initializing...');
+                            localStorage.setItem('authVerified', 'true');
+                            if (!localStorage.getItem('fullName')) {
+                                localStorage.setItem('fullName', user.email);
+                                console.log('[MY-TOOLS] Stored fullName:', user.email);
+                            }
+                            await completeInitialization();
+                        } else {
+                            console.log('[MY-TOOLS] ✗ No user found, redirecting to main-menu.html');
+                            localStorage.removeItem('authVerified');
+                            window.location.href = 'main-menu.html';
+                        }
+                    });
+                }
             }
             
-            // No stored flag - wait for Firebase auth
-            console.log('[MY-TOOLS] ✗ No auth flag found - waiting for Firebase auth');
-            console.log('[MY-TOOLS] Setting up onAuthStateChanged listener (no flag path)...');
-            auth.onAuthStateChanged(async function(user) {
-                console.log('[MY-TOOLS] onAuthStateChanged fired (no flag path), user:', user ? user.email : 'null');
-                if (user && !user.emailVerified) {
-                    console.log('[MY-TOOLS] ✗ User email not verified, signing out...');
-                    auth.signOut();
-                    localStorage.removeItem('authVerified');
-                    window.location.href = 'main-menu.html';
-                    return;
-                }
-                
-                if (user) {
-                    console.log('[MY-TOOLS] ✓ User authenticated, setting flags and initializing...');
-                    localStorage.setItem('authVerified', 'true');
-                    if (!localStorage.getItem('fullName')) {
-                        localStorage.setItem('fullName', user.email);
-                        console.log('[MY-TOOLS] Stored fullName:', user.email);
-                    }
-                    await completeInitialization();
-                } else {
-                    console.log('[MY-TOOLS] ✗ No user found, redirecting to main-menu.html');
-                    localStorage.removeItem('authVerified');
-                    window.location.href = 'main-menu.html';
-                }
-            });
-
             // Setup event listeners
             setupEventListeners();
+            
+            // Start waiting for common.js
+            waitForAuth();
         });
 
         // Setup event listeners
