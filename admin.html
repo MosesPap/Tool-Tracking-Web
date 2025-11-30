@@ -2072,15 +2072,17 @@
                 if (loginSection) loginSection.style.display = 'none';
                 if (adminDashboard) adminDashboard.style.display = 'none';
 
-        // Show alert message
-        function showAlert(message, type = 'danger') {
-            loginAlert.className = `alert alert-custom alert-${type}`;
-            loginAlert.textContent = message;
-            loginAlert.style.display = 'block';
-            setTimeout(() => {
-                loginAlert.style.display = 'none';
-            }, 5000);
-        }
+                // Show alert message
+                function showAlert(message, type = 'danger') {
+                    if (loginAlert) {
+                        loginAlert.className = `alert alert-custom alert-${type}`;
+                        loginAlert.textContent = message;
+                        loginAlert.style.display = 'block';
+                        setTimeout(() => {
+                            if (loginAlert) loginAlert.style.display = 'none';
+                        }, 5000);
+                    }
+                }
 
                 // Check if user is admin
                 async function checkAdminStatus(user) {
@@ -2111,30 +2113,31 @@
                         try {
                             showAlert('Signing in...', 'info');
                             const userCredential = await auth.signInWithEmailAndPassword(email, password);
-                const user = userCredential.user;
+                            const user = userCredential.user;
 
-                // Check if user is admin
-                const { isAdmin, name } = await checkAdminStatus(user);
-                if (isAdmin) {
-                    showAlert('Success! Loading admin dashboard...', 'success');
-                    loadAdminDashboard(name);
-                } else {
-                    await auth.signOut();
-                    showAlert('Access Denied: You do not have administrator privileges.', 'danger');
+                            // Check if user is admin
+                            const { isAdmin, name } = await checkAdminStatus(user);
+                            if (isAdmin) {
+                                showAlert('Success! Loading admin dashboard...', 'success');
+                                loadAdminDashboard(name);
+                            } else {
+                                await auth.signOut();
+                                showAlert('Access Denied: You do not have administrator privileges.', 'danger');
+                            }
+                        } catch (error) {
+                            console.error('Login error:', error);
+                            if (error.code === 'auth/user-not-found') {
+                                showAlert('User not found. Please check your email.', 'danger');
+                            } else if (error.code === 'auth/wrong-password') {
+                                showAlert('Incorrect password. Please try again.', 'danger');
+                            } else if (error.code === 'auth/invalid-email') {
+                                showAlert('Invalid email address.', 'danger');
+                            } else {
+                                showAlert('Login failed: ' + error.message, 'danger');
+                            }
+                        }
+                    });
                 }
-            } catch (error) {
-                console.error('Login error:', error);
-                if (error.code === 'auth/user-not-found') {
-                    showAlert('User not found. Please check your email.', 'danger');
-                } else if (error.code === 'auth/wrong-password') {
-                    showAlert('Incorrect password. Please try again.', 'danger');
-                } else if (error.code === 'auth/invalid-email') {
-                    showAlert('Invalid email address.', 'danger');
-                } else {
-                    showAlert('Login failed: ' + error.message, 'danger');
-                }
-            }
-        });
 
                 // Google Sign-In (kept for direct access if needed, but normally not used)
                 if (googleSignInBtn) {
@@ -2144,26 +2147,27 @@
                             showAlert('Opening Google Sign-In...', 'info');
                             const provider = new firebase.auth.GoogleAuthProvider();
                             const userCredential = await auth.signInWithPopup(provider);
-                const user = userCredential.user;
+                            const user = userCredential.user;
 
-                // Check if user is admin
-                const { isAdmin, name } = await checkAdminStatus(user);
-                if (isAdmin) {
-                    showAlert('Success! Loading admin dashboard...', 'success');
-                    loadAdminDashboard(name);
-                } else {
-                    await auth.signOut();
-                    showAlert('Access Denied: You do not have administrator privileges.', 'danger');
+                            // Check if user is admin
+                            const { isAdmin, name } = await checkAdminStatus(user);
+                            if (isAdmin) {
+                                showAlert('Success! Loading admin dashboard...', 'success');
+                                loadAdminDashboard(name);
+                            } else {
+                                await auth.signOut();
+                                showAlert('Access Denied: You do not have administrator privileges.', 'danger');
+                            }
+                        } catch (error) {
+                            console.error('Google Sign-In error:', error);
+                            if (error.code === 'auth/popup-closed-by-user') {
+                                showAlert('Sign-in cancelled.', 'warning');
+                            } else {
+                                showAlert('Google Sign-In failed: ' + error.message, 'danger');
+                            }
+                        }
+                    });
                 }
-            } catch (error) {
-                console.error('Google Sign-In error:', error);
-                if (error.code === 'auth/popup-closed-by-user') {
-                    showAlert('Sign-in cancelled.', 'warning');
-                } else {
-                    showAlert('Google Sign-In failed: ' + error.message, 'danger');
-                }
-            }
-        });
 
                 // Load Admin Dashboard
                 function loadAdminDashboard(adminName) {
