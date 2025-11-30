@@ -897,11 +897,13 @@
                 }
             });
             
-            // Check authentication
-            if (typeof auth === 'undefined') {
+            // Check authentication - use global auth from common.js
+            const auth = window.auth || firebase.auth();
+            if (!auth) {
                 console.error('Firebase auth not initialized!');
                 setTimeout(() => {
-                    if (typeof auth !== 'undefined') {
+                    const retryAuth = window.auth || firebase.auth();
+                    if (retryAuth) {
                         initializePage();
                     } else {
                         console.error('Firebase auth still not available after timeout');
@@ -912,12 +914,16 @@
             }
             
             function initializePage() {
+                // Get auth instance (use global from common.js)
+                const auth = window.auth || firebase.auth();
+                
                 debugLog('[REGISTER-TOOLS] ====== initializePage() called ======');
                 debugLog(`[REGISTER-TOOLS] Timestamp: ${new Date().toISOString()}`);
                 debugLog(`[REGISTER-TOOLS] localStorage.authVerified: ${localStorage.getItem('authVerified')}`);
                 debugLog(`[REGISTER-TOOLS] localStorage.fullName: ${localStorage.getItem('fullName')}`);
                 debugLog(`[REGISTER-TOOLS] localStorage.techniciansId: ${localStorage.getItem('techniciansId')}`);
                 debugLog(`[REGISTER-TOOLS] auth.currentUser (sync): ${auth ? (auth.currentUser ? auth.currentUser.email : 'null') : 'auth not initialized'}`);
+                debugLog(`[REGISTER-TOOLS] Using auth instance: ${auth === window.auth ? 'global (common.js)' : 'local (firebase.auth())'}`);
                 
                 let initializationComplete = false;
                 
