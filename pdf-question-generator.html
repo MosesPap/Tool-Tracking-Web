@@ -524,19 +524,43 @@
                     db = firebase.firestore();
                     firebaseInitialized = true;
                     
-                    // Verify auth in background and load from Firestore if available
-                    auth.onAuthStateChanged((user) => {
-                        currentUser = user;
-                        if (user) {
-                            loadApiKeyFromFirestore(user.uid);
+                    // Verify auth in background - but wait a bit for Firebase to restore session
+                    setTimeout(() => {
+                        // First check currentUser (synchronous check)
+                        const currentUser = auth.currentUser;
+                        if (currentUser) {
+                            console.log('Auth confirmed via currentUser:', currentUser.email);
+                            loadApiKeyFromFirestore(currentUser.uid);
                             localStorage.setItem('authVerified', 'true');
-                        } else {
-                            console.log('Background auth check failed - redirecting');
-                            localStorage.removeItem('authVerified');
-                            localStorage.removeItem('fullName');
-                            window.location.href = 'main-menu.html';
+                            return;
                         }
-                    });
+                        
+                        // If currentUser is null, wait for onAuthStateChanged (but only redirect if truly logged out)
+                        let authCheckComplete = false;
+                        const unsubscribe = auth.onAuthStateChanged((user) => {
+                            if (authCheckComplete) return; // Only process first event
+                            authCheckComplete = true;
+                            
+                            currentUser = user;
+                            if (user) {
+                                console.log('Auth confirmed via onAuthStateChanged:', user.email);
+                                loadApiKeyFromFirestore(user.uid);
+                                localStorage.setItem('authVerified', 'true');
+                            } else {
+                                // Only redirect if we're certain user is logged out
+                                console.log('Background auth check: no user found after delay');
+                                setTimeout(() => {
+                                    if (!auth.currentUser) {
+                                        console.log('User confirmed logged out - redirecting');
+                                        localStorage.removeItem('authVerified');
+                                        localStorage.removeItem('fullName');
+                                        window.location.href = 'main-menu.html';
+                                    }
+                                }, 500);
+                            }
+                            unsubscribe(); // Clean up listener
+                        });
+                    }, 300); // Give Firebase 300ms to restore session
                 } catch (error) {
                     console.warn('Firebase not available, using localStorage only:', error);
                 }
@@ -546,14 +570,19 @@
             console.log('No auth flag found - waiting for Firebase auth');
             if (typeof firebase !== 'undefined') {
                 try {
+                    console.log('[PDF-QG] Firebase available, initializing auth and db (no flag path)...');
                     auth = firebase.auth();
                     db = firebase.firestore();
                     firebaseInitialized = true;
+                    console.log('[PDF-QG] Firebase initialized, auth.currentUser (sync):', auth.currentUser ? auth.currentUser.email : 'null');
                     
                     // Listen for auth state changes
+                    console.log('[PDF-QG] Setting up onAuthStateChanged listener (no flag path)...');
                     auth.onAuthStateChanged((user) => {
+                        console.log('[PDF-QG] onAuthStateChanged fired (no flag path), user:', user ? user.email : 'null');
                         currentUser = user;
                         if (user && !user.emailVerified) {
+                            console.log('[PDF-QG] ✗ User email not verified, signing out...');
                             auth.signOut();
                             localStorage.removeItem('authVerified');
                             window.location.href = 'main-menu.html';
@@ -561,23 +590,27 @@
                         }
                         
                         if (user) {
+                            console.log('[PDF-QG] ✓ User authenticated, setting flags and loading API key...');
                             localStorage.setItem('authVerified', 'true');
                             if (!localStorage.getItem('fullName')) {
                                 localStorage.setItem('fullName', user.email);
+                                console.log('[PDF-QG] Stored fullName:', user.email);
                             }
                             loadApiKeyFromFirestore(user.uid);
                         } else {
+                            console.log('[PDF-QG] ✗ No user found, using localStorage fallback');
                             localStorage.removeItem('authVerified');
                             // Fallback to localStorage if not logged in
                             loadApiKeyFromLocalStorage();
                         }
                     });
                 } catch (error) {
-                    console.warn('Firebase not available, using localStorage only:', error);
+                    console.warn('[PDF-QG] Firebase not available, using localStorage only:', error);
                     loadApiKeyFromLocalStorage();
                 }
             } else {
                 // Firebase not available, use localStorage only
+                console.log('[PDF-QG] Firebase not available, using localStorage only');
                 loadApiKeyFromLocalStorage();
             }
         }

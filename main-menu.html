@@ -253,27 +253,42 @@
         let previousOutToolsData = [];
 
         // Check authentication state
+        console.log('[MAIN-MENU] Page loaded, checking auth state...');
+        console.log('[MAIN-MENU] localStorage.authVerified:', localStorage.getItem('authVerified'));
+        console.log('[MAIN-MENU] localStorage.fullName:', localStorage.getItem('fullName'));
+        console.log('[MAIN-MENU] auth.currentUser (sync):', auth.currentUser ? auth.currentUser.email : 'null');
+        
         auth.onAuthStateChanged(function(user) {
+            console.log('[MAIN-MENU] onAuthStateChanged fired, user:', user ? user.email : 'null');
+            console.log('[MAIN-MENU] user.emailVerified:', user ? user.emailVerified : 'N/A');
+            
             if (user && !user.emailVerified) {
                 // Force sign out if user is not verified
+                console.log('[MAIN-MENU] User email not verified, signing out...');
                 auth.signOut();
                 window.location.href = 'index.html';
                 return;
             }
             
             if (user) {
+                console.log('[MAIN-MENU] User authenticated, setting authVerified flag');
                 // User is logged in - set auth verification flag for seamless navigation
                 localStorage.setItem('authVerified', 'true');
+                console.log('[MAIN-MENU] authVerified flag set to true');
                 
                 // Fetch data and show menu
+                console.log('[MAIN-MENU] Fetching technician data from Firestore...');
                 db.collection('technicians').doc(user.uid)
                     .get()
                     .then(doc => {
+                        console.log('[MAIN-MENU] Firestore doc exists:', doc.exists);
                         if (doc.exists) {
                             const technicianData = doc.data();
                             const name = technicianData.fullName || user.email;
                             localStorage.setItem('techniciansId', doc.id);
                             localStorage.setItem('fullName', name);
+                            console.log('[MAIN-MENU] Stored fullName:', name);
+                            console.log('[MAIN-MENU] Stored techniciansId:', doc.id);
                             document.getElementById('fullName').textContent = name;
                             
                             // Check if user is admin
@@ -292,16 +307,21 @@
                                 }
                             }
                         } else {
+                            console.log('[MAIN-MENU] Technician doc does not exist, using email');
                             document.getElementById('fullName').textContent = user.email;
                         }
+                        console.log('[MAIN-MENU] Calling updatePreviousOutToolsCount()');
                         updatePreviousOutToolsCount();
                     }).catch(error => {
-                        console.error('Error fetching technician data:', error);
+                        console.error('[MAIN-MENU] Error fetching technician data:', error);
                         document.getElementById('fullName').textContent = user.email;
                         updatePreviousOutToolsCount();
                     });
             } else {
                 // User is not logged in - redirect to index.html
+                console.log('[MAIN-MENU] No user found, redirecting to index.html');
+                localStorage.removeItem('authVerified');
+                localStorage.removeItem('fullName');
                 window.location.href = 'index.html';
             }
         });

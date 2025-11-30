@@ -536,57 +536,122 @@
             }
             
             function initializePage() {
+                console.log('[PREVIOUS-OUT] ====== initializePage() called ======');
+                console.log('[PREVIOUS-OUT] Timestamp:', new Date().toISOString());
+                console.log('[PREVIOUS-OUT] localStorage.authVerified:', localStorage.getItem('authVerified'));
+                console.log('[PREVIOUS-OUT] localStorage.fullName:', localStorage.getItem('fullName'));
+                console.log('[PREVIOUS-OUT] auth.currentUser (sync):', auth ? (auth.currentUser ? auth.currentUser.email : 'null') : 'auth not initialized');
+                
                 let initializationComplete = false;
                 
                 // Function to complete page initialization
                 function completeInitialization() {
-                    if (initializationComplete) return;
+                    if (initializationComplete) {
+                        console.log('[PREVIOUS-OUT] completeInitialization() already called, skipping');
+                        return;
+                    }
                     initializationComplete = true;
                     
-                    console.log('Initializing previous-out page');
+                    console.log('[PREVIOUS-OUT] ====== completeInitialization() called ======');
+                    console.log('[PREVIOUS-OUT] Timestamp:', new Date().toISOString());
                     
                     // Update technician name using common.js function
                     if (typeof updateLoggedInTechnician === 'function') {
+                        console.log('[PREVIOUS-OUT] Calling updateLoggedInTechnician()');
                         updateLoggedInTechnician();
+                    } else {
+                        console.warn('[PREVIOUS-OUT] updateLoggedInTechnician() function not found');
                     }
                     
                     // Update online status
                     if (typeof updateOnlineStatus === 'function') {
+                        console.log('[PREVIOUS-OUT] Calling updateOnlineStatus()');
                         updateOnlineStatus();
+                    } else {
+                        console.warn('[PREVIOUS-OUT] updateOnlineStatus() function not found');
                     }
                     
                     // Set up event listeners
+                    console.log('[PREVIOUS-OUT] Setting up event listeners...');
                     setupEventListeners();
+                    console.log('[PREVIOUS-OUT] Event listeners set up');
+                    console.log('[PREVIOUS-OUT] completeInitialization() completed');
                 }
                 
                 // SEAMLESS NAVIGATION: Check localStorage first - if flag exists, proceed IMMEDIATELY
                 const authVerified = localStorage.getItem('authVerified');
                 const storedFullName = localStorage.getItem('fullName');
                 
+                console.log('[PREVIOUS-OUT] Checking auth flags...');
+                console.log('[PREVIOUS-OUT] authVerified:', authVerified);
+                console.log('[PREVIOUS-OUT] storedFullName:', storedFullName);
+                
                 if (authVerified === 'true' && storedFullName) {
                     // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
-                    console.log('Auth verified flag found - proceeding immediately');
+                    console.log('[PREVIOUS-OUT] ✓ Auth verified flag found - proceeding immediately');
+                    console.log('[PREVIOUS-OUT] Calling completeInitialization() immediately...');
                     completeInitialization();
                     
-                    // Verify auth in background (non-blocking)
-                    auth.onAuthStateChanged(function(user) {
-                        if (user) {
+                    // Verify auth in background (non-blocking) - but wait a bit for Firebase to restore session
+                    console.log('[PREVIOUS-OUT] Scheduling background auth verification (300ms delay)...');
+                    setTimeout(() => {
+                        console.log('[PREVIOUS-OUT] Background auth check starting...');
+                        // First check currentUser (synchronous check)
+                        const currentUser = auth.currentUser;
+                        console.log('[PREVIOUS-OUT] auth.currentUser (after delay):', currentUser ? currentUser.email : 'null');
+                        if (currentUser) {
+                            console.log('[PREVIOUS-OUT] ✓ Auth confirmed via currentUser:', currentUser.email);
                             localStorage.setItem('authVerified', 'true');
-                        } else {
-                            console.log('Background auth check failed - redirecting');
-                            localStorage.removeItem('authVerified');
-                            localStorage.removeItem('fullName');
-                            window.location.href = 'main-menu.html';
+                            return;
                         }
-                    });
+                        
+                        // If currentUser is null, wait for onAuthStateChanged (but only redirect if truly logged out)
+                        console.log('[PREVIOUS-OUT] currentUser is null, setting up onAuthStateChanged listener...');
+                        let authCheckComplete = false;
+                        const unsubscribe = auth.onAuthStateChanged(function(user) {
+                            console.log('[PREVIOUS-OUT] onAuthStateChanged fired in background check, user:', user ? user.email : 'null');
+                            if (authCheckComplete) {
+                                console.log('[PREVIOUS-OUT] Background check already completed, ignoring event');
+                                return; // Only process first event
+                            }
+                            authCheckComplete = true;
+                            
+                            if (user) {
+                                console.log('[PREVIOUS-OUT] ✓ Auth confirmed via onAuthStateChanged:', user.email);
+                                localStorage.setItem('authVerified', 'true');
+                            } else {
+                                // Only redirect if we're certain user is logged out
+                                console.log('[PREVIOUS-OUT] ⚠ Background auth check: no user found after delay');
+                                console.log('[PREVIOUS-OUT] Scheduling double-check (500ms delay)...');
+                                setTimeout(() => {
+                                    const doubleCheckUser = auth.currentUser;
+                                    console.log('[PREVIOUS-OUT] Double-check auth.currentUser:', doubleCheckUser ? doubleCheckUser.email : 'null');
+                                    if (!doubleCheckUser) {
+                                        console.log('[PREVIOUS-OUT] ✗ User confirmed logged out - redirecting to main-menu.html');
+                                        localStorage.removeItem('authVerified');
+                                        localStorage.removeItem('fullName');
+                                        window.location.href = 'main-menu.html';
+                                    } else {
+                                        console.log('[PREVIOUS-OUT] ✓ User found in double-check, staying on page');
+                                    }
+                                }, 500);
+                            }
+                            unsubscribe(); // Clean up listener
+                            console.log('[PREVIOUS-OUT] Background auth check completed, listener unsubscribed');
+                        });
+                    }, 300); // Give Firebase 300ms to restore session
                     
+                    console.log('[PREVIOUS-OUT] Returning from initializePage() - page initialized immediately');
                     return; // Exit - page initialized, no delays
                 }
                 
                 // No stored flag - wait for Firebase auth
-                console.log('No auth flag found - waiting for Firebase auth');
+                console.log('[PREVIOUS-OUT] ✗ No auth flag found - waiting for Firebase auth');
+                console.log('[PREVIOUS-OUT] Setting up onAuthStateChanged listener (no flag path)...');
                 auth.onAuthStateChanged(function(user) {
+                    console.log('[PREVIOUS-OUT] onAuthStateChanged fired (no flag path), user:', user ? user.email : 'null');
                     if (user && !user.emailVerified) {
+                        console.log('[PREVIOUS-OUT] ✗ User email not verified, signing out...');
                         auth.signOut();
                         localStorage.removeItem('authVerified');
                         window.location.href = 'main-menu.html';
@@ -594,12 +659,15 @@
                     }
                     
                     if (user) {
+                        console.log('[PREVIOUS-OUT] ✓ User authenticated, setting flags and initializing...');
                         localStorage.setItem('authVerified', 'true');
                         if (!localStorage.getItem('fullName')) {
                             localStorage.setItem('fullName', user.email);
+                            console.log('[PREVIOUS-OUT] Stored fullName:', user.email);
                         }
                         completeInitialization();
                     } else {
+                        console.log('[PREVIOUS-OUT] ✗ No user found, redirecting to main-menu.html');
                         localStorage.removeItem('authVerified');
                         window.location.href = 'main-menu.html';
                     }

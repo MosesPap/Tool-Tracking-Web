@@ -615,46 +615,105 @@
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', async function() {
+            console.log('[MY-TOOLS] ====== DOMContentLoaded fired ======');
+            console.log('[MY-TOOLS] Timestamp:', new Date().toISOString());
+            console.log('[MY-TOOLS] localStorage.authVerified:', localStorage.getItem('authVerified'));
+            console.log('[MY-TOOLS] localStorage.fullName:', localStorage.getItem('fullName'));
+            console.log('[MY-TOOLS] auth.currentUser (sync):', auth ? (auth.currentUser ? auth.currentUser.email : 'null') : 'auth not initialized');
+            
             let initializationComplete = false;
             
             // Function to complete page initialization
             async function completeInitialization() {
-                if (initializationComplete) return;
+                if (initializationComplete) {
+                    console.log('[MY-TOOLS] completeInitialization() already called, skipping');
+                    return;
+                }
                 initializationComplete = true;
                 
-                console.log('Initializing my-tools page');
+                console.log('[MY-TOOLS] ====== completeInitialization() called ======');
+                console.log('[MY-TOOLS] Timestamp:', new Date().toISOString());
                 // Show collection selection modal first (matching index.html behavior)
+                console.log('[MY-TOOLS] Calling showCollectionSelectionDialog()...');
                 await showCollectionSelectionDialog();
+                console.log('[MY-TOOLS] Collection selection dialog shown');
+                console.log('[MY-TOOLS] completeInitialization() completed');
             }
             
             // SEAMLESS NAVIGATION: Check localStorage first - if flag exists, proceed IMMEDIATELY
             const authVerified = localStorage.getItem('authVerified');
             const storedFullName = localStorage.getItem('fullName');
             
+            console.log('[MY-TOOLS] Checking auth flags...');
+            console.log('[MY-TOOLS] authVerified:', authVerified);
+            console.log('[MY-TOOLS] storedFullName:', storedFullName);
+            
             if (authVerified === 'true' && storedFullName) {
                 // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
-                console.log('Auth verified flag found - proceeding immediately');
+                console.log('[MY-TOOLS] ✓ Auth verified flag found - proceeding immediately');
+                console.log('[MY-TOOLS] Calling completeInitialization() immediately...');
                 await completeInitialization();
                 
-                // Verify auth in background (non-blocking)
-                auth.onAuthStateChanged(async function(user) {
-                    if (user) {
+                // Verify auth in background (non-blocking) - but wait a bit for Firebase to restore session
+                console.log('[MY-TOOLS] Scheduling background auth verification (300ms delay)...');
+                setTimeout(() => {
+                    console.log('[MY-TOOLS] Background auth check starting...');
+                    // First check currentUser (synchronous check)
+                    const currentUser = auth.currentUser;
+                    console.log('[MY-TOOLS] auth.currentUser (after delay):', currentUser ? currentUser.email : 'null');
+                    if (currentUser) {
+                        console.log('[MY-TOOLS] ✓ Auth confirmed via currentUser:', currentUser.email);
                         localStorage.setItem('authVerified', 'true');
-                    } else {
-                        console.log('Background auth check failed - redirecting');
-                        localStorage.removeItem('authVerified');
-                        localStorage.removeItem('fullName');
-                        window.location.href = 'main-menu.html';
+                        return;
                     }
-                });
+                    
+                    // If currentUser is null, wait for onAuthStateChanged (but only redirect if truly logged out)
+                    console.log('[MY-TOOLS] currentUser is null, setting up onAuthStateChanged listener...');
+                    let authCheckComplete = false;
+                    const unsubscribe = auth.onAuthStateChanged(async function(user) {
+                        console.log('[MY-TOOLS] onAuthStateChanged fired in background check, user:', user ? user.email : 'null');
+                        if (authCheckComplete) {
+                            console.log('[MY-TOOLS] Background check already completed, ignoring event');
+                            return; // Only process first event
+                        }
+                        authCheckComplete = true;
+                        
+                        if (user) {
+                            console.log('[MY-TOOLS] ✓ Auth confirmed via onAuthStateChanged:', user.email);
+                            localStorage.setItem('authVerified', 'true');
+                        } else {
+                            // Only redirect if we're certain user is logged out
+                            console.log('[MY-TOOLS] ⚠ Background auth check: no user found after delay');
+                            console.log('[MY-TOOLS] Scheduling double-check (500ms delay)...');
+                            setTimeout(() => {
+                                const doubleCheckUser = auth.currentUser;
+                                console.log('[MY-TOOLS] Double-check auth.currentUser:', doubleCheckUser ? doubleCheckUser.email : 'null');
+                                if (!doubleCheckUser) {
+                                    console.log('[MY-TOOLS] ✗ User confirmed logged out - redirecting to main-menu.html');
+                                    localStorage.removeItem('authVerified');
+                                    localStorage.removeItem('fullName');
+                                    window.location.href = 'main-menu.html';
+                                } else {
+                                    console.log('[MY-TOOLS] ✓ User found in double-check, staying on page');
+                                }
+                            }, 500);
+                        }
+                        unsubscribe(); // Clean up listener
+                        console.log('[MY-TOOLS] Background auth check completed, listener unsubscribed');
+                    });
+                }, 300); // Give Firebase 300ms to restore session
                 
+                console.log('[MY-TOOLS] Returning from DOMContentLoaded - page initialized immediately');
                 return; // Exit - page initialized, no delays
             }
             
             // No stored flag - wait for Firebase auth
-            console.log('No auth flag found - waiting for Firebase auth');
+            console.log('[MY-TOOLS] ✗ No auth flag found - waiting for Firebase auth');
+            console.log('[MY-TOOLS] Setting up onAuthStateChanged listener (no flag path)...');
             auth.onAuthStateChanged(async function(user) {
+                console.log('[MY-TOOLS] onAuthStateChanged fired (no flag path), user:', user ? user.email : 'null');
                 if (user && !user.emailVerified) {
+                    console.log('[MY-TOOLS] ✗ User email not verified, signing out...');
                     auth.signOut();
                     localStorage.removeItem('authVerified');
                     window.location.href = 'main-menu.html';
@@ -662,12 +721,15 @@
                 }
                 
                 if (user) {
+                    console.log('[MY-TOOLS] ✓ User authenticated, setting flags and initializing...');
                     localStorage.setItem('authVerified', 'true');
                     if (!localStorage.getItem('fullName')) {
                         localStorage.setItem('fullName', user.email);
+                        console.log('[MY-TOOLS] Stored fullName:', user.email);
                     }
                     await completeInitialization();
                 } else {
+                    console.log('[MY-TOOLS] ✗ No user found, redirecting to main-menu.html');
                     localStorage.removeItem('authVerified');
                     window.location.href = 'main-menu.html';
                 }

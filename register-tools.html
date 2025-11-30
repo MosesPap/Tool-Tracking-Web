@@ -725,87 +725,162 @@
             }
             
             function initializePage() {
+                console.log('[REGISTER-TOOLS] ====== initializePage() called ======');
+                console.log('[REGISTER-TOOLS] Timestamp:', new Date().toISOString());
+                console.log('[REGISTER-TOOLS] localStorage.authVerified:', localStorage.getItem('authVerified'));
+                console.log('[REGISTER-TOOLS] localStorage.fullName:', localStorage.getItem('fullName'));
+                console.log('[REGISTER-TOOLS] localStorage.techniciansId:', localStorage.getItem('techniciansId'));
+                console.log('[REGISTER-TOOLS] auth.currentUser (sync):', auth ? (auth.currentUser ? auth.currentUser.email : 'null') : 'auth not initialized');
+                
                 let initializationComplete = false;
                 
                 // Function to complete page initialization
                 function completeInitialization(user) {
-                    if (initializationComplete) return;
+                    if (initializationComplete) {
+                        console.log('[REGISTER-TOOLS] completeInitialization() already called, skipping');
+                        return;
+                    }
                     initializationComplete = true;
                     
-                    console.log('Initializing page, user:', user ? user.email : 'using stored data');
+                    console.log('[REGISTER-TOOLS] ====== completeInitialization() called ======');
+                    console.log('[REGISTER-TOOLS] User provided:', user ? user.email : 'using stored data');
+                    console.log('[REGISTER-TOOLS] Timestamp:', new Date().toISOString());
                     
                     // Update technician name
                     const fullName = localStorage.getItem('fullName') || (user ? user.email : 'Unknown');
+                    console.log('[REGISTER-TOOLS] Setting technician name to:', fullName);
                     const registerScreenNameElem = document.getElementById('registerScreenName');
                     if (registerScreenNameElem) {
                         registerScreenNameElem.textContent = fullName;
+                        console.log('[REGISTER-TOOLS] Technician name element updated');
+                    } else {
+                        console.warn('[REGISTER-TOOLS] registerScreenNameElem not found!');
                     }
                     
                     // Update using common.js function if available
                     if (typeof updateLoggedInTechnician === 'function') {
+                        console.log('[REGISTER-TOOLS] Calling updateLoggedInTechnician()');
                         updateLoggedInTechnician();
+                    } else {
+                        console.warn('[REGISTER-TOOLS] updateLoggedInTechnician() function not found');
                     }
                     
                     // Set up event listeners (including back button)
+                    console.log('[REGISTER-TOOLS] Setting up event listeners...');
                     setupEventListeners();
+                    console.log('[REGISTER-TOOLS] Event listeners set up');
                     
                     // Check if work location is already selected
                     const currentLocation = selectedWorkLocation || window.selectedWorkLocation || localStorage.getItem('selectedWorkLocation');
+                    console.log('[REGISTER-TOOLS] Current work location:', currentLocation);
                     if (currentLocation) {
                         selectedWorkLocation = currentLocation;
                         window.selectedWorkLocation = currentLocation;
                         updateWorkLocationLabel();
+                        console.log('[REGISTER-TOOLS] Work location set and label updated');
                     }
                     
                     // Show location selection modal
+                    console.log('[REGISTER-TOOLS] Scheduling location selection modal (100ms delay)...');
                     setTimeout(() => {
+                        console.log('[REGISTER-TOOLS] Attempting to show location selection modal...');
                         if (typeof showLocationSelectionModalForRegisterTools === 'function') {
                             try {
                                 showLocationSelectionModalForRegisterTools();
+                                console.log('[REGISTER-TOOLS] Location selection modal shown successfully');
                             } catch (error) {
-                                console.error('Error showing location selection modal:', error);
+                                console.error('[REGISTER-TOOLS] Error showing location selection modal:', error);
                                 if (typeof showHelicopterModelSelectionModal === 'function') {
+                                    console.log('[REGISTER-TOOLS] Falling back to helicopter model selection modal');
                                     showHelicopterModelSelectionModal();
                                 }
                             }
                         } else {
+                            console.warn('[REGISTER-TOOLS] showLocationSelectionModalForRegisterTools function not found');
                             if (typeof showHelicopterModelSelectionModal === 'function') {
+                                console.log('[REGISTER-TOOLS] Using helicopter model selection modal instead');
                                 showHelicopterModelSelectionModal();
                             }
                         }
                     }, 100);
+                    console.log('[REGISTER-TOOLS] completeInitialization() completed');
                 }
                 
                 // SEAMLESS NAVIGATION: Check localStorage first - if flag exists, proceed IMMEDIATELY
                 const authVerified = localStorage.getItem('authVerified');
                 const storedFullName = localStorage.getItem('fullName');
                 
+                console.log('[REGISTER-TOOLS] Checking auth flags...');
+                console.log('[REGISTER-TOOLS] authVerified:', authVerified);
+                console.log('[REGISTER-TOOLS] storedFullName:', storedFullName);
+                
                 if (authVerified === 'true' && storedFullName) {
                     // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
-                    console.log('Auth verified flag found - proceeding immediately');
+                    console.log('[REGISTER-TOOLS] ✓ Auth verified flag found - proceeding immediately');
+                    console.log('[REGISTER-TOOLS] Calling completeInitialization() immediately...');
                     completeInitialization(null); // Pass null, we'll use stored data
                     
-                    // Verify auth in background (non-blocking)
-                    auth.onAuthStateChanged(function(user) {
-                        if (user) {
-                            // Auth confirmed - update flag if needed
+                    // Verify auth in background (non-blocking) - but wait a bit for Firebase to restore session
+                    console.log('[REGISTER-TOOLS] Scheduling background auth verification (300ms delay)...');
+                    setTimeout(() => {
+                        console.log('[REGISTER-TOOLS] Background auth check starting...');
+                        // First check currentUser (synchronous check)
+                        const currentUser = auth.currentUser;
+                        console.log('[REGISTER-TOOLS] auth.currentUser (after delay):', currentUser ? currentUser.email : 'null');
+                        if (currentUser) {
+                            console.log('[REGISTER-TOOLS] ✓ Auth confirmed via currentUser:', currentUser.email);
                             localStorage.setItem('authVerified', 'true');
-                        } else {
-                            // Auth failed - clear flags and redirect
-                            console.log('Background auth check failed - redirecting');
-                            localStorage.removeItem('authVerified');
-                            localStorage.removeItem('fullName');
-                            window.location.href = 'main-menu.html';
+                            return;
                         }
-                    });
+                        
+                        // If currentUser is null, wait for onAuthStateChanged (but only redirect if truly logged out)
+                        console.log('[REGISTER-TOOLS] currentUser is null, setting up onAuthStateChanged listener...');
+                        let authCheckComplete = false;
+                        const unsubscribe = auth.onAuthStateChanged(function(user) {
+                            console.log('[REGISTER-TOOLS] onAuthStateChanged fired in background check, user:', user ? user.email : 'null');
+                            if (authCheckComplete) {
+                                console.log('[REGISTER-TOOLS] Background check already completed, ignoring event');
+                                return; // Only process first event
+                            }
+                            authCheckComplete = true;
+                            
+                            if (user) {
+                                console.log('[REGISTER-TOOLS] ✓ Auth confirmed via onAuthStateChanged:', user.email);
+                                localStorage.setItem('authVerified', 'true');
+                            } else {
+                                // Only redirect if we're certain user is logged out (not just Firebase restoring)
+                                console.log('[REGISTER-TOOLS] ⚠ Background auth check: no user found after delay');
+                                console.log('[REGISTER-TOOLS] Scheduling double-check (500ms delay)...');
+                                // Double-check by waiting a bit more
+                                setTimeout(() => {
+                                    const doubleCheckUser = auth.currentUser;
+                                    console.log('[REGISTER-TOOLS] Double-check auth.currentUser:', doubleCheckUser ? doubleCheckUser.email : 'null');
+                                    if (!doubleCheckUser) {
+                                        console.log('[REGISTER-TOOLS] ✗ User confirmed logged out - redirecting to main-menu.html');
+                                        localStorage.removeItem('authVerified');
+                                        localStorage.removeItem('fullName');
+                                        window.location.href = 'main-menu.html';
+                                    } else {
+                                        console.log('[REGISTER-TOOLS] ✓ User found in double-check, staying on page');
+                                    }
+                                }, 500);
+                            }
+                            unsubscribe(); // Clean up listener
+                            console.log('[REGISTER-TOOLS] Background auth check completed, listener unsubscribed');
+                        });
+                    }, 300); // Give Firebase 300ms to restore session
                     
+                    console.log('[REGISTER-TOOLS] Returning from initializePage() - page initialized immediately');
                     return; // Exit - page initialized, no delays
                 }
                 
                 // No stored flag - wait for Firebase auth (only if no stored data)
-                console.log('No auth flag found - waiting for Firebase auth');
+                console.log('[REGISTER-TOOLS] ✗ No auth flag found - waiting for Firebase auth');
+                console.log('[REGISTER-TOOLS] Setting up onAuthStateChanged listener (no flag path)...');
                 auth.onAuthStateChanged(function(user) {
+                    console.log('[REGISTER-TOOLS] onAuthStateChanged fired (no flag path), user:', user ? user.email : 'null');
                     if (user && !user.emailVerified) {
+                        console.log('[REGISTER-TOOLS] ✗ User email not verified, signing out...');
                         auth.signOut();
                         localStorage.removeItem('authVerified');
                         window.location.href = 'main-menu.html';
@@ -813,13 +888,15 @@
                     }
                     
                     if (user) {
+                        console.log('[REGISTER-TOOLS] ✓ User authenticated, setting flags and initializing...');
                         localStorage.setItem('authVerified', 'true');
                         if (!localStorage.getItem('fullName')) {
                             localStorage.setItem('fullName', user.email);
+                            console.log('[REGISTER-TOOLS] Stored fullName:', user.email);
                         }
                         completeInitialization(user);
                     } else {
-                        // No user - redirect to main menu
+                        console.log('[REGISTER-TOOLS] ✗ No user found, redirecting to main-menu.html');
                         localStorage.removeItem('authVerified');
                         window.location.href = 'main-menu.html';
                     }
