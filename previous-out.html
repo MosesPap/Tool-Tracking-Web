@@ -858,13 +858,14 @@
                     return;
                 }
                 
-                // Get today's start time in local timezone
+                // Get today's start time in local timezone (00:00:00 of today)
                 const currentTime = new Date();
                 const today = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate());
+                today.setHours(0, 0, 0, 0); // Ensure it's exactly midnight
                 console.log('loadPreviousOutTools: Today start time (local):', today.toISOString());
                 console.log('loadPreviousOutTools: Today start time (local date):', today.toDateString());
                 
-                // Filter tools from previous days (not today)
+                // Filter tools from previous days ONLY (strictly exclude today's tools)
                 const previousTools = snapshot.docs.filter(doc => {
                     const data = doc.data();
                     const timestamp = data.timestamp;
@@ -890,17 +891,31 @@
                         }
                         else {
                             console.log('loadPreviousOutTools: Tool', doc.id, 'has unsupported timestamp format');
-                            return false;
+                            return false; // Exclude tools without valid timestamps
                         }
                         
-                        // Compare dates in local timezone
+                        // Normalize tool date to start of day in local timezone
                         const toolDateLocal = new Date(toolDate.getFullYear(), toolDate.getMonth(), toolDate.getDate());
-                        const isPrevious = toolDateLocal < today;
-                        console.log('loadPreviousOutTools: Tool', doc.id, 'date (UTC):', toolDate.toISOString(), 'date (local):', toolDateLocal.toDateString(), 'isPrevious:', isPrevious);
+                        toolDateLocal.setHours(0, 0, 0, 0);
+                        
+                        // Normalize today to start of day in local timezone
+                        const todayLocal = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                        todayLocal.setHours(0, 0, 0, 0);
+                        
+                        // Strict comparison: only include tools from dates STRICTLY BEFORE today
+                        // This ensures today's tools are excluded
+                        const isPrevious = toolDateLocal.getTime() < todayLocal.getTime();
+                        
+                        console.log('loadPreviousOutTools: Tool', doc.id, 
+                            'toolDate (UTC):', toolDate.toISOString(), 
+                            'toolDateLocal:', toolDateLocal.toDateString(),
+                            'todayLocal:', todayLocal.toDateString(), 
+                            'isPrevious:', isPrevious);
+                        
                         return isPrevious;
                     }
-                    console.log('loadPreviousOutTools: Tool', doc.id, 'has no timestamp');
-                    return false;
+                    console.log('loadPreviousOutTools: Tool', doc.id, 'has no timestamp - excluding');
+                    return false; // Exclude tools without timestamps
                 });
                 
                 console.log('loadPreviousOutTools: Previous tools count:', previousTools.length);
