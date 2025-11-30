@@ -177,6 +177,36 @@
             opacity: 0.9;
         }
 
+        /* Back to Menu button 3D interactive Grey */
+        .back-to-menu-btn {
+            padding: 6px 12px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            border-radius: 12px;
+            border: 2px solid #bdbdbd;
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
+            color: #333;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
+            cursor: pointer;
+            white-space: nowrap;
+            transform: perspective(1000px) rotateX(0deg);
+        }
+
+        .back-to-menu-btn:hover {
+            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%);
+            border-color: #adadad;
+            transform: perspective(1000px) rotateX(5deg) translateY(-2px);
+            box-shadow: 0 4px 12px rgba(189, 189, 189, 0.4),
+                        0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .back-to-menu-btn:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(0px);
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
+        }
+
         .admin-content {
             padding: 30px 0;
         }
@@ -1074,9 +1104,9 @@
                 <div>
                     <h1><i class="fas fa-user-shield"></i> Tool Administrator</h1>
                     <p class="admin-welcome mb-2">Welcome, <span id="adminName">Admin</span></p>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-light btn-admin-action" onclick="location.href='index.html'">
-                            <i class="fas fa-home"></i> Main App
+                    <div class="d-flex gap-2 align-items-center">
+                        <button id="backToMenuBtn" class="back-to-menu-btn" onclick="window.location.href='main-menu.html'">
+                            <i class="fas fa-arrow-left"></i> Back to Menu
                         </button>
                         <button class="btn btn-danger btn-admin-action" id="logoutBtn">
                             <i class="fas fa-sign-out-alt"></i> Logout
