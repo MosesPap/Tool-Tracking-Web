@@ -2037,30 +2037,40 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Common Firebase configuration and utilities -->
+    <script src="js/common.js"></script>
 
     <script>
-        // Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyDmI0v_pVt_qFJlsqmw8QlIOi-4VLjyn54",
-            authDomain: "tool-tracking-system-15e84.firebaseapp.com",
-            projectId: "tool-tracking-system-15e84",
-            storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
-            messagingSenderId: "813615362050",
-            appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
-        };
+        // Use global Firebase instances from common.js
+        // Wait for common.js to load
+        document.addEventListener('DOMContentLoaded', function() {
+            function waitForAuth() {
+                const auth = window.auth;
+                const db = window.db;
+                const storage = window.storage;
+                
+                if (!auth || !db || !storage) {
+                    console.log('[ADMIN] Waiting for common.js to load...');
+                    setTimeout(waitForAuth, 50);
+                    return;
+                }
+                
+                console.log('[ADMIN] ✓ Using global Firebase instances from common.js');
+                initializeAdmin(auth, db, storage);
+            }
+            
+            function initializeAdmin(auth, db, storage) {
 
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-        const storage = firebase.storage();
-
-        // DOM Elements
-        const loginSection = document.getElementById('loginSection');
-        const adminDashboard = document.getElementById('adminDashboard');
-        const loginAlert = document.getElementById('loginAlert');
-        const loginForm = document.getElementById('loginForm');
-        const googleSignInBtn = document.getElementById('googleSignInBtn');
+                // DOM Elements
+                const loginSection = document.getElementById('loginSection');
+                const adminDashboard = document.getElementById('adminDashboard');
+                const loginAlert = document.getElementById('loginAlert');
+                const loginForm = document.getElementById('loginForm');
+                const googleSignInBtn = document.getElementById('googleSignInBtn');
+                
+                // Hide login screen by default - use seamless navigation
+                if (loginSection) loginSection.style.display = 'none';
+                if (adminDashboard) adminDashboard.style.display = 'none';
 
         // Show alert message
         function showAlert(message, type = 'danger') {
@@ -2072,10 +2082,11 @@
             }, 5000);
         }
 
-        // Check if user is admin
-        async function checkAdminStatus(user) {
-            try {
-                const doc = await db.collection('technicians').doc(user.uid).get();
+                // Check if user is admin
+                async function checkAdminStatus(user) {
+                    const db = window.db || firebase.firestore();
+                    try {
+                        const doc = await db.collection('technicians').doc(user.uid).get();
                 if (doc.exists) {
                     const userData = doc.data();
                     if (userData.isAdmin === true) {
@@ -2089,15 +2100,17 @@
             }
         }
 
-        // Email/Password Login
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('adminEmail').value.trim();
-            const password = document.getElementById('adminPassword').value;
+                // Email/Password Login (kept for direct access if needed, but normally not used)
+                if (loginForm) {
+                    loginForm.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        const auth = window.auth || firebase.auth();
+                        const email = document.getElementById('adminEmail').value.trim();
+                        const password = document.getElementById('adminPassword').value;
 
-            try {
-                showAlert('Signing in...', 'info');
-                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                        try {
+                            showAlert('Signing in...', 'info');
+                            const userCredential = await auth.signInWithEmailAndPassword(email, password);
                 const user = userCredential.user;
 
                 // Check if user is admin
@@ -2123,12 +2136,14 @@
             }
         });
 
-        // Google Sign-In
-        googleSignInBtn.addEventListener('click', async () => {
-            try {
-                showAlert('Opening Google Sign-In...', 'info');
-                const provider = new firebase.auth.GoogleAuthProvider();
-                const userCredential = await auth.signInWithPopup(provider);
+                // Google Sign-In (kept for direct access if needed, but normally not used)
+                if (googleSignInBtn) {
+                    googleSignInBtn.addEventListener('click', async () => {
+                        const auth = window.auth || firebase.auth();
+                        try {
+                            showAlert('Opening Google Sign-In...', 'info');
+                            const provider = new firebase.auth.GoogleAuthProvider();
+                            const userCredential = await auth.signInWithPopup(provider);
                 const user = userCredential.user;
 
                 // Check if user is admin
@@ -2150,21 +2165,31 @@
             }
         });
 
-        // Load Admin Dashboard
-        function loadAdminDashboard(adminName) {
-            loginSection.style.display = 'none';
-            adminDashboard.style.display = 'block';
-            document.getElementById('adminName').textContent = adminName;
+                // Load Admin Dashboard
+                function loadAdminDashboard(adminName) {
+                    if (loginSection) loginSection.style.display = 'none';
+                    if (adminDashboard) adminDashboard.style.display = 'block';
+                    const adminNameElement = document.getElementById('adminName');
+                    if (adminNameElement) adminNameElement.textContent = adminName;
+                    
+                    // Load all dashboard data
+                    loadStatistics();
+                    loadSettings();
+                    loadUsers();
+                    loadTools();
+                    loadAnalytics();
+                }
+                
+                // Make functions available globally
+                window.checkAdminStatus = checkAdminStatus;
+                window.loadAdminDashboard = loadAdminDashboard;
+            }
             
-            // Load all dashboard data
-            loadStatistics();
-            loadSettings();
-            loadUsers();
-            loadTools();
-            loadAnalytics();
-        }
-
-        // Custom schedule helpers for email frequency
+            // Start waiting for common.js
+            waitForAuth();
+        });
+        
+        // Custom schedule helpers for email frequency (defined outside initializeAdmin)
         const emailCheckFrequencySelect = document.getElementById('emailCheckFrequency');
         const customScheduleContainer = document.getElementById('customScheduleContainer');
         const customScheduleTimeInput = document.getElementById('customScheduleTime');
@@ -2291,6 +2316,7 @@
 
         // Load Statistics
         async function loadStatistics() {
+            const db = window.db || firebase.firestore();
             try {
                 // Total Tools
                 const toolsSnapshot = await db.collection('tools').get();
@@ -2318,6 +2344,7 @@
 
         // Load Settings
         async function loadSettings() {
+            const db = window.db || firebase.firestore();
             try {
                 const doc = await db.collection('settings').doc('admin').get();
                 if (doc.exists) {
@@ -2421,7 +2448,7 @@
                         document.getElementById('lastUpdate').textContent = 'Never';
                     }
                 }
-                document.getElementById('projectId').textContent = firebaseConfig.projectId;
+                document.getElementById('projectId').textContent = 'tool-tracking-system-15e84';
             } catch (error) {
                 console.error('Error loading settings:', error);
             }
@@ -2431,6 +2458,7 @@
         const updatePasswordBtn = document.getElementById('updatePasswordBtn');
         if (updatePasswordBtn) {
             updatePasswordBtn.addEventListener('click', async () => {
+            const db = window.db || firebase.firestore();
             const newPassword = document.getElementById('adminPasswordInput').value.trim();
             if (!newPassword) {
                 alert('Please enter an admin code');
@@ -2457,6 +2485,7 @@
         const updateCooldownBtn = document.getElementById('updateCooldownBtn');
         if (updateCooldownBtn) {
             updateCooldownBtn.addEventListener('click', async () => {
+            const db = window.db || firebase.firestore();
             const cooldownMinutes = parseInt(document.getElementById('cooldownMinutes').value);
             if (!cooldownMinutes || cooldownMinutes < 1) {
                 alert('Please enter a valid number of minutes (minimum 1)');
@@ -2481,6 +2510,7 @@
         const updateEmailTimeBtn = document.getElementById('updateEmailTimeBtn');
         if (updateEmailTimeBtn) {
             updateEmailTimeBtn.addEventListener('click', async () => {
+                const db = window.db || firebase.firestore();
                 const emailTime = document.getElementById('emailNotificationTime').value;
                 if (!emailTime) {
                     alert('Please enter a time for email notifications');
@@ -2505,6 +2535,7 @@
         const updateEmailToleranceBtn = document.getElementById('updateEmailToleranceBtn');
         if (updateEmailToleranceBtn) {
             updateEmailToleranceBtn.addEventListener('click', async () => {
+                const db = window.db || firebase.firestore();
                 const toleranceWindow = parseInt(document.getElementById('emailToleranceWindow').value);
                 
                 if (isNaN(toleranceWindow) || toleranceWindow < 0 || toleranceWindow > 60) {
@@ -2530,6 +2561,7 @@
         const updateEmailFrequencyBtn = document.getElementById('updateEmailFrequencyBtn');
         if (updateEmailFrequencyBtn) {
             updateEmailFrequencyBtn.addEventListener('click', async () => {
+                const db = window.db || firebase.firestore();
                 if (!emailCheckFrequencySelect) {
                     alert('Frequency selector not found');
                     return;
@@ -2584,6 +2616,7 @@
         const updateEmailConfigBtn = document.getElementById('updateEmailConfigBtn');
         if (updateEmailConfigBtn) {
             updateEmailConfigBtn.addEventListener('click', async () => {
+                const db = window.db || firebase.firestore();
                 const emailAccount = document.getElementById('emailAccount').value.trim();
                 const emailAppPassword = document.getElementById('emailAppPassword').value.trim();
                 const emailFrom = document.getElementById('emailFrom').value.trim();
@@ -2633,6 +2666,7 @@
         const updateEmailTemplateBtn = document.getElementById('updateEmailTemplateBtn');
         if (updateEmailTemplateBtn) {
             updateEmailTemplateBtn.addEventListener('click', async () => {
+                const db = window.db || firebase.firestore();
                 const emailSubjectUser = document.getElementById('emailSubjectUser').value.trim();
                 const emailSubjectAdmin = document.getElementById('emailSubjectAdmin').value.trim();
                 const emailBodyUser = document.getElementById('emailBodyUser').value.trim();
@@ -2664,6 +2698,7 @@
         const resetEmailTemplateBtn = document.getElementById('resetEmailTemplateBtn');
         if (resetEmailTemplateBtn) {
             resetEmailTemplateBtn.addEventListener('click', async () => {
+                const db = window.db || firebase.firestore();
                 if (!confirm('Are you sure you want to reset email templates to default values?')) {
                     return;
                 }
@@ -2715,6 +2750,7 @@ Thank you!`;
         const updateTableConfigBtn = document.getElementById('updateTableConfigBtn');
         if (updateTableConfigBtn) {
             updateTableConfigBtn.addEventListener('click', async () => {
+                const db = window.db || firebase.firestore();
                 try {
                     // Get user table columns
                     const userTableColumns = {
@@ -2757,6 +2793,7 @@ Thank you!`;
 
         // Load Users
         async function loadUsers() {
+            const db = window.db || firebase.firestore();
             const tableBody = document.getElementById('usersTableBody');
             const mobileCards = document.getElementById('userCardsMobile');
             const loading = document.getElementById('usersLoading');
@@ -2845,6 +2882,7 @@ Thank you!`;
 
         // Toggle Admin Status
         window.toggleAdmin = async function(userId, makeAdmin) {
+            const db = window.db || firebase.firestore();
             const confirmMsg = makeAdmin 
                 ? 'Are you sure you want to grant admin privileges to this user?' 
                 : 'Are you sure you want to remove admin privileges from this user?';
@@ -2866,6 +2904,7 @@ Thank you!`;
 
         // Toggle Instructor Status
         window.toggleInstructor = async function(userId, makeInstructor) {
+            const db = window.db || firebase.firestore();
             const confirmMsg = makeInstructor 
                 ? 'Are you sure you want to grant instructor privileges to this user?' 
                 : 'Are you sure you want to remove instructor privileges from this user?';
@@ -2886,6 +2925,7 @@ Thank you!`;
 
         // Toggle Avionics Status
         window.toggleAvionics = async function(userId, makeAvionics) {
+            const db = window.db || firebase.firestore();
             const confirmMsg = makeAvionics 
                 ? 'Are you sure you want to grant avionics privileges to this user?' 
                 : 'Are you sure you want to remove avionics privileges from this user?';
@@ -2985,6 +3025,7 @@ Thank you!`;
 
         // Load users for Tools By User section
         async function loadToolsUsers() {
+            const db = window.db || firebase.firestore();
             const loading = document.getElementById('toolsUsersLoading');
             const usersList = document.getElementById('toolsUsersList');
             
@@ -3155,6 +3196,7 @@ Thank you!`;
 
         // Load all tool history for a user from logtoolmovements collection
         async function loadUserToolHistory(userName) {
+            const db = window.db || firebase.firestore();
             try {
                 // Use logtoolmovements collection with existing index (technician field, not technicianName)
                 const snapshot = await db.collection('logtoolmovements')
@@ -3628,12 +3670,14 @@ Thank you!`;
 
         // Load Tools (legacy - not used in new menu)
         async function loadTools() {
+            const db = window.db || firebase.firestore();
             // This function is replaced by the new tools menu system
             console.log('Tools section now uses submenu navigation');
         }
 
         // Delete Tool
         window.deleteTool = async function(toolId, toolName) {
+            const db = window.db || firebase.firestore();
             if (!confirm(`Are you sure you want to delete "${toolName}"?\n\nThis action cannot be undone!`)) {
                 return;
             }
@@ -3665,6 +3709,7 @@ Thank you!`;
 
         // Load Analytics
         async function loadAnalytics() {
+            const db = window.db || firebase.firestore();
             try {
                 // Get today's date range
                 const today = new Date();
@@ -3752,38 +3797,143 @@ Thank you!`;
             }
         }
 
-        // Logout
-        document.getElementById('logoutBtn').addEventListener('click', async () => {
-            if (confirm('Are you sure you want to logout?')) {
-                try {
-                    await auth.signOut();
-                    loginSection.style.display = 'flex';
-                    adminDashboard.style.display = 'none';
-                    document.getElementById('adminEmail').value = '';
-                    document.getElementById('adminPassword').value = '';
-                    showAlert('Logged out successfully', 'success');
-                } catch (error) {
-                    console.error('Logout error:', error);
-                    alert('Logout failed: ' + error.message);
+                // Logout
+                const logoutBtn = document.getElementById('logoutBtn');
+                if (logoutBtn) {
+                    logoutBtn.addEventListener('click', async () => {
+                        const auth = window.auth || firebase.auth();
+                        if (confirm('Are you sure you want to logout?')) {
+                            try {
+                                await auth.signOut();
+                                localStorage.removeItem('authVerified');
+                                localStorage.removeItem('fullName');
+                                window.location.href = 'main-menu.html';
+                            } catch (error) {
+                                console.error('Logout error:', error);
+                                alert('Logout failed: ' + error.message);
+                            }
+                        }
+                    });
                 }
-            }
-        });
 
-        // Check auth state on page load
-        auth.onAuthStateChanged(async (user) => {
-            if (user) {
-                const { isAdmin, name } = await checkAdminStatus(user);
-                if (isAdmin) {
-                    loadAdminDashboard(name);
-                } else {
-                    await auth.signOut();
-                    showAlert('Access Denied: Admin privileges required.', 'danger');
+                // SEAMLESS NAVIGATION: Check localStorage first - if flag exists, proceed IMMEDIATELY
+                const authVerified = localStorage.getItem('authVerified');
+                const storedFullName = localStorage.getItem('fullName');
+                
+                console.log('[ADMIN] Checking auth flags...');
+                console.log('[ADMIN] authVerified:', authVerified);
+                console.log('[ADMIN] storedFullName:', storedFullName);
+                console.log('[ADMIN] auth.currentUser (sync):', auth ? (auth.currentUser ? auth.currentUser.email : 'null') : 'auth not initialized');
+                
+                if (authVerified === 'true' && storedFullName) {
+                    // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
+                    console.log('[ADMIN] ✓ Auth verified flag found - checking admin status immediately');
+                    
+                    // Wait for user to be available (Firebase may need time to restore session)
+                    let user = auth.currentUser;
+                    if (!user) {
+                        console.log('[ADMIN] auth.currentUser is null, waiting for user...');
+                        // Wait up to 2 seconds for Firebase to restore the session
+                        let waitCount = 0;
+                        while (!user && waitCount < 20) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            user = auth.currentUser;
+                            waitCount++;
+                        }
+                    }
+                    
+                    if (user) {
+                        console.log('[ADMIN] User found, checking admin status...');
+                        const { isAdmin, name } = await checkAdminStatus(user);
+                        if (isAdmin) {
+                            console.log('[ADMIN] ✓ Admin confirmed, loading dashboard');
+                            loadAdminDashboard(name);
+                            
+                            // Verify auth in background (non-blocking)
+                            setTimeout(() => {
+                                const currentUser = auth.currentUser;
+                                if (currentUser) {
+                                    console.log('[ADMIN] ✓ Auth confirmed via currentUser:', currentUser.email);
+                                    localStorage.setItem('authVerified', 'true');
+                                } else {
+                                    // Set up onAuthStateChanged listener
+                                    const unsubscribe = auth.onAuthStateChanged(async function(user) {
+                                        if (user) {
+                                            const { isAdmin, name } = await checkAdminStatus(user);
+                                            if (isAdmin) {
+                                                console.log('[ADMIN] ✓ Auth confirmed via onAuthStateChanged');
+                                                localStorage.setItem('authVerified', 'true');
+                                            } else {
+                                                console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
+                                                localStorage.removeItem('authVerified');
+                                                window.location.href = 'main-menu.html';
+                                            }
+                                        } else {
+                                            console.log('[ADMIN] ✗ No user found, redirecting to main-menu.html');
+                                            localStorage.removeItem('authVerified');
+                                            window.location.href = 'main-menu.html';
+                                        }
+                                        unsubscribe();
+                                    });
+                                }
+                            }, 300);
+                            
+                            return; // Exit - page initialized
+                        } else {
+                            console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
+                            localStorage.removeItem('authVerified');
+                            window.location.href = 'main-menu.html';
+                            return;
+                        }
+                    } else {
+                        console.log('[ADMIN] ✗ No user found after waiting, redirecting to main-menu.html');
+                        localStorage.removeItem('authVerified');
+                        window.location.href = 'main-menu.html';
+                        return;
+                    }
                 }
-            } else {
-                loginSection.style.display = 'flex';
-                adminDashboard.style.display = 'none';
+                
+                // No stored flag - wait for Firebase auth
+                console.log('[ADMIN] ✗ No auth flag found - waiting for Firebase auth');
+                console.log('[ADMIN] Setting up onAuthStateChanged listener...');
+                auth.onAuthStateChanged(async function(user) {
+                    console.log('[ADMIN] onAuthStateChanged fired, user:', user ? user.email : 'null');
+                    if (user) {
+                        const { isAdmin, name } = await checkAdminStatus(user);
+                        if (isAdmin) {
+                            console.log('[ADMIN] ✓ User authenticated and is admin, loading dashboard');
+                            localStorage.setItem('authVerified', 'true');
+                            if (!localStorage.getItem('fullName')) {
+                                localStorage.setItem('fullName', name || user.email);
+                            }
+                            loadAdminDashboard(name);
+                        } else {
+                            console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
+                            await auth.signOut();
+                            localStorage.removeItem('authVerified');
+                            window.location.href = 'main-menu.html';
+                        }
+                    } else {
+                        console.log('[ADMIN] ✗ No user found, redirecting to main-menu.html');
+                        localStorage.removeItem('authVerified');
+                        window.location.href = 'main-menu.html';
+                    }
+                });
             }
+            
+            // Start waiting for common.js
+            waitForAuth();
         });
+        
+        // Continue with rest of script using auth, db, storage from scope
+        (function() {
+            // These will be set when initializeAdmin is called
+            let auth, db, storage;
+            
+            // Make them available globally for other functions
+            window.getAuth = () => window.auth;
+            window.getDb = () => window.db;
+            window.getStorage = () => window.storage;
 
         // Session timeout (30 minutes of inactivity)
         let sessionTimeout;
@@ -3925,6 +4075,7 @@ Thank you!`;
 
         // Load all tools for activity dropdown
         async function loadAllToolsForActivity() {
+            const db = window.db || firebase.firestore();
             if (allToolsForActivity.length > 0) return; // Already loaded
 
             try {
@@ -3960,6 +4111,7 @@ Thank you!`;
 
         // Load all users (showing those without checkups as disabled)
         async function loadCheckupUsers() {
+            const db = window.db || firebase.firestore();
             const loading = document.getElementById('checkupUsersLoading');
             const usersList = document.getElementById('checkupUsersList');
             
@@ -4144,6 +4296,7 @@ Thank you!`;
 
         // Load checkup history for a user (all collections)
         async function loadCheckupHistoryForUser(userName) {
+            const db = window.db || firebase.firestore();
             const loading = document.getElementById('checkupHistoryLoading');
             const tableContainer = document.getElementById('checkupHistoryTableContainer');
             const noMessage = document.getElementById('noCheckupsMessage');
@@ -4187,6 +4340,7 @@ Thank you!`;
 
         // Load checkup history for selected user and collection
         async function loadCheckupHistory() {
+            const db = window.db || firebase.firestore();
             const loading = document.getElementById('checkupHistoryLoading');
             const tableContainer = document.getElementById('checkupHistoryTableContainer');
             const noMessage = document.getElementById('noCheckupsMessage');
@@ -4649,6 +4803,7 @@ Thank you!`;
 
         // Search for tool activity
         window.searchToolActivity = async function() {
+            const db = window.db || firebase.firestore();
             const searchInput = document.getElementById('activityToolSearch');
             const toolCode = searchInput.value.trim();
             const resultsDiv = document.getElementById('activityResults');
@@ -4671,6 +4826,7 @@ Thank you!`;
 
             try {
                 // Search for the tool (case-insensitive)
+                const db = window.db || firebase.firestore();
                 const toolsSnapshot = await db.collection('tools').get();
                 let foundTool = null;
 
@@ -4848,6 +5004,7 @@ Thank you!`;
 
         // View tool history (shows all log entries)
         window.viewToolHistory = async function(toolId) {
+            const db = window.db || firebase.firestore();
             const resultsDiv = document.getElementById('activityResults');
             
             resultsDiv.innerHTML = `
