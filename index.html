@@ -3389,11 +3389,44 @@
     <script>
         // Use global Firebase instances from common.js
         // common.js loads before this script, so window.auth should be available
-        const auth = window.auth || firebase.auth();
-        const db = window.db || firebase.firestore();
-        const storage = window.storage || firebase.storage();
+        // Use let instead of const to avoid declaration conflicts
+        let auth = window.auth;
+        let db = window.db;
+        let storage = window.storage;
         
-        console.log('[INDEX] Using auth instance:', auth === window.auth ? 'global (common.js)' : 'local (fallback)');
+        if (!auth || !db || !storage) {
+            console.error('[INDEX] ✗ Firebase instances not available from common.js!');
+            console.error('[INDEX] window.auth:', window.auth);
+            console.error('[INDEX] window.db:', window.db);
+            console.error('[INDEX] window.storage:', window.storage);
+            // Fallback: create new instances (shouldn't happen if common.js loads correctly)
+            if (!firebase.apps.length) {
+                const firebaseConfig = {
+                    apiKey: "AIzaSyDmI0v_pVt_qFJlsqmw8QlIOi-4VLjyn54",
+                    authDomain: "tool-tracking-system-15e84.firebaseapp.com",
+                    projectId: "tool-tracking-system-15e84",
+                    storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
+                    messagingSenderId: "813615362050",
+                    appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
+                };
+                firebase.initializeApp(firebaseConfig);
+            }
+            const fallbackAuth = firebase.auth();
+            const fallbackDb = firebase.firestore();
+            const fallbackStorage = firebase.storage();
+            // Use fallback if window.auth not available
+            if (!auth) {
+                Object.defineProperty(window, 'auth', { value: fallbackAuth, writable: false });
+            }
+            if (!db) {
+                Object.defineProperty(window, 'db', { value: fallbackDb, writable: false });
+            }
+            if (!storage) {
+                Object.defineProperty(window, 'storage', { value: fallbackStorage, writable: false });
+            }
+        } else {
+            console.log('[INDEX] ✓ Using global Firebase instances from common.js');
+        }
         
         // Set custom error messages for unverified emails
         auth.onAuthStateChanged(function(user) {
@@ -3405,7 +3438,7 @@
 
         // Ensure user stays logged in across refreshes and browser restarts
         // Note: setPersistence is already called in common.js, but keeping for compatibility
-        if (auth.setPersistence) {
+        if (auth && auth.setPersistence) {
             auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
         }
 
