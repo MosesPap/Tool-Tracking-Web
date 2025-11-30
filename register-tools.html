@@ -871,10 +871,24 @@
                 }
                 
                 // Set up auth listener to capture real Firebase user when it becomes available
-                // IMPORTANT: Wait a moment for Firebase to initialize and restore session
-                console.log('=== REGISTER TOOLS: Setting up auth listener (waiting 500ms for Firebase init) ===');
-                setTimeout(() => {
-                    auth.onAuthStateChanged(function(user) {
+                // Firebase Auth persistence should restore the session, but we need to wait for it
+                console.log('=== REGISTER TOOLS: Setting up auth listener ===');
+                
+                // Check immediately first
+                let immediateUser = auth.currentUser;
+                if (immediateUser) {
+                    console.log('=== User found immediately:', immediateUser.email, '===');
+                    authenticatedUser = immediateUser;
+                    authStateReady = true;
+                    if (!initializationComplete) {
+                        completeInitialization(immediateUser);
+                    } else if (typeof loadTools === 'function') {
+                        setTimeout(() => loadTools(), 500);
+                    }
+                } else {
+                    console.log('=== No user immediately, waiting for auth state change ===');
+                    // Wait for auth state to change (Firebase will restore session)
+                    const unsubscribe = auth.onAuthStateChanged(function(user) {
                         // Store user globally - this is what processToolSubmission and loadTools will use
                         authenticatedUser = user;
                         authStateReady = true;
@@ -883,6 +897,7 @@
                         
                         if (user && !user.emailVerified) {
                             auth.signOut();
+                            unsubscribe();
                             window.location.href = 'index.html';
                             return;
                         }
@@ -898,34 +913,44 @@
                                 console.log('=== Initializing with real Firebase user ===');
                                 completeInitialization(user);
                             }
-                        }
-                        
-                        // Handle logout after initialization - but only if we don't have storedFullName
-                        // (Firebase might still be restoring the session)
-                        if (initializationComplete && !user) {
+                            unsubscribe(); // Clean up once we have the user
+                        } else {
+                            // User is null - check if we have stored name
                             const hasStoredName = localStorage.getItem('fullName');
-                            if (!hasStoredName) {
+                            if (initializationComplete && !hasStoredName) {
                                 console.log('User logged out and no stored name, redirecting...');
+                                unsubscribe();
                                 window.location.href = 'main-menu.html';
-                            } else {
-                                console.log('User is null but we have stored name, waiting for Firebase to restore...');
+                            } else if (hasStoredName) {
+                                console.log('User is null but we have stored name, Firebase may still be restoring...');
+                                // Don't unsubscribe - keep listening in case auth restores
                             }
                         }
                     });
                     
-                    // Also check immediately after delay
-                    const delayedUser = auth.currentUser;
-                    if (delayedUser) {
-                        console.log('=== User found after delay:', delayedUser.email, '===');
-                        authenticatedUser = delayedUser;
-                        authStateReady = true;
-                        if (!initializationComplete) {
-                            completeInitialization(delayedUser);
-                        } else if (typeof loadTools === 'function') {
-                            setTimeout(() => loadTools(), 500);
+                    // Also poll for a short time in case auth persistence is slow
+                    let pollCount = 0;
+                    const maxPolls = 30; // 6 seconds
+                    const pollInterval = setInterval(() => {
+                        pollCount++;
+                        const polledUser = auth.currentUser;
+                        if (polledUser) {
+                            console.log('=== User found via polling after', pollCount * 200, 'ms:', polledUser.email, '===');
+                            authenticatedUser = polledUser;
+                            authStateReady = true;
+                            clearInterval(pollInterval);
+                            if (!initializationComplete) {
+                                completeInitialization(polledUser);
+                            } else if (typeof loadTools === 'function') {
+                                setTimeout(() => loadTools(), 500);
+                            }
+                        } else if (pollCount >= maxPolls) {
+                            console.log('=== No user found after', maxPolls * 200, 'ms of polling ===');
+                            console.log('=== This might indicate Firebase Auth persistence is not working ===');
+                            clearInterval(pollInterval);
                         }
-                    }
-                }, 500); // Wait 500ms for Firebase to initialize
+                    }, 200);
+                } // Wait 500ms for Firebase to initialize
                 
                 // Also check immediately
                 const currentUser = auth.currentUser;
@@ -1764,33 +1789,80 @@
                 // But we can use technicianName from localStorage for the technician field
                 let user = authenticatedUser || auth.currentUser;
                 
-                // If no user, wait briefly for Firebase to restore (for authentication only)
+                // If no user, wait for Firebase to restore using Promise-based approach
                 if (!user) {
-                    console.log('No Firebase user yet, waiting briefly for auth to restore...');
+                    console.log('No Firebase user yet, waiting for auth to restore...');
                     const storedTechnicianId = localStorage.getItem('techniciansId');
                     
                     if (storedTechnicianId) {
-                        // Wait up to 5 seconds for Firebase auth to restore
-                        for (let i = 0; i < 50; i++) {
-                            await new Promise(resolve => setTimeout(resolve, 100));
-                            user = auth.currentUser;
-                            if (user) {
-                                console.log('Firebase user found after', (i + 1) * 100, 'ms:', user.email);
-                                authenticatedUser = user;
-                                authStateReady = true;
-                                break;
+                        // Use Promise to wait for auth state change
+                        user = await new Promise((resolve, reject) => {
+                            let resolved = false;
+                            const timeout = setTimeout(() => {
+                                if (!resolved) {
+                                    resolved = true;
+                                    console.error('Timeout waiting for Firebase auth to restore');
+                                    resolve(null);
+                                }
+                            }, 10000); // 10 second timeout
+                            
+                            // Check immediately
+                            const immediateUser = auth.currentUser;
+                            if (immediateUser) {
+                                clearTimeout(timeout);
+                                if (!resolved) {
+                                    resolved = true;
+                                    console.log('Firebase user found immediately');
+                                    resolve(immediateUser);
+                                }
+                                return;
                             }
-                            if (authenticatedUser) {
-                                user = authenticatedUser;
-                                break;
-                            }
+                            
+                            // Wait for auth state change
+                            const unsubscribe = auth.onAuthStateChanged((authUser) => {
+                                if (authUser && !resolved) {
+                                    clearTimeout(timeout);
+                                    resolved = true;
+                                    console.log('Firebase user found via auth state change:', authUser.email);
+                                    unsubscribe();
+                                    resolve(authUser);
+                                } else if (!authUser && !resolved) {
+                                    // Keep waiting...
+                                    console.log('Still waiting for Firebase auth...');
+                                }
+                            });
+                            
+                            // Also poll as backup
+                            let pollCount = 0;
+                            const pollInterval = setInterval(() => {
+                                pollCount++;
+                                const polledUser = auth.currentUser;
+                                if (polledUser && !resolved) {
+                                    clearTimeout(timeout);
+                                    clearInterval(pollInterval);
+                                    resolved = true;
+                                    console.log('Firebase user found via polling after', pollCount * 200, 'ms:', polledUser.email);
+                                    unsubscribe();
+                                    resolve(polledUser);
+                                } else if (pollCount >= 50) { // Stop after 10 seconds
+                                    clearInterval(pollInterval);
+                                }
+                            }, 200);
+                        });
+                        
+                        if (user) {
+                            authenticatedUser = user;
+                            authStateReady = true;
                         }
                     }
                 }
                 
                 if (!user) {
-                    console.error('ERROR: Firebase Auth not restored. Cannot write to Firestore without authentication.');
-                    alert('Error: Authentication not restored. Please refresh the page or go back to main menu and try again.');
+                    console.error('ERROR: Firebase Auth not restored after waiting. Cannot write to Firestore without authentication.');
+                    console.error('This might be a Firebase Auth persistence issue. Please try:');
+                    console.error('1. Refresh the page');
+                    console.error('2. Go back to main menu and log in again');
+                    alert('Error: Authentication not restored. Please refresh the page or go back to main menu and log in again.');
                     return;
                 }
                 
