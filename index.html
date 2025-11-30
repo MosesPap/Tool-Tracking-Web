@@ -2308,8 +2308,8 @@
           </div>
         </div>
 
-        <!-- Main App Section - REMOVED: Now in register-tools.html -->
-        <div id="appSection" style="display: none !important; visibility: hidden !important;">
+        <!-- Main App Section -->
+        <div id="appSection" style="display: none;">
             <!-- Orange Top Bar with Title -->
             <div class="full-width-title-bar" style="background: #FF9800; color: white; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
                 <h2 style="margin: 0 0 0 20px; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px; padding-right: 160px;">Register Tools</h2>
@@ -2466,8 +2466,61 @@
                 </div>
             </div>
         </div>
-        <!-- Admin Section - REMOVED: Now in admin.html -->
-        <!-- My Tools Screen - REMOVED: Now in my-tools.html -->
+
+        <!-- Admin Section -->
+        <div id="adminSection" class="mt-4" style="display: none;">
+            <div class="card">
+                <div class="card-body">
+                    <h3>Tool Administration</h3>
+                    <div class="mb-3">
+                        <input type="text" id="adminToolId" class="form-control" placeholder="Tool ID">
+                    </div>
+                    <div class="mb-3">
+                        <input type="text" id="adminToolName" class="form-control" placeholder="Tool Name">
+                    </div>
+                    <div class="mb-3">
+                        <input type="text" id="adminPartNumber" class="form-control" placeholder="Part Number">
+                    </div>
+                    <div class="mb-3">
+                        <input type="text" id="adminLocation" class="form-control" placeholder="Location">
+                    </div>
+                    <button onclick="saveToolAdmin()" class="btn btn-success">Save Tool</button>
+                    <button onclick="runCleanup()" class="btn btn-warning">Cleanup Unverified Accounts</button>
+                    <button onclick="toggleAdmin()" class="btn btn-secondary">Close Admin</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- My Tools Screen (new, full page) -->
+    <div id="myToolsScreen" style="display:none;">
+      <div class="container py-4">
+        <button id="myToolsBackBtn" class="mytools-back"><i class="fas fa-arrow-left"></i> Back to Menu</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <h2 class="mytools-title" style="margin:0;">MY TOOLS</h2>
+          <div style="display:flex;gap:8px;">
+            <button id="editMyToolsBtn" style="background:#2196F3;color:white;border:none;border-radius:16px;padding:8px 16px;font-size:0.9rem;font-weight:bold;cursor:pointer;">Edit My Tools</button>
+            <button id="myToolsAddCollectionPhotoBtn" style="background:#4CAF50;color:white;border:none;border-radius:16px;padding:8px 16px;font-size:0.9rem;font-weight:bold;cursor:pointer;"><i class="fas fa-camera"></i> Add Collection Photo</button>
+            <button id="myToolsCollectionPhotosBtn" style="background:#9C27B0;color:white;border:none;border-radius:16px;padding:8px 16px;font-size:0.9rem;font-weight:bold;cursor:pointer;"><i class="fas fa-images"></i> Collection Photos</button>
+          </div>
+        </div>
+        <div id="myToolsScreenBody"></div>
+      </div>
+    </div>
+
+    <!-- Edit My Tools Screen (hidden by default) -->
+    <div id="editMyToolsScreen" style="display:none;">
+      <div class="container py-4">
+        <div style="background:#FF9800;color:white;font-weight:bold;font-size:1.3rem;padding:12px 16px;border-radius:8px 8px 0 0;">Edit My Tools</div>
+        <div style="display:flex;gap:8px;margin:16px 0;align-items:center;">
+          <input id="editMyToolsSearch" type="text" placeholder="Search or scan tool..." style="flex:1;padding:8px 12px;font-size:1.1rem;border-radius:6px;border:1px solid #ccc;">
+          <button id="editMyToolsSearchBtn" style="background:#2196F3;color:white;border:none;border-radius:6px;padding:8px 16px;font-size:1rem;font-weight:bold;cursor:pointer;">Search</button>
+          <!-- Optionally add a scan button here if you have barcode scanning support -->
+        </div>
+        <button id="editMyToolsBackBtn" class="mytools-back"><i class="fas fa-arrow-left"></i> Back</button>
+        <div id="editMyToolsResults"></div>
+      </div>
+    </div>
 
     <!-- 5-Minute Cooldown Info Modal -->
     <div class="modal fade" id="cooldownInfoModal" tabindex="-1" aria-labelledby="cooldownInfoModalLabel" aria-hidden="true">
@@ -2547,7 +2600,31 @@
       </div>
     </div>
 
-    <!-- ToolScanner Menu Section - REMOVED: Now in main-menu.html -->
+    <!-- ToolScanner Menu Section -->
+    <div id="toolScannerMenu" style="display:none;">
+        <!-- Orange Top Bar with Title and Settings (now outside container) -->
+        <div class="full-width-title-bar" style="background: #FF9800; color: white; min-width: 100vw; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(255,152,0,0.10); margin-bottom: 0.5rem; overflow: visible;">
+            <h2 style="margin: 0 0 0 20px; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px;">ToolScanner Menu</h2>
+            <button id="settingsBtn" class="btn btn-link p-0" style="position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-size: 2rem; color: white; z-index: 2;" title="Settings">
+                <i class="fas fa-cog" style="color: white;"></i>
+                </button>
+            </div>
+        <div class="container py-4">
+            <!-- Welcome Message (no background) -->
+            <div style="margin: 8px 0 10px 0; text-align: left;">
+                <span style="font-size: 1.5rem; color: #333; font-weight: bold;">Welcome, <span id="fullName" class="technician-name"></span></span>
+            </div>
+            <div class="d-grid gap-3 col-6 mx-auto">
+                <button class="btn btn-success" id="menuRegisterBtn"><i class="fas fa-plus"></i> Register Tools</button>
+                <button class="btn btn-danger" id="menuOutBtn"><i class="fas fa-sign-out-alt"></i> View OUT Tools</button>
+                <button class="btn btn-warning" id="menuMyToolsBtn"><i class="fas fa-toolbox"></i> My Tools</button>
+                <button class="btn" id="menuWorkLocationBtn"><i class="fas fa-map-marker-alt"></i> Tools by Work Location</button>
+                <button class="btn btn-info" id="menuAdminBtn" style="display: none;"><i class="fas fa-user-shield"></i> Tool Administrator</button>
+                <button class="btn btn-primary" id="menuTrainingQuestionsBtn" style="display: none;"><i class="fas fa-question-circle"></i> Create Training Questions</button>
+                <button class="btn btn-secondary" id="menuLogoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Admin Code Modal -->
     <div class="modal fade" id="adminCodeModal" tabindex="-1" aria-labelledby="adminCodeModalLabel" aria-hidden="true">
@@ -3328,14 +3405,11 @@
         auth.useDeviceLanguage();
         
         // Set custom error messages for unverified emails
-        // First auth handler - REMOVED: Now redirects immediately in second handler
-        // Keep only the email verification check
         auth.onAuthStateChanged(function(user) {
             if (user && !user.emailVerified) {
                 // Force sign out if user is not verified
                 auth.signOut();
             }
-            // Don't do anything else - let the second handler handle redirects
         });
 
         // Ensure user stays logged in across refreshes and browser restarts
@@ -3408,7 +3482,16 @@
             modal.show();
         };
 
-        // Hide all main screens - REMOVED: No longer needed, sections moved to separate HTML files
+        // Hide all main screens
+        function hideAllMainScreens() {
+            document.getElementById('appSection').style.display = 'none';
+            document.getElementById('toolScannerMenu').style.display = 'none';
+            document.getElementById('myToolsScreen').style.display = 'none';
+            document.getElementById('myToolsByCollectionScreen').style.display = 'none';
+            document.getElementById('collectionCheckupScreen').style.display = 'none';
+            document.getElementById('previousOutToolsScreen').style.display = 'none';
+            // Add any other sections you may have
+        }
 
         // Login logic
         async function login() {
@@ -3451,7 +3534,11 @@ if (pendingRegistrationDoc.exists) {
         await db.collection('pendingRegistrations').doc(email).delete();
         localStorage.setItem('fullName', pendingData.fullName);
         // Continue to main menu...
-        window.location.href = 'main-menu.html';
+        document.getElementById('loginSection').classList.add('d-none');
+        hideAllMainScreens();
+        document.getElementById('toolScannerMenu').style.display = 'block';
+        document.getElementById('headerBranding').style.display = 'none';
+        updateLoggedInTechnician();
         return;
     }
 }
@@ -3488,8 +3575,12 @@ if (!userCredential.user.emailVerified) {
                     await saveTechnicianToFirestore(userCredential.user);
                 }
                 
-                // Success: redirect to main menu
-                window.location.href = 'main-menu.html';
+                // Success: hide login, show only main menu
+                document.getElementById('loginSection').classList.add('d-none');
+                hideAllMainScreens();
+                document.getElementById('toolScannerMenu').style.display = 'block';
+                document.getElementById('headerBranding').style.display = 'none';
+                updateLoggedInTechnician();
             } catch (error) {
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
@@ -3697,8 +3788,12 @@ if (!userCredential.user.emailVerified) {
                     await saveTechnicianToFirestore(user);
                 }
                 
-                // Success: redirect to main menu
-                window.location.href = 'main-menu.html';
+                // Success: hide login, show only main menu
+                document.getElementById('loginSection').classList.add('d-none');
+                hideAllMainScreens();
+                document.getElementById('toolScannerMenu').style.display = 'block';
+                document.getElementById('headerBranding').style.display = 'none';
+                updateLoggedInTechnician();
             } catch (error) {
                 console.error('Google Sign-In Error:', error);
                 alertBox.textContent = error.message;
@@ -3812,11 +3907,25 @@ if (!userCredential.user.emailVerified) {
                 html5QrCode.clear();
             }
             localStorage.removeItem('fullName'); // Clear stored name on logout
-            // Redirect to index.html (login page)
-            window.location.href = 'index.html';
+            document.getElementById('headerBranding').style.display = 'block';
+            // Hide all app sections
+            document.getElementById('toolScannerMenu').style.display = 'none';
+            document.getElementById('appSection').style.display = 'none';
+            document.getElementById('myToolsScreen').style.display = 'none';
+            document.getElementById('myToolsByCollectionScreen').style.display = 'none';
+            document.getElementById('collectionCheckupScreen').style.display = 'none';
+            document.getElementById('previousOutToolsScreen').style.display = 'none';
+            // Show login section
+            const loginSection = document.getElementById('loginSection');
+            loginSection.classList.remove('d-none');
+            loginSection.style.display = 'block'; // Ensure login is visible
         }
 
-        // Toggle Admin Section - REMOVED: Now in admin.html
+        // Toggle Admin Section
+        function toggleAdmin() {
+            const adminSection = document.getElementById('adminSection');
+            adminSection.style.display = adminSection.style.display === 'none' ? 'block' : 'none';
+        }
 
         // Save Tool Admin
         async function saveToolAdmin() {
@@ -6331,8 +6440,24 @@ if (!userCredential.user.emailVerified) {
             }
         }
 
-        // Back button for My Tools screen - REMOVED: Now in my-tools.html
-        // Collection photo buttons for My Tools screen - REMOVED: Now in my-tools.html
+        // Back button for My Tools screen
+        document.getElementById('myToolsBackBtn').onclick = function() {
+            document.getElementById('myToolsScreen').style.display = 'none';
+            document.getElementById('toolScannerMenu').style.display = 'block';
+            // Refresh the OUT tools count when returning to menu
+            updatePreviousOutToolsCount();
+        };
+
+        // Collection photo buttons for My Tools screen
+        document.getElementById('myToolsAddCollectionPhotoBtn').onclick = function() {
+            // Show collection selection modal first
+            showCollectionSelectionForPhotos();
+        };
+
+        document.getElementById('myToolsCollectionPhotosBtn').onclick = function() {
+            // Show collection selection modal first
+            showCollectionSelectionForPhotos();
+        };
 
         // Update collection photo button counts
         async function updateCollectionPhotoButtonCounts() {
@@ -6584,36 +6709,119 @@ if (!userCredential.user.emailVerified) {
         // Tab change handler
         // (removed previous-tab event listener as the tab is no longer present)
 
-        // Check auth state immediately on page load
-        const currentUser = auth.currentUser;
-        if (currentUser) {
-            console.log('User already authenticated on page load, redirecting immediately...');
-            window.location.replace('main-menu.html');
-        }
-        
-        // Listen for auth state changes
+        // On auth state change, show menu after login (not register tools)
         auth.onAuthStateChanged(function(user) {
             if (user) {
-                // Redirect IMMEDIATELY - don't update any UI elements
-                // All user data fetching will happen in main-menu.html
-                console.log('User authenticated, redirecting to main-menu.html immediately');
-                window.location.replace('main-menu.html'); // Use replace() to prevent back button issues
-                return; // Exit immediately to prevent any UI updates
+                loginSection.style.display = 'none';
+                signUpSection.classList.add('d-none');
+                adminSection.style.display = 'none';
+                const adminButton = document.getElementById('adminButton');
+                if (adminButton) {
+                    adminButton.style.display = 'none';
+                }
+                document.getElementById('headerBranding').style.display = 'none';
+                
+                // Check if we should skip splash (coming from register-tools, previous-out, or pdf-question-generator)
+                const skipSplash = sessionStorage.getItem('skipSplash');
+                if (skipSplash === 'true') {
+                    console.log('skipSplash detected in auth handler - showing menu immediately');
+                    // Hide splash screen immediately if it's still visible
+                    const splashScreen = document.getElementById('splashScreen');
+                    const orangeOverlay = document.getElementById('orangeOverlay');
+                    const loginSection = document.getElementById('loginSection');
+                    if (splashScreen) {
+                        splashScreen.style.display = 'none';
+                        splashScreen.classList.add('splash-hidden');
+                    }
+                    if (orangeOverlay) {
+                        orangeOverlay.classList.add('hidden');
+                        orangeOverlay.style.display = 'none';
+                    }
+                    // Hide login section and show menu immediately
+                    if (loginSection) {
+                        loginSection.style.display = 'none';
+                        loginSection.classList.add('d-none');
+                    }
+                    // Force show menu - don't wait for anything
+                    hideAllMainScreens();
+                    const menuElement = document.getElementById('toolScannerMenu');
+                    if (menuElement) {
+                        menuElement.style.display = 'block';
+                        console.log('Menu shown via skipSplash flag in auth handler');
+                    } else {
+                        console.error('toolScannerMenu element not found!');
+                    }
+                    // Clear the flag
+                    sessionStorage.removeItem('skipSplash');
+                    // Continue with normal flow - don't return, we still need to fetch user data
+                }
+                
+                // Always fetch fresh data from Firestore
+                db.collection('technicians').doc(user.uid)
+                    .get()
+                    .then(doc => {
+                        if (doc.exists) {
+                            const technicianData = doc.data();
+                            const name = technicianData.fullName || user.email;
+                            // Store the document ID
+                            localStorage.setItem('techniciansId', doc.id);
+                            localStorage.setItem('fullName', name);
+                            document.getElementById('fullName').textContent = name;
+                            
+                            // Check if user is admin
+                            if (technicianData.isAdmin) {
+                                const adminButton = document.getElementById('adminButton');
+                                if (adminButton) {
+                                    adminButton.style.display = 'inline-block';
+                                }
+                                // Show Tool Administrator button in menu
+                                const menuAdminBtn = document.getElementById('menuAdminBtn');
+                                if (menuAdminBtn) {
+                                    menuAdminBtn.style.display = 'block';
+                                }
+                            }
+                            
+                            // Check if user is instructor
+                            if (technicianData.isInstructor) {
+                                // Show Create Training Questions button in menu
+                                const menuTrainingQuestionsBtn = document.getElementById('menuTrainingQuestionsBtn');
+                                if (menuTrainingQuestionsBtn) {
+                                    menuTrainingQuestionsBtn.style.display = 'block';
+                                }
+                            }
+                        } else {
+                            document.getElementById('fullName').textContent = user.email;
+                        }
+                        updatePreviousToolsTabCount();
+                    }).catch(error => {
+                        console.error('Error fetching technician data:', error);
+                        document.getElementById('fullName').textContent = user.email;
+                        updatePreviousToolsTabCount();
+                    });
+                // Redirect to main-menu.html after login
+                window.location.href = 'main-menu.html';
             } else {
-                // User not logged in - show login section
-                const loginSection = document.getElementById('loginSection');
-                if (loginSection) {
-                    loginSection.style.display = 'block';
+                loginSection.style.display = 'block';
+                appSection.style.display = 'none';
+                adminSection.style.display = 'none';
+                const adminButton = document.getElementById('adminButton');
+                if (adminButton) {
+                    adminButton.style.display = 'none';
                 }
-                const headerBranding = document.getElementById('headerBranding');
-                if (headerBranding) {
-                    headerBranding.style.display = 'block';
-                }
+                document.getElementById('headerBranding').style.display = 'block';
                 localStorage.removeItem('fullName');
             }
         });
 
-        // Navigation logic for ToolScanner Menu - REMOVED: Now in main-menu.html
+        // Navigation logic for ToolScanner Menu
+        function toolScannerMenu() {
+            document.getElementById('toolScannerMenu').style.display = 'block';
+            document.getElementById('appSection').style.display = 'none';
+            // Refresh the OUT tools count when showing the menu
+            updatePreviousOutToolsCount();
+            // Show outstanding and overdue dialogs
+            showNotificationsInSequence();
+        }
         // Global variable to store selected work location
         let selectedWorkLocation = null;
 

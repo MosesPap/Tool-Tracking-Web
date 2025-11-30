@@ -682,10 +682,6 @@
         let currentToolPhotoUrls = [];
         let bulkScanMessageTimeout = null;
         
-        // Store authenticated user globally (updated by auth state listener)
-        let authenticatedUser = null;
-        let authStateReady = false;
-        
         // Initialize page on load
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOMContentLoaded - Register Tools page');
@@ -734,63 +730,22 @@
                 
                 // Function to complete page initialization
                 function completeInitialization(user) {
-                    if (initializationComplete) {
-                        console.log('Already initialized, skipping...');
-                        return;
-                    }
-                    
-                    // Allow initialization even with mock user
-                    if (!user) {
-                        console.error('completeInitialization called without user!');
-                        return;
-                    }
-                    
+                    if (!user || initializationComplete) return;
                     initializationComplete = true;
                     
-                    console.log('Initializing page for user:', user.email || user.uid || 'user');
-                    
-                    // Set technician name directly - use fullName from localStorage, NOT technicianName
-                    const fullName = localStorage.getItem('fullName') || user.email || user.uid || 'User';
-                    console.log('Setting technician name to:', fullName);
-                    console.log('Checking for technicianName in localStorage:', localStorage.getItem('technicianName'));
-                    console.log('Using fullName instead of technicianName');
-                    
-                    // Update technician name using common.js function (but it might use wrong value)
+                    console.log('User authenticated:', user.email);
+                    // Update technician name using common.js function
                     if (typeof updateLoggedInTechnician === 'function') {
                         updateLoggedInTechnician();
                     }
                     
-                    // ALWAYS set it directly to ensure we use fullName, not technicianName
-                    console.log('Looking for registerScreenName element...');
+                    // Also set it directly as backup
+                    const fullName = localStorage.getItem('fullName') || user.email;
+                    console.log('Setting technician name to:', fullName);
                     const registerScreenNameElem = document.getElementById('registerScreenName');
-                    console.log('registerScreenNameElem found?', registerScreenNameElem ? 'YES' : 'NO');
                     if (registerScreenNameElem) {
                         registerScreenNameElem.textContent = fullName;
-                        console.log('Name set successfully to:', fullName);
-                    } else {
-                        console.error('registerScreenName element NOT FOUND!');
-                        // Try again after a short delay
-                        setTimeout(() => {
-                            const retryElem = document.getElementById('registerScreenName');
-                            if (retryElem) {
-                                retryElem.textContent = fullName;
-                                console.log('Name set on retry to:', fullName);
-                            } else {
-                                console.error('registerScreenName element still not found on retry!');
-                            }
-                        }, 100);
                     }
-                    
-                    // Also ensure it stays correct after station selection
-                    // Set up a mutation observer or interval to keep it correct
-                    setInterval(() => {
-                        const nameElem = document.getElementById('registerScreenName');
-                        const correctName = localStorage.getItem('fullName');
-                        if (nameElem && correctName && nameElem.textContent !== correctName) {
-                            console.log('Correcting name display from', nameElem.textContent, 'to', correctName);
-                            nameElem.textContent = correctName;
-                        }
-                    }, 1000);
                     
                     // Set up event listeners (including back button)
                     setupEventListeners();
@@ -808,166 +763,85 @@
                     }
                     
                     // Always show location selection modal on page load
-                    console.log('=== About to show location selection modal ===');
-                    // Use a longer delay to ensure DOM is ready and Bootstrap is loaded
+                    console.log('Showing location selection modal');
                     setTimeout(() => {
-                        console.log('=== Attempting to show location selection modal (500ms delay) ===');
-                        console.log('showLocationSelectionModalForRegisterTools exists?', typeof showLocationSelectionModalForRegisterTools);
-                        console.log('showHelicopterModelSelectionModal exists?', typeof showHelicopterModelSelectionModal);
-                        
                         if (typeof showLocationSelectionModalForRegisterTools === 'function') {
                             try {
-                                console.log('=== Calling showLocationSelectionModalForRegisterTools() ===');
                                 showLocationSelectionModalForRegisterTools();
-                                console.log('=== Modal function called successfully ===');
                             } catch (error) {
-                                console.error('=== ERROR calling showLocationSelectionModalForRegisterTools:', error);
+                                console.error('Error showing location selection modal:', error);
                                 // Try showing helicopter model selection directly
                                 if (typeof showHelicopterModelSelectionModal === 'function') {
-                                    console.log('=== Trying helicopter model selection modal directly ===');
-                                    try {
-                                        showHelicopterModelSelectionModal();
-                                        console.log('=== Helicopter modal function called successfully ===');
-                                    } catch (err) {
-                                        console.error('=== ERROR calling showHelicopterModelSelectionModal:', err);
-                                    }
+                                    showHelicopterModelSelectionModal();
                                 }
                             }
                         } else {
-                            console.error('=== showLocationSelectionModalForRegisterTools function not found! ===');
+                            console.error('showLocationSelectionModalForRegisterTools function not found!');
                             // Try showing helicopter model selection directly
                             if (typeof showHelicopterModelSelectionModal === 'function') {
-                                console.log('=== Trying to show helicopter model selection modal directly ===');
-                                try {
-                                    showHelicopterModelSelectionModal();
-                                    console.log('=== Helicopter modal function called successfully ===');
-                                } catch (err) {
-                                    console.error('=== ERROR calling showHelicopterModelSelectionModal:', err);
-                                }
-                            } else {
-                                console.error('=== showHelicopterModelSelectionModal function also not found! ===');
+                                console.log('Trying to show helicopter model selection modal directly');
+                                showHelicopterModelSelectionModal();
                             }
                         }
-                    }, 500); // Increased delay to 500ms
+                    }, 300);
                 }
                 
                 // Check if user is in localStorage (coming from main-menu.html)
                 const storedFullName = localStorage.getItem('fullName');
-                console.log('=== REGISTER TOOLS: storedFullName =', storedFullName);
-                
-                // Initialize UI immediately with stored data (so user sees their name)
-                // Then wait for Firebase auth to restore session in background
                 if (storedFullName) {
-                    console.log('=== REGISTER TOOLS: Found stored user, initializing UI immediately ===');
-                    const mockUser = {
-                        uid: localStorage.getItem('techniciansId') || 'temp',
-                        email: storedFullName
-                    };
-                    console.log('=== Calling completeInitialization with mockUser:', mockUser);
-                    completeInitialization(mockUser);
-                    console.log('=== completeInitialization called ===');
-                } else {
-                    console.log('=== REGISTER TOOLS: No storedFullName found ===');
+                    console.log('Found stored user name, waiting for Firebase auth to confirm...');
                 }
                 
-                // Set up auth listener to capture real Firebase user when it becomes available
-                // Firebase Auth persistence should restore the session, but we need to wait for it
-                console.log('=== REGISTER TOOLS: Setting up auth listener ===');
-                
-                // Check immediately first
-                let immediateUser = auth.currentUser;
-                if (immediateUser) {
-                    console.log('=== User found immediately:', immediateUser.email, '===');
-                    authenticatedUser = immediateUser;
-                    authStateReady = true;
-                    if (!initializationComplete) {
-                        completeInitialization(immediateUser);
-                    } else if (typeof loadTools === 'function') {
-                        setTimeout(() => loadTools(), 500);
-                    }
-                } else {
-                    console.log('=== No user immediately, waiting for auth state change ===');
-                    // Wait for auth state to change (Firebase will restore session)
-                    const unsubscribe = auth.onAuthStateChanged(function(user) {
-                        // Store user globally - this is what processToolSubmission and loadTools will use
-                        authenticatedUser = user;
-                        authStateReady = true;
-                        
-                        console.log('=== Auth state changed, user:', user ? user.email : 'null ===');
-                        
-                        if (user && !user.emailVerified) {
-                            auth.signOut();
-                            unsubscribe();
+                // Listen for auth state changes - this is the primary way to check auth
+                const unsubscribe = auth.onAuthStateChanged(function(user) {
+                    if (authStateChecked && initializationComplete) {
+                        // Already initialized, only handle logout
+                        if (!user) {
+                            console.log('User logged out after initialization');
                             window.location.href = 'index.html';
-                            return;
                         }
-                        
-                        if (user) {
-                            console.log('=== Firebase user confirmed:', user.email, '===');
-                            // User is available - reload tools if UI is already initialized
-                            if (initializationComplete && typeof loadTools === 'function') {
-                                console.log('=== Reloading tools now that Firebase user is available ===');
-                                setTimeout(() => loadTools(), 500);
-                            } else if (!initializationComplete) {
-                                // Initialize with real user if not already initialized
-                                console.log('=== Initializing with real Firebase user ===');
-                                completeInitialization(user);
-                            }
-                            unsubscribe(); // Clean up once we have the user
-                        } else {
-                            // User is null - check if we have stored name
-                            const hasStoredName = localStorage.getItem('fullName');
-                            if (initializationComplete && !hasStoredName) {
-                                console.log('User logged out and no stored name, redirecting...');
-                                unsubscribe();
-                                window.location.href = 'main-menu.html';
-                            } else if (hasStoredName) {
-                                console.log('User is null but we have stored name, Firebase may still be restoring...');
-                                // Don't unsubscribe - keep listening in case auth restores
-                            }
-                        }
-                    });
-                    
-                    // Also poll for a short time in case auth persistence is slow
-                    let pollCount = 0;
-                    const maxPolls = 30; // 6 seconds
-                    const pollInterval = setInterval(() => {
-                        pollCount++;
-                        const polledUser = auth.currentUser;
-                        if (polledUser) {
-                            console.log('=== User found via polling after', pollCount * 200, 'ms:', polledUser.email, '===');
-                            authenticatedUser = polledUser;
-                            authStateReady = true;
-                            clearInterval(pollInterval);
-                            if (!initializationComplete) {
-                                completeInitialization(polledUser);
-                            } else if (typeof loadTools === 'function') {
-                                setTimeout(() => loadTools(), 500);
-                            }
-                        } else if (pollCount >= maxPolls) {
-                            console.log('=== No user found after', maxPolls * 200, 'ms of polling ===');
-                            console.log('=== This might indicate Firebase Auth persistence is not working ===');
-                            clearInterval(pollInterval);
-                        }
-                    }, 200);
-                } // Wait 500ms for Firebase to initialize
-                
-                // Also check immediately
-                const currentUser = auth.currentUser;
-                console.log('=== Immediate auth.currentUser check:', currentUser ? currentUser.email : 'null ===');
-                if (currentUser) {
-                    console.log('=== User immediately available:', currentUser.email, '===');
-                    authenticatedUser = currentUser;
-                    authStateReady = true;
-                    if (!initializationComplete) {
-                        completeInitialization(currentUser);
-                    } else if (typeof loadTools === 'function') {
-                        setTimeout(() => loadTools(), 500);
+                        return;
                     }
-                } else if (!storedFullName) {
-                    // No stored data and no user - redirect
-                    console.log('No user and no stored data, redirecting to main-menu.html');
-                    window.location.href = 'main-menu.html';
+                    
+                    authStateChecked = true;
+                    console.log('Auth state changed, user:', user ? user.email : 'null');
+                    
+                    if (user && !user.emailVerified) {
+                        // Force sign out if user is not verified
+                        auth.signOut();
+                        window.location.href = 'index.html';
+                        return;
+                    }
+                    
+                    if (user) {
+                        // User is authenticated, proceed with initialization
+                        completeInitialization(user);
+                    } else {
+                        // No user - but wait a bit longer if we have stored user data
+                        if (storedFullName) {
+                            console.log('No user in Firebase but stored name exists, waiting...');
+                            setTimeout(() => {
+                                const retryUser = auth.currentUser;
+                                if (retryUser) {
+                                    completeInitialization(retryUser);
+                                } else {
+                                    console.log('Still no user after retry, redirecting to main-menu.html');
+                                    window.location.href = 'main-menu.html';
+                                }
+                            }, 1000);
+                        } else {
+                            // No stored user data either, redirect to main menu (not index.html to avoid login loop)
+                            console.log('No user and no stored data, redirecting to main-menu.html');
+                            window.location.href = 'main-menu.html';
+                        }
+                    }
+                });
+                
+                // Also check immediately (in case auth state is already available)
+                const currentUser = auth.currentUser;
+                if (currentUser) {
+                    console.log('User immediately available');
+                    completeInitialization(currentUser);
                 }
             }
         });
@@ -1208,14 +1082,7 @@
 
             // Check if bulk scan mode is enabled
             if (bulkScanMode) {
-                console.log('Bulk scan mode enabled, processing tool in bulk mode');
-                const bulkFunc = window.processToolInBulkMode || processToolInBulkMode;
-                if (typeof bulkFunc === 'function') {
-                    await bulkFunc(code);
-                } else {
-                    console.error('ERROR: processToolInBulkMode function not found!');
-                    alert('Error: Bulk scan function not found. Please refresh the page.');
-                }
+                await processToolInBulkMode(code);
                 return;
             }
 
@@ -1225,16 +1092,7 @@
                 showLocationSelectionModalForToolSubmission(code);
             } else {
                 console.log('Work location already selected, processing tool submission');
-                console.log('processToolSubmission function exists?', typeof processToolSubmission);
-                console.log('window.processToolSubmission function exists?', typeof window.processToolSubmission);
-                if (typeof processToolSubmission === 'function') {
-                    await processToolSubmission(code);
-                } else if (typeof window.processToolSubmission === 'function') {
-                    await window.processToolSubmission(code);
-                } else {
-                    console.error('ERROR: processToolSubmission function not found!');
-                    alert('Error: Tool processing function not found. Please refresh the page.');
-                }
+                processToolSubmission(code);
             }
         }
         
@@ -1491,8 +1349,7 @@
             }
         }
         
-        // Make processToolInBulkMode globally accessible
-        window.processToolInBulkMode = async function processToolInBulkMode(code) {
+        async function processToolInBulkMode(code) {
             // Clear any existing message at start of new scan
             const messageDiv = document.getElementById('bulkScanMessage');
             if (messageDiv && bulkScanMessageTimeout) {
@@ -1521,72 +1378,12 @@
             document.getElementById('toolCode').value = '';
             
             try {
-                // Get user - use stored authenticatedUser first
-                let user = authenticatedUser || auth.currentUser;
-                console.log('Bulk mode - Initial user check:', user ? user.email : 'null');
-                
-                // If user is null, wait for auth state using Promise
+                const user = auth.currentUser;
                 if (!user) {
-                    console.log('Bulk mode - User is null, waiting for Firebase auth state...');
-                    const storedFullName = localStorage.getItem('fullName');
-                    
-                    if (storedFullName) {
-                        user = await new Promise((resolve) => {
-                            let resolved = false;
-                            
-                            // If auth state is already ready, use stored user
-                            if (authStateReady && authenticatedUser) {
-                                console.log('Bulk mode - Auth state ready, using stored user');
-                                resolve(authenticatedUser);
-                                return;
-                            }
-                            
-                            const timeout = setTimeout(() => {
-                                if (!resolved) {
-                                    resolved = true;
-                                    const finalUser = authenticatedUser || auth.currentUser;
-                                    resolve(finalUser);
-                                }
-                            }, 5000);
-                            
-                            // Poll for user
-                            let pollCount = 0;
-                            const pollInterval = setInterval(() => {
-                                pollCount++;
-                                if (authenticatedUser && !resolved) {
-                                    clearTimeout(timeout);
-                                    clearInterval(pollInterval);
-                                    resolved = true;
-                                    console.log('Bulk mode - User found via stored authenticatedUser:', authenticatedUser.email);
-                                    resolve(authenticatedUser);
-                                } else {
-                                    const currentUser = auth.currentUser;
-                                    if (currentUser && !resolved) {
-                                        clearTimeout(timeout);
-                                        clearInterval(pollInterval);
-                                        resolved = true;
-                                        authenticatedUser = currentUser;
-                                        console.log('Bulk mode - User found via currentUser polling:', currentUser.email);
-                                        resolve(currentUser);
-                                    }
-                                }
-                                
-                                if (pollCount >= 50) {
-                                    clearInterval(pollInterval);
-                                }
-                            }, 100);
-                        });
-                    }
-                }
-                
-                if (!user) {
-                    console.error('Bulk mode - ERROR: No user found after waiting.');
-                    showBulkScanMessage('Not authenticated. Please refresh page.', false);
+                    showBulkScanMessage('Not authenticated', false);
                     bulkProcessingCodes.delete(code);
                     return;
                 }
-                
-                console.log('Bulk mode - User confirmed:', user.email);
                 
                 // Check if already processed in this session
                 if (bulkScannedTools.some(t => t.code === code)) {
@@ -1771,102 +1568,11 @@
         }
         
         // Process tool submission after location selection
-        // Make processToolSubmission globally accessible
-        window.processToolSubmission = async function processToolSubmission(code) {
+        async function processToolSubmission(code) {
             console.log('processToolSubmission called with code:', code);
             try {
-                // Get technician name from localStorage - we have it from login!
-                const technicianName = localStorage.getItem('fullName');
-                if (!technicianName) {
-                    console.error('ERROR: No technician name in localStorage');
-                    alert('Error: You are not logged in. Please go back to main menu and log in again.');
-                    return;
-                }
-                
-                console.log('Using technician name from localStorage:', technicianName);
-                
-                // We still need Firebase user for authentication to write to Firestore
-                // But we can use technicianName from localStorage for the technician field
-                let user = authenticatedUser || auth.currentUser;
-                
-                // If no user, wait for Firebase to restore using Promise-based approach
-                if (!user) {
-                    console.log('No Firebase user yet, waiting for auth to restore...');
-                    const storedTechnicianId = localStorage.getItem('techniciansId');
-                    
-                    if (storedTechnicianId) {
-                        // Use Promise to wait for auth state change
-                        user = await new Promise((resolve, reject) => {
-                            let resolved = false;
-                            const timeout = setTimeout(() => {
-                                if (!resolved) {
-                                    resolved = true;
-                                    console.error('Timeout waiting for Firebase auth to restore');
-                                    resolve(null);
-                                }
-                            }, 10000); // 10 second timeout
-                            
-                            // Check immediately
-                            const immediateUser = auth.currentUser;
-                            if (immediateUser) {
-                                clearTimeout(timeout);
-                                if (!resolved) {
-                                    resolved = true;
-                                    console.log('Firebase user found immediately');
-                                    resolve(immediateUser);
-                                }
-                                return;
-                            }
-                            
-                            // Wait for auth state change
-                            const unsubscribe = auth.onAuthStateChanged((authUser) => {
-                                if (authUser && !resolved) {
-                                    clearTimeout(timeout);
-                                    resolved = true;
-                                    console.log('Firebase user found via auth state change:', authUser.email);
-                                    unsubscribe();
-                                    resolve(authUser);
-                                } else if (!authUser && !resolved) {
-                                    // Keep waiting...
-                                    console.log('Still waiting for Firebase auth...');
-                                }
-                            });
-                            
-                            // Also poll as backup
-                            let pollCount = 0;
-                            const pollInterval = setInterval(() => {
-                                pollCount++;
-                                const polledUser = auth.currentUser;
-                                if (polledUser && !resolved) {
-                                    clearTimeout(timeout);
-                                    clearInterval(pollInterval);
-                                    resolved = true;
-                                    console.log('Firebase user found via polling after', pollCount * 200, 'ms:', polledUser.email);
-                                    unsubscribe();
-                                    resolve(polledUser);
-                                } else if (pollCount >= 50) { // Stop after 10 seconds
-                                    clearInterval(pollInterval);
-                                }
-                            }, 200);
-                        });
-                        
-                        if (user) {
-                            authenticatedUser = user;
-                            authStateReady = true;
-                        }
-                    }
-                }
-                
-                if (!user) {
-                    console.error('ERROR: Firebase Auth not restored after waiting. Cannot write to Firestore without authentication.');
-                    console.error('This might be a Firebase Auth persistence issue. Please try:');
-                    console.error('1. Refresh the page');
-                    console.error('2. Go back to main menu and log in again');
-                    alert('Error: Authentication not restored. Please refresh the page or go back to main menu and log in again.');
-                    return;
-                }
-                
-                console.log('Firebase user confirmed for authentication:', user.email);
+                const user = auth.currentUser;
+                console.log('User:', user);
                 
                 // Check if we're online
                 if (!isOnline) {
@@ -1887,8 +1593,9 @@
                 if (doc.exists) {
                     const data = doc.data();
                     
-                    // Use technician name from localStorage (already set above)
-                    // technicianName is already set from localStorage at the start of the function
+                    // Get current technician name
+                    const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                    const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
 
                     // Only show warning if tool is OUT and checked out by a different technician
                     if (data.status === 'OUT' && data.technician !== technicianName) {
@@ -2053,17 +1760,15 @@
 
         // Load today's tools
         async function loadTools() {
-            // Get technician name from localStorage - we don't need Firebase user for this!
-            const technicianName = localStorage.getItem('fullName');
-            
-            if (!technicianName) {
-                console.log('loadTools: No technician name in localStorage');
+            const user = auth.currentUser;
+            if (!user) {
+                console.log('loadTools: No user logged in');
                 return;
             }
-            
-            console.log('loadTools: Using technician name from localStorage:', technicianName);
 
             try {
+                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                const technicianName = technicianDoc.exists ? technicianDoc.data().fullName : 'Unknown Technician';
 
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
@@ -3043,21 +2748,7 @@
                     console.log('Location selected:', location);
                     
                     modal.hide();
-                    console.log('Calling processToolSubmission with toolCode:', toolCode);
-                    console.log('processToolSubmission function exists?', typeof processToolSubmission);
-                    console.log('window.processToolSubmission function exists?', typeof window.processToolSubmission);
-                    
-                    // Call the function - use window.processToolSubmission if available
-                    const processFunc = window.processToolSubmission || processToolSubmission;
-                    if (typeof processFunc === 'function') {
-                        processFunc(toolCode).catch(error => {
-                            console.error('Error in processToolSubmission:', error);
-                            alert('Error processing tool: ' + error.message);
-                        });
-                    } else {
-                        console.error('ERROR: processToolSubmission function not found!');
-                        alert('Error: Tool processing function not found. Please refresh the page.');
-                    }
+                    processToolSubmission(toolCode);
                 };
             });
             
@@ -3078,21 +2769,7 @@
         }
 
         function showHelicopterModelSelectionModal() {
-            console.log('=== showHelicopterModelSelectionModal called ===');
-            const modalElement = document.getElementById('helicopterModelSelectionModal');
-            if (!modalElement) {
-                console.error('=== ERROR: helicopterModelSelectionModal element not found in DOM! ===');
-                return;
-            }
-            console.log('=== Modal element found, creating Bootstrap modal ===');
-            const modal = new bootstrap.Modal(modalElement);
-            console.log('=== Bootstrap modal created, showing modal ===');
-            try {
-                modal.show();
-                console.log('=== Modal.show() called successfully ===');
-            } catch (error) {
-                console.error('=== ERROR calling modal.show():', error);
-            }
+            const modal = new bootstrap.Modal(document.getElementById('helicopterModelSelectionModal'));
             document.querySelectorAll('.helicopter-model-option').forEach(btn => {
                 btn.classList.remove('active');
                 btn.style.background = '#f8f9fa';
@@ -3263,14 +2940,6 @@
             clearWorkLocationFlash();
             clearAllCountdowns();
             updateWorkLocationLabel();
-            
-            // Ensure name is correct (use fullName, not technicianName)
-            const correctName = localStorage.getItem('fullName');
-            const nameElem = document.getElementById('registerScreenName');
-            if (nameElem && correctName) {
-                nameElem.textContent = correctName;
-            }
-            
             loadTools();
             showNotificationsInSequence();
         }
