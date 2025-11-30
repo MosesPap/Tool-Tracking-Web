@@ -335,8 +335,9 @@
                 const techniciansId = localStorage.getItem('techniciansId') || user.uid;
 
                 // Query for tools checked out by this technician that are still OUT
+                // Note: Tools are saved with 'technician' field, not 'checkedOutBy'
                 const outToolsSnapshot = await db.collection('tools')
-                    .where('checkedOutBy', '==', fullName)
+                    .where('technician', '==', fullName)
                     .where('status', '==', 'OUT')
                     .get();
 
