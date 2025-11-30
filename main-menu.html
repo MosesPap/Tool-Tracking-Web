@@ -231,25 +231,33 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        // Use global Firebase instances from common.js
-        // This ensures all pages use the same Firebase Auth instance with LOCAL persistence
-        const auth = window.auth || firebase.auth();
-        const db = window.db || firebase.firestore();
-        
-        console.log('[MAIN-MENU] Using auth instance:', auth === window.auth ? 'global (common.js)' : 'local (fallback)');
-        console.log('[MAIN-MENU] Using db instance:', db === window.db ? 'global (common.js)' : 'local (fallback)');
+        // Wait for common.js to load and set window.auth
+        // This ensures we use the same Firebase Auth instance across all pages
+        function initializeMainMenu() {
+            // Get auth and db from common.js (global instances)
+            const auth = window.auth;
+            const db = window.db;
+            
+            if (!auth || !db) {
+                console.error('[MAIN-MENU] window.auth or window.db not available! Retrying in 100ms...');
+                setTimeout(initializeMainMenu, 100);
+                return;
+            }
+            
+            console.log('[MAIN-MENU] ✓ Using global auth instance from common.js');
+            console.log('[MAIN-MENU] ✓ Using global db instance from common.js');
 
-        // Variables
-        let previousOutToolsCount = 0;
-        let previousOutToolsData = [];
+            // Variables
+            let previousOutToolsCount = 0;
+            let previousOutToolsData = [];
 
-        // Check authentication state
-        console.log('[MAIN-MENU] Page loaded, checking auth state...');
-        console.log('[MAIN-MENU] localStorage.authVerified:', localStorage.getItem('authVerified'));
-        console.log('[MAIN-MENU] localStorage.fullName:', localStorage.getItem('fullName'));
-        console.log('[MAIN-MENU] auth.currentUser (sync):', auth.currentUser ? auth.currentUser.email : 'null');
-        
-        auth.onAuthStateChanged(function(user) {
+            // Check authentication state
+            console.log('[MAIN-MENU] Page loaded, checking auth state...');
+            console.log('[MAIN-MENU] localStorage.authVerified:', localStorage.getItem('authVerified'));
+            console.log('[MAIN-MENU] localStorage.fullName:', localStorage.getItem('fullName'));
+            console.log('[MAIN-MENU] auth.currentUser (sync):', auth.currentUser ? auth.currentUser.email : 'null');
+            
+            auth.onAuthStateChanged(function(user) {
             console.log('[MAIN-MENU] onAuthStateChanged fired, user:', user ? user.email : 'null');
             console.log('[MAIN-MENU] user.emailVerified:', user ? user.emailVerified : 'N/A');
             
@@ -509,16 +517,20 @@
             console.log('Menu buttons setup complete');
         }
 
-        // Setup buttons when DOM is ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', setupMenuButtons);
-        } else {
-            // DOM is already loaded
-            setupMenuButtons();
+            // Setup buttons when DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', setupMenuButtons);
+            } else {
+                // DOM is already loaded
+                setupMenuButtons();
+            }
+            
+            // Also try after a short delay as fallback
+            setTimeout(setupMenuButtons, 100);
         }
         
-        // Also try after a short delay as fallback
-        setTimeout(setupMenuButtons, 100);
+        // Start initialization - wait for common.js to load
+        initializeMainMenu();
     </script>
 </body>
 </html>
