@@ -992,6 +992,7 @@
         let photoUploadAutoShareTargets = [];
         let currentToolPhotoUrls = [];
         let bulkScanMessageTimeout = null;
+        let bulkScanModeAutoEnabled = false; // Track if bulk scan mode was auto-enabled
         
         // Initialize page on load
         document.addEventListener('DOMContentLoaded', function() {
@@ -1302,6 +1303,34 @@
             document.getElementById('toolCode').addEventListener('input', function() {
                 const btn = document.getElementById('toolDetailsBtn');
                 btn.disabled = !this.value.trim();
+                
+                // Auto-enable bulk scan mode when comma is detected
+                const value = this.value.trim();
+                if (value.includes(',')) {
+                    // Check if bulk scan mode is not already enabled
+                    if (!bulkScanMode) {
+                        bulkScanMode = true;
+                        bulkScanModeAutoEnabled = true;
+                        const bulkBtn = document.getElementById('bulkScanModeBtn');
+                        if (bulkBtn) {
+                            bulkBtn.style.background = 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)';
+                            bulkBtn.style.borderColor = '#FF9800';
+                            bulkBtn.style.color = 'white';
+                            bulkScannedTools = [];
+                        }
+                    }
+                } else if (value.length === 0 && bulkScanModeAutoEnabled) {
+                    // Auto-disable bulk scan mode only if input is empty and it was auto-enabled
+                    bulkScanMode = false;
+                    bulkScanModeAutoEnabled = false;
+                    const bulkBtn = document.getElementById('bulkScanModeBtn');
+                    if (bulkBtn) {
+                        bulkBtn.style.background = 'linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%)';
+                        bulkBtn.style.borderColor = '#bdbdbd';
+                        bulkBtn.style.color = '#333';
+                        bulkScannedTools = [];
+                    }
+                }
             });
             
             // Scan Tool tab toggle
@@ -1714,6 +1743,9 @@
         // Bulk Scan Mode Functions (make it global)
         window.toggleBulkScanMode = function toggleBulkScanMode() {
             bulkScanMode = !bulkScanMode;
+            // When manually toggled, clear auto-enabled flag
+            // When manually toggled, clear auto-enabled flag
+            bulkScanModeAutoEnabled = false;
             const btn = document.getElementById('bulkScanModeBtn');
             
             if (bulkScanMode) {

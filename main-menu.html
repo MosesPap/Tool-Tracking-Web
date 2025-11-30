@@ -342,8 +342,55 @@
                     .get();
 
                 if (!outToolsSnapshot.empty) {
-                    previousOutToolsCount = outToolsSnapshot.size;
-                    previousOutToolsData = outToolsSnapshot.docs.map(doc => ({
+                    // Calculate today's start time (midnight in local timezone)
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    console.log('[MAIN-MENU] Today start time (local):', today.toISOString());
+                    console.log('[MAIN-MENU] Today start time (local date):', today.toDateString());
+                    
+                    // Filter tools from previous days (not today)
+                    const previousTools = outToolsSnapshot.docs.filter(doc => {
+                        const data = doc.data();
+                        const timestamp = data.timestamp;
+                        console.log('[MAIN-MENU] Tool', doc.id, 'timestamp:', timestamp, 'timestamp type:', typeof timestamp);
+                        
+                        if (timestamp) {
+                            let toolDate;
+                            // Handle Firestore Timestamp
+                            if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+                                toolDate = timestamp.toDate();
+                            } 
+                            // Handle regular Date object
+                            else if (timestamp instanceof Date) {
+                                toolDate = timestamp;
+                            }
+                            // Handle timestamp number (milliseconds)
+                            else if (typeof timestamp === 'number') {
+                                toolDate = new Date(timestamp);
+                            }
+                            // Handle Firestore Timestamp-like object
+                            else if (timestamp.seconds) {
+                                toolDate = new Date(timestamp.seconds * 1000);
+                            }
+                            else {
+                                console.log('[MAIN-MENU] Tool', doc.id, 'has unsupported timestamp format');
+                                return false;
+                            }
+                            
+                            // Compare dates in local timezone
+                            const toolDateLocal = new Date(toolDate.getFullYear(), toolDate.getMonth(), toolDate.getDate());
+                            const isPrevious = toolDateLocal < today;
+                            console.log('[MAIN-MENU] Tool', doc.id, 'date (UTC):', toolDate.toISOString(), 'date (local):', toolDateLocal.toDateString(), 'isPrevious:', isPrevious);
+                            return isPrevious;
+                        }
+                        console.log('[MAIN-MENU] Tool', doc.id, 'has no timestamp');
+                        return false;
+                    });
+                    
+                    console.log('[MAIN-MENU] Previous tools count:', previousTools.length);
+                    
+                    previousOutToolsCount = previousTools.length;
+                    previousOutToolsData = previousTools.map(doc => ({
                         id: doc.id,
                         ...doc.data()
                     }));

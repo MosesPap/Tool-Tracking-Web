@@ -611,6 +611,9 @@
                         if (currentUser) {
                             console.log('[PREVIOUS-OUT] ✓ Auth confirmed via currentUser:', currentUser.email);
                             localStorage.setItem('authVerified', 'true');
+                            // Reload tools now that user is confirmed
+                            console.log('[PREVIOUS-OUT] Reloading tools after user confirmation...');
+                            loadPreviousOutTools();
                             return;
                         }
                         
@@ -628,6 +631,9 @@
                             if (user) {
                                 console.log('[PREVIOUS-OUT] ✓ Auth confirmed via onAuthStateChanged:', user.email);
                                 localStorage.setItem('authVerified', 'true');
+                                // Reload tools now that user is confirmed
+                                console.log('[PREVIOUS-OUT] Reloading tools after user confirmation via onAuthStateChanged...');
+                                loadPreviousOutTools();
                             } else {
                                 // Only redirect if we're certain user is logged out
                                 console.log('[PREVIOUS-OUT] ⚠ Background auth check: no user found after delay');
@@ -768,26 +774,61 @@
             const auth = window.auth || firebase.auth();
             const db = window.db || firebase.firestore();
             
-            const user = auth.currentUser;
+            // Wait for user to be available (Firebase may need time to restore session)
+            let user = auth.currentUser;
             if (!user) {
-                console.log('loadPreviousOutTools: No user logged in');
-                return;
+                console.log('[PREVIOUS-OUT] loadPreviousOutTools: auth.currentUser is null, waiting for user...');
+                // Wait up to 2 seconds for Firebase to restore the session
+                let waitCount = 0;
+                while (!user && waitCount < 20) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    user = auth.currentUser;
+                    waitCount++;
+                }
+                
+                if (!user) {
+                    console.log('[PREVIOUS-OUT] loadPreviousOutTools: Still no user after waiting, checking localStorage...');
+                    // If still no user but we have localStorage flag, use that
+                    const storedFullName = localStorage.getItem('fullName');
+                    if (storedFullName && localStorage.getItem('authVerified') === 'true') {
+                        console.log('[PREVIOUS-OUT] loadPreviousOutTools: Using stored fullName from localStorage:', storedFullName);
+                        // Continue with storedFullName - we'll use it below
+                    } else {
+                        console.log('[PREVIOUS-OUT] loadPreviousOutTools: No user and no stored credentials, cannot load tools');
+                        return;
+                    }
+                } else {
+                    console.log('[PREVIOUS-OUT] loadPreviousOutTools: User found after waiting:', user.email);
+                }
             }
             
             const previousOutToolsList = document.getElementById('previousOutToolsList');
+            if (!previousOutToolsList) {
+                console.error('[PREVIOUS-OUT] loadPreviousOutTools: previousOutToolsList element not found!');
+                return;
+            }
             
             // Show loading state
             previousOutToolsList.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><div class="mt-2">Refreshing previous OUT tools...</div></div>';
-            document.getElementById('previousOutToolsSummary').innerHTML = `
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <span class="summary-label-3d">Status:</span>
-                    <span class="summary-timestamp-3d" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%); border-color: #F57C00; box-shadow: 0 3px 6px rgba(255, 152, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2);">Refreshing...</span>
-                </div>
-            `;
+            const summaryElement = document.getElementById('previousOutToolsSummary');
+            if (summaryElement) {
+                summaryElement.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span class="summary-label-3d">Status:</span>
+                        <span class="summary-timestamp-3d" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%); border-color: #F57C00; box-shadow: 0 3px 6px rgba(255, 152, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2);">Refreshing...</span>
+                    </div>
+                `;
+            }
             
             try {
                 // Fetch fresh data from tools collection
-                const fullName = localStorage.getItem('fullName') || user.email;
+                // Use localStorage fullName if available (for seamless navigation), otherwise use user.email
+                const fullName = localStorage.getItem('fullName') || (user ? user.email : null);
+                if (!fullName) {
+                    console.error('[PREVIOUS-OUT] loadPreviousOutTools: No fullName available');
+                    previousOutToolsList.innerHTML = '<div class="text-center text-danger">Error: User information not available</div>';
+                    return;
+                }
                 console.log('loadPreviousOutTools: Searching for tools with technician:', fullName);
                 
                 const snapshot = await db.collection('tools')
