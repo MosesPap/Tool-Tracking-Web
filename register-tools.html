@@ -68,17 +68,17 @@
         #debugPanel .log-warning { color: #ffaa00; }
         #debugPanel .log-info { color: #00aaff; }
         
-        /* 3D Grey IN button for OUT tools */
+        /* 3D Grey IN button for OUT tools - Enabled state (default) */
         .tool-in-btn-3d {
             font-weight: bold;
             border-radius: 8px;
             padding: 6px 12px;
             white-space: nowrap;
-            background: linear-gradient(135deg, #9e9e9e 0%, #757575 100%);
-            border: 2px solid #616161;
+            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%);
+            border: 2px solid #757575;
             color: white;
-            box-shadow: 0 2px 4px rgba(117, 117, 117, 0.4),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+            box-shadow: 0 2px 4px rgba(158, 158, 158, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
                         inset 0 -1px 0 rgba(0, 0, 0, 0.2);
             transform: perspective(1000px) rotateX(2deg);
             transition: all 0.3s ease;
@@ -86,61 +86,24 @@
         }
         
         .tool-in-btn-3d:hover {
-            background: linear-gradient(135deg, #8e8e8e 0%, #616161 100%);
-            border-color: #616161;
+            background: linear-gradient(135deg, #a8a8a8 0%, #8e8e8e 100%);
+            border-color: #757575;
             color: white;
             transform: perspective(1000px) rotateX(0deg) translateY(-2px);
-            box-shadow: 0 4px 8px rgba(117, 117, 117, 0.5),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+            box-shadow: 0 4px 8px rgba(158, 158, 158, 0.5),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
                         inset 0 -1px 0 rgba(0, 0, 0, 0.3);
         }
         
         .tool-in-btn-3d:active {
             transform: perspective(1000px) rotateX(2deg) translateY(0px);
-            box-shadow: 0 2px 4px rgba(117, 117, 117, 0.4),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.2),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
-        }
-        
-        /* Orange selected state for IN button */
-        .tool-in-btn-3d.selected {
-            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
-            border-color: #F57C00;
-            color: white;
-            box-shadow: 0 2px 4px rgba(255, 152, 0, 0.4),
+            box-shadow: 0 2px 4px rgba(158, 158, 158, 0.4),
                         inset 0 1px 0 rgba(255, 255, 255, 0.3),
                         inset 0 -1px 0 rgba(0, 0, 0, 0.2);
         }
         
-        .tool-in-btn-3d.selected:hover {
-            background: linear-gradient(135deg, #FB8C00 0%, #E65100 100%);
-            border-color: #E65100;
-            transform: perspective(1000px) rotateX(0deg) translateY(-2px);
-            box-shadow: 0 4px 8px rgba(255, 152, 0, 0.5),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.3);
-        }
-        
-        /* Disabled state for IN button (during countdown) */
-        .tool-in-btn-3d:disabled {
-            background: linear-gradient(135deg, #9e9e9e 0%, #757575 100%);
-            border-color: #616161;
-            color: white;
-            cursor: not-allowed;
-            opacity: 0.7;
-        }
-        
-        .tool-in-btn-3d:disabled:hover {
-            background: linear-gradient(135deg, #9e9e9e 0%, #757575 100%);
-            border-color: #616161;
-            transform: perspective(1000px) rotateX(2deg);
-            box-shadow: 0 2px 4px rgba(117, 117, 117, 0.4),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.2),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
-        }
-        
-        /* Enabled green state for IN button (when ready) */
-        .tool-in-btn-3d.enabled {
+        /* Green selected state for IN button */
+        .tool-in-btn-3d.selected {
             background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
             border-color: #388E3C;
             color: white;
@@ -149,13 +112,31 @@
                         inset 0 -1px 0 rgba(0, 0, 0, 0.2);
         }
         
-        .tool-in-btn-3d.enabled:hover {
+        .tool-in-btn-3d.selected:hover {
             background: linear-gradient(135deg, #45a049 0%, #2e7d32 100%);
             border-color: #2e7d32;
             transform: perspective(1000px) rotateX(0deg) translateY(-2px);
             box-shadow: 0 4px 8px rgba(76, 175, 80, 0.5),
                         inset 0 1px 0 rgba(255, 255, 255, 0.4),
                         inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Disabled state for IN button (during countdown) - darker grey */
+        .tool-in-btn-3d:disabled {
+            background: linear-gradient(135deg, #757575 0%, #616161 100%);
+            border-color: #424242;
+            color: #bdbdbd;
+            cursor: not-allowed;
+            opacity: 0.8;
+        }
+        
+        .tool-in-btn-3d:disabled:hover {
+            background: linear-gradient(135deg, #757575 0%, #616161 100%);
+            border-color: #424242;
+            transform: perspective(1000px) rotateX(2deg);
+            box-shadow: 0 2px 4px rgba(66, 66, 66, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
         }
         
         /* 3D Orange Countdown (when counting down) */
@@ -1406,18 +1387,15 @@
             const isSelected = existingCodes.includes(toolId);
             
             if (isSelected) {
-                // TID already exists, remove it - turn button green (deselected)
+                // TID already exists, remove it - turn button grey (deselected)
                 const newCodes = existingCodes.filter(c => c !== toolId);
                 toolCodeInput.value = newCodes.join(', ');
                 if (button) {
                     button.classList.remove('selected');
-                    // Ensure enabled class is present for green color
-                    if (!button.disabled) {
-                        button.classList.add('enabled');
-                    }
+                    // Button returns to default grey state - no class needed
                 }
             } else {
-                // Add TID to input - turn button orange (selected)
+                // Add TID to input - turn button green (selected)
                 if (!currentValue) {
                     toolCodeInput.value = toolId;
                 } else {
@@ -1425,8 +1403,7 @@
                 }
                 if (button) {
                     button.classList.add('selected');
-                    // Remove enabled class when selected (orange takes precedence)
-                    button.classList.remove('enabled');
+                    // Selected state (green) takes precedence over default grey
                 }
             }
             
@@ -1451,10 +1428,8 @@
             const selectedButtons = document.querySelectorAll('.tool-in-btn-3d.selected');
             selectedButtons.forEach(button => {
                 button.classList.remove('selected');
-                // Restore green enabled state if button is not disabled
-                if (!button.disabled) {
-                    button.classList.add('enabled');
-                }
+                // Restore default grey state if button is not disabled
+                // No class needed - default state is grey
             });
         }
         
@@ -3026,7 +3001,7 @@
                 const inButton = document.getElementById(`tool-in-btn-${toolId}`);
                 if (inButton) {
                     inButton.disabled = true;
-                    inButton.classList.remove('enabled', 'selected');
+                    inButton.classList.remove('selected');
                 }
                 
                 // Show countdown element initially
@@ -3047,12 +3022,11 @@
                     const inButton = document.getElementById(`tool-in-btn-${toolId}`);
                     
                     if (remainingMs <= 0) {
-                        // Countdown finished - hide countdown, enable IN button (green state)
+                        // Countdown finished - hide countdown, enable IN button (grey state)
                         countdownElement.style.display = 'none';
                         if (inButton) {
                             inButton.disabled = false;
-                            inButton.classList.add('enabled');
-                            inButton.classList.remove('selected'); // Start in green (not selected) state
+                            inButton.classList.remove('selected'); // Start in grey (not selected) state
                         }
                         delete countdownRemainingTimes[toolId];
                         if (activeCountdowns[toolId]) {
@@ -3069,7 +3043,7 @@
                         countdownElement.classList.add('counting');
                         if (inButton) {
                             inButton.disabled = true;
-                            inButton.classList.remove('enabled', 'selected');
+                            inButton.classList.remove('selected');
                         }
                     }
                 }
