@@ -760,7 +760,7 @@
     </div>
 
     <!-- Out Tools Notification Modal -->
-    <div class="modal fade" id="outToolsNotifModal" tabindex="-1" aria-labelledby="outToolsNotifModalLabel" aria-hidden="true">
+    <div class="modal fade" id="outToolsNotifModal" tabindex="-1" aria-labelledby="outToolsNotifModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="true">
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header bg-primary text-white">
@@ -3244,22 +3244,31 @@
             const modal = new bootstrap.Modal(modalElement);
             
             // Properly manage aria-hidden attribute to fix accessibility warning
-            modalElement.addEventListener('shown.bs.modal', function() {
+            // Use a named function so we can remove it if needed, but keep it persistent
+            function handleModalShown() {
                 // Remove aria-hidden when modal is shown
                 modalElement.removeAttribute('aria-hidden');
                 modalElement.setAttribute('aria-modal', 'true');
                 // Set focus to the first button to ensure proper focus management
                 const firstButton = modalElement.querySelector('.helicopter-model-option');
                 if (firstButton) {
-                    firstButton.focus();
+                    setTimeout(() => firstButton.focus(), 100);
                 }
-            }, { once: true });
+            }
             
-            modalElement.addEventListener('hidden.bs.modal', function() {
+            function handleModalHidden() {
                 // Restore aria-hidden when modal is hidden
                 modalElement.setAttribute('aria-hidden', 'true');
                 modalElement.removeAttribute('aria-modal');
-            }, { once: true });
+            }
+            
+            // Remove any existing listeners to avoid duplicates
+            modalElement.removeEventListener('shown.bs.modal', handleModalShown);
+            modalElement.removeEventListener('hidden.bs.modal', handleModalHidden);
+            
+            // Add event listeners
+            modalElement.addEventListener('shown.bs.modal', handleModalShown);
+            modalElement.addEventListener('hidden.bs.modal', handleModalHidden);
             
             document.querySelectorAll('.helicopter-model-option').forEach(btn => {
                 btn.classList.remove('active');
@@ -4158,6 +4167,45 @@
                 }
             }
             
+            // Helper function to show outToolsNotifModal with proper ARIA management
+            function showOutToolsNotifModal(message) {
+                const modalElement = document.getElementById('outToolsNotifModal');
+                const modalBody = document.getElementById('outToolsNotifBody');
+                const modal = new bootstrap.Modal(modalElement);
+                
+                // Set the message
+                modalBody.innerHTML = message;
+                
+                // Properly manage aria-hidden attribute to fix accessibility warning
+                function handleModalShown() {
+                    // Remove aria-hidden when modal is shown
+                    modalElement.removeAttribute('aria-hidden');
+                    modalElement.setAttribute('aria-modal', 'true');
+                    // Set focus to the OK button to ensure proper focus management
+                    const okButton = document.getElementById('outToolsNotifOkBtn');
+                    if (okButton) {
+                        setTimeout(() => okButton.focus(), 100);
+                    }
+                }
+                
+                function handleModalHidden() {
+                    // Restore aria-hidden when modal is hidden
+                    modalElement.setAttribute('aria-hidden', 'true');
+                    modalElement.removeAttribute('aria-modal');
+                }
+                
+                // Remove any existing listeners to avoid duplicates
+                modalElement.removeEventListener('shown.bs.modal', handleModalShown);
+                modalElement.removeEventListener('hidden.bs.modal', handleModalHidden);
+                
+                // Add event listeners
+                modalElement.addEventListener('shown.bs.modal', handleModalShown);
+                modalElement.addEventListener('hidden.bs.modal', handleModalHidden);
+                
+                // Show the modal
+                modal.show();
+            }
+            
             if (outstandingNeeded) {
                 document.getElementById('outstandingToolsBody').innerHTML = outstandingMsg;
                 const outstandingModal = new bootstrap.Modal(document.getElementById('outstandingToolsModal'));
@@ -4165,17 +4213,13 @@
                     outstandingModal.hide();
                     if (overdueNeeded) {
                         setTimeout(() => {
-                            document.getElementById('outToolsNotifBody').innerHTML = overdueMsg;
-                            const notifModal = new bootstrap.Modal(document.getElementById('outToolsNotifModal'));
-                            notifModal.show();
+                            showOutToolsNotifModal(overdueMsg);
                         }, 300);
                     }
                 };
                 outstandingModal.show();
             } else if (overdueNeeded) {
-                document.getElementById('outToolsNotifBody').innerHTML = overdueMsg;
-                const notifModal = new bootstrap.Modal(document.getElementById('outToolsNotifModal'));
-                notifModal.show();
+                showOutToolsNotifModal(overdueMsg);
             }
         }
         
