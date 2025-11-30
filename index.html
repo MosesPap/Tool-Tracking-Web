@@ -12064,9 +12064,7 @@ if (!userCredential.user.emailVerified) {
         document.getElementById('checkupDetailsContent').innerHTML = html;
       })();
     }
-
-    
-
+        })(); // End IIFE - closes the function scope to avoid variable conflicts with common.js
     </script>
 
     <script>
@@ -12305,7 +12303,6 @@ if (!userCredential.user.emailVerified) {
             }
         }
         });
-        })(); // End IIFE - closes the function scope to avoid variable conflicts with common.js
     </script>
 </body>
 </html> 
