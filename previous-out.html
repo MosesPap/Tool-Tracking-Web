@@ -521,21 +521,22 @@
 
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
-            // Check if Firebase is available
-            if (typeof firebase === 'undefined' || !firebase.apps.length) {
-                console.error('Firebase not initialized. Waiting...');
-                setTimeout(() => {
-                    if (typeof firebase !== 'undefined' && firebase.apps.length) {
-                        initializePage();
-                    } else {
-                        console.error('Firebase still not available after timeout');
-                    }
-                }, 500);
-            } else {
-                initializePage();
+            // Wait for common.js to load and use global Firebase instances
+            function waitForAuth() {
+                const auth = window.auth;
+                const db = window.db;
+                
+                if (!auth || !db) {
+                    console.log('[PREVIOUS-OUT] Waiting for common.js to load...');
+                    setTimeout(waitForAuth, 50);
+                    return;
+                }
+                
+                console.log('[PREVIOUS-OUT] ✓ Using global Firebase instances from common.js');
+                initializePage(auth, db);
             }
             
-            function initializePage() {
+            function initializePage(auth, db) {
                 console.log('[PREVIOUS-OUT] ====== initializePage() called ======');
                 console.log('[PREVIOUS-OUT] Timestamp:', new Date().toISOString());
                 console.log('[PREVIOUS-OUT] localStorage.authVerified:', localStorage.getItem('authVerified'));
@@ -672,13 +673,10 @@
                         window.location.href = 'main-menu.html';
                     }
                 });
-                    
-                    // Load previous out tools - add small delay to ensure DOM is ready
-                    setTimeout(() => {
-                        loadPreviousOutTools();
-                    }, 100);
-                });
             }
+            
+            // Start waiting for common.js
+            waitForAuth();
         });
         
         // Function to handle back navigation (used by both button and phone back button)
@@ -758,6 +756,10 @@
 
         // Load previous out tools from tools collection
         async function loadPreviousOutTools() {
+            // Use global Firebase instances from common.js
+            const auth = window.auth || firebase.auth();
+            const db = window.db || firebase.firestore();
+            
             const user = auth.currentUser;
             if (!user) {
                 console.log('loadPreviousOutTools: No user logged in');
@@ -1146,6 +1148,8 @@
 
         // Function to show collection details
         async function showCollectionDetails(collectionCode, sourceScreen) {
+            // Use global Firebase instances from common.js
+            const db = window.db || firebase.firestore();
             if (!collectionCode) return;
             // Track the source screen
             lastCollectionDetailsSource = sourceScreen || 'previousOut';
