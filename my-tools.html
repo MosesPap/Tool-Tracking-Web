@@ -615,16 +615,32 @@
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', async function() {
-            console.log('[MY-TOOLS] ====== DOMContentLoaded fired ======');
-            console.log('[MY-TOOLS] Timestamp:', new Date().toISOString());
-            console.log('[MY-TOOLS] localStorage.authVerified:', localStorage.getItem('authVerified'));
-            console.log('[MY-TOOLS] localStorage.fullName:', localStorage.getItem('fullName'));
-            console.log('[MY-TOOLS] auth.currentUser (sync):', auth ? (auth.currentUser ? auth.currentUser.email : 'null') : 'auth not initialized');
+            // Wait for common.js to load and use global Firebase instances
+            function waitForAuth() {
+                const auth = window.auth;
+                const db = window.db;
+                
+                if (!auth || !db) {
+                    console.log('[MY-TOOLS] Waiting for common.js to load...');
+                    setTimeout(waitForAuth, 50);
+                    return;
+                }
+                
+                console.log('[MY-TOOLS] ✓ Using global Firebase instances from common.js');
+                initializePage(auth, db);
+            }
             
-            let initializationComplete = false;
-            
-            // Function to complete page initialization
-            async function completeInitialization() {
+            function initializePage(auth, db) {
+                console.log('[MY-TOOLS] ====== initializePage() called ======');
+                console.log('[MY-TOOLS] Timestamp:', new Date().toISOString());
+                console.log('[MY-TOOLS] localStorage.authVerified:', localStorage.getItem('authVerified'));
+                console.log('[MY-TOOLS] localStorage.fullName:', localStorage.getItem('fullName'));
+                console.log('[MY-TOOLS] auth.currentUser (sync):', auth ? (auth.currentUser ? auth.currentUser.email : 'null') : 'auth not initialized');
+                
+                let initializationComplete = false;
+                
+                // Function to complete page initialization
+                async function completeInitialization() {
                 if (initializationComplete) {
                     console.log('[MY-TOOLS] completeInitialization() already called, skipping');
                     return;
@@ -825,6 +841,8 @@
 
         // Show collection selection dialog (matching index.html)
         async function showCollectionSelectionDialog() {
+            const auth = window.auth || firebase.auth();
+            const db = window.db || firebase.firestore();
             const user = auth.currentUser;
             if (!user) return;
             const fullName = localStorage.getItem('fullName') || user.email;
@@ -891,6 +909,8 @@
 
         // Show My Tools by Collection (matching index.html)
         async function showMyToolsByCollection(collectionName) {
+            const auth = window.auth || firebase.auth();
+            const db = window.db || firebase.firestore();
             lastViewedCollectionName = collectionName;
             const user = auth.currentUser;
             const fullName = localStorage.getItem('fullName') || (user ? user.email : '');
@@ -1046,6 +1066,7 @@
         }
 
         async function getLocationPhotoCount(collectionName, location) {
+            const db = window.db || firebase.firestore();
             if (!collectionName || collectionName === 'N/A' || !location || location === 'N/A') return 0;
             try {
                 const documentId = `${collectionName}_${location}`;
@@ -1065,6 +1086,8 @@
 
         // My Tools Screen with app-like formatting (kept for backward compatibility, but not used in main flow)
         async function showMyTools() {
+            const auth = window.auth || firebase.auth();
+            const db = window.db || firebase.firestore();
             const user = auth.currentUser;
             if (!user) return;
             const fullName = localStorage.getItem('fullName') || user.email;
@@ -1159,6 +1182,7 @@
 
         // Show tool details from My Tools
         async function showToolDetailsFromMyTools(tool) {
+            const db = window.db || firebase.firestore();
             const formatTimestamp = (timestamp) => {
                 if (!timestamp) return 'N/A';
                 if (timestamp.toDate) {
@@ -1266,6 +1290,8 @@
 
         // Update collection photo button counts
         async function updateCollectionPhotoButtonCounts() {
+            const auth = window.auth || firebase.auth();
+            const db = window.db || firebase.firestore();
             try {
                 // Update My Tools screen buttons
                 const myToolsBtn = document.getElementById('myToolsCollectionPhotosBtn');
@@ -1489,6 +1515,8 @@
 
         // Upload collection photo
         async function uploadCollectionPhoto(collectionName, file) {
+            const db = window.db || firebase.firestore();
+            const storage = window.storage || firebase.storage();
             try {
                 const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
                 loadingModal.show();
@@ -1684,6 +1712,8 @@
 
         // Delete collection photo
         async function deleteCollectionPhoto(photoIndex, photoUrl) {
+            const db = window.db || firebase.firestore();
+            const storage = window.storage || firebase.storage();
             if (!confirm('Are you sure you want to delete this photo? This action cannot be undone.')) {
                 return;
             }
@@ -1792,6 +1822,7 @@
 
         // Create photo upload input (full implementation with photo sharing logic)
         async function createPhotoUploadInput(toolId, partNumber) {
+            const db = window.db || firebase.firestore();
             currentPhotoUploadToolId = toolId;
             currentPhotoUploadPartNumber = partNumber;
             photoUploadToAllTools = false;
@@ -2003,6 +2034,7 @@
 
         // Use multiple selected photos
         async function useSelectedPhotos(toolId, partNumber, toolsWithSamePartDocs = [], addToAll = false) {
+            const db = window.db || firebase.firestore();
             if (!window.selectedPhotos || window.selectedPhotos.length === 0) {
                 alert('Please select at least one photo.');
                 return;
@@ -2201,6 +2233,8 @@
 
         // Upload tool photo (full implementation with sharing logic)
         async function uploadToolPhoto(toolId, partNumber, file) {
+            const db = window.db || firebase.firestore();
+            const storage = window.storage || firebase.storage();
             try {
                 const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
                 loadingModal.show();
@@ -2385,6 +2419,8 @@
 
         // Delete photo function (full implementation with admin code verification)
         async function deletePhoto(toolId, partNumber, photoIndex, photoUrl) {
+            const db = window.db || firebase.firestore();
+            const storage = window.storage || firebase.storage();
             return new Promise(async (resolve, reject) => {
                 try {
                     // Find all tools with the same part number to show owners
@@ -2426,6 +2462,7 @@
                     
                     // Handle "Delete from ALL Tools" button
                     document.getElementById('deleteFromAllToolsBtn').onclick = async function() {
+                        const db = window.db || firebase.firestore();
                         choiceModal.hide();
                         
                         const settingsDoc = await db.collection('settings').doc('admin').get();
@@ -2456,6 +2493,8 @@
                     };
                     
                     async function proceedWithDeletion() {
+                        const db = window.db || firebase.firestore();
+                        const storage = window.storage || firebase.storage();
                         const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
                         loadingModal.show();
                         document.getElementById('photoUploadProgress').textContent = 'Deleting photo...';
