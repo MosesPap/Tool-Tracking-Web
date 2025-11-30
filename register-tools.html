@@ -2346,11 +2346,22 @@
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
                             <div style="color: blue; font-weight: normal; cursor: pointer; text-align: left;">
-                                Click For Details
+                                Press for Details
                             </div>
-                            ${status === 'OUT' ? `<div id="countdown-${tool.id}" class="cooldown-countdown" style="background: #FF9800; color: white; padding: 6px 8px; border-radius: 4px; font-weight: bold; text-align: center; white-space: nowrap;" onclick="event.stopPropagation();">
-                                <span style="font-weight: bold;">Check-in in:</span> <span class="countdown-value">Loading...</span>
-                            </div>` : ''}
+                            ${status === 'OUT' ? `
+                                <div style="display: flex; gap: 8px; align-items: center; flex: 1; justify-content: flex-end;">
+                                    <div id="countdown-${tool.id}" class="cooldown-countdown" style="background: #FF9800; color: white; padding: 6px 8px; border-radius: 4px; font-weight: bold; text-align: center; white-space: nowrap; display: none;" onclick="event.stopPropagation();">
+                                        <span style="font-weight: bold;">Time for Check-in:</span> <span class="countdown-value">Loading...</span>
+                                    </div>
+                                    <button id="tool-in-btn-${tool.id}" 
+                                            class="tool-in-btn-3d" 
+                                            disabled
+                                            onclick="event.stopPropagation(); pasteToolIdToInput('${tool.id}', event);"
+                                            style="flex-shrink: 0;">
+                                        IN
+                                    </button>
+                                </div>
+                            ` : ''}
                         </div>
                     `;
                     toolsContainer.appendChild(card);
@@ -3018,6 +3029,9 @@
                     inButton.classList.remove('enabled', 'selected');
                 }
                 
+                // Show countdown element initially
+                countdownElement.style.display = 'block';
+                
                 if (activeCountdowns[toolId]) {
                     clearInterval(activeCountdowns[toolId]);
                 }
@@ -3047,6 +3061,7 @@
                         }
                     } else {
                         // Still counting down - show countdown, disable IN button
+                        countdownElement.style.display = 'block';
                         const mins = Math.floor(remainingMs / 60000);
                         const secs = Math.floor((remainingMs % 60000) / 1000);
                         valueSpan.textContent = `${mins}m ${secs}s`;

@@ -576,6 +576,14 @@
                     console.log('[PREVIOUS-OUT] Setting up event listeners...');
                     setupEventListeners();
                     console.log('[PREVIOUS-OUT] Event listeners set up');
+                    
+                    // Load previous out tools - add small delay to ensure DOM is ready
+                    console.log('[PREVIOUS-OUT] Scheduling loadPreviousOutTools()...');
+                    setTimeout(() => {
+                        console.log('[PREVIOUS-OUT] Calling loadPreviousOutTools()...');
+                        loadPreviousOutTools();
+                    }, 100);
+                    
                     console.log('[PREVIOUS-OUT] completeInitialization() completed');
                 }
                 
