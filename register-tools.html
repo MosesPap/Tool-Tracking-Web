@@ -708,6 +708,126 @@
     
     <script>
         // ============================================
+        // DEBUG MODE UTILITY
+        // ============================================
+        // Enable debug mode via URL parameter ?debug=true or localStorage
+        const DEBUG_MODE = new URLSearchParams(window.location.search).get('debug') === 'true' || 
+                          localStorage.getItem('debugMode') === 'true';
+        
+        if (DEBUG_MODE) {
+            localStorage.setItem('debugMode', 'true');
+        }
+        
+        const debugLogs = [];
+        const MAX_DEBUG_LOGS = 500;
+        
+        // Enhanced logging function that logs to both console and debug panel
+        function debugLog(message, type = 'info') {
+            const timestamp = new Date().toISOString();
+            const logEntry = {
+                timestamp,
+                message,
+                type
+            };
+            
+            // Add to logs array
+            debugLogs.push(logEntry);
+            if (debugLogs.length > MAX_DEBUG_LOGS) {
+                debugLogs.shift();
+            }
+            
+            // Log to console
+            const consoleMethod = type === 'error' ? 'error' : 
+                                  type === 'warning' ? 'warn' : 
+                                  type === 'success' ? 'log' : 'log';
+            console[consoleMethod](message);
+            
+            // Update debug panel if visible
+            if (DEBUG_MODE) {
+                updateDebugPanel();
+            }
+            
+            // Also save to localStorage for persistence
+            try {
+                const savedLogs = JSON.parse(localStorage.getItem('debugLogs') || '[]');
+                savedLogs.push(logEntry);
+                if (savedLogs.length > MAX_DEBUG_LOGS) {
+                    savedLogs.shift();
+                }
+                localStorage.setItem('debugLogs', JSON.stringify(savedLogs));
+            } catch (e) {
+                // Ignore localStorage errors
+            }
+        }
+        
+        function updateDebugPanel() {
+            const panel = document.getElementById('debugPanel');
+            const content = document.getElementById('debugContent');
+            if (!panel || !content) return;
+            
+            panel.classList.add('active');
+            content.innerHTML = debugLogs.map(log => {
+                const time = new Date(log.timestamp).toLocaleTimeString();
+                return `<div class="log-entry log-${log.type}">
+                    <span class="log-timestamp">[${time}]</span>
+                    ${log.message}
+                </div>`;
+            }).join('');
+            
+            // Auto-scroll to bottom
+            content.scrollTop = content.scrollHeight;
+        }
+        
+        function toggleDebugPanel() {
+            const panel = document.getElementById('debugPanel');
+            if (panel) {
+                panel.classList.toggle('active');
+            }
+        }
+        
+        // Safe redirect function that respects debug mode
+        window.safeRedirect = function(url) {
+            if (DEBUG_MODE) {
+                debugLog(`[DEBUG] Redirect BLOCKED to: ${url}`, 'warning');
+                debugLog(`[DEBUG] To allow redirect: localStorage.removeItem('debugMode') or remove ?debug=true`, 'info');
+                return false; // Block redirect
+            }
+            window.location.href = url;
+            return true; // Redirect allowed
+        };
+        
+        // Intercept redirects by overriding window.location.href
+        if (DEBUG_MODE) {
+            const originalLocation = window.location;
+            let locationOverride = {
+                ...originalLocation,
+                set href(url) {
+                    debugLog(`[DEBUG] Redirect BLOCKED: window.location.href = "${url}"`, 'warning');
+                    debugLog(`[DEBUG] To allow: localStorage.removeItem('debugMode')`, 'info');
+                },
+                get href() {
+                    return originalLocation.href;
+                }
+            };
+            
+            // Try to override location (may not work in all browsers)
+            try {
+                Object.defineProperty(window, 'location', {
+                    get: function() {
+                        return locationOverride;
+                    },
+                    configurable: true
+                });
+            } catch (e) {
+                debugLog(`[DEBUG] Could not override window.location: ${e.message}`, 'warning');
+            }
+            
+            debugLog('[DEBUG] Debug mode ENABLED - redirects will be blocked', 'success');
+            debugLog('[DEBUG] Page: register-tools.html', 'info');
+            debugLog('[DEBUG] To disable: localStorage.removeItem("debugMode") or remove ?debug=true', 'info');
+        }
+        
+        // ============================================
         // REGISTER TOOLS PAGE - SPECIFIC JAVASCRIPT
         // ============================================
         
@@ -929,7 +1049,7 @@
                                 if (!window.safeRedirect('main-menu.html')) {
                                     // Redirect blocked by debug mode
                                 }
-                                    } else {
+                            } else {
                                         console.log('[REGISTER-TOOLS] ✓ User found in double-check, staying on page');
                                     }
                                 }, 500);
@@ -952,10 +1072,8 @@
                         debugLog('[REGISTER-TOOLS] ✗ User email not verified, signing out...', 'error');
                         auth.signOut();
                         localStorage.removeItem('authVerified');
-                        if (DEBUG_MODE) {
-                            debugLog('[DEBUG] Redirect blocked - would go to: main-menu.html', 'warning');
-                        } else {
-                            window.location.href = 'main-menu.html';
+                        if (!window.safeRedirect('main-menu.html')) {
+                            // Redirect blocked by debug mode
                         }
                         return;
                     }
@@ -971,10 +1089,8 @@
                     } else {
                         debugLog('[REGISTER-TOOLS] ✗ No user found, redirecting to main-menu.html', 'error');
                         localStorage.removeItem('authVerified');
-                        if (DEBUG_MODE) {
-                            debugLog('[DEBUG] Redirect blocked - would go to: main-menu.html', 'warning');
-                        } else {
-                            window.location.href = 'main-menu.html';
+                        if (!window.safeRedirect('main-menu.html')) {
+                            // Redirect blocked by debug mode
                         }
                     }
                 });
@@ -984,10 +1100,11 @@
         // Function to handle back navigation (used by both button and phone back button)
         function handleBackNavigation() {
             // Set flag to skip splash video
-            if (!window.safeRedirect) {
-                window.location.href = 'main-menu.html';
-            } else {
+            if (window.safeRedirect) {
                 window.safeRedirect('main-menu.html');
+            } else {
+                // Fallback if safeRedirect not available
+                window.location.href = 'main-menu.html';
             }
         }
         
