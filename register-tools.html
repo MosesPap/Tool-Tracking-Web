@@ -1299,14 +1299,51 @@
                 showLocationSelectionModalForRegisterTools();
             };
             
+            // Track previous input value to detect deletions
+            let previousInputValue = '';
+            
             // Tool code input - enable/disable Tool Details button
             document.getElementById('toolCode').addEventListener('input', function() {
                 const btn = document.getElementById('toolDetailsBtn');
                 btn.disabled = !this.value.trim();
                 
+                const currentValue = this.value.trim();
+                
+                // Check for deleted codes and deselect corresponding buttons
+                if (previousInputValue !== undefined && previousInputValue !== currentValue) {
+                    const previousCodes = previousInputValue ? previousInputValue.split(',').map(c => c.trim()).filter(c => c.length > 0) : [];
+                    const currentCodes = currentValue ? currentValue.split(',').map(c => c.trim()).filter(c => c.length > 0) : [];
+                    
+                    // Find codes that were removed
+                    const removedCodes = previousCodes.filter(code => !currentCodes.includes(code));
+                    
+                    // Deselect buttons for removed codes
+                    removedCodes.forEach(toolId => {
+                        const button = document.getElementById(`tool-in-btn-${toolId}`);
+                        if (button && !button.disabled) {
+                            button.classList.remove('selected');
+                            // Button returns to default grey state
+                        }
+                    });
+                    
+                    // Find codes that were added (manually typed)
+                    const addedCodes = currentCodes.filter(code => !previousCodes.includes(code));
+                    
+                    // Select buttons for added codes (if they exist and are not disabled)
+                    addedCodes.forEach(toolId => {
+                        const button = document.getElementById(`tool-in-btn-${toolId}`);
+                        if (button && !button.disabled) {
+                            button.classList.add('selected');
+                            // Button turns green (selected state)
+                        }
+                    });
+                }
+                
+                // Update previous value for next comparison
+                previousInputValue = currentValue;
+                
                 // Auto-enable bulk scan mode when comma is detected
-                const value = this.value.trim();
-                if (value.includes(',')) {
+                if (currentValue.includes(',')) {
                     // Check if bulk scan mode is not already enabled
                     if (!bulkScanMode) {
                         bulkScanMode = true;
@@ -1319,7 +1356,7 @@
                             bulkScannedTools = [];
                         }
                     }
-                } else if (value.length === 0 && bulkScanModeAutoEnabled) {
+                } else if (currentValue.length === 0 && bulkScanModeAutoEnabled) {
                     // Auto-disable bulk scan mode only if input is empty and it was auto-enabled
                     bulkScanMode = false;
                     bulkScanModeAutoEnabled = false;
@@ -1330,6 +1367,14 @@
                         bulkBtn.style.color = '#333';
                         bulkScannedTools = [];
                     }
+                    
+                    // Deselect all buttons when input is cleared
+                    const allSelectedButtons = document.querySelectorAll('.tool-in-btn-3d.selected');
+                    allSelectedButtons.forEach(button => {
+                        if (!button.disabled) {
+                            button.classList.remove('selected');
+                        }
+                    });
                 }
             });
             
