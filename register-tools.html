@@ -3244,9 +3244,35 @@
             const modal = new bootstrap.Modal(modalElement);
             
             // Properly manage aria-hidden attribute to fix accessibility warning
-            // Use a named function so we can remove it if needed, but keep it persistent
+            let observer = null;
+            
+            function handleModalShow() {
+                // Remove aria-hidden before Bootstrap shows the modal
+                modalElement.removeAttribute('aria-hidden');
+                modalElement.setAttribute('aria-modal', 'true');
+                
+                // Use MutationObserver to watch for Bootstrap trying to set aria-hidden
+                observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.type === 'attributes' && mutation.attributeName === 'aria-hidden') {
+                            // If Bootstrap tries to set aria-hidden to true while modal is visible, remove it
+                            if (modalElement.getAttribute('aria-hidden') === 'true' && 
+                                modalElement.classList.contains('show')) {
+                                modalElement.removeAttribute('aria-hidden');
+                                modalElement.setAttribute('aria-modal', 'true');
+                            }
+                        }
+                    });
+                });
+                
+                observer.observe(modalElement, {
+                    attributes: true,
+                    attributeFilter: ['aria-hidden']
+                });
+            }
+            
             function handleModalShown() {
-                // Remove aria-hidden when modal is shown
+                // Ensure aria-hidden is removed after modal is shown
                 modalElement.removeAttribute('aria-hidden');
                 modalElement.setAttribute('aria-modal', 'true');
                 // Set focus to the first button to ensure proper focus management
@@ -3257,16 +3283,23 @@
             }
             
             function handleModalHidden() {
+                // Stop observing when modal is hidden
+                if (observer) {
+                    observer.disconnect();
+                    observer = null;
+                }
                 // Restore aria-hidden when modal is hidden
                 modalElement.setAttribute('aria-hidden', 'true');
                 modalElement.removeAttribute('aria-modal');
             }
             
             // Remove any existing listeners to avoid duplicates
+            modalElement.removeEventListener('show.bs.modal', handleModalShow);
             modalElement.removeEventListener('shown.bs.modal', handleModalShown);
             modalElement.removeEventListener('hidden.bs.modal', handleModalHidden);
             
-            // Add event listeners
+            // Add event listeners - use 'show.bs.modal' which fires BEFORE the modal is shown
+            modalElement.addEventListener('show.bs.modal', handleModalShow);
             modalElement.addEventListener('shown.bs.modal', handleModalShown);
             modalElement.addEventListener('hidden.bs.modal', handleModalHidden);
             
@@ -4177,8 +4210,35 @@
                 modalBody.innerHTML = message;
                 
                 // Properly manage aria-hidden attribute to fix accessibility warning
+                let observer = null;
+                
+                function handleModalShow() {
+                    // Remove aria-hidden before Bootstrap shows the modal
+                    modalElement.removeAttribute('aria-hidden');
+                    modalElement.setAttribute('aria-modal', 'true');
+                    
+                    // Use MutationObserver to watch for Bootstrap trying to set aria-hidden
+                    observer = new MutationObserver(function(mutations) {
+                        mutations.forEach(function(mutation) {
+                            if (mutation.type === 'attributes' && mutation.attributeName === 'aria-hidden') {
+                                // If Bootstrap tries to set aria-hidden to true while modal is visible, remove it
+                                if (modalElement.getAttribute('aria-hidden') === 'true' && 
+                                    modalElement.classList.contains('show')) {
+                                    modalElement.removeAttribute('aria-hidden');
+                                    modalElement.setAttribute('aria-modal', 'true');
+                                }
+                            }
+                        });
+                    });
+                    
+                    observer.observe(modalElement, {
+                        attributes: true,
+                        attributeFilter: ['aria-hidden']
+                    });
+                }
+                
                 function handleModalShown() {
-                    // Remove aria-hidden when modal is shown
+                    // Ensure aria-hidden is removed after modal is shown
                     modalElement.removeAttribute('aria-hidden');
                     modalElement.setAttribute('aria-modal', 'true');
                     // Set focus to the OK button to ensure proper focus management
@@ -4189,16 +4249,23 @@
                 }
                 
                 function handleModalHidden() {
+                    // Stop observing when modal is hidden
+                    if (observer) {
+                        observer.disconnect();
+                        observer = null;
+                    }
                     // Restore aria-hidden when modal is hidden
                     modalElement.setAttribute('aria-hidden', 'true');
                     modalElement.removeAttribute('aria-modal');
                 }
                 
                 // Remove any existing listeners to avoid duplicates
+                modalElement.removeEventListener('show.bs.modal', handleModalShow);
                 modalElement.removeEventListener('shown.bs.modal', handleModalShown);
                 modalElement.removeEventListener('hidden.bs.modal', handleModalHidden);
                 
-                // Add event listeners
+                // Add event listeners - use 'show.bs.modal' which fires BEFORE the modal is shown
+                modalElement.addEventListener('show.bs.modal', handleModalShow);
                 modalElement.addEventListener('shown.bs.modal', handleModalShown);
                 modalElement.addEventListener('hidden.bs.modal', handleModalHidden);
                 
