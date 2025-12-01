@@ -3735,29 +3735,91 @@ if (!userCredential.user.emailVerified) {
             }
             
             try {
+                // Show loading state
+                const signUpBtn = document.getElementById('signUpBtn');
+                const btnText = signUpBtn.querySelector('.btn-text');
+                const btnLoading = signUpBtn.querySelector('.btn-loading');
+                if (btnText && btnLoading) {
+                    btnText.classList.add('d-none');
+                    btnLoading.classList.remove('d-none');
+                    signUpBtn.disabled = true;
+                }
+                
                 // Create Firebase Auth account
                 const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                console.log('Account created successfully:', user.uid);
+                
+                // Create technician document immediately
+                try {
+                    await db.collection('technicians').doc(user.uid).set({
+                        fullName: fullName,
+                        email: email,
+                        isAdmin: false,
+                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    console.log('Technician document created successfully');
+                    
+                    // Store full name in localStorage
+                    localStorage.setItem('fullName', fullName);
+                } catch (techError) {
+                    console.error('Error creating technician document:', techError);
+                    // Continue even if technician document creation fails - onAuthStateChanged will handle it
+                }
+                
+                // Store pending registration data (for tracking verification status)
+                try {
+                    await db.collection('pendingRegistrations').doc(email).set({
+                        fullName: fullName,
+                        email: email,
+                        uid: user.uid,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        verified: false
+                    });
+                } catch (pendingError) {
+                    console.error('Error storing pending registration:', pendingError);
+                    // Continue even if this fails
+                }
                 
                 // Send email verification
-                await userCredential.user.sendEmailVerification();
+                try {
+                    await user.sendEmailVerification();
+                    console.log('Verification email sent');
+                } catch (verifyError) {
+                    console.error('Error sending verification email:', verifyError);
+                    // Continue even if email sending fails
+                }
                 
-                // Store pending registration data
-                await db.collection('pendingRegistrations').doc(email).set({
-                    fullName: fullName,
-                    email: email,
-                    uid: userCredential.user.uid,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    verified: false
-                });
-                
-                // Sign out the user immediately to prevent access
+                // Sign out the user immediately to prevent access until email is verified
                 await auth.signOut();
+                console.log('User signed out after account creation');
 
+                // Reset button state
+                if (btnText && btnLoading) {
+                    btnText.classList.remove('d-none');
+                    btnLoading.classList.add('d-none');
+                    signUpBtn.disabled = false;
+                }
+                
                 alertBox.classList.add('d-none');
                 showLogin();
-                alert('Account created! Please check your email and verify your account before signing in. You will not be able to sign in until you verify your email address.');
+                alert('Account created successfully! Please check your email and verify your account before signing in. You will not be able to sign in until you verify your email address.');
             } catch (error) {
-                alertBox.textContent = error.message;
+                console.error('Error during account creation:', error);
+                
+                // Reset button state
+                const signUpBtn = document.getElementById('signUpBtn');
+                const btnText = signUpBtn.querySelector('.btn-text');
+                const btnLoading = signUpBtn.querySelector('.btn-loading');
+                if (btnText && btnLoading) {
+                    btnText.classList.remove('d-none');
+                    btnLoading.classList.add('d-none');
+                    signUpBtn.disabled = false;
+                }
+                
+                alertBox.textContent = error.message || 'An error occurred during account creation. Please try again.';
                 alertBox.classList.remove('d-none');
             }
         }
