@@ -3399,15 +3399,15 @@
             console.error('[INDEX] window.storage:', window.storage);
             // Fallback: create new instances (shouldn't happen if common.js loads correctly)
             if (!firebase.apps.length) {
-                const firebaseConfig = {
-                    apiKey: "AIzaSyDmI0v_pVt_qFJlsqmw8QlIOi-4VLjyn54",
-                    authDomain: "tool-tracking-system-15e84.firebaseapp.com",
-                    projectId: "tool-tracking-system-15e84",
-                    storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
-                    messagingSenderId: "813615362050",
-                    appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
-                };
-                firebase.initializeApp(firebaseConfig);
+        const firebaseConfig = {
+            apiKey: "AIzaSyDmI0v_pVt_qFJlsqmw8QlIOi-4VLjyn54",
+            authDomain: "tool-tracking-system-15e84.firebaseapp.com",
+            projectId: "tool-tracking-system-15e84",
+            storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
+            messagingSenderId: "813615362050",
+            appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
+        };
+        firebase.initializeApp(firebaseConfig);
             }
             window.auth = window.auth || firebase.auth();
             window.db = window.db || firebase.firestore();
@@ -3432,7 +3432,7 @@
         // Ensure user stays logged in across refreshes and browser restarts
         // Note: setPersistence is already called in common.js, but keeping for compatibility
         if (auth && auth.setPersistence) {
-            auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+        auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
         }
 
         // QR Scanner
@@ -3591,8 +3591,22 @@ if (!userCredential.user.emailVerified) {
                     // Store full name in localStorage
                     localStorage.setItem('fullName', pendingData.fullName);
                 } else {
-                    // Regular login, update technician data
-                    await saveTechnicianToFirestore(userCredential.user);
+                    // Regular login - check if technician document exists, create if not
+                    const technicianDoc = await db.collection('technicians').doc(userCredential.user.uid).get();
+                    if (!technicianDoc.exists) {
+                        // Technician document doesn't exist - create it
+                        await db.collection('technicians').doc(userCredential.user.uid).set({
+                            fullName: userCredential.user.displayName || userCredential.user.email || email,
+                            email: email,
+                            isAdmin: false,
+                            lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        localStorage.setItem('fullName', userCredential.user.displayName || userCredential.user.email || email);
+                    } else {
+                        // Update technician data
+                        await saveTechnicianToFirestore(userCredential.user);
+                    }
                 }
                 
                 // Success: hide login, show only main menu
@@ -12064,7 +12078,7 @@ if (!userCredential.user.emailVerified) {
         document.getElementById('checkupDetailsContent').innerHTML = html;
       })();
     }
-        
+
         // Expose functions that are called from HTML onclick handlers to global scope
         // This is necessary because the IIFE creates a local scope, but HTML onclick handlers run in global scope
         window.signInWithGoogle = signInWithGoogle;
@@ -12332,7 +12346,7 @@ if (!userCredential.user.emailVerified) {
                 console.error('Service Worker registration failed:', error);
             }
         }
-        });
+    });
     </script>
 </body>
 </html> 
