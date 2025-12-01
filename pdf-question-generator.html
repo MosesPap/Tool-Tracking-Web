@@ -527,10 +527,11 @@
                     // Verify auth in background - but wait a bit for Firebase to restore session
                     setTimeout(() => {
                         // First check currentUser (synchronous check)
-                        const currentUser = auth.currentUser;
-                        if (currentUser) {
-                            console.log('Auth confirmed via currentUser:', currentUser.email);
-                            loadApiKeyFromFirestore(currentUser.uid);
+                        const checkUser = auth.currentUser;
+                        if (checkUser) {
+                            console.log('Auth confirmed via currentUser:', checkUser.email);
+                            currentUser = checkUser;
+                            loadApiKeyFromFirestore(checkUser.uid);
                             localStorage.setItem('authVerified', 'true');
                             return;
                         }
