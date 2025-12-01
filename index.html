@@ -2278,7 +2278,7 @@
                     </div>
                     </div>
                     
-                    <button onclick="signUp()" class="btn btn-primary w-100 mb-2" id="signUpBtn">
+                    <button type="button" onclick="signUp(event)" class="btn btn-primary w-100 mb-2" id="signUpBtn">
                         <span class="btn-text">CREATE ACCOUNT</span>
                         <span class="btn-loading d-none">
                             <span class="spinner-border spinner-border-sm me-2"></span>Loading...
@@ -3700,13 +3700,23 @@ if (!userCredential.user.emailVerified) {
         }
 
         // Sign up logic
-        async function signUp() {
+        async function signUp(event) {
+            // Prevent form submission and page refresh
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
+            console.log('=== SIGN UP FUNCTION CALLED ===');
+            
             let fullName = document.getElementById('signUpFullName').value.trim();
             const email = document.getElementById('signUpEmail').value.trim();
             const password = document.getElementById('signUpPassword').value.trim();
             const confirmPassword = document.getElementById('signUpConfirmPassword').value.trim();
             const alertBox = document.getElementById('signUpAlert');
             alertBox.classList.add('d-none');
+            
+            console.log('Form values:', { fullName, email, passwordLength: password.length, confirmPasswordLength: confirmPassword.length });
 
             // Final validation for full name format
             if (!fullName || !/^([A-Z][a-z]+)( [A-Z][a-z]+)+$/.test(fullName)) {
