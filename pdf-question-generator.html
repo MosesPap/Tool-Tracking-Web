@@ -908,23 +908,60 @@
 
         // ========== DUPLICATE DETECTION ==========
         function isDuplicateQuestion(newQuestion, existingQuestions) {
-            // Normalize question text for comparison (lowercase, remove extra spaces)
-            const normalize = (text) => text.toLowerCase().trim().replace(/\s+/g, ' ');
+            // Normalize question text for comparison (lowercase, remove extra spaces, remove punctuation)
+            const normalize = (text) => {
+                return text.toLowerCase()
+                    .trim()
+                    .replace(/[.,!?;:]/g, '') // Remove punctuation
+                    .replace(/\s+/g, ' ') // Normalize whitespace
+                    .replace(/\b(the|a|an|is|are|was|were|do|does|did|can|could|will|would|should)\b/gi, ''); // Remove common words
+            };
+            
+            const normalizeOption = (text) => {
+                return text.toLowerCase()
+                    .trim()
+                    .replace(/[.,!?;:]/g, '')
+                    .replace(/\s+/g, ' ');
+            };
+            
             const newQText = normalize(newQuestion.question);
+            const newOptionsNormalized = Object.values(newQuestion.options)
+                .map(v => normalizeOption(v))
+                .sort()
+                .join('|');
             
             // Check against all existing questions across all levels
             for (const levelGroup of existingQuestions) {
                 for (const existingQ of levelGroup.questions) {
                     const existingQText = normalize(existingQ.question);
                     
-                    // Check if question text is the same or very similar (90% similarity)
-                    if (newQText === existingQText || calculateSimilarity(newQText, existingQText) > 0.9) {
-                        // Also check if answers are the same
-                        const newOptions = Object.values(newQuestion.options).map(v => normalize(v)).sort().join('|');
-                        const existingOptions = Object.values(existingQ.options).map(v => normalize(v)).sort().join('|');
+                    // Calculate similarity
+                    const questionSimilarity = calculateSimilarity(newQText, existingQText);
+                    
+                    // If questions are identical or very similar (85% threshold - more aggressive)
+                    if (newQText === existingQText || questionSimilarity > 0.85) {
+                        // Check if options are similar (even if reordered)
+                        const existingOptionsNormalized = Object.values(existingQ.options)
+                            .map(v => normalizeOption(v))
+                            .sort()
+                            .join('|');
                         
-                        if (newOptions === existingOptions) {
-                            return true; // Duplicate question with same answers
+                        // If questions are very similar AND options are similar, it's a duplicate
+                        const optionsSimilarity = calculateSimilarity(newOptionsNormalized, existingOptionsNormalized);
+                        
+                        // If question is identical or >90% similar, it's a duplicate regardless of answers
+                        if (newQText === existingQText || questionSimilarity > 0.90) {
+                            return true;
+                        }
+                        
+                        // If question is >85% similar AND options are >80% similar, it's a duplicate
+                        if (questionSimilarity > 0.85 && optionsSimilarity > 0.80) {
+                            return true;
+                        }
+                        
+                        // If question is >85% similar AND all options match (even if reordered), it's a duplicate
+                        if (questionSimilarity > 0.85 && newOptionsNormalized === existingOptionsNormalized) {
+                            return true;
                         }
                     }
                 }
@@ -1482,7 +1519,14 @@
                         ? '\nIMPORTANT FOR LEVEL 3: Generate detailed, complex questions that require deep understanding. Keep questions and options concise but comprehensive. Ensure the JSON response is complete and valid.'
                         : '';
                     
-                    const levelPrompt = `Based on the following text from a PDF document, generate ${count} multiple choice questions at ${levelInfo.name}.${complexityNote}
+                    const levelPrompt = `Based on the following text from a PDF document, generate ${count} UNIQUE multiple choice questions at ${levelInfo.name}.${complexityNote}
+
+CRITICAL REQUIREMENTS FOR UNIQUENESS:
+- Each question must be COMPLETELY UNIQUE - no similar or rephrased versions of the same question
+- Questions must test DIFFERENT concepts, facts, or applications
+- Do NOT create variations of the same question with slightly different wording
+- Each question must cover a DISTINCT aspect of the subject matter
+- If you've already asked about a specific topic, do NOT ask about it again in a different way
 
 KNOWLEDGE LEVEL REQUIREMENTS:
 ${levelInfo.description}
@@ -1492,12 +1536,13 @@ ${levelInfo.objectives.map((obj, idx) => `${idx + 1}. ${obj}`).join('\n')}
 
 Each question should have:
 - A clear question stem appropriate for ${levelInfo.name}
-- 3 answer options (A, B, C)
+- 3 answer options (A, B, C) that are DISTINCT and UNIQUE
 - One correct answer clearly marked
 - IMPORTANT: Distribute correct answers evenly and randomly across A, B, and C options. 
   For ${count} questions, ensure roughly equal distribution (not all A, not all B, not all C, and not in a pattern like first=A, middle=B, last=C).
 - Questions should test knowledge at the specified level depth
 - Questions should be varied in style (factual, comprehension, application, analysis) as appropriate for the level
+- Each question must cover a DIFFERENT topic or aspect - no repetition or similarity
 
 Format the response as a JSON array with this structure:
 [
@@ -1688,13 +1733,33 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         // Randomly shuffle options for each question to ensure balanced distribution of correct answers
                         levelQuestions = shuffleQuestionOptions(levelQuestions);
                         
-                        // Filter out duplicates before adding
-                        const existingQuestions = questions; // All questions generated so far
-                        const uniqueQuestions = levelQuestions.filter(q => !isDuplicateQuestion(q, existingQuestions));
+                        // Filter out duplicates before adding - check against ALL existing questions across ALL levels
+                        const existingQuestions = questions; // All questions generated so far (all levels)
+                        
+                        // First pass: filter duplicates against existing questions from other levels
+                        let uniqueQuestions = levelQuestions.filter(q => !isDuplicateQuestion(q, existingQuestions));
                         const duplicatesRemoved = levelQuestions.length - uniqueQuestions.length;
                         
-                        if (duplicatesRemoved > 0) {
-                            console.warn(`Removed ${duplicatesRemoved} duplicate question(s) from Level ${level}`);
+                        // Second pass: check for duplicates within the current level batch
+                        const withinLevelUnique = [];
+                        for (const q of uniqueQuestions) {
+                            let isDuplicate = false;
+                            for (const existingQ of withinLevelUnique) {
+                                if (isDuplicateQuestion(q, [{ questions: [existingQ] }])) {
+                                    isDuplicate = true;
+                                    break;
+                                }
+                            }
+                            if (!isDuplicate) {
+                                withinLevelUnique.push(q);
+                            }
+                        }
+                        const withinLevelDuplicates = uniqueQuestions.length - withinLevelUnique.length;
+                        uniqueQuestions = withinLevelUnique;
+                        const totalDuplicatesRemoved = duplicatesRemoved + withinLevelDuplicates;
+                        
+                        if (totalDuplicatesRemoved > 0) {
+                            console.warn(`Removed ${totalDuplicatesRemoved} duplicate question(s) from Level ${level} (${duplicatesRemoved} cross-level, ${withinLevelDuplicates} within-level)`);
                         }
                         
                         if (uniqueQuestions.length > 0) {
