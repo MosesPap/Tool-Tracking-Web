@@ -3422,11 +3422,11 @@
         const storage = window.storage;
         
         // Set custom error messages for unverified emails
+        // Note: We don't sign out unverified users here - let them complete signup/login flow
+        // Individual pages will check email verification before allowing access
         auth.onAuthStateChanged(function(user) {
-            if (user && !user.emailVerified) {
-                // Force sign out if user is not verified
-                auth.signOut();
-            }
+            // Allow unverified users to stay logged in during signup/login process
+            // Pages like main-menu.html will check verification before allowing access
         });
 
         // Ensure user stays logged in across refreshes and browser restarts
@@ -3789,14 +3789,28 @@ if (!userCredential.user.emailVerified) {
                 
                 // Send email verification
                 try {
-                    await user.sendEmailVerification();
-                    console.log('Verification email sent');
+                    await user.sendEmailVerification({
+                        url: window.location.origin + '/index.html',
+                        handleCodeInApp: false
+                    });
+                    console.log('Verification email sent successfully');
                 } catch (verifyError) {
                     console.error('Error sending verification email:', verifyError);
-                    // Continue even if email sending fails
+                    alertBox.textContent = 'Account created but verification email could not be sent: ' + verifyError.message;
+                    alertBox.classList.remove('d-none');
+                    // Reset button state
+                    if (btnText && btnLoading) {
+                        btnText.classList.remove('d-none');
+                        btnLoading.classList.add('d-none');
+                        signUpBtn.disabled = false;
+                    }
+                    return;
                 }
                 
-                // Sign out the user immediately to prevent access until email is verified
+                // Wait a moment for email to be sent, then sign out
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Sign out the user to prevent access until email is verified
                 await auth.signOut();
                 console.log('User signed out after account creation');
 
