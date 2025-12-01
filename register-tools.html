@@ -993,7 +993,6 @@
         let currentToolPhotoUrls = [];
         let bulkScanMessageTimeout = null;
         let bulkScanModeAutoEnabled = false; // Track if bulk scan mode was auto-enabled
-        let bulkScanCheckedOutByOthers = []; // Collect tools checked out by others during bulk scan
         
         // Initialize page on load
         document.addEventListener('DOMContentLoaded', function() {
@@ -1355,7 +1354,6 @@
                             bulkBtn.style.borderColor = '#FF9800';
                             bulkBtn.style.color = 'white';
                             bulkScannedTools = [];
-                            bulkScanCheckedOutByOthers = []; // Reset when auto-enabling
                         }
                     }
                 } else if (currentValue.length === 0 && bulkScanModeAutoEnabled) {
@@ -1368,32 +1366,6 @@
                         bulkBtn.style.borderColor = '#bdbdbd';
                         bulkBtn.style.color = '#333';
                         bulkScannedTools = [];
-                        
-                        // Show modal with all tools checked out by others (if any) when auto-disabling
-                        if (bulkScanCheckedOutByOthers.length > 0) {
-                            let listHtml = '<div style="max-height: 400px; overflow-y: auto;"><p>The following tools are checked out by other users:</p><ul class="list-group">';
-                            bulkScanCheckedOutByOthers.forEach(tool => {
-                                listHtml += `
-                                    <li class="list-group-item">
-                                        <div class="d-flex justify-content-between align-items-start">
-                                            <div>
-                                                <strong>Tool: ${tool.code}</strong><br>
-                                                <small class="text-muted">${tool.toolName}</small>
-                                            </div>
-                                            <div class="text-end">
-                                                <div><strong>${tool.technician}</strong></div>
-                                                <small class="text-muted">${tool.timestamp}</small>
-                                            </div>
-                                        </div>
-                                    </li>
-                                `;
-                            });
-                            listHtml += '</ul></div>';
-                            document.getElementById('toolAlreadyCheckedOutModalBody').innerHTML = listHtml;
-                            const modal = new bootstrap.Modal(document.getElementById('toolAlreadyCheckedOutModal'));
-                            modal.show();
-                            bulkScanCheckedOutByOthers = []; // Clear after showing
-                        }
                     }
                     
                     // Deselect all buttons when input is cleared
@@ -1605,7 +1577,6 @@
             let errorCount = 0;
             const errors = [];
             const skippedCodes = [];
-            const checkedOutByOthers = []; // Collect tools checked out by other users
             
             // Process each tool sequentially
             for (let i = 0; i < codes.length; i++) {
@@ -1634,21 +1605,6 @@
                     
                     // Check if tool is OUT and checked out by different technician
                     if (data.status === 'OUT' && data.technician !== technicianName) {
-                        // Collect tool info for showing in list at the end
-                        let checkedOutDate = 'Unknown';
-                        if (data.timestamp && data.timestamp.toDate) {
-                            checkedOutDate = data.timestamp.toDate().toLocaleString('en-GB', {
-                                day: '2-digit', month: '2-digit', year: 'numeric',
-                                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-                            });
-                        }
-                        checkedOutByOthers.push({
-                            code: code,
-                            toolName: data.toolName || code,
-                            technician: data.technician || 'Unknown Technician',
-                            timestamp: checkedOutDate
-                        });
-                        
                         skippedCodes.push({ code, reason: 'Checked out by different technician' });
                         continue;
                     }
@@ -1727,31 +1683,6 @@
             // Remove processing message
             if (alertDiv.parentNode) {
                 alertDiv.remove();
-            }
-            
-            // Show modal with all tools checked out by others (if any)
-            if (checkedOutByOthers.length > 0) {
-                let listHtml = '<div style="max-height: 400px; overflow-y: auto;"><p>The following tools are checked out by other users:</p><ul class="list-group">';
-                checkedOutByOthers.forEach(tool => {
-                    listHtml += `
-                        <li class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div>
-                                    <strong>Tool: ${tool.code}</strong><br>
-                                    <small class="text-muted">${tool.toolName}</small>
-                                </div>
-                                <div class="text-end">
-                                    <div><strong>${tool.technician}</strong></div>
-                                    <small class="text-muted">${tool.timestamp}</small>
-                                </div>
-                            </div>
-                        </li>
-                    `;
-                });
-                listHtml += '</ul></div>';
-                document.getElementById('toolAlreadyCheckedOutModalBody').innerHTML = listHtml;
-                const modal = new bootstrap.Modal(document.getElementById('toolAlreadyCheckedOutModal'));
-                modal.show();
             }
             
             // Show summary message
@@ -1856,7 +1787,6 @@
         
         // Bulk Scan Mode Functions (make it global)
         window.toggleBulkScanMode = function toggleBulkScanMode() {
-            const wasEnabled = bulkScanMode;
             bulkScanMode = !bulkScanMode;
             // When manually toggled, clear auto-enabled flag
             // When manually toggled, clear auto-enabled flag
@@ -1868,39 +1798,11 @@
                 btn.style.borderColor = '#FF9800';
                 btn.style.color = 'white';
                 bulkScannedTools = [];
-                bulkScanCheckedOutByOthers = []; // Reset when starting bulk scan
             } else {
                 btn.style.background = 'linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%)';
                 btn.style.borderColor = '#bdbdbd';
                 btn.style.color = '#333';
-                
-                // Show modal with all tools checked out by others (if any) when disabling bulk scan
-                if (bulkScanCheckedOutByOthers.length > 0) {
-                    let listHtml = '<div style="max-height: 400px; overflow-y: auto;"><p>The following tools are checked out by other users:</p><ul class="list-group">';
-                    bulkScanCheckedOutByOthers.forEach(tool => {
-                        listHtml += `
-                            <li class="list-group-item">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <strong>Tool: ${tool.code}</strong><br>
-                                        <small class="text-muted">${tool.toolName}</small>
-                                    </div>
-                                    <div class="text-end">
-                                        <div><strong>${tool.technician}</strong></div>
-                                        <small class="text-muted">${tool.timestamp}</small>
-                                    </div>
-                                </div>
-                            </li>
-                        `;
-                    });
-                    listHtml += '</ul></div>';
-                    document.getElementById('toolAlreadyCheckedOutModalBody').innerHTML = listHtml;
-                    const modal = new bootstrap.Modal(document.getElementById('toolAlreadyCheckedOutModal'));
-                    modal.show();
-                }
-                
                 bulkScannedTools = [];
-                bulkScanCheckedOutByOthers = []; // Clear after showing
             }
         }
         
@@ -1962,21 +1864,6 @@
                 
                 // Validation checks
                 if (data.status === 'OUT' && data.technician !== technicianName) {
-                    // Collect tool info for showing in list when bulk scan mode is disabled
-                    let checkedOutDate = 'Unknown';
-                    if (data.timestamp && data.timestamp.toDate) {
-                        checkedOutDate = data.timestamp.toDate().toLocaleString('en-GB', {
-                            day: '2-digit', month: '2-digit', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-                        });
-                    }
-                    bulkScanCheckedOutByOthers.push({
-                        code: code,
-                        toolName: data.toolName || code,
-                        technician: data.technician || 'Unknown Technician',
-                        timestamp: checkedOutDate
-                    });
-                    
                     showBulkScanMessage(`Tool checked out by <br>${data.technician}`, false);
                     bulkProcessingCodes.delete(code);
                     return;
@@ -2462,10 +2349,28 @@
                     const offlineIndicator = tool.isOffline ? ' (Offline)' : '';
                     const workOnValue = data.WorkOn ? data.WorkOn : 'N/A';
                     const serialNumber = data.serialNumber || data.partNumber || 'N/A';
-                    const partNumber = data.partNumber || 'N/A';
-                    const calDueDate = data.calDueDate && data.calDueDate.toDate 
-                        ? data.calDueDate.toDate().toLocaleDateString('en-GB')
-                        : 'N/A';
+                    // Get partNumber from tools collection - prioritize partNumber field
+                    const partNumber = data.partNumber || tool.id || 'N/A';
+                    // Get calDueDate from tools collection - handle both Firestore timestamp and Date objects
+                    let calDueDate = 'N/A';
+                    if (data.calDueDate) {
+                        if (data.calDueDate.toDate && typeof data.calDueDate.toDate === 'function') {
+                            // Firestore Timestamp
+                            calDueDate = data.calDueDate.toDate().toLocaleDateString('en-GB');
+                        } else if (data.calDueDate instanceof Date) {
+                            // Date object
+                            calDueDate = data.calDueDate.toLocaleDateString('en-GB');
+                        } else if (typeof data.calDueDate === 'string') {
+                            // String date
+                            const dateObj = new Date(data.calDueDate);
+                            if (!isNaN(dateObj.getTime())) {
+                                calDueDate = dateObj.toLocaleDateString('en-GB');
+                            }
+                        } else if (data.calDueDate.seconds) {
+                            // Firestore Timestamp object (seconds property)
+                            calDueDate = new Date(data.calDueDate.seconds * 1000).toLocaleDateString('en-GB');
+                        }
+                    }
                     
                     // Determine status color
                     const statusColor = status === 'IN' ? 'green' : 'red';
@@ -2499,7 +2404,7 @@
                                 <span style="color: #666; font-weight: bold;">${tool.id}</span>
                             </div>
                             <div style="text-align: center;">
-                                <span style="color: #666; font-weight: bold;">${serialNumber}</span>
+                                <span style="color: #666; font-weight: bold;">${partNumber}</span>
                             </div>
                             <div style="text-align: right;">
                                 <span class="badge bg-${status === 'IN' ? 'success' : 'danger'}" style="font-weight: bold; border-radius: 15px; padding: 4px 8px;">${status}</span>
