@@ -1585,7 +1585,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                             generationConfig: {
                                                 temperature: 0.7,
                                                 // Level 3 questions are more complex and need more tokens - increase significantly
-                                                maxOutputTokens: level === 3 ? Math.max(16384, count * 2000) : Math.max(4096, count * 1000)
+                                                // Use maximum available tokens (8192) for Level 3 to avoid truncation
+                                                maxOutputTokens: level === 3 ? Math.min(8192, count * 3000) : Math.max(4096, count * 1000)
                                             }
                                         })
                                     });
@@ -1608,9 +1609,17 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                         if (data.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
                                             console.warn(`Response truncated for Level ${level}. May need more tokens.`);
                                             if (level === 3) {
-                                                console.warn('Level 3 response was truncated. Try generating fewer questions at once or the response may be incomplete.');
+                                                console.warn('Level 3 response was truncated. The JSON may be incomplete. Attempting to repair...');
+                                                // For Level 3, we'll try harder to repair the truncated JSON
                                             }
                                             // Still try to use what we got, but warn user
+                                        }
+                                        
+                                        // Check for safety or other blocking reasons
+                                        if (data.candidates?.[0]?.finishReason === 'SAFETY') {
+                                            console.warn(`Response blocked by safety filter for Level ${level}.`);
+                                            lastError = 'Response was blocked by safety filter. Try rephrasing your PDF content.';
+                                            continue;
                                         }
                                         
                                         console.log(`Successfully used model: ${model} for Level ${level}`);
@@ -1703,11 +1712,23 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                             let fixedContent = '';
                             let inString = false;
                             let stringStart = -1;
+                            let escapeNext = false;
                             for (let i = 0; i < cleanedContent.length; i++) {
                                 const char = cleanedContent[i];
-                                const prevChar = i > 0 ? cleanedContent[i - 1] : '';
                                 
-                                if (char === '"' && prevChar !== '\\') {
+                                if (escapeNext) {
+                                    fixedContent += char;
+                                    escapeNext = false;
+                                    continue;
+                                }
+                                
+                                if (char === '\\') {
+                                    escapeNext = true;
+                                    fixedContent += char;
+                                    continue;
+                                }
+                                
+                                if (char === '"') {
                                     if (!inString) {
                                         inString = true;
                                         stringStart = i;
@@ -1715,7 +1736,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                         inString = false;
                                     }
                                     fixedContent += char;
-                                } else if (inString && (char === ',' || char === '}') && i > stringStart + 1) {
+                                } else if (inString && (char === ',' || char === '}' || char === ']') && i > stringStart + 1) {
                                     // If we're in a string and hit a comma or brace, close the string first
                                     fixedContent += '"' + char;
                                     inString = false;
@@ -1730,15 +1751,37 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                             cleanedContent = fixedContent;
                             
                             // Try to find and close incomplete question objects
+                            // Look for patterns like "correct": "A" without closing brace
                             const correctMatches = [...cleanedContent.matchAll(/"correct":\s*"([ABC])"/g)];
                             if (correctMatches.length > 0) {
-                                const lastMatch = correctMatches[correctMatches.length - 1];
-                                const afterLastCorrect = cleanedContent.substring(lastMatch.index + lastMatch[0].length);
-                                
-                                // If there's no closing brace after the last correct answer, add it
-                                if (!afterLastCorrect.trim().startsWith('}')) {
-                                    const bracePos = lastMatch.index + lastMatch[0].length;
-                                    cleanedContent = cleanedContent.substring(0, bracePos) + '}' + cleanedContent.substring(bracePos);
+                                // For each match, check if it's followed by a closing brace
+                                for (let i = correctMatches.length - 1; i >= 0; i--) {
+                                    const match = correctMatches[i];
+                                    const afterMatch = cleanedContent.substring(match.index + match[0].length).trim();
+                                    
+                                    // If not followed by } or ], add the closing brace
+                                    if (!afterMatch.startsWith('}') && !afterMatch.startsWith(']') && !afterMatch.startsWith(',')) {
+                                        const insertPos = match.index + match[0].length;
+                                        cleanedContent = cleanedContent.substring(0, insertPos) + '}' + cleanedContent.substring(insertPos);
+                                    }
+                                }
+                            }
+                            
+                            // Fix incomplete option objects - ensure all questions have all 3 options
+                            // Look for patterns where we have "question" but incomplete "options"
+                            const questionMatches = [...cleanedContent.matchAll(/"question":\s*"([^"]+)"/g)];
+                            for (const match of questionMatches) {
+                                const afterQuestion = cleanedContent.substring(match.index + match[0].length);
+                                // Check if options object exists and is complete
+                                if (!afterQuestion.includes('"options"')) {
+                                    // Try to find where options should be
+                                    const nextBrace = afterQuestion.indexOf('}');
+                                    if (nextBrace > 0) {
+                                        // Insert options object before closing brace
+                                        const insertPos = match.index + match[0].length + nextBrace;
+                                        const optionsObj = ', "options": {"A": "", "B": "", "C": ""}';
+                                        cleanedContent = cleanedContent.substring(0, insertPos) + optionsObj + cleanedContent.substring(insertPos);
+                                    }
                                 }
                             }
                             
@@ -1753,11 +1796,70 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                     const missingBraces = openBraces - closeBraces;
                                     cleanedContent = cleanedContent.substring(0, lastBracket + 1) + 
                                                      '}'.repeat(missingBraces);
+                                } else {
+                                    // If no closing bracket, try to add it
+                                    const lastOpenBrace = cleanedContent.lastIndexOf('{');
+                                    if (lastOpenBrace > 0) {
+                                        // Find the last complete object and close the array
+                                        const tempContent = cleanedContent + '}'.repeat(openBraces - closeBraces) + ']';
+                                        cleanedContent = tempContent;
+                                    }
                                 }
+                            }
+                            
+                            // Final check: ensure the content starts with [ and ends with ]
+                            if (!cleanedContent.trim().startsWith('[')) {
+                                const firstBrace = cleanedContent.indexOf('{');
+                                if (firstBrace > 0) {
+                                    cleanedContent = '[' + cleanedContent.substring(firstBrace);
+                                }
+                            }
+                            if (!cleanedContent.trim().endsWith(']')) {
+                                cleanedContent = cleanedContent + ']';
                             }
                         }
                         
-                        let levelQuestions = JSON.parse(cleanedContent);
+                        // Try parsing with multiple strategies
+                        let levelQuestions = null;
+                        let parseError = null;
+                        
+                        // Strategy 1: Direct parse
+                        try {
+                            levelQuestions = JSON.parse(cleanedContent);
+                        } catch (e) {
+                            parseError = e;
+                            console.warn(`Direct JSON parse failed for Level ${level}, trying alternative strategies...`, e.message);
+                            
+                            // Strategy 2: Try to extract valid JSON objects one by one
+                            if (level === 3) {
+                                try {
+                                    const objects = [];
+                                    const objectPattern = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
+                                    let match;
+                                    while ((match = objectPattern.exec(cleanedContent)) !== null) {
+                                        try {
+                                            const obj = JSON.parse(match[0]);
+                                            if (obj.question && obj.options && obj.correct) {
+                                                objects.push(obj);
+                                            }
+                                        } catch (e) {
+                                            // Skip invalid objects
+                                        }
+                                    }
+                                    if (objects.length > 0) {
+                                        levelQuestions = objects;
+                                        console.log(`Extracted ${objects.length} valid question objects from Level 3 response`);
+                                    }
+                                } catch (e2) {
+                                    console.warn('Object-by-object extraction failed:', e2);
+                                }
+                            }
+                            
+                            // Strategy 3: If still no success, throw the original error
+                            if (!levelQuestions) {
+                                throw parseError;
+                            }
+                        }
                         
                         // Validate it's an array
                         if (!Array.isArray(levelQuestions)) {
@@ -1840,9 +1942,13 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                 }
                             } else {
                                 const errorMsg = level === 3 
-                                    ? `Could not extract any questions for Level 3. The response may be incomplete or truncated. Try generating fewer Level 3 questions at once, or check the console for details.`
+                                    ? `Could not extract any questions for Level 3. The API response may be incomplete, truncated, or malformed. Suggestions:\n1. Try generating fewer Level 3 questions at once (e.g., 3-5 instead of 10+)\n2. Check the browser console for detailed error information\n3. Ensure your PDF content is sufficient for generating complex questions\n4. Try again - sometimes the API response varies`
                                     : `Could not extract any questions for Level ${level}. The response may be incomplete.`;
                                 console.warn(errorMsg);
+                                // Show user-friendly alert for Level 3 failures
+                                if (level === 3) {
+                                    alert(`Level 3 Question Generation Failed\n\n${errorMsg}\n\nOther levels may have been generated successfully. Check the questions list below.`);
+                                }
                                 // Still continue - other levels may have worked
                             }
                         } catch (extractError) {
