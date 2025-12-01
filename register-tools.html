@@ -2583,9 +2583,26 @@
                     const workOnValue = data.WorkOn ? data.WorkOn : 'N/A';
                     const serialNumber = data.serialNumber || data.partNumber || 'N/A';
                     const partNumber = data.partNumber || 'N/A';
-                    const calDueDate = data.calDueDate && data.calDueDate.toDate 
-                        ? data.calDueDate.toDate().toLocaleDateString('en-GB')
-                        : 'N/A';
+                    
+                    // Handle calDueDate with multiple format support
+                    let calDueDate = 'N/A';
+                    if (data.calDueDate) {
+                        let calDate = null;
+                        if (data.calDueDate.toDate && typeof data.calDueDate.toDate === 'function') {
+                            calDate = data.calDueDate.toDate();
+                        } else if (data.calDueDate instanceof Date) {
+                            calDate = data.calDueDate;
+                        } else if (typeof data.calDueDate === 'string') {
+                            calDate = new Date(data.calDueDate);
+                        } else if (data.calDueDate.seconds) {
+                            // Firestore timestamp object
+                            calDate = new Date(data.calDueDate.seconds * 1000);
+                        }
+                        
+                        if (calDate && !isNaN(calDate.getTime())) {
+                            calDueDate = calDate.toLocaleDateString('en-GB');
+                        }
+                    }
                     
                     // Determine status color
                     const statusColor = status === 'IN' ? 'green' : 'red';
@@ -2619,7 +2636,7 @@
                                 <span style="color: #666; font-weight: bold;">${tool.id}</span>
                             </div>
                             <div style="text-align: center;">
-                                <span style="color: #666; font-weight: bold;">${serialNumber}</span>
+                                <span style="color: #666; font-weight: bold;">${partNumber}</span>
                             </div>
                             <div style="text-align: right;">
                                 <span class="badge bg-${status === 'IN' ? 'success' : 'danger'}" style="font-weight: bold; border-radius: 15px; padding: 4px 8px;">${status}</span>
