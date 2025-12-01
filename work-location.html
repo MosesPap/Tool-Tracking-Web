@@ -347,9 +347,15 @@
                 // Back to Menu button
                 const backBtn = document.getElementById('backToMenuFromWorkLocationBtn');
                 if (backBtn) {
-                    backBtn.addEventListener('click', function() {
-                        window.location.href = 'main-menu.html';
+                    // Remove any existing onclick to avoid conflicts
+                    backBtn.onclick = null;
+                    backBtn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        handleBackNavigation();
                     });
+                    console.log('[WORK-LOCATION] Back button event listener attached');
+                } else {
+                    console.error('[WORK-LOCATION] Back button element not found!');
                 }
 
                 // Enable load button when location is selected
@@ -477,6 +483,11 @@
             // Start waiting for common.js
             waitForAuth();
         });
+
+        // Function to handle back navigation (used by both button and phone back button)
+        window.handleBackNavigation = function handleBackNavigation() {
+            window.location.href = 'main-menu.html';
+        }
 
         // Load available work locations from tools
         async function loadWorkLocations() {

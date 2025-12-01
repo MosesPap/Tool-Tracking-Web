@@ -218,6 +218,42 @@
             border-radius: 8px;
             border: none;
         }
+
+        /* Back to Menu button 3D interactive Grey */
+        #backToMenuFromPdfBtn {
+            padding: 6px 12px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            border-radius: 12px;
+            border: 2px solid #bdbdbd;
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
+            color: #333;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            white-space: nowrap;
+            transform: perspective(1000px) rotateX(0deg);
+        }
+
+        #backToMenuFromPdfBtn:hover {
+            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%);
+            border-color: #adadad;
+            transform: perspective(1000px) rotateX(5deg) translateY(-2px);
+            box-shadow: 0 4px 12px rgba(189, 189, 189, 0.4),
+                        0 2px 4px rgba(0, 0, 0, 0.2),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.5),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+        }
+
+        #backToMenuFromPdfBtn:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(0px);
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        }
     </style>
 </head>
 <body>
@@ -228,7 +264,7 @@
                     <i class="fas fa-file-pdf me-2"></i>
                     PDF Question Generator
                 </div>
-                <button class="btn btn-sm btn-outline-light" onclick="goToMainMenu()" title="Return to Main Menu">
+                <button id="backToMenuFromPdfBtn" title="Back to Menu">
                     <i class="fas fa-arrow-left me-1"></i>Back to Menu
                 </button>
             </div>
@@ -463,26 +499,8 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Firebase SDK for syncing API key across devices -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <script>
-        // Initialize Firebase (same config as index.html)
-        const firebaseConfig = {
-            apiKey: "AIzaSyDmI0v_pVt_qFJlsqmw8QlIOi-4VLjyn54",
-            authDomain: "tool-tracking-system-15e84.firebaseapp.com",
-            projectId: "tool-tracking-system-15e84",
-            storageBucket: "tool-tracking-system-15e84.firebasestorage.app",
-            messagingSenderId: "813615362050",
-            appId: "1:813615362050:web:1fa435f0b725dd1f8cb71b"
-        };
-        
-        // Initialize Firebase if not already initialized
-        if (typeof firebase !== 'undefined' && !firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-    </script>
+    <!-- Common Firebase configuration and utilities -->
+    <script src="js/common.js"></script>
     <script>
         // Set up PDF.js worker
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -501,122 +519,125 @@
             requestsPerDay: 1500
         };
 
-        // Initialize Firebase (if not already initialized)
-        let firebaseInitialized = false;
-        let auth = null;
-        let db = null;
-        let currentUser = null;
-
-        // SEAMLESS NAVIGATION: Check localStorage first - if flag exists, proceed IMMEDIATELY
-        const authVerified = localStorage.getItem('authVerified');
-        const storedFullName = localStorage.getItem('fullName');
-        
-        if (authVerified === 'true' && storedFullName) {
-            // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
-            console.log('Auth verified flag found - proceeding immediately');
-            // Load API key from localStorage first (instant)
-            loadApiKeyFromLocalStorage();
+        // Wait for common.js to load and use global Firebase instances
+        document.addEventListener('DOMContentLoaded', function() {
+            function waitForAuth() {
+                const auth = window.auth;
+                const db = window.db;
+                
+                if (!auth || !db) {
+                    console.log('[PDF-QG] Waiting for common.js to load...');
+                    setTimeout(waitForAuth, 50);
+                    return;
+                }
+                
+                console.log('[PDF-QG] ✓ Using global Firebase instances from common.js');
+                initializePage(auth, db);
+            }
             
-            // Then try to load from Firestore in background
-            if (typeof firebase !== 'undefined') {
-                try {
-                    auth = firebase.auth();
-                    db = firebase.firestore();
-                    firebaseInitialized = true;
+            function initializePage(auth, db) {
+                console.log('[PDF-QG] ====== initializePage() called ======');
+                console.log('[PDF-QG] localStorage.authVerified:', localStorage.getItem('authVerified'));
+                console.log('[PDF-QG] localStorage.fullName:', localStorage.getItem('fullName'));
+                console.log('[PDF-QG] auth.currentUser (sync):', auth ? (auth.currentUser ? auth.currentUser.email : 'null') : 'auth not initialized');
+                
+                // Back to Menu button
+                const backBtn = document.getElementById('backToMenuFromPdfBtn');
+                if (backBtn) {
+                    backBtn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        handleBackNavigation();
+                    });
+                }
+                
+                // Load API key from localStorage first (instant)
+                loadApiKeyFromLocalStorage();
+                
+                // SEAMLESS NAVIGATION: Check localStorage first - if flag exists, proceed IMMEDIATELY
+                const authVerified = localStorage.getItem('authVerified');
+                const storedFullName = localStorage.getItem('fullName');
+                
+                if (authVerified === 'true' && storedFullName) {
+                    // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
+                    console.log('[PDF-QG] ✓ Auth verified flag found - proceeding immediately');
                     
-                    // Verify auth in background - but wait a bit for Firebase to restore session
+                    // Try to load from Firestore in background
                     setTimeout(() => {
-                        // First check currentUser (synchronous check)
                         const currentUser = auth.currentUser;
                         if (currentUser) {
-                            console.log('Auth confirmed via currentUser:', currentUser.email);
+                            console.log('[PDF-QG] ✓ Auth confirmed via currentUser:', currentUser.email);
                             loadApiKeyFromFirestore(currentUser.uid);
                             localStorage.setItem('authVerified', 'true');
-                            return;
-                        }
-                        
-                        // If currentUser is null, wait for onAuthStateChanged (but only redirect if truly logged out)
-                        let authCheckComplete = false;
-                        const unsubscribe = auth.onAuthStateChanged((user) => {
-                            if (authCheckComplete) return; // Only process first event
-                            authCheckComplete = true;
-                            
-                            currentUser = user;
-                            if (user) {
-                                console.log('Auth confirmed via onAuthStateChanged:', user.email);
-                                loadApiKeyFromFirestore(user.uid);
-                                localStorage.setItem('authVerified', 'true');
-                            } else {
-                                // Only redirect if we're certain user is logged out
-                                console.log('Background auth check: no user found after delay');
-                                setTimeout(() => {
-                                    if (!auth.currentUser) {
-                                        console.log('User confirmed logged out - redirecting');
-                                        localStorage.removeItem('authVerified');
-                                        localStorage.removeItem('fullName');
-                                        window.location.href = 'main-menu.html';
-                                    }
-                                }, 500);
-                            }
-                            unsubscribe(); // Clean up listener
-                        });
-                    }, 300); // Give Firebase 300ms to restore session
-                } catch (error) {
-                    console.warn('Firebase not available, using localStorage only:', error);
-                }
-            }
-        } else {
-            // No stored flag - wait for Firebase auth
-            console.log('No auth flag found - waiting for Firebase auth');
-            if (typeof firebase !== 'undefined') {
-                try {
-                    console.log('[PDF-QG] Firebase available, initializing auth and db (no flag path)...');
-                    auth = firebase.auth();
-                    db = firebase.firestore();
-                    firebaseInitialized = true;
-                    console.log('[PDF-QG] Firebase initialized, auth.currentUser (sync):', auth.currentUser ? auth.currentUser.email : 'null');
-                    
-                    // Listen for auth state changes
-                    console.log('[PDF-QG] Setting up onAuthStateChanged listener (no flag path)...');
-                    auth.onAuthStateChanged((user) => {
-                        console.log('[PDF-QG] onAuthStateChanged fired (no flag path), user:', user ? user.email : 'null');
-                        currentUser = user;
-                        if (user && !user.emailVerified) {
-                            console.log('[PDF-QG] ✗ User email not verified, signing out...');
-                            auth.signOut();
-                            localStorage.removeItem('authVerified');
-                            window.location.href = 'main-menu.html';
-                            return;
-                        }
-                        
-                        if (user) {
-                            console.log('[PDF-QG] ✓ User authenticated, setting flags and loading API key...');
-                            localStorage.setItem('authVerified', 'true');
-                            if (!localStorage.getItem('fullName')) {
-                                localStorage.setItem('fullName', user.email);
-                                console.log('[PDF-QG] Stored fullName:', user.email);
-                            }
-                            loadApiKeyFromFirestore(user.uid);
                         } else {
-                            console.log('[PDF-QG] ✗ No user found, using localStorage fallback');
-                            localStorage.removeItem('authVerified');
-                            // Fallback to localStorage if not logged in
-                            loadApiKeyFromLocalStorage();
+                            // Set up onAuthStateChanged listener
+                            const unsubscribe = auth.onAuthStateChanged((user) => {
+                                if (user) {
+                                    console.log('[PDF-QG] ✓ Auth confirmed via onAuthStateChanged');
+                                    loadApiKeyFromFirestore(user.uid);
+                                    localStorage.setItem('authVerified', 'true');
+                                } else {
+                                    console.log('[PDF-QG] ✗ No user found, redirecting to main-menu.html');
+                                    localStorage.removeItem('authVerified');
+                                    window.location.href = 'main-menu.html';
+                                }
+                                unsubscribe();
+                            });
                         }
-                    });
-                } catch (error) {
-                    console.warn('[PDF-QG] Firebase not available, using localStorage only:', error);
-                    loadApiKeyFromLocalStorage();
+                    }, 300);
+                    
+                    return; // Exit - page initialized
                 }
-            } else {
-                // Firebase not available, use localStorage only
-                console.log('[PDF-QG] Firebase not available, using localStorage only');
-                loadApiKeyFromLocalStorage();
+                
+                // No stored flag - wait for Firebase auth
+                console.log('[PDF-QG] ✗ No auth flag found - waiting for Firebase auth');
+                auth.onAuthStateChanged((user) => {
+                    console.log('[PDF-QG] onAuthStateChanged fired, user:', user ? user.email : 'null');
+                    if (user && !user.emailVerified) {
+                        console.log('[PDF-QG] ✗ User email not verified, signing out...');
+                        auth.signOut();
+                        localStorage.removeItem('authVerified');
+                        window.location.href = 'main-menu.html';
+                        return;
+                    }
+                    
+                    if (user) {
+                        console.log('[PDF-QG] ✓ User authenticated, setting flags and loading API key...');
+                        localStorage.setItem('authVerified', 'true');
+                        if (!localStorage.getItem('fullName')) {
+                            localStorage.setItem('fullName', user.email);
+                        }
+                        loadApiKeyFromFirestore(user.uid);
+                    } else {
+                        console.log('[PDF-QG] ✗ No user found, redirecting to main-menu.html');
+                        localStorage.removeItem('authVerified');
+                        window.location.href = 'main-menu.html';
+                    }
+                });
             }
-        }
+            
+            // Start waiting for common.js
+            waitForAuth();
+        });
 
         // Load API key from Firestore (synced across devices)
         async function loadApiKeyFromFirestore(userId) {
+            const db = window.db || firebase.firestore();
+            if (!db) {
+                console.warn('[PDF-QG] Firestore not available, using localStorage only');
+                return;
+            }
+            
+            if (!userId) {
+                const auth = window.auth || firebase.auth();
+                const user = auth ? auth.currentUser : null;
+                if (user) {
+                    userId = user.uid;
+                } else {
+                    console.warn('[PDF-QG] No user ID provided and no current user, using localStorage only');
+                    return;
+                }
+            }
+            
             try {
                 // First, try to load from current user's document
                 const userDoc = await db.collection('technicians').doc(userId).get();
@@ -679,7 +700,11 @@
             localStorage.setItem('gemini_api_key', apiKey);
             
             // Save to Firestore if user is logged in
-            if (firebaseInitialized && currentUser) {
+            const auth = window.auth || firebase.auth();
+            const db = window.db || firebase.firestore();
+            const currentUser = auth ? auth.currentUser : null;
+            
+            if (db && currentUser) {
                 try {
                     // First, save to current user's document
                     await db.collection('technicians').doc(currentUser.uid).set({
@@ -750,15 +775,10 @@
         updateAnalyticsDisplay();
         setInterval(updateAnalyticsDisplay, 1000); // Update every second
         
-        // Back button function - EXACT copy from register-tools.html
-        function handleBackNavigation() {
-            // Navigate directly to main menu
+        // Function to handle back navigation (used by both button and phone back button)
+        window.handleBackNavigation = function handleBackNavigation() {
             window.location.href = 'main-menu.html';
         }
-        
-        // Make it available globally for onclick - EXACT same as register-tools
-        window.goToMainMenu = handleBackNavigation;
-        window.handleBackNavigation = handleBackNavigation;
 
         // ========== API USAGE ANALYTICS ==========
         function trackApiCall() {
