@@ -68,10 +68,41 @@ if (typeof window !== 'undefined' && window.console) {
     };
 }
 
-// Set custom error messages for unverified emails
-auth.onAuthStateChanged(function(user) {
+// Set custom error messages for unverified emails and ensure technician document exists
+auth.onAuthStateChanged(async function(user) {
     if (user && !user.emailVerified) {
         auth.signOut();
+        return;
+    }
+    
+    // Ensure technician document exists for authenticated users
+    if (user && user.emailVerified) {
+        try {
+            const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+            
+            if (!technicianDoc.exists) {
+                // Create technician document for new users
+                console.log('Creating technician document for new user:', user.uid);
+                const technicianData = {
+                    fullName: user.displayName || user.email,
+                    email: user.email,
+                    isAdmin: false,
+                    lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                await db.collection('technicians').doc(user.uid).set(technicianData);
+                localStorage.setItem('fullName', technicianData.fullName || user.email);
+                console.log('Technician document created successfully');
+            } else {
+                // Update lastSignIn for existing users
+                await db.collection('technicians').doc(user.uid).update({
+                    lastSignIn: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            }
+        } catch (error) {
+            console.error('Error ensuring technician document exists:', error);
+        }
     }
 });
 
@@ -257,23 +288,23 @@ async function initIndexedDB() {
         
         try {
             const request = window.indexedDB.open('ToolTrackingDB', 1);
-            
+        
             request.onerror = () => {
                 console.warn('IndexedDB open failed:', request.error);
                 resolve(null); // Resolve with null instead of rejecting
             };
             
-            request.onsuccess = () => {
-                indexedDB = request.result;
-                resolve(indexedDB);
-            };
-            
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains('offlineTools')) {
-                    db.createObjectStore('offlineTools', { keyPath: 'id' });
-                }
-            };
+        request.onsuccess = () => {
+            indexedDB = request.result;
+            resolve(indexedDB);
+        };
+        
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains('offlineTools')) {
+                db.createObjectStore('offlineTools', { keyPath: 'id' });
+            }
+        };
         } catch (error) {
             console.warn('IndexedDB initialization error:', error);
             resolve(null); // Resolve with null instead of rejecting
