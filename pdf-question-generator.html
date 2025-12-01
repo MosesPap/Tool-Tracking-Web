@@ -1684,8 +1684,13 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                             // Remove any {n}{n} patterns that might appear
                             cleanedContent = cleanedContent.replace(/\{n\}/g, '');
                             
-                            // Try to fix incomplete strings in options
-                            // Look for patterns like "A": "text without closing quote
+                            // Fix empty objects {} that break JSON
+                            cleanedContent = cleanedContent.replace(/\{\s*\}/g, '');
+                            
+                            // Fix unquoted property names (common error: property: instead of "property":)
+                            cleanedContent = cleanedContent.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+                            
+                            // Try to fix incomplete strings in options - look for unclosed quotes
                             cleanedContent = cleanedContent.replace(/"([ABC])":\s*"([^"]*?)(?=\s*[,}])/g, (match, option, value) => {
                                 // If the value doesn't end with a quote and we're at a comma or brace, add the quote
                                 if (!match.endsWith('"')) {
@@ -1694,8 +1699,37 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                 return match;
                             });
                             
+                            // Fix incomplete strings - find strings that don't have closing quotes
+                            let fixedContent = '';
+                            let inString = false;
+                            let stringStart = -1;
+                            for (let i = 0; i < cleanedContent.length; i++) {
+                                const char = cleanedContent[i];
+                                const prevChar = i > 0 ? cleanedContent[i - 1] : '';
+                                
+                                if (char === '"' && prevChar !== '\\') {
+                                    if (!inString) {
+                                        inString = true;
+                                        stringStart = i;
+                                    } else {
+                                        inString = false;
+                                    }
+                                    fixedContent += char;
+                                } else if (inString && (char === ',' || char === '}') && i > stringStart + 1) {
+                                    // If we're in a string and hit a comma or brace, close the string first
+                                    fixedContent += '"' + char;
+                                    inString = false;
+                                } else {
+                                    fixedContent += char;
+                                }
+                            }
+                            // Close any remaining open strings
+                            if (inString) {
+                                fixedContent += '"';
+                            }
+                            cleanedContent = fixedContent;
+                            
                             // Try to find and close incomplete question objects
-                            // Look for patterns where we have "correct" but no closing brace
                             const correctMatches = [...cleanedContent.matchAll(/"correct":\s*"([ABC])"/g)];
                             if (correctMatches.length > 0) {
                                 const lastMatch = correctMatches[correctMatches.length - 1];
@@ -2407,7 +2441,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     updateFormInfo: {
                         info: {
                             title: formTitle,
-                            description: ''
+                            description: 'Write your name and answer all Questions'
                         },
                         updateMask: 'title,description'
                     }
@@ -2432,40 +2466,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 // Track item indices for setting required status later
                 const requiredItemIndices = [];
                 
-                // ===== SECTION 1: Title, Description, and Name Field =====
-                // Add form title as a text item (display only)
-                requests.push({
-                    createItem: {
-                        item: {
-                            title: formTitle,
-                            questionItem: {
-                                question: {
-                                    textQuestion: {}
-                                }
-                            }
-                        },
-                        location: { index: questionIndex }
-                    }
-                });
-                questionIndex++;
-                
-                // Add brief description
-                requests.push({
-                    createItem: {
-                        item: {
-                            title: 'Write your name and answer all Questions',
-                            questionItem: {
-                                question: {
-                                    textQuestion: {}
-                                }
-                            }
-                        },
-                        location: { index: questionIndex }
-                    }
-                });
-                questionIndex++;
-                
-                // Add name field (required)
+                // ===== SECTION 1: Only Name Field =====
+                // Add name field (required) - form title and description are already in form info
                 requests.push({
                     createItem: {
                         item: {
@@ -2523,25 +2525,25 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         questionIndex++;
                     }
 
-                    // Add section title
+                    // Add section with title and description (using pageBreakItem for section)
                     const sectionTitle = levelNames[level];
+                    const sectionDesc = sectionDescriptions[level] || '';
+                    
+                    // Create section with title and description
                     requests.push({
                         createItem: {
                             item: {
                                 title: sectionTitle,
-                                questionItem: {
-                                    question: {
-                                        textQuestion: {}
-                                    }
+                                pageBreakItem: {
+                                    pageNavigationType: 'CONTINUE'
                                 }
                             },
                             location: { index: questionIndex }
                         }
                     });
                     questionIndex++;
-
-                    // Add section description
-                    const sectionDesc = sectionDescriptions[level] || '';
+                    
+                    // Add section description as a text item (non-required, display only)
                     if (sectionDesc) {
                         requests.push({
                             createItem: {
