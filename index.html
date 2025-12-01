@@ -3807,12 +3807,10 @@ if (!userCredential.user.emailVerified) {
                     return;
                 }
                 
-                // Wait a moment for email to be sent, then sign out
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
-                // Sign out the user to prevent access until email is verified
-                await auth.signOut();
-                console.log('User signed out after account creation');
+                // Don't sign out immediately - let onAuthStateChanged handle it
+                // This allows the verification email to be sent properly
+                // User will be redirected to login after a short delay
+                console.log('Account created, verification email sent');
 
                 // Reset button state
                 if (btnText && btnLoading) {
