@@ -623,38 +623,16 @@
                 const userDoc = await db.collection('technicians').doc(userId).get();
                 if (userDoc.exists) {
                     const userData = userDoc.data();
-                    // Check if user is an instructor
-                    if (userData.isInstructor && userData.geminiApiKey) {
-                        document.getElementById('apiKey').value = userData.geminiApiKey;
-                        localStorage.setItem('gemini_api_key', userData.geminiApiKey);
-                        console.log('API key loaded from current instructor document');
-                        return;
-                    }
-                    // If not instructor but has key, use it
+                    // Load API key from current user's document (each user has their own key)
                     if (userData.geminiApiKey) {
                         document.getElementById('apiKey').value = userData.geminiApiKey;
                         localStorage.setItem('gemini_api_key', userData.geminiApiKey);
-                        console.log('API key loaded from current user document');
-                        return;
-                    }
-                }
-                
-                // If current user is an instructor but doesn't have key, try to load from any instructor
-                if (userDoc.exists && userDoc.data().isInstructor) {
-                    const instructorsQuery = await db.collection('technicians')
-                        .where('isInstructor', '==', true)
-                        .limit(1)
-                        .get();
-                    
-                    if (!instructorsQuery.empty) {
-                        const instructorDoc = instructorsQuery.docs[0];
-                        const instructorData = instructorDoc.data();
-                        if (instructorData.geminiApiKey) {
-                            document.getElementById('apiKey').value = instructorData.geminiApiKey;
-                            localStorage.setItem('gemini_api_key', instructorData.geminiApiKey);
-                            console.log('API key loaded from another instructor document');
-                            return;
+                        if (userData.isInstructor) {
+                            console.log('API key loaded from current instructor document (user-specific)');
+                        } else {
+                            console.log('API key loaded from current user document');
                         }
+                        return;
                     }
                 }
                 
@@ -688,26 +666,9 @@
                     }, { merge: true });
                     console.log('API key saved to current user document');
                     
-                    // Check if current user is an instructor
-                    const userDoc = await db.collection('technicians').doc(currentUser.uid).get();
-                    if (userDoc.exists && userDoc.data().isInstructor) {
-                        // If user is an instructor, save to ALL instructor documents
-                        const instructorsQuery = await db.collection('technicians')
-                            .where('isInstructor', '==', true)
-                            .get();
-                        
-                        const updatePromises = [];
-                        instructorsQuery.forEach((doc) => {
-                            updatePromises.push(
-                                db.collection('technicians').doc(doc.id).set({
-                                    geminiApiKey: apiKey
-                                }, { merge: true })
-                            );
-                        });
-                        
-                        await Promise.all(updatePromises);
-                        console.log(`API key saved to ${instructorsQuery.size} instructor document(s) (synced across all instructors)`);
-                    }
+                    // Save API key to current user's document only
+                    // Each instructor/user saves their own API key individually
+                    console.log('API key saved to current user document (user-specific, not synced)');
                 } catch (error) {
                     console.error('Error saving API key to Firestore:', error);
                     // Continue anyway - at least localStorage is saved
@@ -1274,6 +1235,9 @@
                 availableModels = [];
             }
         }
+        
+        // Expose testApiKey to window for onclick handlers
+        window.testApiKey = testApiKey;
 
         // Randomly shuffle options for each question to ensure balanced distribution of correct answers
         function shuffleQuestionOptions(questions) {
@@ -2138,9 +2102,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         
                         // Only proceed to manual extraction if we still have an error
                         if (parseError) {
-                        
-                        // Try to extract questions manually if JSON parsing fails
-                        try {
+                            // Try to extract questions manually if JSON parsing fails
+                            try {
                             let manualQuestions = extractQuestionsFromText(content);
                             if (manualQuestions.length > 0) {
                                 // Randomly shuffle options for manually extracted questions too
@@ -2172,12 +2135,13 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                 }
                                 // Still continue - other levels may have worked
                             }
-                        } catch (extractError) {
-                            console.error(`Failed to extract questions manually:`, extractError);
-                            if (level === 3) {
-                                console.error('Level 3 manual extraction also failed. The API response may be malformed or incomplete. Try reducing the number of Level 3 questions.');
+                            } catch (extractError) {
+                                console.error(`Failed to extract questions manually:`, extractError);
+                                if (level === 3) {
+                                    console.error('Level 3 manual extraction also failed. The API response may be malformed or incomplete. Try reducing the number of Level 3 questions.');
+                                }
+                                // Continue with other levels
                             }
-                            // Continue with other levels
                         }
                     }
                 }

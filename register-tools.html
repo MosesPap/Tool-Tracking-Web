@@ -1605,7 +1605,22 @@
                     
                     // Check if tool is OUT and checked out by different technician
                     if (data.status === 'OUT' && data.technician !== technicianName) {
+                        // Show popup modal with user name and timestamp (similar to single tool registration)
+                        let checkedOutDate = 'Unknown';
+                        if (data.timestamp && data.timestamp.toDate) {
+                            checkedOutDate = data.timestamp.toDate().toLocaleString('en-GB', {
+                                day: '2-digit', month: '2-digit', year: 'numeric',
+                                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                            });
+                        }
+                        document.getElementById('toolAlreadyCheckedOutModalBody').innerHTML =
+                            `Tool <b>${code}</b> was checked out by <b>${data.technician || 'Unknown Technician'}</b> on ${checkedOutDate}<br>You cannot Check Out this tool.`;
+                        const modal = new bootstrap.Modal(document.getElementById('toolAlreadyCheckedOutModal'));
+                        modal.show();
+                        
                         skippedCodes.push({ code, reason: 'Checked out by different technician' });
+                        // Wait a bit before continuing to next tool to allow user to see the modal
+                        await new Promise(resolve => setTimeout(resolve, 2000));
                         continue;
                     }
                     
@@ -1864,7 +1879,19 @@
                 
                 // Validation checks
                 if (data.status === 'OUT' && data.technician !== technicianName) {
-                    showBulkScanMessage(`Tool checked out by <br>${data.technician}`, false);
+                    // Show popup modal with user name and timestamp (similar to single tool registration)
+                    let checkedOutDate = 'Unknown';
+                    if (data.timestamp && data.timestamp.toDate) {
+                        checkedOutDate = data.timestamp.toDate().toLocaleString('en-GB', {
+                            day: '2-digit', month: '2-digit', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                        });
+                    }
+                    document.getElementById('toolAlreadyCheckedOutModalBody').innerHTML =
+                        `Tool <b>${code}</b> was checked out by <b>${data.technician || 'Unknown Technician'}</b> on ${checkedOutDate}<br>You cannot Check Out this tool.`;
+                    const modal = new bootstrap.Modal(document.getElementById('toolAlreadyCheckedOutModal'));
+                    modal.show();
+                    
                     bulkProcessingCodes.delete(code);
                     return;
                 }
