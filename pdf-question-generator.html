@@ -2276,17 +2276,24 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     3: 'Interrelationships, manufacturer instructions, corrective actions'
                 };
                 
+                // Level names mapping
+                const levelNames = {
+                    1: 'Level 1 - Familiarisation',
+                    2: 'Level 2 - General Knowledge',
+                    3: 'Level 3 - Detailed Knowledge'
+                };
+                
                 let questionIndex = 0;
-                let lastLevel = null;
                 
                 // Track item indices for setting required status later
                 const requiredItemIndices = [];
                 
-                // Add Section 1: Chapter info and name field
+                // ===== SECTION 1: Title, Description, and Name Field =====
+                // Add form title as a text item (display only)
                 requests.push({
                     createItem: {
                         item: {
-                            title: 'Chapter Number',
+                            title: formTitle,
                             questionItem: {
                                 question: {
                                     textQuestion: {}
@@ -2296,12 +2303,13 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         location: { index: questionIndex }
                     }
                 });
-                requiredItemIndices.push(questionIndex++);
+                questionIndex++;
                 
+                // Add brief description
                 requests.push({
                     createItem: {
                         item: {
-                            title: 'Chapter Title',
+                            title: 'Write your name and answer all Questions',
                             questionItem: {
                                 question: {
                                     textQuestion: {}
@@ -2311,23 +2319,9 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         location: { index: questionIndex }
                     }
                 });
-                requiredItemIndices.push(questionIndex++);
+                questionIndex++;
                 
-                requests.push({
-                    createItem: {
-                        item: {
-                            title: 'Date',
-                            questionItem: {
-                                question: {
-                                    textQuestion: {}
-                                }
-                            }
-                        },
-                        location: { index: questionIndex }
-                    }
-                });
-                requiredItemIndices.push(questionIndex++);
-                
+                // Add name field (required)
                 requests.push({
                     createItem: {
                         item: {
@@ -2354,12 +2348,25 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     }
                 });
 
+                // Group questions by level
+                const questionsByLevel = {};
                 selectedQuestions.forEach((item) => {
-                    const { levelGroup, question, level } = item;
-                    
-                    // Add a page break/section for each level (only if level changed)
-                    if (lastLevel !== null && lastLevel !== level && questionIndex > 0) {
-                        // Add page break before new section
+                    const { level } = item;
+                    if (!questionsByLevel[level]) {
+                        questionsByLevel[level] = [];
+                    }
+                    questionsByLevel[level].push(item);
+                });
+
+                // Add sections for each level in order (1, 2, 3)
+                const levels = [1, 2, 3];
+                levels.forEach((level) => {
+                    if (!questionsByLevel[level] || questionsByLevel[level].length === 0) {
+                        return; // Skip if no questions for this level
+                    }
+
+                    // Add page break before new section (except for first level after Section 1)
+                    if (level > 1 || questionIndex > 0) {
                         requests.push({
                             createItem: {
                                 item: {
@@ -2371,17 +2378,31 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         });
                         questionIndex++;
                     }
-                    
-                    // Add section title and description for each level (first time we see it)
-                    if (lastLevel !== level) {
-                        const sectionTitle = levelGroup.levelName;
-                        const sectionDesc = sectionDescriptions[level] || '';
-                        
-                        // Add section title as a text question (non-required, just for display)
+
+                    // Add section title
+                    const sectionTitle = levelNames[level];
+                    requests.push({
+                        createItem: {
+                            item: {
+                                title: sectionTitle,
+                                questionItem: {
+                                    question: {
+                                        textQuestion: {}
+                                    }
+                                }
+                            },
+                            location: { index: questionIndex }
+                        }
+                    });
+                    questionIndex++;
+
+                    // Add section description
+                    const sectionDesc = sectionDescriptions[level] || '';
+                    if (sectionDesc) {
                         requests.push({
                             createItem: {
                                 item: {
-                                    title: sectionTitle,
+                                    title: sectionDesc,
                                     questionItem: {
                                         question: {
                                             textQuestion: {}
@@ -2392,58 +2413,42 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                             }
                         });
                         questionIndex++;
-                        
-                        // Add section description if available
-                        if (sectionDesc) {
-                            requests.push({
-                                createItem: {
-                                    item: {
-                                        title: sectionDesc,
-                                        questionItem: {
-                                            question: {
-                                                textQuestion: {}
-                                            }
-                                        }
-                                    },
-                                    location: { index: questionIndex }
-                                }
-                            });
-                            questionIndex++;
-                        }
                     }
-                    
-                    lastLevel = level;
 
-                    requests.push({
-                        createItem: {
-                            item: {
-                                title: question.question,
-                                questionItem: {
-                                    question: {
-                                        choiceQuestion: {
-                                            type: 'RADIO',
-                                            options: [
-                                                { value: question.options.A || '' },
-                                                { value: question.options.B || '' },
-                                                { value: question.options.C || '' }
-                                            ],
-                                            shuffle: false
-                                        },
-                                        grading: {
-                                            pointValue: 1,
-                                            correctAnswers: {
-                                                answers: [{
-                                                    value: question.options[question.correct] || question.options.A
-                                                }]
+                    // Add questions for this level
+                    questionsByLevel[level].forEach((item) => {
+                        const { question } = item;
+                        requests.push({
+                            createItem: {
+                                item: {
+                                    title: question.question,
+                                    questionItem: {
+                                        question: {
+                                            choiceQuestion: {
+                                                type: 'RADIO',
+                                                options: [
+                                                    { value: question.options.A || '' },
+                                                    { value: question.options.B || '' },
+                                                    { value: question.options.C || '' }
+                                                ],
+                                                shuffle: false
+                                            },
+                                            grading: {
+                                                pointValue: 1,
+                                                correctAnswers: {
+                                                    answers: [{
+                                                        value: question.options[question.correct] || question.options.A
+                                                    }]
+                                                }
                                             }
                                         }
                                     }
-                                }
-                            },
-                            location: { index: questionIndex }
-                        }
+                                },
+                                location: { index: questionIndex }
+                            }
+                        });
+                        requiredItemIndices.push(questionIndex++);
                     });
-                    requiredItemIndices.push(questionIndex++);
                 });
 
                 // First batch: Create all items
