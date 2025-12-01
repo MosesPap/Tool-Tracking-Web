@@ -2062,116 +2062,31 @@
             async function initializeAdmin(auth, db, storage) {
 
                 // DOM Elements
-                const loginSection = document.getElementById('loginSection');
                 const adminDashboard = document.getElementById('adminDashboard');
-                const loginAlert = document.getElementById('loginAlert');
-                const loginForm = document.getElementById('loginForm');
-                const googleSignInBtn = document.getElementById('googleSignInBtn');
                 
                 // Hide login screen by default - use seamless navigation
-                if (loginSection) loginSection.style.display = 'none';
                 if (adminDashboard) adminDashboard.style.display = 'none';
-
-                // Show alert message
-                function showAlert(message, type = 'danger') {
-                    if (loginAlert) {
-                        loginAlert.className = `alert alert-custom alert-${type}`;
-                        loginAlert.textContent = message;
-                        loginAlert.style.display = 'block';
-                        setTimeout(() => {
-                            if (loginAlert) loginAlert.style.display = 'none';
-                        }, 5000);
-                    }
-                }
 
                 // Check if user is admin
                 async function checkAdminStatus(user) {
                     const db = window.db || firebase.firestore();
                     try {
                         const doc = await db.collection('technicians').doc(user.uid).get();
-                if (doc.exists) {
-                    const userData = doc.data();
-                    if (userData.isAdmin === true) {
-                        return { isAdmin: true, name: userData.fullName || user.email };
+                        if (doc.exists) {
+                            const userData = doc.data();
+                            if (userData.isAdmin === true) {
+                                return { isAdmin: true, name: userData.fullName || user.email };
+                            }
+                        }
+                        return { isAdmin: false, name: null };
+                    } catch (error) {
+                        console.error('Error checking admin status:', error);
+                        return { isAdmin: false, name: null };
                     }
-                }
-                return { isAdmin: false, name: null };
-            } catch (error) {
-                console.error('Error checking admin status:', error);
-                return { isAdmin: false, name: null };
-            }
-        }
-
-                // Email/Password Login (kept for direct access if needed, but normally not used)
-                if (loginForm) {
-                    loginForm.addEventListener('submit', async (e) => {
-                        e.preventDefault();
-                        const auth = window.auth || firebase.auth();
-                        const email = document.getElementById('adminEmail').value.trim();
-                        const password = document.getElementById('adminPassword').value;
-
-                        try {
-                            showAlert('Signing in...', 'info');
-                            const userCredential = await auth.signInWithEmailAndPassword(email, password);
-                            const user = userCredential.user;
-
-                            // Check if user is admin
-                            const { isAdmin, name } = await checkAdminStatus(user);
-                            if (isAdmin) {
-                                showAlert('Success! Loading admin dashboard...', 'success');
-                                loadAdminDashboard(name);
-                            } else {
-                                await auth.signOut();
-                                showAlert('Access Denied: You do not have administrator privileges.', 'danger');
-                            }
-                        } catch (error) {
-                            console.error('Login error:', error);
-                            if (error.code === 'auth/user-not-found') {
-                                showAlert('User not found. Please check your email.', 'danger');
-                            } else if (error.code === 'auth/wrong-password') {
-                                showAlert('Incorrect password. Please try again.', 'danger');
-                            } else if (error.code === 'auth/invalid-email') {
-                                showAlert('Invalid email address.', 'danger');
-                            } else {
-                                showAlert('Login failed: ' + error.message, 'danger');
-                            }
-                        }
-                    });
-                }
-
-                // Google Sign-In (kept for direct access if needed, but normally not used)
-                if (googleSignInBtn) {
-                    googleSignInBtn.addEventListener('click', async () => {
-                        const auth = window.auth || firebase.auth();
-                        try {
-                            showAlert('Opening Google Sign-In...', 'info');
-                            const provider = new firebase.auth.GoogleAuthProvider();
-                            const userCredential = await auth.signInWithPopup(provider);
-                            const user = userCredential.user;
-
-                            // Check if user is admin
-                            const { isAdmin, name } = await checkAdminStatus(user);
-                            if (isAdmin) {
-                                showAlert('Success! Loading admin dashboard...', 'success');
-                                loadAdminDashboard(name);
-                            } else {
-                                await auth.signOut();
-                                showAlert('Access Denied: You do not have administrator privileges.', 'danger');
-                            }
-                        } catch (error) {
-                            console.error('Google Sign-In error:', error);
-                            if (error.code === 'auth/popup-closed-by-user') {
-                                showAlert('Sign-in cancelled.', 'warning');
-                            } else {
-                                showAlert('Google Sign-In failed: ' + error.message, 'danger');
-                            }
-                        }
-                    });
                 }
 
                 // Load Admin Dashboard
                 function loadAdminDashboard(adminName) {
-                    if (loginSection) loginSection.style.display = 'none';
                     if (adminDashboard) adminDashboard.style.display = 'block';
                     const adminNameElement = document.getElementById('adminName');
                     if (adminNameElement) adminNameElement.textContent = adminName;
@@ -2187,6 +2102,128 @@
                 // Make functions available globally
                 window.checkAdminStatus = checkAdminStatus;
                 window.loadAdminDashboard = loadAdminDashboard;
+
+                // Logout button handler
+                const logoutBtn = document.getElementById('logoutBtn');
+                if (logoutBtn) {
+                    logoutBtn.addEventListener('click', async () => {
+                        if (confirm('Are you sure you want to logout?')) {
+                            try {
+                                await auth.signOut();
+                                localStorage.removeItem('authVerified');
+                                localStorage.removeItem('fullName');
+                                window.location.href = 'main-menu.html';
+                            } catch (error) {
+                                console.error('Logout error:', error);
+                                alert('Logout failed: ' + error.message);
+                            }
+                        }
+                    });
+                }
+
+                // SEAMLESS NAVIGATION: Check localStorage first - if flag exists, proceed IMMEDIATELY
+                const authVerified = localStorage.getItem('authVerified');
+                const storedFullName = localStorage.getItem('fullName');
+                
+                console.log('[ADMIN] Checking auth flags...');
+                console.log('[ADMIN] authVerified:', authVerified);
+                console.log('[ADMIN] storedFullName:', storedFullName);
+                console.log('[ADMIN] auth.currentUser (sync):', auth ? (auth.currentUser ? auth.currentUser.email : 'null') : 'auth not initialized');
+                
+                if (authVerified === 'true' && storedFullName) {
+                    // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
+                    console.log('[ADMIN] ✓ Auth verified flag found - checking admin status immediately');
+                    
+                    // Wait for user to be available (Firebase may need time to restore session)
+                    let user = auth.currentUser;
+                    if (!user) {
+                        console.log('[ADMIN] auth.currentUser is null, waiting for user...');
+                        // Wait up to 2 seconds for Firebase to restore the session
+                        let waitCount = 0;
+                        while (!user && waitCount < 20) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            user = auth.currentUser;
+                            waitCount++;
+                        }
+                    }
+                    
+                    if (user) {
+                        console.log('[ADMIN] User found, checking admin status...');
+                        const { isAdmin, name } = await checkAdminStatus(user);
+                        if (isAdmin) {
+                            console.log('[ADMIN] ✓ Admin confirmed, loading dashboard');
+                            loadAdminDashboard(name);
+                            
+                            // Verify auth in background (non-blocking)
+                            setTimeout(() => {
+                                const currentUser = auth.currentUser;
+                                if (currentUser) {
+                                    console.log('[ADMIN] ✓ Auth confirmed via currentUser:', currentUser.email);
+                                    localStorage.setItem('authVerified', 'true');
+                                } else {
+                                    // Set up onAuthStateChanged listener
+                                    const unsubscribe = auth.onAuthStateChanged(async function(user) {
+                                        if (user) {
+                                            const { isAdmin } = await checkAdminStatus(user);
+                                            if (isAdmin) {
+                                                console.log('[ADMIN] ✓ Auth confirmed via onAuthStateChanged');
+                                                localStorage.setItem('authVerified', 'true');
+                                            } else {
+                                                console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
+                                                localStorage.removeItem('authVerified');
+                                                window.location.href = 'main-menu.html';
+                                            }
+                                        } else {
+                                            console.log('[ADMIN] ✗ No user found, redirecting to main-menu.html');
+                                            localStorage.removeItem('authVerified');
+                                            window.location.href = 'main-menu.html';
+                                        }
+                                        unsubscribe();
+                                    });
+                                }
+                            }, 300);
+                            
+                            return; // Exit - page initialized
+                        } else {
+                            console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
+                            localStorage.removeItem('authVerified');
+                            window.location.href = 'main-menu.html';
+                            return;
+                        }
+                    } else {
+                        console.log('[ADMIN] ✗ No user found after waiting, redirecting to main-menu.html');
+                        localStorage.removeItem('authVerified');
+                        window.location.href = 'main-menu.html';
+                        return;
+                    }
+                }
+                
+                // No stored flag - wait for Firebase auth
+                console.log('[ADMIN] ✗ No auth flag found - waiting for Firebase auth');
+                console.log('[ADMIN] Setting up onAuthStateChanged listener...');
+                auth.onAuthStateChanged(async function(user) {
+                    console.log('[ADMIN] onAuthStateChanged fired, user:', user ? user.email : 'null');
+                    if (user) {
+                        const { isAdmin, name } = await checkAdminStatus(user);
+                        if (isAdmin) {
+                            console.log('[ADMIN] ✓ User authenticated and is admin, loading dashboard');
+                            localStorage.setItem('authVerified', 'true');
+                            if (!localStorage.getItem('fullName')) {
+                                localStorage.setItem('fullName', name || user.email);
+                            }
+                            loadAdminDashboard(name);
+                        } else {
+                            console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
+                            await auth.signOut();
+                            localStorage.removeItem('authVerified');
+                            window.location.href = 'main-menu.html';
+                        }
+                    } else {
+                        console.log('[ADMIN] ✗ No user found, redirecting to main-menu.html');
+                        localStorage.removeItem('authVerified');
+                        window.location.href = 'main-menu.html';
+                    }
+                });
             }
             
             // Start waiting for common.js
@@ -3801,139 +3838,9 @@ Thank you!`;
             }
         }
 
-                // Logout
-                const logoutBtn = document.getElementById('logoutBtn');
-                if (logoutBtn) {
-                    logoutBtn.addEventListener('click', async () => {
-                        const auth = window.auth || firebase.auth();
-                        if (confirm('Are you sure you want to logout?')) {
-                            try {
-                                await auth.signOut();
-                                localStorage.removeItem('authVerified');
-                                localStorage.removeItem('fullName');
-                                window.location.href = 'main-menu.html';
-                            } catch (error) {
-                                console.error('Logout error:', error);
-                                alert('Logout failed: ' + error.message);
-                            }
-                        }
-                    });
-                }
-
-                // SEAMLESS NAVIGATION: Check localStorage first - if flag exists, proceed IMMEDIATELY
-                const authVerified = localStorage.getItem('authVerified');
-                const storedFullName = localStorage.getItem('fullName');
-                
-                console.log('[ADMIN] Checking auth flags...');
-                console.log('[ADMIN] authVerified:', authVerified);
-                console.log('[ADMIN] storedFullName:', storedFullName);
-                console.log('[ADMIN] auth.currentUser (sync):', auth ? (auth.currentUser ? auth.currentUser.email : 'null') : 'auth not initialized');
-                
-                if (authVerified === 'true' && storedFullName) {
-                    // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
-                    console.log('[ADMIN] ✓ Auth verified flag found - checking admin status immediately');
-                    
-                    // Wait for user to be available (Firebase may need time to restore session)
-                    let user = auth.currentUser;
-                    if (!user) {
-                        console.log('[ADMIN] auth.currentUser is null, waiting for user...');
-                        // Wait up to 2 seconds for Firebase to restore the session
-                        let waitCount = 0;
-                        while (!user && waitCount < 20) {
-                            await new Promise(resolve => setTimeout(resolve, 100));
-                            user = auth.currentUser;
-                            waitCount++;
-                        }
-                    }
-                    
-                    if (user) {
-                        console.log('[ADMIN] User found, checking admin status...');
-                        const { isAdmin, name } = await checkAdminStatus(user);
-                        if (isAdmin) {
-                            console.log('[ADMIN] ✓ Admin confirmed, loading dashboard');
-                            loadAdminDashboard(name);
-                            
-                            // Verify auth in background (non-blocking)
-                            setTimeout(() => {
-                                const currentUser = auth.currentUser;
-                                if (currentUser) {
-                                    console.log('[ADMIN] ✓ Auth confirmed via currentUser:', currentUser.email);
-                                    localStorage.setItem('authVerified', 'true');
-                                } else {
-                                    // Set up onAuthStateChanged listener
-                                    const unsubscribe = auth.onAuthStateChanged(async function(user) {
-                                        if (user) {
-                                            const { isAdmin, name } = await checkAdminStatus(user);
-                                            if (isAdmin) {
-                                                console.log('[ADMIN] ✓ Auth confirmed via onAuthStateChanged');
-                                                localStorage.setItem('authVerified', 'true');
-                                            } else {
-                                                console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
-                                                localStorage.removeItem('authVerified');
-                                                window.location.href = 'main-menu.html';
-                                            }
-                                        } else {
-                                            console.log('[ADMIN] ✗ No user found, redirecting to main-menu.html');
-                                            localStorage.removeItem('authVerified');
-                                            window.location.href = 'main-menu.html';
-                                        }
-                                        unsubscribe();
-                                    });
-                                }
-                            }, 300);
-                            
-                            return; // Exit - page initialized
-                        } else {
-                            console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
-                            localStorage.removeItem('authVerified');
-                            window.location.href = 'main-menu.html';
-                            return;
-                        }
-                    } else {
-                        console.log('[ADMIN] ✗ No user found after waiting, redirecting to main-menu.html');
-                        localStorage.removeItem('authVerified');
-                        window.location.href = 'main-menu.html';
-                        return;
-                    }
-                }
-                
-                // No stored flag - wait for Firebase auth
-                console.log('[ADMIN] ✗ No auth flag found - waiting for Firebase auth');
-                console.log('[ADMIN] Setting up onAuthStateChanged listener...');
-                auth.onAuthStateChanged(async function(user) {
-                    console.log('[ADMIN] onAuthStateChanged fired, user:', user ? user.email : 'null');
-                    if (user) {
-                        const { isAdmin, name } = await checkAdminStatus(user);
-                        if (isAdmin) {
-                            console.log('[ADMIN] ✓ User authenticated and is admin, loading dashboard');
-                            localStorage.setItem('authVerified', 'true');
-                            if (!localStorage.getItem('fullName')) {
-                                localStorage.setItem('fullName', name || user.email);
-                            }
-                            loadAdminDashboard(name);
-                        } else {
-                            console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
-                            await auth.signOut();
-                            localStorage.removeItem('authVerified');
-                            window.location.href = 'main-menu.html';
-                        }
-                    } else {
-                        console.log('[ADMIN] ✗ No user found, redirecting to main-menu.html');
-                        localStorage.removeItem('authVerified');
-                        window.location.href = 'main-menu.html';
-                    }
-                });
-            }
-            
-            // Start waiting for common.js
-            waitForAuth();
-        });
         
         // Continue with rest of script using auth, db, storage from scope
         (function() {
-            // These will be set when initializeAdmin is called
-            let auth, db, storage;
-            
             // Make them available globally for other functions
             window.getAuth = () => window.auth;
             window.getDb = () => window.db;
@@ -3943,10 +3850,14 @@ Thank you!`;
         let sessionTimeout;
         function resetSessionTimeout() {
             clearTimeout(sessionTimeout);
+            const auth = window.auth;
+            if (!auth) return;
             sessionTimeout = setTimeout(async () => {
                 if (auth.currentUser) {
                     alert('Session expired due to inactivity. Please login again.');
                     await auth.signOut();
+                    localStorage.removeItem('authVerified');
+                    window.location.href = 'main-menu.html';
                 }
             }, 30 * 60 * 1000); // 30 minutes
         }
@@ -5180,6 +5091,7 @@ Thank you!`;
                 });
             }
         });
+        })();
     </script>
 </body>
 </html>
