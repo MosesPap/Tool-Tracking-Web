@@ -1609,8 +1609,10 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                         if (data.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
                                             console.warn(`Response truncated for Level ${level}. May need more tokens.`);
                                             if (level === 3) {
-                                                console.warn('Level 3 response was truncated. The JSON may be incomplete. Attempting to repair...');
+                                                console.warn('Level 3 response was truncated. The JSON may be incomplete. Attempting to repair and extract valid questions...');
                                                 // For Level 3, we'll try harder to repair the truncated JSON
+                                                // Mark that we should be more lenient in extraction
+                                                content = content + ']'; // Try to close the array if truncated
                                             }
                                             // Still try to use what we got, but warn user
                                         }
@@ -1678,6 +1680,16 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         }
                         
                         // Fix common JSON issues
+                        // Remove {n} artifacts FIRST (before other processing)
+                        cleanedContent = cleanedContent.replace(/\{n\}/g, '');
+                        cleanedContent = cleanedContent.replace(/\s*\{n\}\s*/g, '');
+                        
+                        // Fix "in "property"" patterns (common API artifact)
+                        cleanedContent = cleanedContent.replace(/\s+in\s+"([^"]+)":/g, ' "$1":');
+                        cleanedContent = cleanedContent.replace(/,\s*in\s+"([^"]+)":/g, ', "$1":');
+                        cleanedContent = cleanedContent.replace(/}\s*,\s*in\s+"/g, '}, "');
+                        cleanedContent = cleanedContent.replace(/}\s*in\s+"/g, '}, "');
+                        
                         cleanedContent = cleanedContent
                             .replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3') // Fix unquoted keys
                             .replace(/,\s*}/g, '}') // Remove trailing commas
@@ -1685,19 +1697,27 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                             .replace(/\}\s*\{/g, '},{') // Fix missing commas between objects
                             .replace(/\}\s*\n\s*\{/g, '},\n{') // Fix missing commas with newlines
                             .replace(/\n\s*\n\s*\n/g, '\n') // Remove multiple consecutive newlines
-                            .replace(/\}\s*\{n\}\s*\{n\}/g, '}') // Remove {n}{n} artifacts
                             .replace(/\}\s*\{/g, '},{'); // Fix any remaining missing commas
                         
                         // For Level 3, try to fix incomplete JSON more aggressively
                         if (level === 3) {
-                            // Remove any {n}{n} patterns that might appear
+                            // Remove any {n}{n} patterns that might appear (do this FIRST)
                             cleanedContent = cleanedContent.replace(/\{n\}/g, '');
+                            cleanedContent = cleanedContent.replace(/\s*\{n\}\s*/g, '');
+                            
+                            // Fix patterns like "in "correct"" -> "correct"
+                            cleanedContent = cleanedContent.replace(/\s+in\s+"([^"]+)":/g, ' "$1":');
+                            cleanedContent = cleanedContent.replace(/,\s*in\s+"([^"]+)":/g, ', "$1":');
                             
                             // Fix empty objects {} that break JSON
                             cleanedContent = cleanedContent.replace(/\{\s*\}/g, '');
                             
                             // Fix unquoted property names (common error: property: instead of "property":)
                             cleanedContent = cleanedContent.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+                            
+                            // Fix malformed patterns like "}, in "correct"" -> "}, "correct""
+                            cleanedContent = cleanedContent.replace(/}\s*,\s*in\s+"/g, '}, "');
+                            cleanedContent = cleanedContent.replace(/}\s*in\s+"/g, '}, "');
                             
                             // Try to fix incomplete strings in options - look for unclosed quotes
                             cleanedContent = cleanedContent.replace(/"([ABC])":\s*"([^"]*?)(?=\s*[,}])/g, (match, option, value) => {
@@ -1834,21 +1854,60 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                             if (level === 3) {
                                 try {
                                     const objects = [];
-                                    const objectPattern = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
+                                    
+                                    // First, try to find complete question objects by looking for the pattern
+                                    // {"question": "...", "options": {...}, "correct": "..."}
+                                    const questionPattern = /\{\s*"question"\s*:\s*"[^"]*"\s*,\s*"options"\s*:\s*\{[^}]*\}\s*,\s*"correct"\s*:\s*"[ABC]"\s*\}/g;
                                     let match;
-                                    while ((match = objectPattern.exec(cleanedContent)) !== null) {
+                                    while ((match = questionPattern.exec(cleanedContent)) !== null) {
                                         try {
-                                            const obj = JSON.parse(match[0]);
-                                            if (obj.question && obj.options && obj.correct) {
+                                            // Clean the match before parsing
+                                            let objStr = match[0];
+                                            // Remove any {n} artifacts
+                                            objStr = objStr.replace(/\{n\}/g, '');
+                                            // Fix "in "property"" patterns
+                                            objStr = objStr.replace(/\s+in\s+"([^"]+)":/g, ' "$1":');
+                                            
+                                            const obj = JSON.parse(objStr);
+                                            if (obj.question && obj.options && obj.correct && 
+                                                obj.options.A && obj.options.B && obj.options.C) {
                                                 objects.push(obj);
                                             }
                                         } catch (e) {
                                             // Skip invalid objects
                                         }
                                     }
+                                    
+                                    // If we didn't find complete objects, try a more lenient approach
+                                    if (objects.length === 0) {
+                                        // Split by question markers and try to parse each section
+                                        const sections = cleanedContent.split(/"question"\s*:/);
+                                        for (let i = 1; i < sections.length; i++) {
+                                            try {
+                                                // Try to reconstruct a complete object from this section
+                                                let objStr = '"question":' + sections[i];
+                                                // Find the end of this object (next } that closes the question object)
+                                                const endIndex = objStr.indexOf('}');
+                                                if (endIndex > 0) {
+                                                    objStr = '{' + objStr.substring(0, endIndex + 1);
+                                                    // Clean it
+                                                    objStr = objStr.replace(/\{n\}/g, '');
+                                                    objStr = objStr.replace(/\s+in\s+"([^"]+)":/g, ' "$1":');
+                                                    
+                                                    const obj = JSON.parse(objStr);
+                                                    if (obj.question && obj.options && obj.correct) {
+                                                        objects.push(obj);
+                                                    }
+                                                }
+                                            } catch (e) {
+                                                // Skip invalid sections
+                                            }
+                                        }
+                                    }
+                                    
                                     if (objects.length > 0) {
                                         levelQuestions = objects;
-                                        console.log(`Extracted ${objects.length} valid question objects from Level 3 response`);
+                                        console.log(`Extracted ${objects.length} valid question objects from Level 3 response using fallback strategy`);
                                     }
                                 } catch (e2) {
                                     console.warn('Object-by-object extraction failed:', e2);
