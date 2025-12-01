@@ -993,6 +993,7 @@
         let currentToolPhotoUrls = [];
         let bulkScanMessageTimeout = null;
         let bulkScanModeAutoEnabled = false; // Track if bulk scan mode was auto-enabled
+        let bulkScanCheckedOutByOthers = []; // Collect tools checked out by others during bulk scan
         
         // Initialize page on load
         document.addEventListener('DOMContentLoaded', function() {
@@ -1354,6 +1355,7 @@
                             bulkBtn.style.borderColor = '#FF9800';
                             bulkBtn.style.color = 'white';
                             bulkScannedTools = [];
+                            bulkScanCheckedOutByOthers = []; // Reset when auto-enabling
                         }
                     }
                 } else if (currentValue.length === 0 && bulkScanModeAutoEnabled) {
@@ -1366,6 +1368,32 @@
                         bulkBtn.style.borderColor = '#bdbdbd';
                         bulkBtn.style.color = '#333';
                         bulkScannedTools = [];
+                        
+                        // Show modal with all tools checked out by others (if any) when auto-disabling
+                        if (bulkScanCheckedOutByOthers.length > 0) {
+                            let listHtml = '<div style="max-height: 400px; overflow-y: auto;"><p>The following tools are checked out by other users:</p><ul class="list-group">';
+                            bulkScanCheckedOutByOthers.forEach(tool => {
+                                listHtml += `
+                                    <li class="list-group-item">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <strong>Tool: ${tool.code}</strong><br>
+                                                <small class="text-muted">${tool.toolName}</small>
+                                            </div>
+                                            <div class="text-end">
+                                                <div><strong>${tool.technician}</strong></div>
+                                                <small class="text-muted">${tool.timestamp}</small>
+                                            </div>
+                                        </div>
+                                    </li>
+                                `;
+                            });
+                            listHtml += '</ul></div>';
+                            document.getElementById('toolAlreadyCheckedOutModalBody').innerHTML = listHtml;
+                            const modal = new bootstrap.Modal(document.getElementById('toolAlreadyCheckedOutModal'));
+                            modal.show();
+                            bulkScanCheckedOutByOthers = []; // Clear after showing
+                        }
                     }
                     
                     // Deselect all buttons when input is cleared
@@ -1577,6 +1605,7 @@
             let errorCount = 0;
             const errors = [];
             const skippedCodes = [];
+            const checkedOutByOthers = []; // Collect tools checked out by other users
             
             // Process each tool sequentially
             for (let i = 0; i < codes.length; i++) {
@@ -1605,7 +1634,7 @@
                     
                     // Check if tool is OUT and checked out by different technician
                     if (data.status === 'OUT' && data.technician !== technicianName) {
-                        // Show popup modal with user name and timestamp (similar to single tool registration)
+                        // Collect tool info for showing in list at the end
                         let checkedOutDate = 'Unknown';
                         if (data.timestamp && data.timestamp.toDate) {
                             checkedOutDate = data.timestamp.toDate().toLocaleString('en-GB', {
@@ -1613,14 +1642,14 @@
                                 hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
                             });
                         }
-                        document.getElementById('toolAlreadyCheckedOutModalBody').innerHTML =
-                            `Tool <b>${code}</b> was checked out by <b>${data.technician || 'Unknown Technician'}</b> on ${checkedOutDate}<br>You cannot Check Out this tool.`;
-                        const modal = new bootstrap.Modal(document.getElementById('toolAlreadyCheckedOutModal'));
-                        modal.show();
+                        checkedOutByOthers.push({
+                            code: code,
+                            toolName: data.toolName || code,
+                            technician: data.technician || 'Unknown Technician',
+                            timestamp: checkedOutDate
+                        });
                         
                         skippedCodes.push({ code, reason: 'Checked out by different technician' });
-                        // Wait a bit before continuing to next tool to allow user to see the modal
-                        await new Promise(resolve => setTimeout(resolve, 2000));
                         continue;
                     }
                     
@@ -1698,6 +1727,31 @@
             // Remove processing message
             if (alertDiv.parentNode) {
                 alertDiv.remove();
+            }
+            
+            // Show modal with all tools checked out by others (if any)
+            if (checkedOutByOthers.length > 0) {
+                let listHtml = '<div style="max-height: 400px; overflow-y: auto;"><p>The following tools are checked out by other users:</p><ul class="list-group">';
+                checkedOutByOthers.forEach(tool => {
+                    listHtml += `
+                        <li class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>Tool: ${tool.code}</strong><br>
+                                    <small class="text-muted">${tool.toolName}</small>
+                                </div>
+                                <div class="text-end">
+                                    <div><strong>${tool.technician}</strong></div>
+                                    <small class="text-muted">${tool.timestamp}</small>
+                                </div>
+                            </div>
+                        </li>
+                    `;
+                });
+                listHtml += '</ul></div>';
+                document.getElementById('toolAlreadyCheckedOutModalBody').innerHTML = listHtml;
+                const modal = new bootstrap.Modal(document.getElementById('toolAlreadyCheckedOutModal'));
+                modal.show();
             }
             
             // Show summary message
@@ -1802,6 +1856,7 @@
         
         // Bulk Scan Mode Functions (make it global)
         window.toggleBulkScanMode = function toggleBulkScanMode() {
+            const wasEnabled = bulkScanMode;
             bulkScanMode = !bulkScanMode;
             // When manually toggled, clear auto-enabled flag
             // When manually toggled, clear auto-enabled flag
@@ -1813,11 +1868,39 @@
                 btn.style.borderColor = '#FF9800';
                 btn.style.color = 'white';
                 bulkScannedTools = [];
+                bulkScanCheckedOutByOthers = []; // Reset when starting bulk scan
             } else {
                 btn.style.background = 'linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%)';
                 btn.style.borderColor = '#bdbdbd';
                 btn.style.color = '#333';
+                
+                // Show modal with all tools checked out by others (if any) when disabling bulk scan
+                if (bulkScanCheckedOutByOthers.length > 0) {
+                    let listHtml = '<div style="max-height: 400px; overflow-y: auto;"><p>The following tools are checked out by other users:</p><ul class="list-group">';
+                    bulkScanCheckedOutByOthers.forEach(tool => {
+                        listHtml += `
+                            <li class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong>Tool: ${tool.code}</strong><br>
+                                        <small class="text-muted">${tool.toolName}</small>
+                                    </div>
+                                    <div class="text-end">
+                                        <div><strong>${tool.technician}</strong></div>
+                                        <small class="text-muted">${tool.timestamp}</small>
+                                    </div>
+                                </div>
+                            </li>
+                        `;
+                    });
+                    listHtml += '</ul></div>';
+                    document.getElementById('toolAlreadyCheckedOutModalBody').innerHTML = listHtml;
+                    const modal = new bootstrap.Modal(document.getElementById('toolAlreadyCheckedOutModal'));
+                    modal.show();
+                }
+                
                 bulkScannedTools = [];
+                bulkScanCheckedOutByOthers = []; // Clear after showing
             }
         }
         
@@ -1879,7 +1962,7 @@
                 
                 // Validation checks
                 if (data.status === 'OUT' && data.technician !== technicianName) {
-                    // Show popup modal with user name and timestamp (similar to single tool registration)
+                    // Collect tool info for showing in list when bulk scan mode is disabled
                     let checkedOutDate = 'Unknown';
                     if (data.timestamp && data.timestamp.toDate) {
                         checkedOutDate = data.timestamp.toDate().toLocaleString('en-GB', {
@@ -1887,11 +1970,14 @@
                             hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
                         });
                     }
-                    document.getElementById('toolAlreadyCheckedOutModalBody').innerHTML =
-                        `Tool <b>${code}</b> was checked out by <b>${data.technician || 'Unknown Technician'}</b> on ${checkedOutDate}<br>You cannot Check Out this tool.`;
-                    const modal = new bootstrap.Modal(document.getElementById('toolAlreadyCheckedOutModal'));
-                    modal.show();
+                    bulkScanCheckedOutByOthers.push({
+                        code: code,
+                        toolName: data.toolName || code,
+                        technician: data.technician || 'Unknown Technician',
+                        timestamp: checkedOutDate
+                    });
                     
+                    showBulkScanMessage(`Tool checked out by <br>${data.technician}`, false);
                     bulkProcessingCodes.delete(code);
                     return;
                 }
