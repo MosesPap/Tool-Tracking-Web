@@ -2278,7 +2278,7 @@
                     </div>
                     </div>
                     
-                    <button type="button" onclick="signUp(event)" class="btn btn-primary w-100 mb-2" id="signUpBtn">
+                    <button type="button" id="signUpBtn" class="btn btn-primary w-100 mb-2" onclick="event.preventDefault(); event.stopPropagation(); signUp(event); return false;">
                         <span class="btn-text">CREATE ACCOUNT</span>
                         <span class="btn-loading d-none">
                             <span class="spinner-border spinner-border-sm me-2"></span>Loading...
@@ -3481,11 +3481,41 @@
                 this.innerHTML = '<i class="fas fa-eye"></i>';
             }
         };
-
+        
+        // Attach event listener to sign up button to prevent page refresh
+        function setupSignUpButton() {
+            const signUpBtn = document.getElementById('signUpBtn');
+            if (signUpBtn) {
+                // Remove any existing listeners
+                const newBtn = signUpBtn.cloneNode(true);
+                signUpBtn.parentNode.replaceChild(newBtn, signUpBtn);
+                
+                // Add event listener to new button
+                const newSignUpBtn = document.getElementById('signUpBtn');
+                newSignUpBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    console.log('Sign up button clicked via event listener');
+                    signUp(e);
+                    return false;
+                }, true); // Use capture phase to catch early
+                
+                // Also set onclick as backup
+                newSignUpBtn.setAttribute('onclick', 'event.preventDefault(); event.stopPropagation(); signUp(event); return false;');
+            }
+        }
+        
+        // Setup button when page loads
+        setupSignUpButton();
+        
+        // Also setup when signup section is shown
         // Show/Hide login/signup
         function showSignUp() {
             document.getElementById('loginSection').classList.add('d-none');
             document.getElementById('signUpSection').classList.remove('d-none');
+            // Setup button again when section is shown
+            setTimeout(setupSignUpButton, 100);
         }
         function showLogin() {
             document.getElementById('signUpSection').classList.add('d-none');
@@ -3701,54 +3731,70 @@ if (!userCredential.user.emailVerified) {
 
         // Sign up logic
         async function signUp(event) {
-            // Prevent form submission and page refresh
-            if (event) {
-                event.preventDefault();
-                event.stopPropagation();
-            }
-            
-            console.log('=== SIGN UP FUNCTION CALLED ===');
-            
-            let fullName = document.getElementById('signUpFullName').value.trim();
-            const email = document.getElementById('signUpEmail').value.trim();
-            const password = document.getElementById('signUpPassword').value.trim();
-            const confirmPassword = document.getElementById('signUpConfirmPassword').value.trim();
-            const alertBox = document.getElementById('signUpAlert');
-            alertBox.classList.add('d-none');
-            
-            console.log('Form values:', { fullName, email, passwordLength: password.length, confirmPasswordLength: confirmPassword.length });
-
-            // Final validation for full name format
-            if (!fullName || !/^([A-Z][a-z]+)( [A-Z][a-z]+)+$/.test(fullName)) {
-                alertBox.textContent = 'Please enter a valid full name with both first and last name (English letters only).';
-                alertBox.classList.remove('d-none');
-                return;
-            }
-
-            if (!fullName || !email || !password || !confirmPassword) {
-                alertBox.textContent = 'Please fill in all fields.';
-                alertBox.classList.remove('d-none');
-                return;
-            }
-            if (password !== confirmPassword) {
-                alertBox.textContent = 'Passwords do not match.';
-                alertBox.classList.remove('d-none');
-                return;
-            }
-            
-            // Check if email already exists in pending registrations
             try {
-                const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
-                if (pendingDoc.exists) {
-                    alertBox.textContent = 'An account with this email is already pending verification. Please check your email or try again later.';
+                // Prevent form submission and page refresh - CRITICAL
+                if (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    if (event.cancelable !== false) {
+                        event.preventDefault();
+                    }
+                }
+                
+                // Also prevent default on window level
+                if (window.event) {
+                    window.event.preventDefault();
+                    window.event.stopPropagation();
+                    window.event.returnValue = false;
+                    window.event.cancelBubble = true;
+                }
+                
+                console.log('=== SIGN UP FUNCTION CALLED ===');
+                console.log('Event prevented, page should not refresh');
+                console.log('Event type:', event ? event.type : 'no event');
+                console.log('Event target:', event ? event.target : 'no event');
+                
+                let fullName = document.getElementById('signUpFullName').value.trim();
+                const email = document.getElementById('signUpEmail').value.trim();
+                const password = document.getElementById('signUpPassword').value.trim();
+                const confirmPassword = document.getElementById('signUpConfirmPassword').value.trim();
+                const alertBox = document.getElementById('signUpAlert');
+                alertBox.classList.add('d-none');
+                
+                console.log('Form values:', { fullName, email, passwordLength: password.length, confirmPasswordLength: confirmPassword.length });
+
+                // Final validation for full name format
+                if (!fullName || !/^([A-Z][a-z]+)( [A-Z][a-z]+)+$/.test(fullName)) {
+                    alertBox.textContent = 'Please enter a valid full name with both first and last name (English letters only).';
                     alertBox.classList.remove('d-none');
                     return;
                 }
-            } catch (error) {
-                console.error('Error checking pending registrations:', error);
-            }
-            
-            try {
+
+                if (!fullName || !email || !password || !confirmPassword) {
+                    alertBox.textContent = 'Please fill in all fields.';
+                    alertBox.classList.remove('d-none');
+                    return;
+                }
+                if (password !== confirmPassword) {
+                    alertBox.textContent = 'Passwords do not match.';
+                    alertBox.classList.remove('d-none');
+                    return;
+                }
+                
+                // Check if email already exists in pending registrations
+                try {
+                    const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
+                    if (pendingDoc.exists) {
+                        alertBox.textContent = 'An account with this email is already pending verification. Please check your email or try again later.';
+                        alertBox.classList.remove('d-none');
+                        return;
+                    }
+                } catch (error) {
+                    console.error('Error checking pending registrations:', error);
+                }
+                
+                try {
                 // Show loading state
                 const signUpBtn = document.getElementById('signUpBtn');
                 const btnText = signUpBtn.querySelector('.btn-text');
