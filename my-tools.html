@@ -1001,34 +1001,6 @@
             window.location.href = 'main-menu.html';
         }
 
-        // Helper function to fetch fullName from technicians collection
-        async function fetchFullNameFromTechnicians(auth, db, user) {
-            if (!user) return null;
-            
-            try {
-                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
-                if (technicianDoc.exists) {
-                    const technicianData = technicianDoc.data();
-                    const fullName = technicianData.fullName || user.email;
-                    console.log('[MY-TOOLS] Fetched fullName from technicians collection:', fullName);
-                    // Update localStorage for consistency
-                    localStorage.setItem('fullName', fullName);
-                    return fullName;
-                } else {
-                    // Fallback to localStorage or email
-                    const fullName = localStorage.getItem('fullName') || user.email;
-                    console.log('[MY-TOOLS] Technician doc not found, using localStorage/email:', fullName);
-                    return fullName;
-                }
-            } catch (error) {
-                console.error('[MY-TOOLS] Error fetching technician data:', error);
-                // Fallback to localStorage or email
-                const fullName = localStorage.getItem('fullName') || user.email;
-                console.log('[MY-TOOLS] Error occurred, using localStorage/email fallback:', fullName);
-                return fullName;
-            }
-        }
-
         // Show collection selection dialog (matching index.html)
         async function showCollectionSelectionDialog() {
             const auth = window.auth || firebase.auth();
@@ -1062,37 +1034,19 @@
                 }
             }
             
-            // Fetch fullName from technicians collection first (more reliable than localStorage)
-            let fullName = null;
-            if (user) {
-                fullName = await fetchFullNameFromTechnicians(auth, db, user);
-            } else {
-                fullName = localStorage.getItem('fullName');
-            }
-            
+            const fullName = localStorage.getItem('fullName') || (user ? user.email : null);
             if (!fullName) {
                 console.error('[MY-TOOLS] showCollectionSelectionDialog: No fullName available');
                 return;
             }
-            
             const modal = new bootstrap.Modal(document.getElementById('collectionSelectModal'));
             const body = document.getElementById('collectionSelectBody');
             body.innerHTML = '<div class="text-center">Loading...</div>';
             try {
                 // 1. Query tools for this owner
-                console.log('[MY-TOOLS] Querying tools with owner:', fullName);
-                let toolsSnapshot = await db.collection('tools').where('owner', '==', fullName).get();
-                console.log('[MY-TOOLS] Found', toolsSnapshot.size, 'tools with owner:', fullName);
-                
-                // If no tools found, try with user.email as fallback
-                if (toolsSnapshot.empty && user && user.email && user.email !== fullName) {
-                    console.log('[MY-TOOLS] No tools found with fullName, trying with email:', user.email);
-                    toolsSnapshot = await db.collection('tools').where('owner', '==', user.email).get();
-                    console.log('[MY-TOOLS] Found', toolsSnapshot.size, 'tools with owner:', user.email);
-                }
-                
+                const toolsSnapshot = await db.collection('tools').where('owner', '==', fullName).get();
                 if (toolsSnapshot.empty) {
-                    body.innerHTML = '<div class="text-center text-danger">No tools found for you.<br><small>If you believe this is an error, please contact an administrator.</small></div>';
+                    body.innerHTML = '<div class="text-center text-danger">No tools found for you.</div>';
                     modal.show();
                     return;
                 }
@@ -1152,17 +1106,7 @@
             const db = window.db || firebase.firestore();
             lastViewedCollectionName = collectionName;
             const user = auth.currentUser;
-            
-            if (!user) {
-                console.error('[MY-TOOLS] showMyToolsByCollection: No user logged in');
-                return;
-            }
-            
-            // Fetch fullName from technicians collection first (more reliable than localStorage)
-            let fullName = await fetchFullNameFromTechnicians(auth, db, user);
-            if (!fullName) {
-                fullName = localStorage.getItem('fullName') || user.email;
-            }
+            const fullName = localStorage.getItem('fullName') || (user ? user.email : '');
             
             // Hide My Tools screen, show My Tools by Collection screen
             document.getElementById('myToolsScreen').style.display = 'none';
@@ -1181,26 +1125,13 @@
             
             try {
                 // Query tools where collectionCode matches the collectionName
-                console.log('[MY-TOOLS] showMyToolsByCollection: Querying with owner:', fullName, 'collectionCode:', collectionName);
-                let snapshot = await db.collection('tools')
+                const snapshot = await db.collection('tools')
                     .where('owner', '==', fullName)
                     .where('collectionCode', '==', collectionName)
                     .get();
                 
-                console.log('[MY-TOOLS] showMyToolsByCollection: Found', snapshot.size, 'tools');
-                
-                // If no tools found, try with user.email as fallback
-                if (snapshot.empty && user.email && user.email !== fullName) {
-                    console.log('[MY-TOOLS] showMyToolsByCollection: No tools found, trying with email:', user.email);
-                    snapshot = await db.collection('tools')
-                        .where('owner', '==', user.email)
-                        .where('collectionCode', '==', collectionName)
-                        .get();
-                    console.log('[MY-TOOLS] showMyToolsByCollection: Found', snapshot.size, 'tools with email');
-                }
-                
                 if (snapshot.empty) {
-                    list.innerHTML = '<div class="text-center text-danger">No tools found in this collection.<br><small>If you believe this is an error, please contact an administrator.</small></div>';
+                    list.innerHTML = '<div class="text-center text-danger">No tools found in this collection.</div>';
                     lastViewedCollectionTools = [];
                     return;
                 }
