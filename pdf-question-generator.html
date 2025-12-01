@@ -1894,8 +1894,54 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 // Add worksheet to workbook
                 XLSX.utils.book_append_sheet(wb, ws, 'Questions');
                 
+                // Generate filename based on chapter number, title, and date
+                const chapterNumber = document.getElementById('chapterNumber')?.value?.trim() || '';
+                const chapterTitle = document.getElementById('chapterTitle')?.value?.trim() || '';
+                const formDate = document.getElementById('formDate')?.value || '';
+                
+                // Build filename parts
+                const filenameParts = [];
+                
+                if (chapterNumber) {
+                    filenameParts.push(chapterNumber);
+                }
+                
+                if (chapterTitle) {
+                    // Sanitize title for filename (remove invalid characters)
+                    const sanitizedTitle = chapterTitle
+                        .replace(/[<>:"/\\|?*]/g, '') // Remove invalid filename characters
+                        .replace(/\s+/g, '_') // Replace spaces with underscores
+                        .substring(0, 50); // Limit length
+                    if (sanitizedTitle) {
+                        filenameParts.push(sanitizedTitle);
+                    }
+                }
+                
+                if (formDate) {
+                    // Format date as YYYY-MM-DD or use as-is if already formatted
+                    const dateObj = new Date(formDate);
+                    if (!isNaN(dateObj.getTime())) {
+                        const formattedDate = dateObj.toISOString().split('T')[0];
+                        filenameParts.push(formattedDate);
+                    } else {
+                        // If date is not valid, use as-is after sanitizing
+                        const sanitizedDate = formDate.replace(/[<>:"/\\|?*]/g, '');
+                        if (sanitizedDate) {
+                            filenameParts.push(sanitizedDate);
+                        }
+                    }
+                }
+                
+                // Generate filename
+                let fileName;
+                if (filenameParts.length > 0) {
+                    fileName = filenameParts.join('_') + '.xlsx';
+                } else {
+                    // Fallback to default filename if no fields are filled
+                    fileName = `generated_questions_${new Date().toISOString().split('T')[0]}.xlsx`;
+                }
+                
                 // Generate Excel file and let user choose save location
-                const fileName = `generated_questions_${new Date().toISOString().split('T')[0]}.xlsx`;
                 
                 // Try to use File System Access API to let user choose folder (Chrome/Edge)
                 if ('showSaveFilePicker' in window) {
