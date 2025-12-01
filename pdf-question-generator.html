@@ -1684,11 +1684,50 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         cleanedContent = cleanedContent.replace(/\{n\}/g, '');
                         cleanedContent = cleanedContent.replace(/\s*\{n\}\s*/g, '');
                         
-                        // Fix "in "property"" patterns (common API artifact)
-                        cleanedContent = cleanedContent.replace(/\s+in\s+"([^"]+)":/g, ' "$1":');
-                        cleanedContent = cleanedContent.replace(/,\s*in\s+"([^"]+)":/g, ', "$1":');
-                        cleanedContent = cleanedContent.replace(/}\s*,\s*in\s+"/g, '}, "');
-                        cleanedContent = cleanedContent.replace(/}\s*in\s+"/g, '}, "');
+                        // Fix "in "property"" patterns (common API artifact) - handle all positions
+                        cleanedContent = cleanedContent.replace(/\[\s*in\s+"([^"]+)":/g, '[{ "$1":');  // Fix at array start
+                        cleanedContent = cleanedContent.replace(/\{\s*in\s+"([^"]+)":/g, '{ "$1":');  // Fix at object start
+                        cleanedContent = cleanedContent.replace(/\s+in\s+"([^"]+)":/g, ' "$1":');     // Fix in middle
+                        cleanedContent = cleanedContent.replace(/,\s*in\s+"([^"]+)":/g, ', "$1":');  // Fix after comma
+                        cleanedContent = cleanedContent.replace(/}\s*,\s*in\s+"/g, '}, "');          // Fix after closing brace
+                        cleanedContent = cleanedContent.replace(/}\s*in\s+"/g, '}, "');              // Fix after closing brace (no comma)
+                        
+                        // CRITICAL FIX: Detect and fix missing opening brace for first object in array
+                        // This is a common issue with Level 3 responses: [ "question": instead of [{ "question":
+                        if (cleanedContent.startsWith('[') && !cleanedContent.match(/^\[\s*\{/)) {
+                            // Find the first "question" property
+                            const firstQuestionIndex = cleanedContent.indexOf('"question"');
+                            if (firstQuestionIndex > 0) {
+                                // Check what's between [ and "question"
+                                const betweenBracketAndQuestion = cleanedContent.substring(1, firstQuestionIndex).trim();
+                                // If there's no { before "question", add it
+                                if (!betweenBracketAndQuestion.startsWith('{') && betweenBracketAndQuestion.length > 0) {
+                                    // Check if it starts with "in" or other text (including weird characters like ελη)
+                                    if (betweenBracketAndQuestion.startsWith('in') || 
+                                        betweenBracketAndQuestion.match(/^[a-zA-Z]/) ||
+                                        betweenBracketAndQuestion.match(/^[^\s{]/)) {
+                                        // Remove any text before "question" and add {
+                                        cleanedContent = '[' + '{' + cleanedContent.substring(firstQuestionIndex);
+                                        console.log('Fixed missing opening brace for first question object (removed leading text: "' + betweenBracketAndQuestion.substring(0, 20) + '...")');
+                                    } else {
+                                        // Just add the missing {
+                                        cleanedContent = '[' + '{' + cleanedContent.substring(1);
+                                        console.log('Fixed missing opening brace for first question object');
+                                    }
+                                } else if (betweenBracketAndQuestion.length === 0) {
+                                    // Empty space between [ and "question", add {
+                                    cleanedContent = '[' + '{' + cleanedContent.substring(1);
+                                    console.log('Fixed missing opening brace for first question object (empty space)');
+                                }
+                            } else if (firstQuestionIndex === -1) {
+                                // No "question" found, but we have [ without { - try to find first property
+                                const firstPropertyMatch = cleanedContent.match(/\[\s*"([^"]+)":/);
+                                if (firstPropertyMatch) {
+                                    cleanedContent = '[' + '{' + cleanedContent.substring(1);
+                                    console.log('Fixed missing opening brace for first object (found property: "' + firstPropertyMatch[1] + '")');
+                                }
+                            }
+                        }
                         
                         cleanedContent = cleanedContent
                             .replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3') // Fix unquoted keys
