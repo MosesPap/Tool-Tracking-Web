@@ -527,11 +527,10 @@
                     // Verify auth in background - but wait a bit for Firebase to restore session
                     setTimeout(() => {
                         // First check currentUser (synchronous check)
-                        const checkUser = auth.currentUser;
-                        if (checkUser) {
-                            console.log('Auth confirmed via currentUser:', checkUser.email);
-                            currentUser = checkUser;
-                            loadApiKeyFromFirestore(checkUser.uid);
+                        const currentUser = auth.currentUser;
+                        if (currentUser) {
+                            console.log('Auth confirmed via currentUser:', currentUser.email);
+                            loadApiKeyFromFirestore(currentUser.uid);
                             localStorage.setItem('authVerified', 'true');
                             return;
                         }
@@ -623,16 +622,38 @@
                 const userDoc = await db.collection('technicians').doc(userId).get();
                 if (userDoc.exists) {
                     const userData = userDoc.data();
-                    // Load API key from current user's document (each user has their own key)
+                    // Check if user is an instructor
+                    if (userData.isInstructor && userData.geminiApiKey) {
+                        document.getElementById('apiKey').value = userData.geminiApiKey;
+                        localStorage.setItem('gemini_api_key', userData.geminiApiKey);
+                        console.log('API key loaded from current instructor document');
+                        return;
+                    }
+                    // If not instructor but has key, use it
                     if (userData.geminiApiKey) {
                         document.getElementById('apiKey').value = userData.geminiApiKey;
                         localStorage.setItem('gemini_api_key', userData.geminiApiKey);
-                        if (userData.isInstructor) {
-                            console.log('API key loaded from current instructor document (user-specific)');
-                        } else {
-                            console.log('API key loaded from current user document');
-                        }
+                        console.log('API key loaded from current user document');
                         return;
+                    }
+                }
+                
+                // If current user is an instructor but doesn't have key, try to load from any instructor
+                if (userDoc.exists && userDoc.data().isInstructor) {
+                    const instructorsQuery = await db.collection('technicians')
+                        .where('isInstructor', '==', true)
+                        .limit(1)
+                        .get();
+                    
+                    if (!instructorsQuery.empty) {
+                        const instructorDoc = instructorsQuery.docs[0];
+                        const instructorData = instructorDoc.data();
+                        if (instructorData.geminiApiKey) {
+                            document.getElementById('apiKey').value = instructorData.geminiApiKey;
+                            localStorage.setItem('gemini_api_key', instructorData.geminiApiKey);
+                            console.log('API key loaded from another instructor document');
+                            return;
+                        }
                     }
                 }
                 
@@ -666,9 +687,26 @@
                     }, { merge: true });
                     console.log('API key saved to current user document');
                     
-                    // Save API key to current user's document only
-                    // Each instructor/user saves their own API key individually
-                    console.log('API key saved to current user document (user-specific, not synced)');
+                    // Check if current user is an instructor
+                    const userDoc = await db.collection('technicians').doc(currentUser.uid).get();
+                    if (userDoc.exists && userDoc.data().isInstructor) {
+                        // If user is an instructor, save to ALL instructor documents
+                        const instructorsQuery = await db.collection('technicians')
+                            .where('isInstructor', '==', true)
+                            .get();
+                        
+                        const updatePromises = [];
+                        instructorsQuery.forEach((doc) => {
+                            updatePromises.push(
+                                db.collection('technicians').doc(doc.id).set({
+                                    geminiApiKey: apiKey
+                                }, { merge: true })
+                            );
+                        });
+                        
+                        await Promise.all(updatePromises);
+                        console.log(`API key saved to ${instructorsQuery.size} instructor document(s) (synced across all instructors)`);
+                    }
                 } catch (error) {
                     console.error('Error saving API key to Firestore:', error);
                     // Continue anyway - at least localStorage is saved
@@ -869,60 +907,23 @@
 
         // ========== DUPLICATE DETECTION ==========
         function isDuplicateQuestion(newQuestion, existingQuestions) {
-            // Normalize question text for comparison (lowercase, remove extra spaces, remove punctuation)
-            const normalize = (text) => {
-                return text.toLowerCase()
-                    .trim()
-                    .replace(/[.,!?;:]/g, '') // Remove punctuation
-                    .replace(/\s+/g, ' ') // Normalize whitespace
-                    .replace(/\b(the|a|an|is|are|was|were|do|does|did|can|could|will|would|should)\b/gi, ''); // Remove common words
-            };
-            
-            const normalizeOption = (text) => {
-                return text.toLowerCase()
-                    .trim()
-                    .replace(/[.,!?;:]/g, '')
-                    .replace(/\s+/g, ' ');
-            };
-            
+            // Normalize question text for comparison (lowercase, remove extra spaces)
+            const normalize = (text) => text.toLowerCase().trim().replace(/\s+/g, ' ');
             const newQText = normalize(newQuestion.question);
-            const newOptionsNormalized = Object.values(newQuestion.options)
-                .map(v => normalizeOption(v))
-                .sort()
-                .join('|');
             
             // Check against all existing questions across all levels
             for (const levelGroup of existingQuestions) {
                 for (const existingQ of levelGroup.questions) {
                     const existingQText = normalize(existingQ.question);
                     
-                    // Calculate similarity
-                    const questionSimilarity = calculateSimilarity(newQText, existingQText);
-                    
-                    // If questions are identical or very similar (85% threshold - more aggressive)
-                    if (newQText === existingQText || questionSimilarity > 0.85) {
-                        // Check if options are similar (even if reordered)
-                        const existingOptionsNormalized = Object.values(existingQ.options)
-                            .map(v => normalizeOption(v))
-                            .sort()
-                            .join('|');
+                    // Check if question text is the same or very similar (90% similarity)
+                    if (newQText === existingQText || calculateSimilarity(newQText, existingQText) > 0.9) {
+                        // Also check if answers are the same
+                        const newOptions = Object.values(newQuestion.options).map(v => normalize(v)).sort().join('|');
+                        const existingOptions = Object.values(existingQ.options).map(v => normalize(v)).sort().join('|');
                         
-                        // If questions are very similar AND options are similar, it's a duplicate
-                        const optionsSimilarity = calculateSimilarity(newOptionsNormalized, existingOptionsNormalized);
-                        
-                        // If question is identical or >90% similar, it's a duplicate regardless of answers
-                        if (newQText === existingQText || questionSimilarity > 0.90) {
-                            return true;
-                        }
-                        
-                        // If question is >85% similar AND options are >80% similar, it's a duplicate
-                        if (questionSimilarity > 0.85 && optionsSimilarity > 0.80) {
-                            return true;
-                        }
-                        
-                        // If question is >85% similar AND all options match (even if reordered), it's a duplicate
-                        if (questionSimilarity > 0.85 && newOptionsNormalized === existingOptionsNormalized) {
-                            return true;
+                        if (newOptions === existingOptions) {
+                            return true; // Duplicate question with same answers
                         }
                     }
                 }
@@ -1235,9 +1236,6 @@
                 availableModels = [];
             }
         }
-        
-        // Expose testApiKey to window for onclick handlers
-        window.testApiKey = testApiKey;
 
         // Randomly shuffle options for each question to ensure balanced distribution of correct answers
         function shuffleQuestionOptions(questions) {
@@ -1483,14 +1481,7 @@
                         ? '\nIMPORTANT FOR LEVEL 3: Generate detailed, complex questions that require deep understanding. Keep questions and options concise but comprehensive. Ensure the JSON response is complete and valid.'
                         : '';
                     
-                    const levelPrompt = `Based on the following text from a PDF document, generate ${count} UNIQUE multiple choice questions at ${levelInfo.name}.${complexityNote}
-
-CRITICAL REQUIREMENTS FOR UNIQUENESS:
-- Each question must be COMPLETELY UNIQUE - no similar or rephrased versions of the same question
-- Questions must test DIFFERENT concepts, facts, or applications
-- Do NOT create variations of the same question with slightly different wording
-- Each question must cover a DISTINCT aspect of the subject matter
-- If you've already asked about a specific topic, do NOT ask about it again in a different way
+                    const levelPrompt = `Based on the following text from a PDF document, generate ${count} multiple choice questions at ${levelInfo.name}.${complexityNote}
 
 KNOWLEDGE LEVEL REQUIREMENTS:
 ${levelInfo.description}
@@ -1500,13 +1491,12 @@ ${levelInfo.objectives.map((obj, idx) => `${idx + 1}. ${obj}`).join('\n')}
 
 Each question should have:
 - A clear question stem appropriate for ${levelInfo.name}
-- 3 answer options (A, B, C) that are DISTINCT and UNIQUE
+- 3 answer options (A, B, C)
 - One correct answer clearly marked
 - IMPORTANT: Distribute correct answers evenly and randomly across A, B, and C options. 
   For ${count} questions, ensure roughly equal distribution (not all A, not all B, not all C, and not in a pattern like first=A, middle=B, last=C).
 - Questions should test knowledge at the specified level depth
 - Questions should be varied in style (factual, comprehension, application, analysis) as appropriate for the level
-- Each question must cover a DIFFERENT topic or aspect - no repetition or similarity
 
 Format the response as a JSON array with this structure:
 [
@@ -1548,9 +1538,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                             contents: [{ parts: [{ text: levelPrompt }] }],
                                             generationConfig: {
                                                 temperature: 0.7,
-                                                // Level 3 questions are more complex and need more tokens - increase significantly
-                                                // Use maximum available tokens (8192) for Level 3 to avoid truncation
-                                                maxOutputTokens: level === 3 ? Math.min(8192, count * 3000) : Math.max(4096, count * 1000)
+                                                // Level 3 questions are more complex and need more tokens
+                                                maxOutputTokens: level === 3 ? Math.max(8192, count * 1500) : Math.max(4096, count * 1000)
                                             }
                                         })
                                     });
@@ -1573,19 +1562,9 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                         if (data.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
                                             console.warn(`Response truncated for Level ${level}. May need more tokens.`);
                                             if (level === 3) {
-                                                console.warn('Level 3 response was truncated. The JSON may be incomplete. Attempting to repair and extract valid questions...');
-                                                // For Level 3, we'll try harder to repair the truncated JSON
-                                                // Mark that we should be more lenient in extraction
-                                                content = content + ']'; // Try to close the array if truncated
+                                                console.warn('Level 3 response was truncated. Try generating fewer questions at once or the response may be incomplete.');
                                             }
                                             // Still try to use what we got, but warn user
-                                        }
-                                        
-                                        // Check for safety or other blocking reasons
-                                        if (data.candidates?.[0]?.finishReason === 'SAFETY') {
-                                            console.warn(`Response blocked by safety filter for Level ${level}.`);
-                                            lastError = 'Response was blocked by safety filter. Try rephrasing your PDF content.';
-                                            continue;
                                         }
                                         
                                         console.log(`Successfully used model: ${model} for Level ${level}`);
@@ -1644,416 +1623,28 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         }
                         
                         // Fix common JSON issues
-                        // Remove {n} artifacts FIRST (before other processing)
-                        cleanedContent = cleanedContent.replace(/\{n\}/g, '');
-                        cleanedContent = cleanedContent.replace(/\s*\{n\}\s*/g, '');
-                        
-                        // CRITICAL: Fix "in "property"" patterns EARLY and AGGRESSIVELY (common API artifact for Level 3)
-                        // The pattern can be: }, in "correct" OR }, in\n "correct" (with newline between in and quote)
-                        const beforeInFix = cleanedContent;
-                        for (let pass = 0; pass < 5; pass++) {
-                            // Fix pattern: }, in\n "correct" (newline between in and quote) - THIS IS THE ACTUAL PATTERN!
-                            cleanedContent = cleanedContent.replace(/}\s*,\s*in\s*\r?\n\s*"/g, '}, "');
-                            cleanedContent = cleanedContent.replace(/}\s*,\s*in\s*\n\s*"/g, '}, "');
-                            
-                            // Fix pattern: }, in "correct" (no newline)
-                            cleanedContent = cleanedContent.replace(/}\s*,\s*in\s+"/g, '}, "');
-                            
-                            // Fix pattern: },\n in "correct" (newline after comma)
-                            cleanedContent = cleanedContent.replace(/}\s*,\s*\r?\n\s*in\s+"/g, '}, "');
-                            cleanedContent = cleanedContent.replace(/}\s*,\s*\n\s*in\s+"/g, '}, "');
-                            
-                            // Fix pattern: } in "correct" (no comma)
-                            cleanedContent = cleanedContent.replace(/}\s*in\s*\r?\n\s*"/g, '}, "');
-                            cleanedContent = cleanedContent.replace(/}\s*in\s+"/g, '}, "');
-                            
-                            // Fix at array/object start
-                            cleanedContent = cleanedContent.replace(/\[\s*in\s*\r?\n\s*"([^"]+)":/g, '[{ "$1":');
-                            cleanedContent = cleanedContent.replace(/\[\s*in\s+"([^"]+)":/g, '[{ "$1":');
-                            cleanedContent = cleanedContent.replace(/\{\s*in\s*\r?\n\s*"([^"]+)":/g, '{ "$1":');
-                            cleanedContent = cleanedContent.replace(/\{\s*in\s+"([^"]+)":/g, '{ "$1":');
-                            
-                            // Fix in middle (with spaces)
-                            cleanedContent = cleanedContent.replace(/\s+in\s*\r?\n\s*"([^"]+)":/g, ' "$1":');
-                            cleanedContent = cleanedContent.replace(/\s+in\s+"([^"]+)":/g, ' "$1":');
-                            
-                            // Fix after comma
-                            cleanedContent = cleanedContent.replace(/,\s*in\s*\r?\n\s*"([^"]+)":/g, ', "$1":');
-                            cleanedContent = cleanedContent.replace(/,\s*in\s+"([^"]+)":/g, ', "$1":');
-                            cleanedContent = cleanedContent.replace(/,\s*\r?\n\s*in\s+"([^"]+)":/g, ', "$1":');
-                        }
-                        if (beforeInFix !== cleanedContent) {
-                            console.log(`Fixed "in" pattern in Level ${level} JSON (applied early fix). Pattern found:`, beforeInFix.includes('in "') || beforeInFix.includes('in\n "'));
-                        }
-                        
-                        // CRITICAL FIX: Detect and fix missing opening brace for first object in array
-                        // This is a common issue with Level 3 responses: [ "question": instead of [{ "question":
-                        if (cleanedContent.startsWith('[') && !cleanedContent.match(/^\[\s*\{/)) {
-                            // Find the first "question" property
-                            const firstQuestionIndex = cleanedContent.indexOf('"question"');
-                            if (firstQuestionIndex > 0) {
-                                // Check what's between [ and "question"
-                                const betweenBracketAndQuestion = cleanedContent.substring(1, firstQuestionIndex).trim();
-                                // If there's no { before "question", add it
-                                if (!betweenBracketAndQuestion.startsWith('{') && betweenBracketAndQuestion.length > 0) {
-                                    // Check if it starts with "in" or other text (including weird characters like ελη)
-                                    if (betweenBracketAndQuestion.startsWith('in') || 
-                                        betweenBracketAndQuestion.match(/^[a-zA-Z]/) ||
-                                        betweenBracketAndQuestion.match(/^[^\s{]/)) {
-                                        // Remove any text before "question" and add {
-                                        cleanedContent = '[' + '{' + cleanedContent.substring(firstQuestionIndex);
-                                        console.log('Fixed missing opening brace for first question object (removed leading text: "' + betweenBracketAndQuestion.substring(0, 20) + '...")');
-                                    } else {
-                                        // Just add the missing {
-                                        cleanedContent = '[' + '{' + cleanedContent.substring(1);
-                                        console.log('Fixed missing opening brace for first question object');
-                                    }
-                                } else if (betweenBracketAndQuestion.length === 0) {
-                                    // Empty space between [ and "question", add {
-                                    cleanedContent = '[' + '{' + cleanedContent.substring(1);
-                                    console.log('Fixed missing opening brace for first question object (empty space)');
-                                }
-                            } else if (firstQuestionIndex === -1) {
-                                // No "question" found, but we have [ without { - try to find first property
-                                const firstPropertyMatch = cleanedContent.match(/\[\s*"([^"]+)":/);
-                                if (firstPropertyMatch) {
-                                    cleanedContent = '[' + '{' + cleanedContent.substring(1);
-                                    console.log('Fixed missing opening brace for first object (found property: "' + firstPropertyMatch[1] + '")');
-                                }
-                            }
-                        }
-                        
-                        // Fix trailing commas FIRST (before other processing that might add them)
-                        cleanedContent = cleanedContent.replace(/,\s*}/g, '}'); // Remove trailing commas before }
-                        cleanedContent = cleanedContent.replace(/,\s*]/g, ']'); // Remove trailing commas before ]
-                        cleanedContent = cleanedContent.replace(/,\s*\n\s*}/g, '\n}'); // Remove trailing commas with newlines
-                        cleanedContent = cleanedContent.replace(/,\s*\n\s*]/g, '\n]'); // Remove trailing commas with newlines before ]
-                        
                         cleanedContent = cleanedContent
                             .replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3') // Fix unquoted keys
-                            .replace(/\}\s*\{/g, '},{') // Fix missing commas between objects
-                            .replace(/\}\s*\n\s*\{/g, '},\n{') // Fix missing commas with newlines
-                            .replace(/\n\s*\n\s*\n/g, '\n') // Remove multiple consecutive newlines
-                            .replace(/\}\s*\{/g, '},{'); // Fix any remaining missing commas
+                            .replace(/,\s*}/g, '}') // Remove trailing commas
+                            .replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
                         
-                        // For Level 3, try to fix incomplete JSON more aggressively
-                        if (level === 3) {
-                            // Remove any {n}{n} patterns that might appear (do this FIRST)
-                            cleanedContent = cleanedContent.replace(/\{n\}/g, '');
-                            cleanedContent = cleanedContent.replace(/\s*\{n\}\s*/g, '');
-                            
-                            // CRITICAL: Fix "in "property"" patterns MORE AGGRESSIVELY (handle newlines, multiple spaces, etc.)
-                            // The pattern can be: }, in "correct" OR }, in\n "correct" (with newline between in and quote)
-                            // Apply multiple times to catch all variations
-                            let previousContent = '';
-                            let iterations = 0;
-                            while (cleanedContent !== previousContent && iterations < 5) {
-                                previousContent = cleanedContent;
-                                
-                                // Fix pattern: }, in\n "correct" (newline between in and quote) - THIS IS THE ACTUAL PATTERN!
-                                cleanedContent = cleanedContent.replace(/}\s*,\s*in\s*\r?\n\s*"/g, '}, "');
-                                cleanedContent = cleanedContent.replace(/}\s*,\s*in\s*\n\s*"/g, '}, "');
-                                
-                                // Fix pattern: }, in "correct" (no newline)
-                                cleanedContent = cleanedContent.replace(/}\s*,\s*in\s+"/g, '}, "');
-                                
-                                // Fix pattern: },\n in "correct" (newline after comma)
-                                cleanedContent = cleanedContent.replace(/}\s*,\s*\r?\n\s*in\s+"/g, '}, "');
-                                cleanedContent = cleanedContent.replace(/}\s*,\s*\n\s*in\s+"/g, '}, "');
-                                
-                                // Fix pattern: } in "correct" (no comma)
-                                cleanedContent = cleanedContent.replace(/}\s*in\s*\r?\n\s*"/g, '}, "');
-                                cleanedContent = cleanedContent.replace(/}\s*in\s+"/g, '}, "');
-                                
-                                // Fix at array/object start
-                                cleanedContent = cleanedContent.replace(/\[\s*in\s*\r?\n\s*"([^"]+)":/g, '[{ "$1":');
-                                cleanedContent = cleanedContent.replace(/\[\s*in\s+"([^"]+)":/g, '[{ "$1":');
-                                cleanedContent = cleanedContent.replace(/\{\s*in\s*\r?\n\s*"([^"]+)":/g, '{ "$1":');
-                                cleanedContent = cleanedContent.replace(/\{\s*in\s+"([^"]+)":/g, '{ "$1":');
-                                
-                                // Fix in middle (with spaces)
-                                cleanedContent = cleanedContent.replace(/\s+in\s*\r?\n\s*"([^"]+)":/g, ' "$1":');
-                                cleanedContent = cleanedContent.replace(/\s+in\s+"([^"]+)":/g, ' "$1":');
-                                
-                                // Fix after comma
-                                cleanedContent = cleanedContent.replace(/,\s*in\s*\r?\n\s*"([^"]+)":/g, ', "$1":');
-                                cleanedContent = cleanedContent.replace(/,\s*in\s+"([^"]+)":/g, ', "$1":');
-                                cleanedContent = cleanedContent.replace(/,\s*\r?\n\s*in\s+"([^"]+)":/g, ', "$1":');
-                                
-                                iterations++;
-                            }
-                            
-                            // Fix empty objects {} that break JSON
-                            cleanedContent = cleanedContent.replace(/\{\s*\}/g, '');
-                            
-                            // Fix unquoted property names (common error: property: instead of "property":)
-                            cleanedContent = cleanedContent.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
-                            
-                            // CRITICAL: Fix incomplete/truncated strings in options
-                            // The API often truncates option values, leaving them without closing quotes
-                            // Pattern: "A": "text without closing quote followed by } or ,
-                            cleanedContent = cleanedContent.replace(/"([ABC])":\s*"([^"]*?)(?=\s*[,}])/g, (match, option, value) => {
-                                // If the value doesn't end with a quote and we're at a comma or brace, add the quote
-                                if (!match.endsWith('"')) {
-                                    return `"${option}": "${value}"`;
-                                }
-                                return match;
-                            });
-                            
-                            // Also fix truncated strings that end abruptly (common in Level 3)
-                            // Look for patterns like: "C": "text that ends without quote before }
-                            cleanedContent = cleanedContent.replace(/"([ABC])":\s*"([^"]+?)(?=\s*\n\s*})/g, (match, option, value) => {
-                                // If match doesn't end with quote and is followed by newline and }, close it
-                                if (!match.endsWith('"')) {
-                                    return `"${option}": "${value}"`;
-                                }
-                                return match;
-                            });
-                            
-                            // Fix incomplete strings before closing braces in options object
-                            cleanedContent = cleanedContent.replace(/"([ABC])":\s*"([^"]+?)(?=\s*}\s*,\s*"correct")/g, (match, option, value) => {
-                                if (!match.endsWith('"')) {
-                                    return `"${option}": "${value}"`;
-                                }
-                                return match;
-                            });
-                            
-                            // Fix incomplete strings - find strings that don't have closing quotes
-                            let fixedContent = '';
-                            let inString = false;
-                            let stringStart = -1;
-                            let escapeNext = false;
-                            for (let i = 0; i < cleanedContent.length; i++) {
-                                const char = cleanedContent[i];
-                                
-                                if (escapeNext) {
-                                    fixedContent += char;
-                                    escapeNext = false;
-                                    continue;
-                                }
-                                
-                                if (char === '\\') {
-                                    escapeNext = true;
-                                    fixedContent += char;
-                                    continue;
-                                }
-                                
-                                if (char === '"') {
-                                    if (!inString) {
-                                        inString = true;
-                                        stringStart = i;
-                                    } else {
-                                        inString = false;
-                                    }
-                                    fixedContent += char;
-                                } else if (inString && (char === ',' || char === '}' || char === ']') && i > stringStart + 1) {
-                                    // If we're in a string and hit a comma or brace, close the string first
-                                    fixedContent += '"' + char;
-                                    inString = false;
-                                } else {
-                                    fixedContent += char;
-                                }
-                            }
-                            // Close any remaining open strings
-                            if (inString) {
-                                fixedContent += '"';
-                            }
-                            cleanedContent = fixedContent;
-                            
-                            // Try to find and close incomplete question objects
-                            // Look for patterns like "correct": "A" without closing brace
-                            const correctMatches = [...cleanedContent.matchAll(/"correct":\s*"([ABC])"/g)];
-                            if (correctMatches.length > 0) {
-                                // For each match, check if it's followed by a closing brace
-                                for (let i = correctMatches.length - 1; i >= 0; i--) {
-                                    const match = correctMatches[i];
-                                    const afterMatch = cleanedContent.substring(match.index + match[0].length).trim();
-                                    
-                                    // If not followed by } or ], add the closing brace
-                                    if (!afterMatch.startsWith('}') && !afterMatch.startsWith(']') && !afterMatch.startsWith(',')) {
-                                        const insertPos = match.index + match[0].length;
-                                        cleanedContent = cleanedContent.substring(0, insertPos) + '}' + cleanedContent.substring(insertPos);
-                                    }
-                                }
-                            }
-                            
-                            // Fix incomplete option objects - ensure all questions have all 3 options
-                            // Look for patterns where we have "question" but incomplete "options"
-                            const questionMatches = [...cleanedContent.matchAll(/"question":\s*"([^"]+)"/g)];
-                            for (const match of questionMatches) {
-                                const afterQuestion = cleanedContent.substring(match.index + match[0].length);
-                                // Check if options object exists and is complete
-                                if (!afterQuestion.includes('"options"')) {
-                                    // Try to find where options should be
-                                    const nextBrace = afterQuestion.indexOf('}');
-                                    if (nextBrace > 0) {
-                                        // Insert options object before closing brace
-                                        const insertPos = match.index + match[0].length + nextBrace;
-                                        const optionsObj = ', "options": {"A": "", "B": "", "C": ""}';
-                                        cleanedContent = cleanedContent.substring(0, insertPos) + optionsObj + cleanedContent.substring(insertPos);
-                                    }
-                                }
-                            }
-                            
-                            // Count and balance braces
-                            const openBraces = (cleanedContent.match(/\{/g) || []).length;
-                            const closeBraces = (cleanedContent.match(/\}/g) || []).length;
-                            
-                            if (openBraces > closeBraces) {
-                                // Find the last position where we can safely add closing braces
-                                const lastBracket = cleanedContent.lastIndexOf(']');
-                                if (lastBracket > 0) {
-                                    const missingBraces = openBraces - closeBraces;
-                                    cleanedContent = cleanedContent.substring(0, lastBracket + 1) + 
-                                                     '}'.repeat(missingBraces);
-                                } else {
-                                    // If no closing bracket, try to add it
-                                    const lastOpenBrace = cleanedContent.lastIndexOf('{');
-                                    if (lastOpenBrace > 0) {
-                                        // Find the last complete object and close the array
-                                        const tempContent = cleanedContent + '}'.repeat(openBraces - closeBraces) + ']';
-                                        cleanedContent = tempContent;
-                                    }
-                                }
-                            }
-                            
-                            // Final check: ensure the content starts with [ and ends with ]
-                            if (!cleanedContent.trim().startsWith('[')) {
-                                const firstBrace = cleanedContent.indexOf('{');
-                                if (firstBrace > 0) {
-                                    cleanedContent = '[' + cleanedContent.substring(firstBrace);
-                                }
-                            }
-                            if (!cleanedContent.trim().endsWith(']')) {
-                                cleanedContent = cleanedContent + ']';
-                            }
-                        }
+                        let levelQuestions = JSON.parse(cleanedContent);
                         
-                        // Try parsing with multiple strategies
-                        let levelQuestions = null;
-                        let parseError = null;
-                        
-                        // Strategy 1: Direct parse
-                        try {
-                            levelQuestions = JSON.parse(cleanedContent);
-                        } catch (e) {
-                            parseError = e;
-                            console.warn(`Direct JSON parse failed for Level ${level}, trying alternative strategies...`, e.message);
-                            
-                            // Strategy 2: Try to extract valid JSON objects one by one
-                            if (level === 3) {
-                                try {
-                                    const objects = [];
-                                    
-                                    // First, try to find complete question objects by looking for the pattern
-                                    // {"question": "...", "options": {...}, "correct": "..."}
-                                    // Use a more lenient pattern that handles the "in" artifact
-                                    const questionPattern = /\{\s*"question"\s*:\s*"[^"]*"\s*,\s*"options"\s*:\s*\{[^}]*\}\s*,\s*(?:in\s+)?"correct"\s*:\s*"[ABC]"\s*\}/g;
-                                    let match;
-                                    while ((match = questionPattern.exec(cleanedContent)) !== null) {
-                                        try {
-                                            // Clean the match before parsing
-                                            let objStr = match[0];
-                                            // Remove any {n} artifacts
-                                            objStr = objStr.replace(/\{n\}/g, '');
-                                            // Fix "in "property"" patterns more aggressively
-                                            objStr = objStr.replace(/}\s*,\s*\r?\n\s*in\s+"/g, '}, "');
-                                            objStr = objStr.replace(/}\s*,\s*in\s+"/g, '}, "');
-                                            objStr = objStr.replace(/\s+in\s+"([^"]+)":/g, ' "$1":');
-                                            
-                                            const obj = JSON.parse(objStr);
-                                            if (obj.question && obj.options && obj.correct && 
-                                                obj.options.A && obj.options.B && obj.options.C) {
-                                                objects.push(obj);
-                                            }
-                                        } catch (e) {
-                                            // Skip invalid objects
-                                            console.warn('Skipped invalid object in Level 3 extraction:', e.message);
-                                        }
-                                    }
-                                    
-                                    // If we didn't find complete objects, try a more lenient approach
-                                    if (objects.length === 0) {
-                                        // Split by question markers and try to parse each section
-                                        const sections = cleanedContent.split(/"question"\s*:/);
-                                        for (let i = 1; i < sections.length; i++) {
-                                            try {
-                                                // Try to reconstruct a complete object from this section
-                                                let objStr = '"question":' + sections[i];
-                                                // Find the end of this object (next } that closes the question object)
-                                                const endIndex = objStr.indexOf('}');
-                                                if (endIndex > 0) {
-                                                    objStr = '{' + objStr.substring(0, endIndex + 1);
-                                                    // Clean it
-                                                    objStr = objStr.replace(/\{n\}/g, '');
-                                                    objStr = objStr.replace(/\s+in\s+"([^"]+)":/g, ' "$1":');
-                                                    
-                                                    const obj = JSON.parse(objStr);
-                                                    if (obj.question && obj.options && obj.correct) {
-                                                        objects.push(obj);
-                                                    }
-                                                }
-                                            } catch (e) {
-                                                // Skip invalid sections
-                                            }
-                                        }
-                                    }
-                                    
-                                    if (objects.length > 0) {
-                                        levelQuestions = objects;
-                                        console.log(`Extracted ${objects.length} valid question objects from Level 3 response using fallback strategy`);
-                                    }
-                                } catch (e2) {
-                                    console.warn('Object-by-object extraction failed:', e2);
-                                }
-                            }
-                            
-                            // Strategy 3: If still no success and we didn't fix it in the catch block, throw the original error
-                            if (!levelQuestions && parseError) {
-                                throw parseError;
-                            }
-                        }
-                        
-                        // If we successfully parsed (either directly or through fallback), validate it's an array
-                        if (levelQuestions && !Array.isArray(levelQuestions)) {
+                        // Validate it's an array
+                        if (!Array.isArray(levelQuestions)) {
                             throw new Error('Response is not an array');
-                        }
-                        
-                        // If we still don't have questions, throw error
-                        if (!levelQuestions) {
-                            throw new Error('Failed to parse questions from API response');
                         }
                         
                         // Randomly shuffle options for each question to ensure balanced distribution of correct answers
                         levelQuestions = shuffleQuestionOptions(levelQuestions);
                         
-                        // Filter out duplicates before adding - check against ALL existing questions across ALL levels
-                        const existingQuestions = questions; // All questions generated so far (all levels)
-                        
-                        // First pass: filter duplicates against existing questions from other levels
-                        let uniqueQuestions = levelQuestions.filter(q => !isDuplicateQuestion(q, existingQuestions));
+                        // Filter out duplicates before adding
+                        const existingQuestions = questions; // All questions generated so far
+                        const uniqueQuestions = levelQuestions.filter(q => !isDuplicateQuestion(q, existingQuestions));
                         const duplicatesRemoved = levelQuestions.length - uniqueQuestions.length;
                         
-                        // Second pass: check for duplicates within the current level batch
-                        const withinLevelUnique = [];
-                        for (const q of uniqueQuestions) {
-                            let isDuplicate = false;
-                            for (const existingQ of withinLevelUnique) {
-                                if (isDuplicateQuestion(q, [{ questions: [existingQ] }])) {
-                                    isDuplicate = true;
-                                    break;
-                                }
-                            }
-                            if (!isDuplicate) {
-                                withinLevelUnique.push(q);
-                            }
-                        }
-                        const withinLevelDuplicates = uniqueQuestions.length - withinLevelUnique.length;
-                        uniqueQuestions = withinLevelUnique;
-                        const totalDuplicatesRemoved = duplicatesRemoved + withinLevelDuplicates;
-                        
-                        if (totalDuplicatesRemoved > 0) {
-                            console.warn(`Removed ${totalDuplicatesRemoved} duplicate question(s) from Level ${level} (${duplicatesRemoved} cross-level, ${withinLevelDuplicates} within-level)`);
+                        if (duplicatesRemoved > 0) {
+                            console.warn(`Removed ${duplicatesRemoved} duplicate question(s) from Level ${level}`);
                         }
                         
                         if (uniqueQuestions.length > 0) {
@@ -2066,7 +1657,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         console.error(`Failed to parse questions for Level ${level}:`, parseError);
                         console.error('Content that failed to parse:', content.substring(0, 1000));
                         
-                        // For Level 3, show more detailed error info and try one more aggressive fix
+                        // For Level 3, show more detailed error info
                         if (level === 3) {
                             console.error('Level 3 parsing error details:', {
                                 contentLength: content.length,
@@ -2074,36 +1665,10 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                 lastChars: content.substring(Math.max(0, content.length - 200)),
                                 errorMessage: parseError.message
                             });
-                            
-                            // LAST RESORT: Try one more aggressive cleanup before manual extraction
-                            console.log('Attempting final aggressive cleanup for Level 3...');
-                            let finalCleanup = cleanedContent;
-                            
-                            // Remove ALL instances of "in " before property names
-                            finalCleanup = finalCleanup.replace(/in\s+"([^"]+)":/g, '"$1":');
-                            // Remove {n} patterns
-                            finalCleanup = finalCleanup.replace(/\{n\}/g, '');
-                            // Fix trailing commas
-                            finalCleanup = finalCleanup.replace(/,\s*}/g, '}');
-                            finalCleanup = finalCleanup.replace(/,\s*]/g, ']');
-                            
-                            // Try parsing one more time with final cleanup
-                            try {
-                                const finalParse = JSON.parse(finalCleanup);
-                                if (Array.isArray(finalParse) && finalParse.length > 0) {
-                                    levelQuestions = finalParse;
-                                    console.log('✓ Final aggressive cleanup succeeded! Parsed', finalParse.length, 'questions');
-                                    parseError = null; // Clear error so we can proceed
-                                }
-                            } catch (finalError) {
-                                console.warn('Final cleanup also failed, proceeding to manual extraction');
-                            }
                         }
                         
-                        // Only proceed to manual extraction if we still have an error
-                        if (parseError) {
-                            // Try to extract questions manually if JSON parsing fails
-                            try {
+                        // Try to extract questions manually if JSON parsing fails
+                        try {
                             let manualQuestions = extractQuestionsFromText(content);
                             if (manualQuestions.length > 0) {
                                 // Randomly shuffle options for manually extracted questions too
@@ -2126,22 +1691,17 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                 }
                             } else {
                                 const errorMsg = level === 3 
-                                    ? `Could not extract any questions for Level 3. The API response may be incomplete, truncated, or malformed. Suggestions:\n1. Try generating fewer Level 3 questions at once (e.g., 3-5 instead of 10+)\n2. Check the browser console for detailed error information\n3. Ensure your PDF content is sufficient for generating complex questions\n4. Try again - sometimes the API response varies`
+                                    ? `Could not extract any questions for Level 3. The response may be incomplete or truncated. Try generating fewer Level 3 questions at once, or check the console for details.`
                                     : `Could not extract any questions for Level ${level}. The response may be incomplete.`;
                                 console.warn(errorMsg);
-                                // Show user-friendly alert for Level 3 failures
-                                if (level === 3) {
-                                    alert(`Level 3 Question Generation Failed\n\n${errorMsg}\n\nOther levels may have been generated successfully. Check the questions list below.`);
-                                }
                                 // Still continue - other levels may have worked
                             }
-                            } catch (extractError) {
-                                console.error(`Failed to extract questions manually:`, extractError);
-                                if (level === 3) {
-                                    console.error('Level 3 manual extraction also failed. The API response may be malformed or incomplete. Try reducing the number of Level 3 questions.');
-                                }
-                                // Continue with other levels
+                        } catch (extractError) {
+                            console.error(`Failed to extract questions manually:`, extractError);
+                            if (level === 3) {
+                                console.error('Level 3 manual extraction also failed. The API response may be malformed or incomplete. Try reducing the number of Level 3 questions.');
                             }
+                            // Continue with other levels
                         }
                     }
                 }
@@ -2308,37 +1868,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 // Add worksheet to workbook
                 XLSX.utils.book_append_sheet(wb, ws, 'Questions');
                 
-                // Generate Excel file name from Chapter Number, Title, and Date
-                const chapterNumber = document.getElementById('chapterNumber')?.value?.trim() || '';
-                const chapterTitle = document.getElementById('chapterTitle')?.value?.trim() || '';
-                const formDate = document.getElementById('formDate')?.value || new Date().toISOString().split('T')[0];
-                
-                // Format date for filename (YYYY-MM-DD)
-                let dateStr = formDate;
-                if (formDate.includes('/')) {
-                    // Convert DD/MM/YYYY to YYYY-MM-DD
-                    const parts = formDate.split('/');
-                    if (parts.length === 3) {
-                        dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                    }
-                }
-                
-                // Create filename
-                let fileName = '';
-                if (chapterNumber && chapterTitle) {
-                    // Remove special characters that might cause issues in filenames
-                    const safeChapterNumber = chapterNumber.replace(/[^a-zA-Z0-9]/g, '_');
-                    const safeChapterTitle = chapterTitle.replace(/[^a-zA-Z0-9\s]/g, '_').replace(/\s+/g, '_');
-                    fileName = `${safeChapterNumber}_${safeChapterTitle}_${dateStr}.xlsx`;
-                } else if (chapterNumber) {
-                    const safeChapterNumber = chapterNumber.replace(/[^a-zA-Z0-9]/g, '_');
-                    fileName = `${safeChapterNumber}_${dateStr}.xlsx`;
-                } else if (chapterTitle) {
-                    const safeChapterTitle = chapterTitle.replace(/[^a-zA-Z0-9\s]/g, '_').replace(/\s+/g, '_');
-                    fileName = `${safeChapterTitle}_${dateStr}.xlsx`;
-                } else {
-                    fileName = `generated_questions_${dateStr}.xlsx`;
-                }
+                // Generate Excel file and let user choose save location
+                const fileName = `generated_questions_${new Date().toISOString().split('T')[0]}.xlsx`;
                 
                 // Try to use File System Access API to let user choose folder (Chrome/Edge)
                 if ('showSaveFilePicker' in window) {
@@ -2732,7 +2263,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     updateFormInfo: {
                         info: {
                             title: formTitle,
-                            description: 'Write your name and answer all Questions'
+                            description: ''
                         },
                         updateMask: 'title,description'
                     }
@@ -2745,20 +2276,58 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     3: 'Interrelationships, manufacturer instructions, corrective actions'
                 };
                 
-                // Level names mapping
-                const levelNames = {
-                    1: 'Level 1 - Familiarisation',
-                    2: 'Level 2 - General Knowledge',
-                    3: 'Level 3 - Detailed Knowledge'
-                };
-                
                 let questionIndex = 0;
+                let lastLevel = null;
                 
                 // Track item indices for setting required status later
                 const requiredItemIndices = [];
                 
-                // ===== SECTION 1: Only Name Field =====
-                // Add name field (required) - form title and description are already in form info
+                // Add Section 1: Chapter info and name field
+                requests.push({
+                    createItem: {
+                        item: {
+                            title: 'Chapter Number',
+                            questionItem: {
+                                question: {
+                                    textQuestion: {}
+                                }
+                            }
+                        },
+                        location: { index: questionIndex }
+                    }
+                });
+                requiredItemIndices.push(questionIndex++);
+                
+                requests.push({
+                    createItem: {
+                        item: {
+                            title: 'Chapter Title',
+                            questionItem: {
+                                question: {
+                                    textQuestion: {}
+                                }
+                            }
+                        },
+                        location: { index: questionIndex }
+                    }
+                });
+                requiredItemIndices.push(questionIndex++);
+                
+                requests.push({
+                    createItem: {
+                        item: {
+                            title: 'Date',
+                            questionItem: {
+                                question: {
+                                    textQuestion: {}
+                                }
+                            }
+                        },
+                        location: { index: questionIndex }
+                    }
+                });
+                requiredItemIndices.push(questionIndex++);
+                
                 requests.push({
                     createItem: {
                         item: {
@@ -2785,25 +2354,12 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     }
                 });
 
-                // Group questions by level
-                const questionsByLevel = {};
                 selectedQuestions.forEach((item) => {
-                    const { level } = item;
-                    if (!questionsByLevel[level]) {
-                        questionsByLevel[level] = [];
-                    }
-                    questionsByLevel[level].push(item);
-                });
-
-                // Add sections for each level in order (1, 2, 3)
-                const levels = [1, 2, 3];
-                levels.forEach((level) => {
-                    if (!questionsByLevel[level] || questionsByLevel[level].length === 0) {
-                        return; // Skip if no questions for this level
-                    }
-
-                    // Add page break before new section (except for first level after Section 1)
-                    if (level > 1 || questionIndex > 0) {
+                    const { levelGroup, question, level } = item;
+                    
+                    // Add a page break/section for each level (only if level changed)
+                    if (lastLevel !== null && lastLevel !== level && questionIndex > 0) {
+                        // Add page break before new section
                         requests.push({
                             createItem: {
                                 item: {
@@ -2815,31 +2371,17 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         });
                         questionIndex++;
                     }
-
-                    // Add section with title and description (using pageBreakItem for section)
-                    const sectionTitle = levelNames[level];
-                    const sectionDesc = sectionDescriptions[level] || '';
                     
-                    // Create section with title and description
-                    requests.push({
-                        createItem: {
-                            item: {
-                                title: sectionTitle,
-                                pageBreakItem: {
-                                    pageNavigationType: 'CONTINUE'
-                                }
-                            },
-                            location: { index: questionIndex }
-                        }
-                    });
-                    questionIndex++;
-                    
-                    // Add section description as a text item (non-required, display only)
-                    if (sectionDesc) {
+                    // Add section title and description for each level (first time we see it)
+                    if (lastLevel !== level) {
+                        const sectionTitle = levelGroup.levelName;
+                        const sectionDesc = sectionDescriptions[level] || '';
+                        
+                        // Add section title as a text question (non-required, just for display)
                         requests.push({
                             createItem: {
                                 item: {
-                                    title: sectionDesc,
+                                    title: sectionTitle,
                                     questionItem: {
                                         question: {
                                             textQuestion: {}
@@ -2850,42 +2392,58 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                             }
                         });
                         questionIndex++;
+                        
+                        // Add section description if available
+                        if (sectionDesc) {
+                            requests.push({
+                                createItem: {
+                                    item: {
+                                        title: sectionDesc,
+                                        questionItem: {
+                                            question: {
+                                                textQuestion: {}
+                                            }
+                                        }
+                                    },
+                                    location: { index: questionIndex }
+                                }
+                            });
+                            questionIndex++;
+                        }
                     }
+                    
+                    lastLevel = level;
 
-                    // Add questions for this level
-                    questionsByLevel[level].forEach((item) => {
-                        const { question } = item;
-                        requests.push({
-                            createItem: {
-                                item: {
-                                    title: question.question,
-                                    questionItem: {
-                                        question: {
-                                            choiceQuestion: {
-                                                type: 'RADIO',
-                                                options: [
-                                                    { value: question.options.A || '' },
-                                                    { value: question.options.B || '' },
-                                                    { value: question.options.C || '' }
-                                                ],
-                                                shuffle: false
-                                            },
-                                            grading: {
-                                                pointValue: 1,
-                                                correctAnswers: {
-                                                    answers: [{
-                                                        value: question.options[question.correct] || question.options.A
-                                                    }]
-                                                }
+                    requests.push({
+                        createItem: {
+                            item: {
+                                title: question.question,
+                                questionItem: {
+                                    question: {
+                                        choiceQuestion: {
+                                            type: 'RADIO',
+                                            options: [
+                                                { value: question.options.A || '' },
+                                                { value: question.options.B || '' },
+                                                { value: question.options.C || '' }
+                                            ],
+                                            shuffle: false
+                                        },
+                                        grading: {
+                                            pointValue: 1,
+                                            correctAnswers: {
+                                                answers: [{
+                                                    value: question.options[question.correct] || question.options.A
+                                                }]
                                             }
                                         }
                                     }
-                                },
-                                location: { index: questionIndex }
-                            }
-                        });
-                        requiredItemIndices.push(questionIndex++);
+                                }
+                            },
+                            location: { index: questionIndex }
+                        }
                     });
+                    requiredItemIndices.push(questionIndex++);
                 });
 
                 // First batch: Create all items
