@@ -1539,8 +1539,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                             contents: [{ parts: [{ text: levelPrompt }] }],
                                             generationConfig: {
                                                 temperature: 0.7,
-                                                // Level 3 questions are more complex and need more tokens
-                                                maxOutputTokens: level === 3 ? Math.max(8192, count * 1500) : Math.max(4096, count * 1000)
+                                                // Level 3 questions are more complex and need more tokens - increase significantly
+                                                maxOutputTokens: level === 3 ? Math.max(16384, count * 2000) : Math.max(4096, count * 1000)
                                             }
                                         })
                                     });
@@ -1627,7 +1627,56 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         cleanedContent = cleanedContent
                             .replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3') // Fix unquoted keys
                             .replace(/,\s*}/g, '}') // Remove trailing commas
-                            .replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
+                            .replace(/,\s*]/g, ']') // Remove trailing commas in arrays
+                            .replace(/\}\s*\{/g, '},{') // Fix missing commas between objects
+                            .replace(/\}\s*\n\s*\{/g, '},\n{') // Fix missing commas with newlines
+                            .replace(/\n\s*\n\s*\n/g, '\n') // Remove multiple consecutive newlines
+                            .replace(/\}\s*\{n\}\s*\{n\}/g, '}') // Remove {n}{n} artifacts
+                            .replace(/\}\s*\{/g, '},{'); // Fix any remaining missing commas
+                        
+                        // For Level 3, try to fix incomplete JSON more aggressively
+                        if (level === 3) {
+                            // Remove any {n}{n} patterns that might appear
+                            cleanedContent = cleanedContent.replace(/\{n\}/g, '');
+                            
+                            // Try to fix incomplete strings in options
+                            // Look for patterns like "A": "text without closing quote
+                            cleanedContent = cleanedContent.replace(/"([ABC])":\s*"([^"]*?)(?=\s*[,}])/g, (match, option, value) => {
+                                // If the value doesn't end with a quote and we're at a comma or brace, add the quote
+                                if (!match.endsWith('"')) {
+                                    return `"${option}": "${value}"`;
+                                }
+                                return match;
+                            });
+                            
+                            // Try to find and close incomplete question objects
+                            // Look for patterns where we have "correct" but no closing brace
+                            const correctMatches = [...cleanedContent.matchAll(/"correct":\s*"([ABC])"/g)];
+                            if (correctMatches.length > 0) {
+                                const lastMatch = correctMatches[correctMatches.length - 1];
+                                const afterLastCorrect = cleanedContent.substring(lastMatch.index + lastMatch[0].length);
+                                
+                                // If there's no closing brace after the last correct answer, add it
+                                if (!afterLastCorrect.trim().startsWith('}')) {
+                                    const bracePos = lastMatch.index + lastMatch[0].length;
+                                    cleanedContent = cleanedContent.substring(0, bracePos) + '}' + cleanedContent.substring(bracePos);
+                                }
+                            }
+                            
+                            // Count and balance braces
+                            const openBraces = (cleanedContent.match(/\{/g) || []).length;
+                            const closeBraces = (cleanedContent.match(/\}/g) || []).length;
+                            
+                            if (openBraces > closeBraces) {
+                                // Find the last position where we can safely add closing braces
+                                const lastBracket = cleanedContent.lastIndexOf(']');
+                                if (lastBracket > 0) {
+                                    const missingBraces = openBraces - closeBraces;
+                                    cleanedContent = cleanedContent.substring(0, lastBracket + 1) + 
+                                                     '}'.repeat(missingBraces);
+                                }
+                            }
+                        }
                         
                         let levelQuestions = JSON.parse(cleanedContent);
                         
@@ -1869,8 +1918,37 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 // Add worksheet to workbook
                 XLSX.utils.book_append_sheet(wb, ws, 'Questions');
                 
-                // Generate Excel file and let user choose save location
-                const fileName = `generated_questions_${new Date().toISOString().split('T')[0]}.xlsx`;
+                // Generate Excel file name from Chapter Number, Title, and Date
+                const chapterNumber = document.getElementById('chapterNumber')?.value?.trim() || '';
+                const chapterTitle = document.getElementById('chapterTitle')?.value?.trim() || '';
+                const formDate = document.getElementById('formDate')?.value || new Date().toISOString().split('T')[0];
+                
+                // Format date for filename (YYYY-MM-DD)
+                let dateStr = formDate;
+                if (formDate.includes('/')) {
+                    // Convert DD/MM/YYYY to YYYY-MM-DD
+                    const parts = formDate.split('/');
+                    if (parts.length === 3) {
+                        dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                    }
+                }
+                
+                // Create filename
+                let fileName = '';
+                if (chapterNumber && chapterTitle) {
+                    // Remove special characters that might cause issues in filenames
+                    const safeChapterNumber = chapterNumber.replace(/[^a-zA-Z0-9]/g, '_');
+                    const safeChapterTitle = chapterTitle.replace(/[^a-zA-Z0-9\s]/g, '_').replace(/\s+/g, '_');
+                    fileName = `${safeChapterNumber}_${safeChapterTitle}_${dateStr}.xlsx`;
+                } else if (chapterNumber) {
+                    const safeChapterNumber = chapterNumber.replace(/[^a-zA-Z0-9]/g, '_');
+                    fileName = `${safeChapterNumber}_${dateStr}.xlsx`;
+                } else if (chapterTitle) {
+                    const safeChapterTitle = chapterTitle.replace(/[^a-zA-Z0-9\s]/g, '_').replace(/\s+/g, '_');
+                    fileName = `${safeChapterTitle}_${dateStr}.xlsx`;
+                } else {
+                    fileName = `generated_questions_${dateStr}.xlsx`;
+                }
                 
                 // Try to use File System Access API to let user choose folder (Chrome/Edge)
                 if ('showSaveFilePicker' in window) {
