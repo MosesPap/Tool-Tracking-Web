@@ -70,12 +70,15 @@ if (typeof window !== 'undefined' && window.console) {
 
 // Set custom error messages for unverified emails and ensure technician document exists
 auth.onAuthStateChanged(async function(user) {
-    // Don't sign out unverified users immediately - allow time for email verification
-    // Only sign out if they try to access protected pages (handled in individual pages)
-    // This allows users to complete the signup/login flow
+    // Don't automatically sign out unverified users - let them verify while signed in
+    // The index.html handler will show verification pending screen
+    if (user && !user.emailVerified) {
+        // User is signed in but not verified - this is handled in index.html
+        return;
+    }
     
-    // Ensure technician document exists for authenticated users (verified or not)
-    if (user) {
+    // Ensure technician document exists for authenticated users
+    if (user && user.emailVerified) {
         try {
             const technicianDoc = await db.collection('technicians').doc(user.uid).get();
             
@@ -94,12 +97,10 @@ auth.onAuthStateChanged(async function(user) {
                 localStorage.setItem('fullName', technicianData.fullName || user.email);
                 console.log('Technician document created successfully');
             } else {
-                // Update lastSignIn for existing users (only if verified)
-                if (user.emailVerified) {
-                    await db.collection('technicians').doc(user.uid).update({
-                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                }
+                // Update lastSignIn for existing users
+                await db.collection('technicians').doc(user.uid).update({
+                    lastSignIn: firebase.firestore.FieldValue.serverTimestamp()
+                });
             }
         } catch (error) {
             console.error('Error ensuring technician document exists:', error);
@@ -142,14 +143,12 @@ async function saveTechnicianToFirestore(user) {
                 ...technicianData
             };
         } else {
-            // New technician document - create with all required fields
             const fullName = user.displayName || user.email;
             technicianData = {
                 fullName: fullName,
                 email: user.email,
                 isAdmin: false,
-                lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                lastSignIn: firebase.firestore.FieldValue.serverTimestamp()
             };
         }
         
