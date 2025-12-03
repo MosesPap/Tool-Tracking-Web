@@ -2278,7 +2278,7 @@
                     </div>
                     </div>
                     
-                    <button type="button" id="signUpBtn" class="btn btn-primary w-100 mb-2" onclick="event.preventDefault(); event.stopPropagation(); signUp(event); return false;">
+                    <button onclick="signUp()" class="btn btn-primary w-100 mb-2" id="signUpBtn">
                         <span class="btn-text">CREATE ACCOUNT</span>
                         <span class="btn-loading d-none">
                             <span class="spinner-border spinner-border-sm me-2"></span>Loading...
@@ -3422,11 +3422,11 @@
         const storage = window.storage;
         
         // Set custom error messages for unverified emails
-        // Note: We don't sign out unverified users here - let them complete signup/login flow
-        // Individual pages will check email verification before allowing access
         auth.onAuthStateChanged(function(user) {
-            // Allow unverified users to stay logged in during signup/login process
-            // Pages like main-menu.html will check verification before allowing access
+            if (user && !user.emailVerified) {
+                // Force sign out if user is not verified
+                auth.signOut();
+            }
         });
 
         // Ensure user stays logged in across refreshes and browser restarts
@@ -3481,49 +3481,15 @@
                 this.innerHTML = '<i class="fas fa-eye"></i>';
             }
         };
-        
-        // Attach event listener to sign up button to prevent page refresh
-        function setupSignUpButton() {
-            const signUpBtn = document.getElementById('signUpBtn');
-            if (signUpBtn) {
-                // Remove any existing listeners
-                const newBtn = signUpBtn.cloneNode(true);
-                signUpBtn.parentNode.replaceChild(newBtn, signUpBtn);
-                
-                // Add event listener to new button
-                const newSignUpBtn = document.getElementById('signUpBtn');
-                newSignUpBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    console.log('Sign up button clicked via event listener');
-                    signUp(e);
-                    return false;
-                }, true); // Use capture phase to catch early
-                
-                // Also set onclick as backup
-                newSignUpBtn.setAttribute('onclick', 'event.preventDefault(); event.stopPropagation(); signUp(event); return false;');
-            }
-        }
-        
-        // Setup button when page loads
-        setupSignUpButton();
-        
-        // Also setup when signup section is shown
+
         // Show/Hide login/signup
         function showSignUp() {
             document.getElementById('loginSection').classList.add('d-none');
             document.getElementById('signUpSection').classList.remove('d-none');
-            // Setup button again when section is shown
-            setTimeout(setupSignUpButton, 100);
         }
         function showLogin() {
             document.getElementById('signUpSection').classList.add('d-none');
             document.getElementById('loginSection').classList.remove('d-none');
-        }
-        function showAdminLogin() {
-            // Redirect to admin.html for admin login
-            window.location.href = 'admin.html';
         }
 
         // Forgot password modal
@@ -3566,80 +3532,67 @@
             loginBtn.disabled = true;
             
             try {
-                // First, check if this email exists in pending registrations (unverified)
-const pendingRegistrationDoc = await db.collection('pendingRegistrations').doc(email).get();
-if (pendingRegistrationDoc.exists) {
-    // Try to sign in and reload user
-    const userCredential = await auth.signInWithEmailAndPassword(email, password);
-    await userCredential.user.reload();
-    if (!userCredential.user.emailVerified) {
-        await auth.signOut();
-        throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
-    } else {
-        // User is verified but still in pendingRegistrations, clean up
-        const pendingData = pendingRegistrationDoc.data();
-        await db.collection('technicians').doc(userCredential.user.uid).set({
-            fullName: pendingData.fullName,
-            email: email,
-            isAdmin: false,
-            lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        await db.collection('pendingRegistrations').doc(email).delete();
-        localStorage.setItem('fullName', pendingData.fullName);
-        // Continue to main menu...
-        document.getElementById('loginSection').classList.add('d-none');
-        hideAllMainScreens();
-        document.getElementById('toolScannerMenu').style.display = 'block';
-        document.getElementById('headerBranding').style.display = 'none';
-        updateLoggedInTechnician();
-        return;
-    }
-}
-                
-                // Now attempt to sign in
+                // Attempt to sign in
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
-// Reload user to get latest verification status
-await userCredential.user.reload();
-if (!userCredential.user.emailVerified) {
-    await auth.signOut();
-    throw new Error('Please verify your email address before signing in. Check your inbox for a verification email.');
-}
+                const user = userCredential.user;
                 
-                // Check if this is the first verified login
+                // Reload user to get latest verification status
+                await user.reload();
+                console.log('User email verified status:', user.emailVerified);
+                
+                // CRITICAL: Check email verification - this is the most important step
+                if (!user.emailVerified) {
+                    await auth.signOut();
+                    throw new Error('Please verify your email address before signing in. Check your inbox (and spam folder) for a verification email and click the verification link.');
+                }
+                
+                // Email is verified - proceed with login
+                console.log('Email verified, proceeding with login');
+                
+                // Check if this is the first verified login (user exists in pendingRegistrations)
                 const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
+                
                 if (pendingDoc.exists) {
-                    const pendingData = pendingDoc.data();
                     // This is the first verified login, create technician document
-                    await db.collection('technicians').doc(userCredential.user.uid).set({
+                    const pendingData = pendingDoc.data();
+                    console.log('Creating technician document for verified user:', user.uid);
+                    
+                    const technicianData = {
                         fullName: pendingData.fullName,
                         email: email,
                         isAdmin: false,
                         lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
                         createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
+                    };
+                    
+                    // Create technician document
+                    await db.collection('technicians').doc(user.uid).set(technicianData);
+                    console.log('Technician document created successfully');
                     
                     // Remove from pending registrations
                     await db.collection('pendingRegistrations').doc(email).delete();
+                    console.log('Removed from pending registrations');
                     
                     // Store full name in localStorage
                     localStorage.setItem('fullName', pendingData.fullName);
                 } else {
-                    // Regular login - check if technician document exists, create if not
-                    const technicianDoc = await db.collection('technicians').doc(userCredential.user.uid).get();
+                    // Regular login - check if technician document exists
+                    const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                    
                     if (!technicianDoc.exists) {
-                        // Technician document doesn't exist - create it
-                        await db.collection('technicians').doc(userCredential.user.uid).set({
-                            fullName: userCredential.user.displayName || userCredential.user.email || email,
+                        // Technician document doesn't exist - create it (safety net)
+                        console.log('Technician document missing, creating it for user:', user.uid);
+                        await db.collection('technicians').doc(user.uid).set({
+                            fullName: user.displayName || email,
                             email: email,
                             isAdmin: false,
                             lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
                             createdAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
-                        localStorage.setItem('fullName', userCredential.user.displayName || userCredential.user.email || email);
+                        localStorage.setItem('fullName', user.displayName || email);
                     } else {
                         // Update technician data
-                        await saveTechnicianToFirestore(userCredential.user);
+                        await saveTechnicianToFirestore(user);
                     }
                 }
                 
@@ -3730,167 +3683,73 @@ if (!userCredential.user.emailVerified) {
         }
 
         // Sign up logic
-        async function signUp(event) {
+        async function signUp() {
+            let fullName = document.getElementById('signUpFullName').value.trim();
+            const email = document.getElementById('signUpEmail').value.trim();
+            const password = document.getElementById('signUpPassword').value.trim();
+            const confirmPassword = document.getElementById('signUpConfirmPassword').value.trim();
+            const alertBox = document.getElementById('signUpAlert');
+            alertBox.classList.add('d-none');
+
+            // Final validation for full name format
+            if (!fullName || !/^([A-Z][a-z]+)( [A-Z][a-z]+)+$/.test(fullName)) {
+                alertBox.textContent = 'Please enter a valid full name with both first and last name (English letters only).';
+                alertBox.classList.remove('d-none');
+                return;
+            }
+
+            if (!fullName || !email || !password || !confirmPassword) {
+                alertBox.textContent = 'Please fill in all fields.';
+                alertBox.classList.remove('d-none');
+                return;
+            }
+            if (password !== confirmPassword) {
+                alertBox.textContent = 'Passwords do not match.';
+                alertBox.classList.remove('d-none');
+                return;
+            }
+            
+            // Check if email already exists in pending registrations
             try {
-                // Prevent form submission and page refresh - CRITICAL
-                if (event) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    event.stopImmediatePropagation();
-                    if (event.cancelable !== false) {
-                        event.preventDefault();
-                    }
-                }
-                
-                // Also prevent default on window level
-                if (window.event) {
-                    window.event.preventDefault();
-                    window.event.stopPropagation();
-                    window.event.returnValue = false;
-                    window.event.cancelBubble = true;
-                }
-                
-                console.log('=== SIGN UP FUNCTION CALLED ===');
-                console.log('Event prevented, page should not refresh');
-                console.log('Event type:', event ? event.type : 'no event');
-                console.log('Event target:', event ? event.target : 'no event');
-                
-                let fullName = document.getElementById('signUpFullName').value.trim();
-                const email = document.getElementById('signUpEmail').value.trim();
-                const password = document.getElementById('signUpPassword').value.trim();
-                const confirmPassword = document.getElementById('signUpConfirmPassword').value.trim();
-                const alertBox = document.getElementById('signUpAlert');
-                alertBox.classList.add('d-none');
-                
-                console.log('Form values:', { fullName, email, passwordLength: password.length, confirmPasswordLength: confirmPassword.length });
-
-                // Final validation for full name format
-                if (!fullName || !/^([A-Z][a-z]+)( [A-Z][a-z]+)+$/.test(fullName)) {
-                    alertBox.textContent = 'Please enter a valid full name with both first and last name (English letters only).';
+                const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
+                if (pendingDoc.exists) {
+                    alertBox.textContent = 'An account with this email is already pending verification. Please check your email or try again later.';
                     alertBox.classList.remove('d-none');
                     return;
                 }
-
-                if (!fullName || !email || !password || !confirmPassword) {
-                    alertBox.textContent = 'Please fill in all fields.';
-                    alertBox.classList.remove('d-none');
-                    return;
-                }
-                if (password !== confirmPassword) {
-                    alertBox.textContent = 'Passwords do not match.';
-                    alertBox.classList.remove('d-none');
-                    return;
-                }
-                
-                // Check if email already exists in pending registrations
-                try {
-                    const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
-                    if (pendingDoc.exists) {
-                        alertBox.textContent = 'An account with this email is already pending verification. Please check your email or try again later.';
-                        alertBox.classList.remove('d-none');
-                        return;
-                    }
-                } catch (error) {
-                    console.error('Error checking pending registrations:', error);
-                }
-                
-                // Show loading state
-                const signUpBtn = document.getElementById('signUpBtn');
-                const btnText = signUpBtn.querySelector('.btn-text');
-                const btnLoading = signUpBtn.querySelector('.btn-loading');
-                if (btnText && btnLoading) {
-                    btnText.classList.add('d-none');
-                    btnLoading.classList.remove('d-none');
-                    signUpBtn.disabled = true;
-                }
-                
+            } catch (error) {
+                console.error('Error checking pending registrations:', error);
+            }
+            
+            try {
                 // Create Firebase Auth account
                 const userCredential = await auth.createUserWithEmailAndPassword(email, password);
                 const user = userCredential.user;
                 
-                console.log('Account created successfully:', user.uid);
-                
-                // Create technician document immediately
-                try {
-                    await db.collection('technicians').doc(user.uid).set({
-                        fullName: fullName,
-                        email: email,
-                        isAdmin: false,
-                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                    console.log('Technician document created successfully');
-                    
-                    // Store full name in localStorage
-                    localStorage.setItem('fullName', fullName);
-                } catch (techError) {
-                    console.error('Error creating technician document:', techError);
-                    // Continue even if technician document creation fails - onAuthStateChanged will handle it
-                }
-                
-                // Store pending registration data (for tracking verification status)
-                try {
-                    await db.collection('pendingRegistrations').doc(email).set({
-                        fullName: fullName,
-                        email: email,
-                        uid: user.uid,
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        verified: false
-                    });
-                } catch (pendingError) {
-                    console.error('Error storing pending registration:', pendingError);
-                    // Continue even if this fails
-                }
-                
                 // Send email verification
-                try {
-                    await user.sendEmailVerification({
-                        url: window.location.origin + '/index.html',
-                        handleCodeInApp: false
-                    });
-                    console.log('Verification email sent successfully');
-                } catch (verifyError) {
-                    console.error('Error sending verification email:', verifyError);
-                    alertBox.textContent = 'Account created but verification email could not be sent: ' + verifyError.message;
-                    alertBox.classList.remove('d-none');
-                    // Reset button state
-                    if (btnText && btnLoading) {
-                        btnText.classList.remove('d-none');
-                        btnLoading.classList.add('d-none');
-                        signUpBtn.disabled = false;
-                    }
-                    return;
-                }
+                await user.sendEmailVerification();
+                console.log('Email verification sent to:', email);
                 
-                // Don't sign out immediately - let onAuthStateChanged handle it
-                // This allows the verification email to be sent properly
-                // User will be redirected to login after a short delay
-                console.log('Account created, verification email sent');
+                // Store pending registration data
+                await db.collection('pendingRegistrations').doc(email).set({
+                    fullName: fullName,
+                    email: email,
+                    uid: user.uid,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    verified: false
+                });
+                console.log('Pending registration document created for:', email);
+                
+                // Sign out the user immediately to prevent access
+                await auth.signOut();
+                console.log('User signed out after registration');
 
-                // Reset button state
-                if (btnText && btnLoading) {
-                    btnText.classList.remove('d-none');
-                    btnLoading.classList.add('d-none');
-                    signUpBtn.disabled = false;
-                }
-                
                 alertBox.classList.add('d-none');
                 showLogin();
-                alert('Account created successfully! Please check your email and verify your account before signing in. You will not be able to sign in until you verify your email address.');
+                alert('Account created successfully! Please check your email inbox (and spam folder) for a verification email. Click the verification link in the email, then you can sign in. You will not be able to sign in until you verify your email address.');
             } catch (error) {
-                console.error('Error during account creation:', error);
-                
-                // Reset button state
-                const signUpBtn = document.getElementById('signUpBtn');
-                const btnText = signUpBtn.querySelector('.btn-text');
-                const btnLoading = signUpBtn.querySelector('.btn-loading');
-                if (btnText && btnLoading) {
-                    btnText.classList.remove('d-none');
-                    btnLoading.classList.add('d-none');
-                    signUpBtn.disabled = false;
-                }
-                
-                alertBox.textContent = error.message || 'An error occurred during account creation. Please try again.';
+                console.error('Sign up error:', error);
+                alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
             }
         }
