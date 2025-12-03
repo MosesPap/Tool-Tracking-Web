@@ -1118,6 +1118,12 @@
                 }
                 // 2. Extract unique collectionCodes
                 const collectionCodes = [...new Set(toolsSnapshot.docs.map(doc => doc.data().collectionCode).filter(Boolean))];
+                
+                // Include newly created collection if it exists
+                if (window.newlyCreatedCollectionName && !collectionCodes.includes(window.newlyCreatedCollectionName)) {
+                    collectionCodes.push(window.newlyCreatedCollectionName);
+                }
+                
                 if (collectionCodes.length === 0) {
                     body.innerHTML = '<div class="text-center text-danger">No collections found for your tools.</div>';
                     modal.show();
@@ -1136,6 +1142,9 @@
                         collections = collections.concat(colSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
                     }
                 }
+                
+                // Clear the newly created collection flag after using it
+                window.newlyCreatedCollectionName = null;
                 if (collections.length === 0) {
                     body.innerHTML = '<div class="text-center text-danger">No collections found for your tools.</div>';
                 } else {
@@ -1170,6 +1179,18 @@
                     showAddCollectionModal();
                 };
                 body.appendChild(addButton);
+                
+                // Handle X button to return to main menu
+                const modalElement = document.getElementById('collectionSelectModal');
+                const closeBtn = modalElement.querySelector('.btn-close');
+                if (closeBtn) {
+                    closeBtn.onclick = function() {
+                        modal.hide();
+                        setTimeout(() => {
+                            handleBackNavigation();
+                        }, 300);
+                    };
+                }
                 
                 modal.show();
             } catch (e) {
@@ -1306,6 +1327,9 @@
                 }
                 
                 await db.collection('collections').add(collectionData);
+                
+                // Store the newly created collection name so it appears in the list
+                window.newlyCreatedCollectionName = collectionName;
                 
                 // Mark that save was successful to prevent return to collection selection on modal close
                 window.collectionSaveSuccess = true;
