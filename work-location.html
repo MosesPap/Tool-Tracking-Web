@@ -646,7 +646,7 @@
                                     partNumber: toolData.partNumber,
                                     calDueDate: toolData.calDueDate,
                                     owner: toolData.owner || 'N/A',
-                                    currentStatus: toolData.status || 'N/A' // Current status from tools collection
+                                    currentStatus: toolData.status || 'N/A' // Current status from tools collection "status" field
                                 });
                             }
                         } catch (err) {
@@ -660,6 +660,10 @@
                 // Enrich history entries with collection, owner, and current status information
                 workLocationToolsData = historyEntries.map(entry => {
                     const toolInfo = toolsMap.get(entry.toolId);
+                    // Get current status from tools collection, fallback to 'N/A' if not found
+                    const currentStatus = toolInfo?.currentStatus !== undefined && toolInfo?.currentStatus !== null 
+                        ? toolInfo.currentStatus 
+                        : 'N/A';
                     return {
                         ...entry,
                         collectionCode: toolInfo?.collectionCode || entry.collectionCode || 'Unknown Collection',
@@ -668,7 +672,7 @@
                         partNumber: toolInfo?.partNumber || entry.partNumber || 'N/A',
                         calDueDate: toolInfo?.calDueDate || entry.calDueDate,
                         owner: toolInfo?.owner || entry.owner || 'N/A',
-                        currentStatus: toolInfo?.currentStatus || 'N/A' // Current status from tools collection
+                        currentStatus: currentStatus // Current status from tools collection "status" field
                     };
                 });
                 
@@ -880,7 +884,10 @@
             const toolId = tool.toolId || tool.id || 'N/A';
             const partNumber = tool.partNumber || 'N/A';
             const historicalStatus = (tool.status || tool.action || 'N/A').toUpperCase();
-            const currentStatus = (tool.currentStatus || 'N/A').toUpperCase();
+            // Get current status from tools collection - use the "status" field value directly
+            const currentStatus = tool.currentStatus && tool.currentStatus !== 'N/A' 
+                ? tool.currentStatus.toUpperCase() 
+                : 'N/A';
             const technician = tool.technician || 'N/A';
             
             // Handle calDueDate with multiple format support
