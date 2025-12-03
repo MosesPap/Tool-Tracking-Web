@@ -3758,9 +3758,39 @@
                 await auth.signOut();
                 console.log('User signed out after registration');
 
+                // Skip splash screen and go directly to login
+                sessionStorage.setItem('skipSplash', 'true');
+                
+                // Hide splash screen immediately if visible
+                const splashScreen = document.getElementById('splashScreen');
+                const orangeOverlay = document.getElementById('orangeOverlay');
+                if (splashScreen) {
+                    splashScreen.style.display = 'none';
+                    splashScreen.classList.add('splash-hidden');
+                }
+                if (orangeOverlay) {
+                    orangeOverlay.classList.add('hidden');
+                    orangeOverlay.style.display = 'none';
+                }
+                
+                // Show login screen
                 alertBox.classList.add('d-none');
                 showLogin();
-                alert('Account created successfully! Please check your email inbox (and spam folder) for a verification email. Click the verification link in the email, then you can sign in. You will not be able to sign in until you verify your email address.');
+                
+                // Show clear verification message in login alert
+                const loginAlert = document.getElementById('loginAlert');
+                if (loginAlert) {
+                    loginAlert.innerHTML = `
+                        <i class="fas fa-envelope-open-text me-2"></i>
+                        <strong>Account created successfully!</strong><br>
+                        Please check your email inbox <strong>and spam folder</strong> for a verification email.<br>
+                        Click the verification link in the email, then you can sign in.<br>
+                        <small>You will not be able to sign in until you verify your email address.</small>
+                    `;
+                    loginAlert.classList.remove('d-none');
+                    loginAlert.classList.remove('alert-danger');
+                    loginAlert.classList.add('alert-info');
+                }
             } catch (error) {
                 console.error('Sign up error:', error);
                 alertBox.textContent = error.message;
