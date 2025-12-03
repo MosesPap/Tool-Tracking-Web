@@ -3758,16 +3758,28 @@
                 await auth.signOut();
                 console.log('User signed out after registration');
 
+                // Set flag to skip splash screen (this prevents splash from showing)
+                sessionStorage.setItem('skipSplash', 'true');
+                
                 // Hide splash screen immediately to prevent it from showing
                 const splashScreen = document.getElementById('splashScreen');
                 const orangeOverlay = document.getElementById('orangeOverlay');
+                const splashVideo = document.getElementById('splashVideo');
+                
+                if (splashVideo) {
+                    splashVideo.pause();
+                    splashVideo.currentTime = 0;
+                }
+                
                 if (splashScreen) {
                     splashScreen.style.display = 'none';
                     splashScreen.classList.add('splash-hidden');
+                    splashScreen.style.visibility = 'hidden';
                 }
                 if (orangeOverlay) {
                     orangeOverlay.classList.add('hidden');
                     orangeOverlay.style.display = 'none';
+                    orangeOverlay.style.visibility = 'hidden';
                 }
 
                 // Clear the form
@@ -3787,7 +3799,7 @@
                     loginSection.classList.remove('d-none');
                 }
                 
-                // Show success message in login alert box after a small delay
+                // Show success message in login alert box - use longer delay to ensure DOM is ready
                 setTimeout(() => {
                     const loginAlert = document.getElementById('loginAlert');
                     if (loginAlert) {
@@ -3801,6 +3813,7 @@
                             </div>
                         `;
                         loginAlert.classList.remove('d-none');
+                        loginAlert.style.display = 'block';
                     }
                     
                     // Pre-fill the email in the login form
@@ -3808,7 +3821,7 @@
                     if (loginEmail) {
                         loginEmail.value = email;
                     }
-                }, 100);
+                }, 300);
             } catch (error) {
                 console.error('Sign up error:', error);
                 alertBox.textContent = error.message;
@@ -6889,7 +6902,29 @@
                 // Redirect to main-menu.html after login
                 window.location.href = 'main-menu.html';
             } else {
+                // User is signed out - hide splash screen and show login
+                const splashScreen = document.getElementById('splashScreen');
+                const orangeOverlay = document.getElementById('orangeOverlay');
+                const splashVideo = document.getElementById('splashVideo');
+                
+                if (splashVideo) {
+                    splashVideo.pause();
+                    splashVideo.currentTime = 0;
+                }
+                
+                if (splashScreen) {
+                    splashScreen.style.display = 'none';
+                    splashScreen.classList.add('splash-hidden');
+                    splashScreen.style.visibility = 'hidden';
+                }
+                if (orangeOverlay) {
+                    orangeOverlay.classList.add('hidden');
+                    orangeOverlay.style.display = 'none';
+                    orangeOverlay.style.visibility = 'hidden';
+                }
+                
                 loginSection.style.display = 'block';
+                loginSection.classList.remove('d-none');
                 appSection.style.display = 'none';
                 adminSection.style.display = 'none';
                 const adminButton = document.getElementById('adminButton');
