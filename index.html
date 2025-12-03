@@ -3754,35 +3754,43 @@
                 });
                 console.log('Pending registration document created for:', email);
                 
-                // Sign out the user immediately to prevent access (don't sign them in)
+                // Sign out the user immediately to prevent access
                 await auth.signOut();
                 console.log('User signed out after registration');
 
-                // Clear the form
-                document.getElementById('signUpFullName').value = '';
-                document.getElementById('signUpEmail').value = '';
-                document.getElementById('signUpPassword').value = '';
-                document.getElementById('signUpConfirmPassword').value = '';
-                alertBox.classList.add('d-none');
+                // Skip splash screen and go directly to login
+                sessionStorage.setItem('skipSplash', 'true');
                 
-                // Navigate to sign-in screen
+                // Hide splash screen immediately if visible
+                const splashScreen = document.getElementById('splashScreen');
+                const orangeOverlay = document.getElementById('orangeOverlay');
+                if (splashScreen) {
+                    splashScreen.style.display = 'none';
+                    splashScreen.classList.add('splash-hidden');
+                }
+                if (orangeOverlay) {
+                    orangeOverlay.classList.add('hidden');
+                    orangeOverlay.style.display = 'none';
+                }
+                
+                // Show login screen
+                alertBox.classList.add('d-none');
                 showLogin();
                 
-                // Show success message in login alert box
+                // Show clear verification message in login alert
                 const loginAlert = document.getElementById('loginAlert');
-                loginAlert.innerHTML = `
-                    <div class="alert alert-success" role="alert">
-                        <strong><i class="fas fa-check-circle"></i> Account Created Successfully!</strong><br>
-                        A verification email has been sent to <strong>${email}</strong>.<br>
-                        <strong>Please check your inbox and spam folder</strong> for the verification email.<br>
+                if (loginAlert) {
+                    loginAlert.innerHTML = `
+                        <i class="fas fa-envelope-open-text me-2"></i>
+                        <strong>Account created successfully!</strong><br>
+                        Please check your email inbox <strong>and spam folder</strong> for a verification email.<br>
                         Click the verification link in the email, then you can sign in.<br>
-                        <small class="text-muted">You will not be able to sign in until you verify your email address.</small>
-                    </div>
-                `;
-                loginAlert.classList.remove('d-none');
-                
-                // Pre-fill the email in the login form
-                document.getElementById('loginEmail').value = email;
+                        <small>You will not be able to sign in until you verify your email address.</small>
+                    `;
+                    loginAlert.classList.remove('d-none');
+                    loginAlert.classList.remove('alert-danger');
+                    loginAlert.classList.add('alert-info');
+                }
             } catch (error) {
                 console.error('Sign up error:', error);
                 alertBox.textContent = error.message;
