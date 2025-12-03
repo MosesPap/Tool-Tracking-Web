@@ -3754,6 +3754,11 @@
                 });
                 console.log('Pending registration document created for:', email);
                 
+                // Store message and email in sessionStorage BEFORE sign out
+                // This ensures the message persists through auth state changes
+                sessionStorage.setItem('accountCreatedMessage', 'true');
+                sessionStorage.setItem('accountCreatedEmail', email);
+                
                 // Sign out the user immediately to prevent access
                 await auth.signOut();
                 console.log('User signed out after registration');
@@ -3792,36 +3797,7 @@
                 alertBox.classList.add('d-none');
                 showLogin();
                 
-                // Ensure login section is visible (not hidden by splash)
-                const loginSection = document.getElementById('loginSection');
-                if (loginSection) {
-                    loginSection.style.display = 'block';
-                    loginSection.classList.remove('d-none');
-                }
-                
-                // Show success message in login alert box - use longer delay to ensure DOM is ready
-                setTimeout(() => {
-                    const loginAlert = document.getElementById('loginAlert');
-                    if (loginAlert) {
-                        loginAlert.innerHTML = `
-                            <div class="alert alert-success" role="alert">
-                                <strong><i class="fas fa-check-circle"></i> Account Created Successfully!</strong><br>
-                                A verification email has been sent to <strong>${email}</strong>.<br>
-                                <strong>Please check your inbox and spam folder</strong> for the verification email.<br>
-                                Click the verification link in the email, then you can sign in.<br>
-                                <small class="text-muted">You will not be able to sign in until you verify your email address.</small>
-                            </div>
-                        `;
-                        loginAlert.classList.remove('d-none');
-                        loginAlert.style.display = 'block';
-                    }
-                    
-                    // Pre-fill the email in the login form
-                    const loginEmail = document.getElementById('loginEmail');
-                    if (loginEmail) {
-                        loginEmail.value = email;
-                    }
-                }, 300);
+                // Show message will be handled by onAuthStateChanged when user is null
             } catch (error) {
                 console.error('Sign up error:', error);
                 alertBox.textContent = error.message;
@@ -6933,6 +6909,40 @@
                 }
                 document.getElementById('headerBranding').style.display = 'block';
                 localStorage.removeItem('fullName');
+                
+                // Check if we need to show account creation message
+                const accountCreatedMessage = sessionStorage.getItem('accountCreatedMessage');
+                const accountCreatedEmail = sessionStorage.getItem('accountCreatedEmail');
+                
+                if (accountCreatedMessage === 'true' && accountCreatedEmail) {
+                    // Show success message in login alert box
+                    setTimeout(() => {
+                        const loginAlert = document.getElementById('loginAlert');
+                        if (loginAlert) {
+                            loginAlert.innerHTML = `
+                                <div class="alert alert-success" role="alert">
+                                    <strong><i class="fas fa-check-circle"></i> Account Created Successfully!</strong><br>
+                                    A verification email has been sent to <strong>${accountCreatedEmail}</strong>.<br>
+                                    <strong>Please check your inbox and spam folder</strong> for the verification email.<br>
+                                    Click the verification link in the email, then you can sign in.<br>
+                                    <small class="text-muted">You will not be able to sign in until you verify your email address.</small>
+                                </div>
+                            `;
+                            loginAlert.classList.remove('d-none');
+                            loginAlert.style.display = 'block';
+                        }
+                        
+                        // Pre-fill the email in the login form
+                        const loginEmail = document.getElementById('loginEmail');
+                        if (loginEmail) {
+                            loginEmail.value = accountCreatedEmail;
+                        }
+                        
+                        // Clear the flags after showing message
+                        sessionStorage.removeItem('accountCreatedMessage');
+                        sessionStorage.removeItem('accountCreatedEmail');
+                    }, 200);
+                }
             }
         });
 
