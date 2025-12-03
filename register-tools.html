@@ -536,40 +536,6 @@
       </div>
     </div>
 
-    <!-- Expired Calibration Modal -->
-    <div class="modal fade" id="expiredCalibrationModal" tabindex="-1" aria-labelledby="expiredCalibrationModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header bg-warning text-dark">
-            <h5 class="modal-title" id="expiredCalibrationModalLabel">
-              <i class="fas fa-exclamation-triangle me-2"></i>Calibration Expired
-            </h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div class="alert alert-warning mb-3">
-              <strong>This tool's calibration has expired.</strong><br>
-              Please contact the administrator before checking out this tool.
-            </div>
-            <div id="expiredCalibrationToolInfo" class="mb-3">
-              <!-- Tool info will be populated here -->
-            </div>
-            <div class="mb-3">
-              <label for="adminCodeForCalibration" class="form-label">
-                <strong>Enter Admin Code to Proceed:</strong>
-              </label>
-              <input type="password" class="form-control" id="adminCodeForCalibration" placeholder="Enter admin code">
-              <div id="adminCodeCalibrationError" class="text-danger mt-2" style="display: none;"></div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn btn-primary" id="verifyAdminCodeForCalibrationBtn">Verify & Check Out</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Tool Details Modal -->
     <div class="modal fade" id="toolDetailsModal" tabindex="-1" aria-labelledby="toolDetailsModalLabel" aria-hidden="true">
       <div class="modal-dialog">
@@ -1120,7 +1086,6 @@
                     // Set up event listeners (including back button)
                     console.log('[REGISTER-TOOLS] Setting up event listeners...');
                     setupEventListeners();
-                    setupExpiredCalibrationHandler();
                     console.log('[REGISTER-TOOLS] Event listeners set up');
                     
                     // Check if work location is already selected
@@ -1271,148 +1236,6 @@
             } else {
                 // Fallback if safeRedirect not available
                 window.location.href = 'main-menu.html';
-            }
-        }
-        
-        // Handle admin code verification for expired calibration
-        function setupExpiredCalibrationHandler() {
-            const verifyBtn = document.getElementById('verifyAdminCodeForCalibrationBtn');
-            const adminCodeInput = document.getElementById('adminCodeForCalibration');
-            const errorDiv = document.getElementById('adminCodeCalibrationError');
-            
-            if (verifyBtn) {
-                verifyBtn.addEventListener('click', async function() {
-                    const adminCode = adminCodeInput.value.trim();
-                    
-                    if (!adminCode) {
-                        errorDiv.textContent = 'Please enter an admin code.';
-                        errorDiv.style.display = 'block';
-                        return;
-                    }
-                    
-                    // Check admin code (same as in main-menu.html)
-                    if (adminCode === 'AVIONICS2024') {
-                        // Correct code - proceed with checkout
-                        errorDiv.style.display = 'none';
-                        
-                        // Hide modal
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('expiredCalibrationModal'));
-                        if (modal) modal.hide();
-                        
-                        // Get pending checkout data
-                        if (window.pendingExpiredCalibrationCheckout) {
-                            const { code, data, technicianName } = window.pendingExpiredCalibrationCheckout;
-                            
-                            // Clear pending data
-                            window.pendingExpiredCalibrationCheckout = null;
-                            
-                            // Proceed with checkout
-                            await proceedWithCheckout(code, data, technicianName);
-                        }
-                    } else {
-                        errorDiv.textContent = 'Invalid admin code. Please try again.';
-                        errorDiv.style.display = 'block';
-                    }
-                });
-            }
-            
-            // Allow Enter key to submit
-            if (adminCodeInput) {
-                adminCodeInput.addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter') {
-                        verifyBtn.click();
-                    }
-                });
-            }
-        }
-        
-        // Function to proceed with checkout after admin code verification
-        async function proceedWithCheckout(code, data, technicianName) {
-            const auth = window.auth || firebase.auth();
-            const db = window.db || firebase.firestore();
-            
-            try {
-                const toolRef = db.collection('tools').doc(code);
-                const timestamp = firebase.firestore.FieldValue.serverTimestamp();
-                
-                // Update tool status with WorkOn field
-                const updateData = {
-                    status: 'OUT',
-                    technician: technicianName,
-                    timestamp: timestamp
-                };
-                
-                if (selectedWorkLocation) {
-                    updateData.WorkOn = selectedWorkLocation;
-                }
-                
-                await toolRef.update(updateData);
-                
-                // Add log entry with WorkOn field
-                const logData = {
-                    toolId: code,
-                    toolName: data.toolName || 'Unknown',
-                    partNumber: data.partNumber || code,
-                    location: data.location || '',
-                    status: 'OUT',
-                    technician: technicianName,
-                    timestamp: timestamp
-                };
-                
-                if (selectedWorkLocation) {
-                    logData.WorkOn = selectedWorkLocation;
-                }
-                
-                await db.collection('logtoolmovements').add(logData);
-                
-                // Show success message
-                const alertDiv = document.createElement('div');
-                alertDiv.className = 'alert alert-success alert-dismissible fade show';
-                alertDiv.innerHTML = `
-                    <i class="fas fa-check-circle me-2"></i>
-                    Tool Checked Out Successfully! (Admin Override - Expired Calibration)
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                `;
-                
-                const scannerView = document.getElementById('scannerView');
-                if (scannerView) {
-                    scannerView.insertBefore(alertDiv, scannerView.firstChild);
-                    
-                    setTimeout(() => {
-                        if (alertDiv.parentNode) {
-                            alertDiv.remove();
-                        }
-                    }, 5000);
-                }
-                
-                // Show cooldown info dialog if needed
-                const today = new Date().toDateString();
-                const lastShownDate = localStorage.getItem('cooldownDialogLastShown');
-                
-                if (lastShownDate !== today) {
-                    const settingsDoc = await db.collection('settings').doc('admin').get();
-                    let cooldownMinutes = 5;
-                    if (settingsDoc.exists && settingsDoc.data().CheckINCooldownMinutes) {
-                        cooldownMinutes = settingsDoc.data().CheckINCooldownMinutes;
-                    }
-                    document.querySelector('#cooldownInfoModal .modal-title').textContent = `Cooldown: ${cooldownMinutes} Minute${cooldownMinutes !== 1 ? 's' : ''}`;
-                    document.querySelector('#cooldownInfoModal .modal-body').textContent =
-                        `When you check out a tool, you must wait at least ${cooldownMinutes} minute${cooldownMinutes !== 1 ? 's' : ''} before returning it. This helps ensure accurate tool tracking. You will not see this message again today.`;
-                    
-                    localStorage.setItem('cooldownDialogLastShown', today);
-                    
-                    const infoModal = new bootstrap.Modal(document.getElementById('cooldownInfoModal'));
-                    infoModal.show();
-                }
-                
-                document.getElementById('toolCode').value = '';
-                clearAllButtonStates();
-                loadTools();
-                updatePreviousOutToolsCount();
-                
-            } catch (error) {
-                console.error('Error during checkout:', error);
-                alert('Error checking out tool: ' + error.message);
             }
         }
         
@@ -2289,62 +2112,6 @@
                     }
                     
                     const status = data.status === 'OUT' ? 'IN' : 'OUT';
-                    
-                    // Check for expired calibration - ONLY for checkout (not check-in)
-                    if (status === 'OUT' && data.calDueDate) {
-                        let calDueDate = null;
-                        if (data.calDueDate.toDate && typeof data.calDueDate.toDate === 'function') {
-                            calDueDate = data.calDueDate.toDate();
-                        } else if (data.calDueDate instanceof Date) {
-                            calDueDate = data.calDueDate;
-                        } else if (typeof data.calDueDate === 'string') {
-                            calDueDate = new Date(data.calDueDate);
-                        }
-                        
-                        if (calDueDate && !isNaN(calDueDate.getTime())) {
-                            const today = new Date();
-                            today.setHours(0, 0, 0, 0);
-                            const calDate = new Date(calDueDate);
-                            calDate.setHours(0, 0, 0, 0);
-                            
-                            if (calDate < today) {
-                                // Calibration expired - show modal with admin code input
-                                const toolName = data.toolName || 'Unknown Tool';
-                                const partNumber = data.partNumber || code;
-                                const formattedCalDate = calDueDate.toLocaleDateString('en-GB');
-                                
-                                document.getElementById('expiredCalibrationToolInfo').innerHTML = `
-                                    <div class="card bg-light">
-                                        <div class="card-body">
-                                            <p class="mb-1"><strong>Tool:</strong> ${toolName}</p>
-                                            <p class="mb-1"><strong>Part Number:</strong> ${partNumber}</p>
-                                            <p class="mb-0"><strong>Calibration Due Date:</strong> <span class="text-danger">${formattedCalDate} (EXPIRED)</span></p>
-                                        </div>
-                                    </div>
-                                `;
-                                
-                                // Clear previous error and input
-                                document.getElementById('adminCodeForCalibration').value = '';
-                                document.getElementById('adminCodeCalibrationError').style.display = 'none';
-                                
-                                // Store the tool code and data for later processing
-                                window.pendingExpiredCalibrationCheckout = {
-                                    code: code,
-                                    data: data,
-                                    technicianName: technicianName
-                                };
-                                
-                                const expiredCalModal = new bootstrap.Modal(document.getElementById('expiredCalibrationModal'));
-                                expiredCalModal.show();
-                                
-                                document.getElementById('toolCode').value = '';
-                                clearAllButtonStates();
-                                lastScannedToolData = null;
-                                document.getElementById('toolDetailsBtn').disabled = true;
-                                return;
-                            }
-                        }
-                    }
                     const timestamp = firebase.firestore.FieldValue.serverTimestamp();
 
                     // Show cooldown info dialog only once per day when first tool is checked OUT
@@ -2583,26 +2350,9 @@
                     const workOnValue = data.WorkOn ? data.WorkOn : 'N/A';
                     const serialNumber = data.serialNumber || data.partNumber || 'N/A';
                     const partNumber = data.partNumber || 'N/A';
-                    
-                    // Handle calDueDate with multiple format support
-                    let calDueDate = 'N/A';
-                    if (data.calDueDate) {
-                        let calDate = null;
-                        if (data.calDueDate.toDate && typeof data.calDueDate.toDate === 'function') {
-                            calDate = data.calDueDate.toDate();
-                        } else if (data.calDueDate instanceof Date) {
-                            calDate = data.calDueDate;
-                        } else if (typeof data.calDueDate === 'string') {
-                            calDate = new Date(data.calDueDate);
-                        } else if (data.calDueDate.seconds) {
-                            // Firestore timestamp object
-                            calDate = new Date(data.calDueDate.seconds * 1000);
-                        }
-                        
-                        if (calDate && !isNaN(calDate.getTime())) {
-                            calDueDate = calDate.toLocaleDateString('en-GB');
-                        }
-                    }
+                    const calDueDate = data.calDueDate && data.calDueDate.toDate 
+                        ? data.calDueDate.toDate().toLocaleDateString('en-GB')
+                        : 'N/A';
                     
                     // Determine status color
                     const statusColor = status === 'IN' ? 'green' : 'red';
@@ -2636,7 +2386,7 @@
                                 <span style="color: #666; font-weight: bold;">${tool.id}</span>
                             </div>
                             <div style="text-align: center;">
-                                <span style="color: #666; font-weight: bold;">${partNumber}</span>
+                                <span style="color: #666; font-weight: bold;">${serialNumber}</span>
                             </div>
                             <div style="text-align: right;">
                                 <span class="badge bg-${status === 'IN' ? 'success' : 'danger'}" style="font-weight: bold; border-radius: 15px; padding: 4px 8px;">${status}</span>
