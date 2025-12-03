@@ -2292,44 +2292,6 @@
             </div>
         </div>
 
-        <!-- Email Verification Pending Screen -->
-        <div id="emailVerificationPendingSection" class="auth-container d-none">
-            <div class="card auth-card">
-                <div class="card-body text-center">
-                    <div class="mb-4">
-                        <i class="fas fa-envelope fa-4x text-primary mb-3"></i>
-                        <h3 class="mb-3">Verify Your Email</h3>
-                        <p class="text-muted">
-                            We've sent a verification email to <strong id="pendingVerificationEmail"></strong>
-                        </p>
-                        <p class="text-muted">
-                            Please check your inbox (and spam folder) and click the verification link in the email.
-                        </p>
-                        <p class="text-muted">
-                            Once you verify your email, you'll be automatically signed in!
-                        </p>
-                    </div>
-                    
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>Didn't receive the email?</strong><br>
-                        <button class="btn btn-link p-0 mt-2" onclick="resendVerificationEmail()">
-                            Click here to resend verification email
-                        </button>
-                    </div>
-                    
-                    <div class="mt-4">
-                        <button onclick="checkEmailVerification()" class="btn btn-primary me-2">
-                            <i class="fas fa-sync-alt me-2"></i>I've Verified My Email
-                        </button>
-                        <button onclick="logout()" class="btn btn-outline-secondary">
-                            <i class="fas fa-sign-out-alt me-2"></i>Sign Out
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- Forgot Password Modal -->
         <div class="modal fade" id="forgotPasswordModal" tabindex="-1" aria-labelledby="forgotPasswordModalLabel" aria-hidden="true">
           <div class="modal-dialog">
@@ -3465,51 +3427,11 @@
         const db = window.db;
         const storage = window.storage;
         
-        // Handle email verification state changes
-        auth.onAuthStateChanged(async function(user) {
+        // Set custom error messages for unverified emails
+        auth.onAuthStateChanged(function(user) {
             if (user && !user.emailVerified) {
-                // Don't sign out - show verification pending screen instead
-                // User can verify email while signed in
-                showEmailVerificationPending();
-                return;
-            }
-            
-            // User is verified - check if we need to create technician document
-            if (user && user.emailVerified) {
-                // Check if this is a newly verified user (exists in pendingRegistrations)
-                const pendingDoc = await db.collection('pendingRegistrations').doc(user.email).get();
-                
-                if (pendingDoc.exists) {
-                    // This is a newly verified user, create technician document
-                    const pendingData = pendingDoc.data();
-                    console.log('Email verified! Creating technician document for:', user.uid);
-                    
-                    try {
-                        const technicianData = {
-                            fullName: pendingData.fullName,
-                            email: user.email,
-                            isAdmin: false,
-                            lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
-                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                        };
-                        
-                        await db.collection('technicians').doc(user.uid).set(technicianData);
-                        await db.collection('pendingRegistrations').doc(user.email).delete();
-                        localStorage.setItem('fullName', pendingData.fullName);
-                        
-                        console.log('Technician document created, granting access');
-                        
-                        // Hide verification pending screen and show main menu
-                        hideEmailVerificationPending();
-                        document.getElementById('loginSection').classList.add('d-none');
-                        hideAllMainScreens();
-                        document.getElementById('toolScannerMenu').style.display = 'block';
-                        document.getElementById('headerBranding').style.display = 'none';
-                        updateLoggedInTechnician();
-                    } catch (error) {
-                        console.error('Error creating technician document after verification:', error);
-                    }
-                }
+                // Force sign out if user is not verified
+                auth.signOut();
             }
         });
 
@@ -3595,61 +3517,6 @@
             document.getElementById('collectionCheckupScreen').style.display = 'none';
             document.getElementById('previousOutToolsScreen').style.display = 'none';
             // Add any other sections you may have
-        }
-
-        // Show email verification pending screen
-        function showEmailVerificationPending() {
-            const user = auth.currentUser;
-            if (user) {
-                document.getElementById('pendingVerificationEmail').textContent = user.email;
-            }
-            document.getElementById('loginSection').classList.add('d-none');
-            document.getElementById('signUpSection').classList.add('d-none');
-            document.getElementById('emailVerificationPendingSection').classList.remove('d-none');
-        }
-
-        // Hide email verification pending screen
-        function hideEmailVerificationPending() {
-            document.getElementById('emailVerificationPendingSection').classList.add('d-none');
-        }
-
-        // Check email verification status manually
-        async function checkEmailVerification() {
-            const user = auth.currentUser;
-            if (!user) {
-                alert('No user found. Please sign in again.');
-                return;
-            }
-            
-            try {
-                await user.reload();
-                if (user.emailVerified) {
-                    // Verification detected - onAuthStateChanged will handle the rest
-                    alert('Email verified! Granting access...');
-                } else {
-                    alert('Email not yet verified. Please check your inbox and click the verification link.');
-                }
-            } catch (error) {
-                console.error('Error checking verification:', error);
-                alert('Error checking verification status: ' + error.message);
-            }
-        }
-
-        // Resend verification email
-        async function resendVerificationEmail() {
-            const user = auth.currentUser;
-            if (!user) {
-                alert('No user found. Please sign in again.');
-                return;
-            }
-            
-            try {
-                await user.sendEmailVerification();
-                alert('Verification email sent! Please check your inbox.');
-            } catch (error) {
-                console.error('Error resending verification:', error);
-                alert('Error resending verification email: ' + error.message);
-            }
         }
 
         // Show admin login modal
@@ -3887,15 +3754,35 @@
                 });
                 console.log('Pending registration document created for:', email);
                 
-                // Keep user signed in - they can verify email while signed in
-                // The onAuthStateChanged handler will automatically handle verification
-                console.log('User remains signed in - will be granted access after email verification');
+                // Sign out the user immediately to prevent access (don't sign them in)
+                await auth.signOut();
+                console.log('User signed out after registration');
 
+                // Clear the form
+                document.getElementById('signUpFullName').value = '';
+                document.getElementById('signUpEmail').value = '';
+                document.getElementById('signUpPassword').value = '';
+                document.getElementById('signUpConfirmPassword').value = '';
                 alertBox.classList.add('d-none');
                 
-                // Hide signup form and show verification pending screen
-                // User stays signed in - when they verify email, onAuthStateChanged will automatically grant access
-                showEmailVerificationPending();
+                // Navigate to sign-in screen
+                showLogin();
+                
+                // Show success message in login alert box
+                const loginAlert = document.getElementById('loginAlert');
+                loginAlert.innerHTML = `
+                    <div class="alert alert-success" role="alert">
+                        <strong><i class="fas fa-check-circle"></i> Account Created Successfully!</strong><br>
+                        A verification email has been sent to <strong>${email}</strong>.<br>
+                        <strong>Please check your inbox and spam folder</strong> for the verification email.<br>
+                        Click the verification link in the email, then you can sign in.<br>
+                        <small class="text-muted">You will not be able to sign in until you verify your email address.</small>
+                    </div>
+                `;
+                loginAlert.classList.remove('d-none');
+                
+                // Pre-fill the email in the login form
+                document.getElementById('loginEmail').value = email;
             } catch (error) {
                 console.error('Sign up error:', error);
                 alertBox.textContent = error.message;
