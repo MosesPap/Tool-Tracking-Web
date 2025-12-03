@@ -631,7 +631,7 @@
                     }
                 });
                 
-                // Fetch collection names and owner from tools collection
+                // Fetch collection names, owner, and current status from tools collection
                 const toolsMap = new Map();
                 if (toolIds.size > 0) {
                     const toolPromises = Array.from(toolIds).map(async (toolId) => {
@@ -643,8 +643,10 @@
                                     collectionCode: toolData.collectionCode || 'Unknown Collection',
                                     toolName: toolData.toolName,
                                     serialNumber: toolData.serialNumber || toolData.partNumber,
+                                    partNumber: toolData.partNumber,
                                     calDueDate: toolData.calDueDate,
-                                    owner: toolData.owner || 'N/A'
+                                    owner: toolData.owner || 'N/A',
+                                    currentStatus: toolData.status || 'N/A' // Current status from tools collection
                                 });
                             }
                         } catch (err) {
@@ -655,7 +657,7 @@
                     await Promise.all(toolPromises);
                 }
                 
-                // Enrich history entries with collection and owner information
+                // Enrich history entries with collection, owner, and current status information
                 workLocationToolsData = historyEntries.map(entry => {
                     const toolInfo = toolsMap.get(entry.toolId);
                     return {
@@ -663,8 +665,10 @@
                         collectionCode: toolInfo?.collectionCode || entry.collectionCode || 'Unknown Collection',
                         toolName: toolInfo?.toolName || entry.toolName || 'Unknown Tool',
                         serialNumber: toolInfo?.serialNumber || entry.serialNumber || entry.partNumber || 'N/A',
+                        partNumber: toolInfo?.partNumber || entry.partNumber || 'N/A',
                         calDueDate: toolInfo?.calDueDate || entry.calDueDate,
-                        owner: toolInfo?.owner || entry.owner || 'N/A'
+                        owner: toolInfo?.owner || entry.owner || 'N/A',
+                        currentStatus: toolInfo?.currentStatus || 'N/A' // Current status from tools collection
                     };
                 });
                 
@@ -875,7 +879,8 @@
             const toolName = tool.toolName || 'Unknown Tool';
             const toolId = tool.toolId || tool.id || 'N/A';
             const partNumber = tool.partNumber || 'N/A';
-            const status = (tool.status || tool.action || 'N/A').toUpperCase();
+            const historicalStatus = (tool.status || tool.action || 'N/A').toUpperCase();
+            const currentStatus = (tool.currentStatus || 'N/A').toUpperCase();
             const technician = tool.technician || 'N/A';
             
             // Handle calDueDate with multiple format support
@@ -913,6 +918,9 @@
                 'N/A';
             
             const statusColorClass = statusClass === 'out' ? 'workloc-status-out' : 'workloc-status-in';
+            const currentStatusColorClass = currentStatus === 'OUT' ? 'workloc-status-out' : 
+                                          currentStatus === 'IN' ? 'workloc-status-in' : 
+                                          'workloc-tool-value';
             
             return `
                 <div class="workloc-tool-card ${statusClass}">
@@ -923,10 +931,11 @@
                     </div>
                     <div class="workloc-tool-info" style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                         <span><span class="workloc-tool-label">Cal Due Date:</span> <span class="workloc-tool-value">${calDueDate}</span></span>
-                        <span><span class="workloc-tool-label">Status:</span> <span class="${statusColorClass}">${status}</span></span>
+                        <span><span class="workloc-tool-label">History Status:</span> <span class="${statusColorClass}">${historicalStatus}</span></span>
                     </div>
-                    <div class="workloc-tool-info" style="margin-bottom: 6px;">
-                        <span class="workloc-tool-label">Last Technician:</span> <span class="workloc-tool-value">${technician}</span>
+                    <div class="workloc-tool-info" style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <span><span class="workloc-tool-label">Current Status:</span> <span class="${currentStatusColorClass}">${currentStatus}</span></span>
+                        <span><span class="workloc-tool-label">Last Technician:</span> <span class="workloc-tool-value">${technician}</span></span>
                     </div>
                     <div class="workloc-tool-info">
                         <span class="workloc-tool-label">Time:</span> <span class="workloc-tool-value">${timestamp}</span>
