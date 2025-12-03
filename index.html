@@ -2116,6 +2116,8 @@
         // Check skipSplash immediately to prevent login screen flash
         (function() {
             const skipSplash = sessionStorage.getItem('skipSplash');
+            const showLoginAfterSignup = sessionStorage.getItem('showLoginAfterSignup');
+            
             if (skipSplash === 'true') {
                 console.log('skipSplash detected in immediate script');
                 // Hide elements immediately - don't wait for DOMContentLoaded
@@ -2125,10 +2127,7 @@
                         const splashScreen = document.getElementById('splashScreen');
                         const orangeOverlay = document.getElementById('orangeOverlay');
                         
-                        if (loginSection) {
-                            loginSection.style.display = 'none';
-                            loginSection.classList.add('d-none');
-                        }
+                        // Always hide splash screen and overlay
                         if (splashScreen) {
                             splashScreen.style.display = 'none';
                             splashScreen.style.visibility = 'hidden';
@@ -2137,6 +2136,20 @@
                             orangeOverlay.classList.add('hidden');
                             orangeOverlay.style.display = 'none';
                             orangeOverlay.style.visibility = 'hidden';
+                        }
+                        
+                        // If this is after sign-up, show login section instead of hiding it
+                        if (showLoginAfterSignup === 'true') {
+                            if (loginSection) {
+                                loginSection.style.display = 'block';
+                                loginSection.classList.remove('d-none');
+                            }
+                        } else {
+                            // For other scenarios (user already logged in), hide login section
+                            if (loginSection) {
+                                loginSection.style.display = 'none';
+                                loginSection.classList.add('d-none');
+                            }
                         }
                     } catch(e) {
                         console.error('Error hiding elements:', e);
@@ -3759,7 +3772,9 @@
                 console.log('User signed out after registration');
 
                 // Skip splash screen and go directly to login
+                // Use a specific flag for sign-up completion to distinguish from other skipSplash scenarios
                 sessionStorage.setItem('skipSplash', 'true');
+                sessionStorage.setItem('showLoginAfterSignup', 'true');
                 
                 // Hide splash screen immediately if visible
                 const splashScreen = document.getElementById('splashScreen');
@@ -3767,15 +3782,33 @@
                 if (splashScreen) {
                     splashScreen.style.display = 'none';
                     splashScreen.classList.add('splash-hidden');
+                    splashScreen.style.visibility = 'hidden';
                 }
                 if (orangeOverlay) {
                     orangeOverlay.classList.add('hidden');
                     orangeOverlay.style.display = 'none';
+                    orangeOverlay.style.visibility = 'hidden';
                 }
                 
-                // Show login screen
+                // Stop any splash video that might be playing
+                const splashVideo = document.getElementById('splashVideo');
+                if (splashVideo) {
+                    splashVideo.pause();
+                    splashVideo.currentTime = 0;
+                    splashVideo.style.display = 'none';
+                }
+                
+                // Hide sign-up section and show login screen
+                document.getElementById('signUpSection').classList.add('d-none');
+                const loginSection = document.getElementById('loginSection');
+                if (loginSection) {
+                    loginSection.classList.remove('d-none');
+                    loginSection.style.display = 'block';
+                    loginSection.style.visibility = 'visible';
+                }
+                
+                // Clear sign-up alert
                 alertBox.classList.add('d-none');
-                showLogin();
                 
                 // Show clear verification message in login alert
                 const loginAlert = document.getElementById('loginAlert');
@@ -3791,6 +3824,20 @@
                     loginAlert.classList.remove('alert-danger');
                     loginAlert.classList.add('alert-info');
                 }
+                
+                // Force a small delay to ensure splash screen is fully hidden
+                setTimeout(() => {
+                    if (splashScreen) {
+                        splashScreen.style.display = 'none';
+                        splashScreen.style.visibility = 'hidden';
+                        splashScreen.classList.add('splash-hidden');
+                    }
+                    if (orangeOverlay) {
+                        orangeOverlay.style.display = 'none';
+                        orangeOverlay.style.visibility = 'hidden';
+                        orangeOverlay.classList.add('hidden');
+                    }
+                }, 100);
             } catch (error) {
                 console.error('Sign up error:', error);
                 alertBox.textContent = error.message;
@@ -6871,7 +6918,16 @@
                 // Redirect to main-menu.html after login
                 window.location.href = 'main-menu.html';
             } else {
-                loginSection.style.display = 'block';
+                // Check if we should show login after signup
+                const showLoginAfterSignup = sessionStorage.getItem('showLoginAfterSignup');
+                if (showLoginAfterSignup === 'true') {
+                    // Keep login section visible and clear the flag
+                    loginSection.style.display = 'block';
+                    loginSection.classList.remove('d-none');
+                    sessionStorage.removeItem('showLoginAfterSignup');
+                } else {
+                    loginSection.style.display = 'block';
+                }
                 appSection.style.display = 'none';
                 adminSection.style.display = 'none';
                 const adminButton = document.getElementById('adminButton');
@@ -7441,18 +7497,41 @@
             
             // Check if we should skip splash (coming from register-tools or other pages)
             const skipSplash = sessionStorage.getItem('skipSplash');
+            const showLoginAfterSignup = sessionStorage.getItem('showLoginAfterSignup');
+            
             if (skipSplash === 'true') {
-                console.log('skipSplash detected - hiding splash and showing menu');
+                console.log('skipSplash detected - hiding splash');
                 // Hide splash screen immediately
                 if (splashScreen) {
                     splashScreen.style.display = 'none';
                     splashScreen.classList.add('splash-hidden');
+                    splashScreen.style.visibility = 'hidden';
                 }
                 if (orangeOverlay) {
                     orangeOverlay.classList.add('hidden');
                     orangeOverlay.style.display = 'none';
+                    orangeOverlay.style.visibility = 'hidden';
                 }
-                // Hide login section immediately
+                
+                // If this is after sign-up, show login screen instead of hiding it
+                if (showLoginAfterSignup === 'true') {
+                    console.log('showLoginAfterSignup detected - showing login screen');
+                    const loginSection = document.getElementById('loginSection');
+                    if (loginSection) {
+                        loginSection.style.display = 'block';
+                        loginSection.classList.remove('d-none');
+                    }
+                    const signUpSection = document.getElementById('signUpSection');
+                    if (signUpSection) {
+                        signUpSection.classList.add('d-none');
+                    }
+                    // Clear the flag after using it
+                    sessionStorage.removeItem('showLoginAfterSignup');
+                    // Return early to prevent splash video from playing
+                    return;
+                }
+                
+                // For other skipSplash scenarios (user already logged in), hide login section
                 const loginSection = document.getElementById('loginSection');
                 if (loginSection) {
                     loginSection.style.display = 'none';
@@ -7518,9 +7597,26 @@
             // Show orange overlay for 0.5s, then attempt video splash
             // BUT skip if skipSplash flag is set
             const skipSplashCheck = sessionStorage.getItem('skipSplash');
+            const showLoginAfterSignupCheck = sessionStorage.getItem('showLoginAfterSignup');
             if (skipSplashCheck === 'true') {
                 // Already handled above, don't show splash video
                 console.log('Skipping splash video - skipSplash flag is set');
+                
+                // If coming from sign-up, ensure login is visible
+                if (showLoginAfterSignupCheck === 'true') {
+                    const loginSection = document.getElementById('loginSection');
+                    if (loginSection) {
+                        loginSection.style.display = 'block';
+                        loginSection.classList.remove('d-none');
+                    }
+                }
+                
+                // Stop video if it exists
+                if (splashVideo) {
+                    splashVideo.pause();
+                    splashVideo.currentTime = 0;
+                }
+                
                 return; // Exit early, don't show splash
             }
             
