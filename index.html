@@ -3595,15 +3595,28 @@
                     
                     if (!technicianDoc.exists) {
                         // Technician document doesn't exist - create it (safety net)
+                        // Try to get fullName from pending registrations first
+                        let fullName = user.displayName || email;
+                        try {
+                            const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
+                            if (pendingDoc.exists) {
+                                const pendingData = pendingDoc.data();
+                                fullName = pendingData.fullName || fullName;
+                                console.log('Using fullName from pending registration (safety net):', fullName);
+                            }
+                        } catch (pendingError) {
+                            console.log('Could not check pending registrations, using displayName or email');
+                        }
+                        
                         console.log('Technician document missing, creating it for user:', user.uid);
                         await db.collection('technicians').doc(user.uid).set({
-                            fullName: user.displayName || email,
+                            fullName: fullName,
                             email: email,
                             isAdmin: false,
                             lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
                             createdAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
-                        localStorage.setItem('fullName', user.displayName || email);
+                        localStorage.setItem('fullName', fullName);
                     } else {
                         // Update technician data
                         await saveTechnicianToFirestore(user);
