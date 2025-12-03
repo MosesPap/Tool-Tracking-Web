@@ -2149,6 +2149,7 @@
                                 signUpSection.classList.add('d-none');
                             }
                             emailVerificationSection.classList.remove('d-none');
+                            emailVerificationSection.style.display = 'flex'; // Match auth-container CSS
                         }
                     } catch(e) {
                         console.error('Error hiding elements:', e);
@@ -3474,6 +3475,13 @@
         
         // Set custom error messages for unverified emails
         auth.onAuthStateChanged(function(user) {
+            // Don't sign out if we're showing email verification screen
+            const showingEmailVerification = sessionStorage.getItem('showingEmailVerification');
+            if (showingEmailVerification === 'true') {
+                // We're in the registration flow, don't interfere
+                return;
+            }
+            
             if (user && !user.emailVerified) {
                 // Force sign out if user is not verified
                 auth.signOut();
@@ -3553,8 +3561,11 @@
         
         // Show email verification message screen
         function showEmailVerificationMessage(email) {
+            console.log('Showing email verification message for:', email);
+            
             // Set flag to prevent splash screen from showing
             sessionStorage.setItem('showingEmailVerification', 'true');
+            console.log('Set showingEmailVerification flag to true');
             
             // Hide splash screen immediately
             const splashScreen = document.getElementById('splashScreen');
@@ -3562,19 +3573,44 @@
             if (splashScreen) {
                 splashScreen.style.display = 'none';
                 splashScreen.classList.add('splash-hidden');
+                console.log('Splash screen hidden');
             }
             if (orangeOverlay) {
                 orangeOverlay.classList.add('hidden');
                 orangeOverlay.style.display = 'none';
+                console.log('Orange overlay hidden');
             }
             
             // Hide login and signup sections
-            document.getElementById('loginSection').classList.add('d-none');
-            document.getElementById('signUpSection').classList.add('d-none');
+            const loginSection = document.getElementById('loginSection');
+            const signUpSection = document.getElementById('signUpSection');
+            if (loginSection) {
+                loginSection.classList.add('d-none');
+                loginSection.style.display = 'none';
+                console.log('Login section hidden');
+            }
+            if (signUpSection) {
+                signUpSection.classList.add('d-none');
+                console.log('Sign up section hidden');
+            }
             
             // Show email verification section
-            document.getElementById('emailVerificationSection').classList.remove('d-none');
-            document.getElementById('verificationEmailDisplay').textContent = email;
+            const emailVerificationSection = document.getElementById('emailVerificationSection');
+            if (emailVerificationSection) {
+                emailVerificationSection.classList.remove('d-none');
+                emailVerificationSection.style.display = 'flex'; // Match auth-container CSS
+                console.log('Email verification section shown');
+            } else {
+                console.error('Email verification section not found!');
+            }
+            
+            const verificationEmailDisplay = document.getElementById('verificationEmailDisplay');
+            if (verificationEmailDisplay) {
+                verificationEmailDisplay.textContent = email;
+                console.log('Email displayed:', email);
+            } else {
+                console.error('Verification email display element not found!');
+            }
         }
 
         // Forgot password modal
@@ -3833,13 +3869,14 @@
                 });
                 console.log('Pending registration document created for:', email);
                 
-                // Sign out the user immediately to prevent access
-                await auth.signOut();
-                console.log('User signed out after registration');
-
-                // Show email verification message screen
+                // Show email verification message screen BEFORE signing out
+                // This ensures the screen is shown before any auth state changes
                 alertBox.classList.add('d-none');
                 showEmailVerificationMessage(email);
+                
+                // Sign out the user immediately to prevent access (after showing message)
+                await auth.signOut();
+                console.log('User signed out after registration');
             } catch (error) {
                 console.error('Sign up error:', error);
                 alertBox.textContent = error.message;
@@ -6832,10 +6869,30 @@
         auth.onAuthStateChanged(function(user) {
             // Check if we're showing email verification - don't interfere
             const showingEmailVerification = sessionStorage.getItem('showingEmailVerification');
-            if (showingEmailVerification === 'true' && !user) {
-                // User signed out during registration - keep showing verification message
-                console.log('User signed out during registration - keeping email verification screen visible');
-                return; // Don't process auth state change
+            if (showingEmailVerification === 'true') {
+                if (!user) {
+                    // User signed out during registration - keep showing verification message
+                    console.log('User signed out during registration - keeping email verification screen visible');
+                    // Ensure verification section is visible
+                    const emailVerificationSection = document.getElementById('emailVerificationSection');
+                    if (emailVerificationSection) {
+                        emailVerificationSection.classList.remove('d-none');
+                        emailVerificationSection.style.display = 'flex'; // Match auth-container CSS
+                        // Hide other sections
+                        const loginSection = document.getElementById('loginSection');
+                        const signUpSection = document.getElementById('signUpSection');
+                        if (loginSection) {
+                            loginSection.classList.add('d-none');
+                        }
+                        if (signUpSection) {
+                            signUpSection.classList.add('d-none');
+                        }
+                    }
+                    return; // Don't process auth state change
+                } else {
+                    // User logged in - clear flag and proceed normally
+                    sessionStorage.removeItem('showingEmailVerification');
+                }
             }
             
             if (user) {
@@ -7548,6 +7605,7 @@
                 const emailVerificationSection = document.getElementById('emailVerificationSection');
                 if (emailVerificationSection) {
                     emailVerificationSection.classList.remove('d-none');
+                    emailVerificationSection.style.display = 'flex'; // Match auth-container CSS
                 }
                 // Hide login and signup sections
                 const loginSection = document.getElementById('loginSection');
