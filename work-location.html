@@ -874,12 +874,29 @@
         function createWorkLocationToolCard(tool, statusClass) {
             const toolName = tool.toolName || 'Unknown Tool';
             const toolId = tool.toolId || tool.id || 'N/A';
-            const partNumber = tool.serialNumber || tool.partNumber || 'N/A';
+            const partNumber = tool.partNumber || 'N/A';
             const status = (tool.status || tool.action || 'N/A').toUpperCase();
             const technician = tool.technician || 'N/A';
-            const calDueDate = tool.calDueDate ? 
-                (tool.calDueDate.toDate ? tool.calDueDate.toDate().toLocaleDateString('en-GB') : tool.calDueDate) : 
-                'N/A';
+            
+            // Handle calDueDate with multiple format support
+            let calDueDate = 'N/A';
+            if (tool.calDueDate) {
+                let calDate = null;
+                if (tool.calDueDate.toDate && typeof tool.calDueDate.toDate === 'function') {
+                    calDate = tool.calDueDate.toDate();
+                } else if (tool.calDueDate instanceof Date) {
+                    calDate = tool.calDueDate;
+                } else if (typeof tool.calDueDate === 'string') {
+                    calDate = new Date(tool.calDueDate);
+                } else if (tool.calDueDate.seconds) {
+                    // Firestore timestamp object
+                    calDate = new Date(tool.calDueDate.seconds * 1000);
+                }
+                
+                if (calDate && !isNaN(calDate.getTime())) {
+                    calDueDate = calDate.toLocaleDateString('en-GB');
+                }
+            }
             
             const timestamp = tool.timestamp ? 
                 (tool.timestamp.toDate ? 
