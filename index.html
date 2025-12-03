@@ -2188,33 +2188,33 @@
             <div class="card auth-card">
                 <div class="card-body">
                     <form id="loginForm" onsubmit="event.preventDefault(); login();">
-                        <div id="loginAlert" class="alert alert-danger d-none" role="alert"></div>
-                        <div class="mb-2">
-                            <label for="loginEmail" class="form-label">Email</label>
-                            <input type="email" id="loginEmail" class="form-control" required autocomplete="username">
-                        </div>
-                        <div class="mb-1">
-                            <label for="loginPassword" class="form-label">Password</label>
-                            <div class="input-group">
-                                <input type="password" id="loginPassword" class="form-control" required autocomplete="current-password">
-                                <button class="btn btn-outline-secondary" type="button" id="toggleLoginPassword" tabindex="-1">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
-                        </div>
-                        <div class="d-flex justify-content-end mb-1">
-                            <a href="#" id="forgotPasswordLink">Forgot my password?</a>
-                        </div>
-                        <div class="mb-2 form-check">
-                            <input type="checkbox" class="form-check-input" id="keepSignedIn">
-                            <label class="form-check-label" for="keepSignedIn">Keep me signed in</label>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100 mb-2" id="loginBtn">
-                            <span class="btn-text">Login</span>
-                            <span class="btn-loading d-none">
-                                <span class="spinner-border spinner-border-sm me-2"></span>Loading...
-                            </span>
+                    <div id="loginAlert" class="alert alert-danger d-none" role="alert"></div>
+                    <div class="mb-2">
+                        <label for="loginEmail" class="form-label">Email</label>
+                        <input type="email" id="loginEmail" class="form-control" required autocomplete="username">
+                    </div>
+                    <div class="mb-1">
+                        <label for="loginPassword" class="form-label">Password</label>
+                        <div class="input-group">
+                            <input type="password" id="loginPassword" class="form-control" required autocomplete="current-password">
+                            <button class="btn btn-outline-secondary" type="button" id="toggleLoginPassword" tabindex="-1">
+                            <i class="fas fa-eye"></i>
                         </button>
+                    </div>
+                    </div>
+                    <div class="d-flex justify-content-end mb-1">
+                        <a href="#" id="forgotPasswordLink">Forgot my password?</a>
+                    </div>
+                    <div class="mb-2 form-check">
+                        <input type="checkbox" class="form-check-input" id="keepSignedIn">
+                        <label class="form-check-label" for="keepSignedIn">Keep me signed in</label>
+                    </div>
+                        <button type="submit" class="btn btn-primary w-100 mb-2" id="loginBtn">
+                        <span class="btn-text">Login</span>
+                        <span class="btn-loading d-none">
+                            <span class="spinner-border spinner-border-sm me-2"></span>Loading...
+                        </span>
+                    </button>
                     </form>
                     
                     <!-- Divider -->
@@ -2246,48 +2246,81 @@
                     </div>
                     
                     <form id="signUpForm" onsubmit="event.preventDefault(); signUp();">
-                        <div id="signUpAlert" class="alert alert-danger d-none" role="alert"></div>
-                        
-                        <div class="mb-2">
-                            <label for="signUpFullName" class="form-label">Full Name</label>
-                            <input type="text" id="signUpFullName" class="form-control" required autocomplete="name" 
-                                   oninput="validateFullName(this)" onblur="formatFullName(this)" 
-                                   placeholder="Enter your full name (English letters only)">
-                            <div id="fullNameValidation" class="form-text text-muted"></div>
-                        </div>
-                        
-                        <div class="mb-2">
-                            <label for="signUpEmail" class="form-label">Email</label>
-                            <input type="email" id="signUpEmail" class="form-control" required autocomplete="username">
-                        </div>
-                        
-                        <div class="mb-2">
-                            <label for="signUpPassword" class="form-label">Password</label>
-                            <div class="input-group">
-                                <input type="password" id="signUpPassword" class="form-control" required autocomplete="new-password">
-                                <button class="btn btn-outline-secondary" type="button" id="toggleSignUpPassword" tabindex="-1">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
-                        </div>
-                        
-                        <div class="mb-2">
-                            <label for="signUpConfirmPassword" class="form-label">Confirm Password</label>
-                            <div class="input-group">
-                                <input type="password" id="signUpConfirmPassword" class="form-control" required autocomplete="new-password">
-                                <button class="btn btn-outline-secondary" type="button" id="toggleSignUpConfirmPassword" tabindex="-1">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
-                        </div>
-                        
-                        <button type="submit" class="btn btn-primary w-100 mb-2" id="signUpBtn">
-                            <span class="btn-text">CREATE ACCOUNT</span>
-                            <span class="btn-loading d-none">
-                                <span class="spinner-border spinner-border-sm me-2"></span>Loading...
-                            </span>
+                    <div id="signUpAlert" class="alert alert-danger d-none" role="alert"></div>
+                    
+                    <div class="mb-2">
+                        <label for="signUpFullName" class="form-label">Full Name</label>
+                        <input type="text" id="signUpFullName" class="form-control" required autocomplete="name" 
+                               oninput="validateFullName(this)" onblur="formatFullName(this)" 
+                               placeholder="Enter your full name (English letters only)">
+                        <div id="fullNameValidation" class="form-text text-muted"></div>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label for="signUpEmail" class="form-label">Email</label>
+                        <input type="email" id="signUpEmail" class="form-control" required autocomplete="username">
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label for="signUpPassword" class="form-label">Password</label>
+                        <div class="input-group">
+                            <input type="password" id="signUpPassword" class="form-control" required autocomplete="new-password">
+                            <button class="btn btn-outline-secondary" type="button" id="toggleSignUpPassword" tabindex="-1">
+                            <i class="fas fa-eye"></i>
                         </button>
+                    </div>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label for="signUpConfirmPassword" class="form-label">Confirm Password</label>
+                        <div class="input-group">
+                            <input type="password" id="signUpConfirmPassword" class="form-control" required autocomplete="new-password">
+                            <button class="btn btn-outline-secondary" type="button" id="toggleSignUpConfirmPassword" tabindex="-1">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    </div>
+                    
+                        <button type="submit" class="btn btn-primary w-100 mb-2" id="signUpBtn">
+                        <span class="btn-text">CREATE ACCOUNT</span>
+                        <span class="btn-loading d-none">
+                            <span class="spinner-border spinner-border-sm me-2"></span>Loading...
+                        </span>
+                    </button>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Email Verification Message Section -->
+        <div id="emailVerificationSection" class="auth-container d-none">
+            <div class="card auth-card">
+                <div class="card-body text-center">
+                    <div class="mb-4">
+                        <i class="fas fa-envelope-circle-check" style="font-size: 4rem; color: #4CAF50; margin-bottom: 1rem;"></i>
+                        <h3 class="mb-3">Check Your Email</h3>
+                        <p class="lead mb-3">We've sent a verification email to:</p>
+                        <p class="h5 mb-4" id="verificationEmailDisplay" style="color: #2196F3; font-weight: bold;"></p>
+                    </div>
+                    
+                    <div class="alert alert-info mb-4" role="alert">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Please verify your email address</strong><br>
+                        Click the verification link in the email to activate your account.<br>
+                        <strong>Don't forget to check your spam/junk folder!</strong>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <p class="text-muted">Once you've verified your email, you can sign in to your account.</p>
+                    </div>
+                    
+                    <button onclick="showLogin()" class="btn btn-primary w-100 mb-2" id="signInAfterVerificationBtn">
+                        <i class="fas fa-sign-in-alt me-2"></i> Sign In After Verification
+                    </button>
+                    
+                    <button onclick="showSignUp()" class="btn btn-outline-secondary w-100">
+                        <i class="fas fa-arrow-left me-2"></i> Back to Sign Up
+                    </button>
                 </div>
             </div>
         </div>
@@ -3492,10 +3525,20 @@
         function showSignUp() {
             document.getElementById('loginSection').classList.add('d-none');
             document.getElementById('signUpSection').classList.remove('d-none');
+            document.getElementById('emailVerificationSection').classList.add('d-none');
         }
         function showLogin() {
             document.getElementById('signUpSection').classList.add('d-none');
             document.getElementById('loginSection').classList.remove('d-none');
+            document.getElementById('emailVerificationSection').classList.add('d-none');
+        }
+        
+        // Show email verification message screen
+        function showEmailVerificationMessage(email) {
+            document.getElementById('loginSection').classList.add('d-none');
+            document.getElementById('signUpSection').classList.add('d-none');
+            document.getElementById('emailVerificationSection').classList.remove('d-none');
+            document.getElementById('verificationEmailDisplay').textContent = email;
         }
 
         // Forgot password modal
@@ -3547,18 +3590,18 @@
             
             try {
                 // Attempt to sign in
-                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+    const userCredential = await auth.signInWithEmailAndPassword(email, password);
                 const user = userCredential.user;
                 
-                // Reload user to get latest verification status
+// Reload user to get latest verification status
                 await user.reload();
                 console.log('User email verified status:', user.emailVerified);
                 
                 // CRITICAL: Check email verification - this is the most important step
                 if (!user.emailVerified) {
-                    await auth.signOut();
+    await auth.signOut();
                     throw new Error('Please verify your email address before signing in. Check your inbox (and spam folder) for a verification email and click the verification link.');
-                }
+}
                 
                 // Email is verified - proceed with login
                 console.log('Email verified, proceeding with login');
@@ -3754,50 +3797,13 @@
                 });
                 console.log('Pending registration document created for:', email);
                 
-                // Store message and email in sessionStorage BEFORE sign out
-                // This ensures the message persists through auth state changes
-                sessionStorage.setItem('accountCreatedMessage', 'true');
-                sessionStorage.setItem('accountCreatedEmail', email);
-                
                 // Sign out the user immediately to prevent access
                 await auth.signOut();
                 console.log('User signed out after registration');
 
-                // Set flag to skip splash screen (this prevents splash from showing)
-                sessionStorage.setItem('skipSplash', 'true');
-                
-                // Hide splash screen immediately to prevent it from showing
-                const splashScreen = document.getElementById('splashScreen');
-                const orangeOverlay = document.getElementById('orangeOverlay');
-                const splashVideo = document.getElementById('splashVideo');
-                
-                if (splashVideo) {
-                    splashVideo.pause();
-                    splashVideo.currentTime = 0;
-                }
-                
-                if (splashScreen) {
-                    splashScreen.style.display = 'none';
-                    splashScreen.classList.add('splash-hidden');
-                    splashScreen.style.visibility = 'hidden';
-                }
-                if (orangeOverlay) {
-                    orangeOverlay.classList.add('hidden');
-                    orangeOverlay.style.display = 'none';
-                    orangeOverlay.style.visibility = 'hidden';
-                }
-
-                // Clear the form
-                document.getElementById('signUpFullName').value = '';
-                document.getElementById('signUpEmail').value = '';
-                document.getElementById('signUpPassword').value = '';
-                document.getElementById('signUpConfirmPassword').value = '';
-                
-                // Hide signup alert and navigate to login screen
+                // Show email verification message screen
                 alertBox.classList.add('d-none');
-                showLogin();
-                
-                // Show message will be handled by onAuthStateChanged when user is null
+                showEmailVerificationMessage(email);
             } catch (error) {
                 console.error('Sign up error:', error);
                 alertBox.textContent = error.message;
@@ -6878,29 +6884,7 @@
                 // Redirect to main-menu.html after login
                 window.location.href = 'main-menu.html';
             } else {
-                // User is signed out - hide splash screen and show login
-                const splashScreen = document.getElementById('splashScreen');
-                const orangeOverlay = document.getElementById('orangeOverlay');
-                const splashVideo = document.getElementById('splashVideo');
-                
-                if (splashVideo) {
-                    splashVideo.pause();
-                    splashVideo.currentTime = 0;
-                }
-                
-                if (splashScreen) {
-                    splashScreen.style.display = 'none';
-                    splashScreen.classList.add('splash-hidden');
-                    splashScreen.style.visibility = 'hidden';
-                }
-                if (orangeOverlay) {
-                    orangeOverlay.classList.add('hidden');
-                    orangeOverlay.style.display = 'none';
-                    orangeOverlay.style.visibility = 'hidden';
-                }
-                
                 loginSection.style.display = 'block';
-                loginSection.classList.remove('d-none');
                 appSection.style.display = 'none';
                 adminSection.style.display = 'none';
                 const adminButton = document.getElementById('adminButton');
@@ -6909,40 +6893,6 @@
                 }
                 document.getElementById('headerBranding').style.display = 'block';
                 localStorage.removeItem('fullName');
-                
-                // Check if we need to show account creation message
-                const accountCreatedMessage = sessionStorage.getItem('accountCreatedMessage');
-                const accountCreatedEmail = sessionStorage.getItem('accountCreatedEmail');
-                
-                if (accountCreatedMessage === 'true' && accountCreatedEmail) {
-                    // Show success message in login alert box
-                    setTimeout(() => {
-                        const loginAlert = document.getElementById('loginAlert');
-                        if (loginAlert) {
-                            loginAlert.innerHTML = `
-                                <div class="alert alert-success" role="alert">
-                                    <strong><i class="fas fa-check-circle"></i> Account Created Successfully!</strong><br>
-                                    A verification email has been sent to <strong>${accountCreatedEmail}</strong>.<br>
-                                    <strong>Please check your inbox and spam folder</strong> for the verification email.<br>
-                                    Click the verification link in the email, then you can sign in.<br>
-                                    <small class="text-muted">You will not be able to sign in until you verify your email address.</small>
-                                </div>
-                            `;
-                            loginAlert.classList.remove('d-none');
-                            loginAlert.style.display = 'block';
-                        }
-                        
-                        // Pre-fill the email in the login form
-                        const loginEmail = document.getElementById('loginEmail');
-                        if (loginEmail) {
-                            loginEmail.value = accountCreatedEmail;
-                        }
-                        
-                        // Clear the flags after showing message
-                        sessionStorage.removeItem('accountCreatedMessage');
-                        sessionStorage.removeItem('accountCreatedEmail');
-                    }, 200);
-                }
             }
         });
 
@@ -12180,6 +12130,7 @@
         window.signInWithGoogle = signInWithGoogle;
         window.showSignUp = showSignUp;
         window.showLogin = showLogin;
+        window.showEmailVerificationMessage = showEmailVerificationMessage;
         window.showAdminLogin = showAdminLogin;
         window.login = login;
         window.signUp = signUp;
