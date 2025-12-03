@@ -2143,6 +2143,14 @@
                             orangeOverlay.style.visibility = 'hidden';
                         }
                         
+                        // Stop video if showing email verification
+                        const splashVideo = document.getElementById('splashVideo');
+                        if (showingEmailVerification === 'true' && splashVideo) {
+                            splashVideo.pause();
+                            splashVideo.currentTime = 0;
+                            splashVideo.removeAttribute('autoplay');
+                        }
+                        
                         // If showing email verification, make sure it's visible
                         if (showingEmailVerification === 'true' && emailVerificationSection) {
                             if (signUpSection) {
@@ -3567,9 +3575,18 @@
             sessionStorage.setItem('showingEmailVerification', 'true');
             console.log('Set showingEmailVerification flag to true');
             
-            // Hide splash screen immediately
+            // Hide splash screen immediately and STOP video
             const splashScreen = document.getElementById('splashScreen');
             const orangeOverlay = document.getElementById('orangeOverlay');
+            const splashVideo = document.getElementById('splashVideo');
+            
+            if (splashVideo) {
+                splashVideo.pause();
+                splashVideo.currentTime = 0;
+                splashVideo.removeAttribute('autoplay');
+                console.log('Splash video paused and autoplay removed');
+            }
+            
             if (splashScreen) {
                 splashScreen.style.display = 'none';
                 splashScreen.classList.add('splash-hidden');
@@ -7589,8 +7606,8 @@
             }
             
             // Check if we're showing email verification message - don't show splash
-            const showingEmailVerification = sessionStorage.getItem('showingEmailVerification');
-            if (showingEmailVerification === 'true') {
+            const showingEmailVerificationFlag = sessionStorage.getItem('showingEmailVerification');
+            if (showingEmailVerificationFlag === 'true') {
                 console.log('Email verification screen active - skipping splash');
                 // Hide splash screen immediately
                 if (splashScreen) {
@@ -7669,15 +7686,45 @@
             }
             
             // Show orange overlay for 0.5s, then attempt video splash
-            // BUT skip if skipSplash flag is set
+            // BUT skip if skipSplash flag is set OR if showing email verification
             const skipSplashCheck = sessionStorage.getItem('skipSplash');
-            if (skipSplashCheck === 'true') {
+            const showingEmailVerificationCheck = sessionStorage.getItem('showingEmailVerification');
+            if (skipSplashCheck === 'true' || showingEmailVerificationCheck === 'true') {
                 // Already handled above, don't show splash video
-                console.log('Skipping splash video - skipSplash flag is set');
+                console.log('Skipping splash video - skipSplash or email verification flag is set');
+                // Make sure video is paused and hidden
+                if (splashVideo) {
+                    splashVideo.pause();
+                    splashVideo.currentTime = 0;
+                }
+                if (splashScreen) {
+                    splashScreen.style.display = 'none';
+                    splashScreen.classList.add('splash-hidden');
+                }
                 return; // Exit early, don't show splash
             }
             
             setTimeout(() => {
+                // Double-check flag before playing video (in case it was set during the timeout)
+                const showingEmailVerificationCheck = sessionStorage.getItem('showingEmailVerification');
+                if (showingEmailVerificationCheck === 'true') {
+                    console.log('Email verification flag detected in setTimeout - skipping video');
+                    if (splashVideo) {
+                        splashVideo.pause();
+                        splashVideo.currentTime = 0;
+                        splashVideo.removeAttribute('autoplay');
+                    }
+                    if (splashScreen) {
+                        splashScreen.style.display = 'none';
+                        splashScreen.classList.add('splash-hidden');
+                    }
+                    if (orangeOverlay) {
+                        orangeOverlay.classList.add('hidden');
+                        orangeOverlay.style.display = 'none';
+                    }
+                    return; // Don't play video
+                }
+                
                 orangeOverlay.classList.add('hidden');
                 
                 if (splashVideo) {
