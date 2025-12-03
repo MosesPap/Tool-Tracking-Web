@@ -70,10 +70,8 @@ if (typeof window !== 'undefined' && window.console) {
 
 // Set custom error messages for unverified emails and ensure technician document exists
 auth.onAuthStateChanged(async function(user) {
-    // Don't automatically sign out unverified users - let them verify while signed in
-    // The index.html handler will show verification pending screen
     if (user && !user.emailVerified) {
-        // User is signed in but not verified - this is handled in index.html
+        auth.signOut();
         return;
     }
     
