@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <title>Sign In - Tool Tracking</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/common.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .auth-container {
+            width: 100%;
+            max-width: 450px;
+            padding: 2rem;
+        }
+        
+        .auth-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            border: none;
+        }
+        
+        .card-body {
+            padding: 2rem;
+        }
+        
+        .form-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+        
+        .form-control {
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+            padding: 0.75rem;
+        }
+        
+        .form-control:focus {
+            border-color: #FF9800;
+            box-shadow: 0 0 0 0.2rem rgba(255, 152, 0, 0.25);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem;
+            font-weight: bold;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #F57C00 0%, #E65100 100%);
+        }
+        
+        .btn-outline-dark {
+            border-radius: 8px;
+            padding: 0.75rem;
+        }
+        
+        #forgotPasswordLink {
+            color: #FF9800;
+            font-weight: 500;
+            text-decoration: none;
+        }
+        
+        #forgotPasswordLink:hover {
+            color: #F57C00;
+            text-decoration: underline;
+        }
+        
+        .back-to-home {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+            z-index: 1000;
+        }
+        
+        .back-to-home:hover {
+            color: #FFD700;
+        }
+    </style>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+    <script src="js/common.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body>
+    <a href="index.html" class="back-to-home">
+        <i class="fas fa-arrow-left"></i> Back to Home
+    </a>
+    
+    <div class="auth-container">
+        <div class="card auth-card">
+            <div class="card-body">
+                <div class="text-center mb-4">
+                    <h2 class="mb-2" style="color: #FF9800; font-weight: bold;">Sign In</h2>
+                    <p class="text-muted">Welcome back to Tool Tracking</p>
+                </div>
+                
+                <form id="loginForm" onsubmit="event.preventDefault(); login();">
+                    <div id="loginAlert" class="alert alert-danger d-none" role="alert"></div>
+                    <div class="mb-2">
+                        <label for="loginEmail" class="form-label">Email</label>
+                        <input type="email" id="loginEmail" class="form-control" required autocomplete="username">
+                    </div>
+                    <div class="mb-1">
+                        <label for="loginPassword" class="form-label">Password</label>
+                        <div class="input-group">
+                            <input type="password" id="loginPassword" class="form-control" required autocomplete="current-password">
+                            <button class="btn btn-outline-secondary" type="button" id="toggleLoginPassword" tabindex="-1">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end mb-1">
+                        <a href="#" id="forgotPasswordLink">Forgot my password?</a>
+                    </div>
+                    <div class="mb-2 form-check">
+                        <input type="checkbox" class="form-check-input" id="keepSignedIn">
+                        <label class="form-check-label" for="keepSignedIn">Keep me signed in</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 mb-2" id="loginBtn">
+                        <span class="btn-text">Login</span>
+                        <span class="btn-loading d-none">
+                            <span class="spinner-border spinner-border-sm me-2"></span>Loading...
+                        </span>
+                    </button>
+                </form>
+                
+                <!-- Divider -->
+                <div class="text-center mb-2">
+                    <span class="text-muted">or</span>
+                </div>
+                
+                <!-- Google Sign-In Button -->
+                <button onclick="signInWithGoogle()" class="btn btn-outline-dark w-100 mb-2" id="googleSignInBtn">
+                    <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google" style="width: 18px; height: 18px; margin-right: 8px;">
+                    Sign in with Google
+                </button>
+                
+                <div class="text-center mt-3">
+                    <p class="text-muted">Don't have an account? <a href="signup.html" style="color: #FF9800; font-weight: bold;">Create Account</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Forgot Password Modal -->
+    <div class="modal fade" id="forgotPasswordModal" tabindex="-1" aria-labelledby="forgotPasswordModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="forgotPasswordModalLabel">Reset Password</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="resetAlert" class="alert alert-danger d-none" role="alert"></div>
+                    <div class="mb-3">
+                        <label for="resetEmail" class="form-label">Email</label>
+                        <input type="email" id="resetEmail" class="form-control" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="resetPassword()">Send Reset Email</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Use global Firebase instances from common.js
+        const auth = window.auth;
+        const db = window.db;
+        
+        // Show/Hide password logic
+        const loginPassword = document.getElementById('loginPassword');
+        document.getElementById('toggleLoginPassword').onclick = function() {
+            if (loginPassword.type === 'password') {
+                loginPassword.type = 'text';
+                this.innerHTML = '<i class="fas fa-eye-slash"></i>';
+            } else {
+                loginPassword.type = 'password';
+                this.innerHTML = '<i class="fas fa-eye"></i>';
+            }
+        };
+
+        // Forgot password modal
+        const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+        forgotPasswordLink.onclick = function() {
+            const email = document.getElementById('loginEmail').value;
+            document.getElementById('resetEmail').value = email;
+            document.getElementById('resetAlert').classList.add('d-none');
+            const modal = new bootstrap.Modal(document.getElementById('forgotPasswordModal'));
+            modal.show();
+        };
+
+        // Login logic
+        async function login() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value.trim();
+            const alertBox = document.getElementById('loginAlert');
+            alertBox.classList.add('d-none');
+            if (!email || !password) {
+                alertBox.textContent = 'Please fill in all fields.';
+                alertBox.classList.remove('d-none');
+                return;
+            }
+            
+            // Show loading state
+            const loginBtn = document.getElementById('loginBtn');
+            const originalText = loginBtn.querySelector('.btn-text').textContent;
+            loginBtn.querySelector('.btn-text').textContent = 'Signing in...';
+            loginBtn.disabled = true;
+            
+            try {
+                // Attempt to sign in
+                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                // Reload user to get latest verification status
+                await user.reload();
+                console.log('User email verified status:', user.emailVerified);
+                
+                // CRITICAL: Check email verification - this is the most important step
+                if (!user.emailVerified) {
+                    await auth.signOut();
+                    throw new Error('Please verify your email address before signing in. Check your inbox (and spam folder) for a verification email and click the verification link.');
+                }
+                
+                // Email is verified - proceed with login
+                console.log('Email verified, proceeding with login');
+                
+                // Check if this is the first verified login (user exists in pendingRegistrations)
+                const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
+                
+                if (pendingDoc.exists) {
+                    // This is the first verified login, create technician document
+                    const pendingData = pendingDoc.data();
+                    console.log('Creating technician document for verified user:', user.uid);
+                    
+                    const technicianData = {
+                        fullName: pendingData.fullName,
+                        email: email,
+                        isAdmin: false,
+                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+                    
+                    // Create technician document
+                    await db.collection('technicians').doc(user.uid).set(technicianData);
+                    console.log('Technician document created successfully');
+                    
+                    // Remove from pending registrations
+                    await db.collection('pendingRegistrations').doc(email).delete();
+                    console.log('Removed from pending registrations');
+                    
+                    // Store full name in localStorage
+                    localStorage.setItem('fullName', pendingData.fullName);
+                } else {
+                    // Regular login - check if technician document exists
+                    const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                    
+                    if (!technicianDoc.exists) {
+                        // Technician document doesn't exist - create it (safety net)
+                        console.log('Technician document missing, creating it for user:', user.uid);
+                        await db.collection('technicians').doc(user.uid).set({
+                            fullName: user.displayName || email,
+                            email: email,
+                            isAdmin: false,
+                            lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        localStorage.setItem('fullName', user.displayName || email);
+                    } else {
+                        // Update technician data
+                        await saveTechnicianToFirestore(user);
+                    }
+                }
+                
+                // Success: redirect to main menu
+                window.location.href = 'main-menu.html';
+            } catch (error) {
+                alertBox.textContent = error.message;
+                alertBox.classList.remove('d-none');
+            } finally {
+                // Reset button state
+                loginBtn.querySelector('.btn-text').textContent = originalText;
+                loginBtn.disabled = false;
+            }
+        }
+
+        // Password reset logic
+        async function resetPassword() {
+            const email = document.getElementById('resetEmail').value.trim();
+            const alertBox = document.getElementById('resetAlert');
+            alertBox.classList.add('d-none');
+            if (!email) {
+                alertBox.textContent = 'Please enter your email.';
+                alertBox.classList.remove('d-none');
+                return;
+            }
+            try {
+                await auth.sendPasswordResetEmail(email);
+                alertBox.textContent = 'Password reset email sent!';
+                alertBox.classList.remove('d-none');
+            } catch (error) {
+                alertBox.textContent = error.message;
+                alertBox.classList.remove('d-none');
+            }
+        }
+
+        // Google Sign-In function
+        async function signInWithGoogle() {
+            const alertBox = document.getElementById('loginAlert');
+            alertBox.classList.add('d-none');
+            try {
+                // Create Google Auth Provider and force account selection every time
+                const provider = new firebase.auth.GoogleAuthProvider();
+                provider.setCustomParameters({
+                    prompt: 'select_account'
+                });
+                // Sign in with Google
+                const result = await auth.signInWithPopup(provider);
+                const user = result.user;
+                
+                // Verify that the user has a valid email
+                if (!user.email || !user.emailVerified) {
+                    await auth.signOut();
+                    throw new Error('Please use a verified Google account with a valid email address');
+                }
+                
+                // Check if this is the first time login for this Google account
+                const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                
+                if (!technicianDoc.exists) {
+                    // First time login - create technician document
+                    await db.collection('technicians').doc(user.uid).set({
+                        fullName: user.displayName || user.email,
+                        email: user.email,
+                        isAdmin: false,
+                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    // Store full name in localStorage
+                    localStorage.setItem('fullName', user.displayName || user.email);
+                } else {
+                    // Regular login - update technician data
+                    await saveTechnicianToFirestore(user);
+                }
+                
+                // Success: redirect to main menu
+                window.location.href = 'main-menu.html';
+            } catch (error) {
+                console.error('Google Sign-In Error:', error);
+                alertBox.textContent = error.message;
+                alertBox.classList.remove('d-none');
+            }
+        }
+        
+        // Check if user is already logged in
+        auth.onAuthStateChanged(function(user) {
+            if (user && user.emailVerified) {
+                // User is already logged in, redirect to main menu
+                window.location.href = 'main-menu.html';
+            }
+        });
+    </script>
+</body>
+</html>
+

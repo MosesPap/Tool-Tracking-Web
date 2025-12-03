@@ -93,6 +93,123 @@
             backdrop-filter: blur(10px);
         }
         
+        /* Welcome Message Screen Styles */
+        #welcomeMessageScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: 9998;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            text-align: center;
+            color: white;
+        }
+        
+        #welcomeMessageScreen.show {
+            display: flex;
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .welcome-message-container {
+            max-width: 600px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 3rem 2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .welcome-title {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 1.5rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            line-height: 1.2;
+        }
+        
+        .welcome-message {
+            font-size: 1.3rem;
+            line-height: 1.6;
+            margin-bottom: 2.5rem;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+        }
+        
+        .welcome-message strong {
+            color: #FFD700;
+            font-weight: bold;
+        }
+        
+        .welcome-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .welcome-btn {
+            position: relative;
+            padding: 14px 32px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 12px;
+            border: 2px solid #bdbdbd;
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
+            color: #333;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
+            cursor: pointer;
+            white-space: nowrap;
+            transform: perspective(1000px) rotateX(0deg);
+            min-width: 180px;
+        }
+        
+        .welcome-btn:hover {
+            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%);
+            border-color: #adadad;
+            transform: perspective(1000px) rotateX(5deg) translateY(-2px);
+            box-shadow: 0 4px 12px rgba(189, 189, 189, 0.4),
+                        0 2px 4px rgba(0, 0, 0, 0.2);
+            color: #333;
+            text-decoration: none;
+        }
+        
+        .welcome-btn:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(0px);
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
+        }
+        
+        @media (max-width: 768px) {
+            .welcome-title {
+                font-size: 2rem;
+            }
+            
+            .welcome-message {
+                font-size: 1.1rem;
+            }
+            
+            .welcome-buttons {
+                flex-direction: column;
+            }
+            
+            .welcome-btn {
+                width: 100%;
+            }
+        }
+        
         #splashLogo {
             width: 120px;
             height: 120px;
@@ -2113,21 +2230,17 @@
 <body>
     <!-- Immediate script to handle skipSplash before other scripts run -->
     <script>
-        // Check skipSplash and email verification flag immediately to prevent login screen flash
+        // Check skipSplash immediately to prevent login screen flash
         (function() {
             const skipSplash = sessionStorage.getItem('skipSplash');
-            const showingEmailVerification = sessionStorage.getItem('showingEmailVerification');
-            
-            if (skipSplash === 'true' || showingEmailVerification === 'true') {
-                console.log('skipSplash or email verification detected in immediate script');
+            if (skipSplash === 'true') {
+                console.log('skipSplash detected in immediate script');
                 // Hide elements immediately - don't wait for DOMContentLoaded
                 const hideElements = function() {
                     try {
                         const loginSection = document.getElementById('loginSection');
                         const splashScreen = document.getElementById('splashScreen');
                         const orangeOverlay = document.getElementById('orangeOverlay');
-                        const signUpSection = document.getElementById('signUpSection');
-                        const emailVerificationSection = document.getElementById('emailVerificationSection');
                         
                         if (loginSection) {
                             loginSection.style.display = 'none';
@@ -2141,23 +2254,6 @@
                             orangeOverlay.classList.add('hidden');
                             orangeOverlay.style.display = 'none';
                             orangeOverlay.style.visibility = 'hidden';
-                        }
-                        
-                        // Stop video if showing email verification
-                        const splashVideo = document.getElementById('splashVideo');
-                        if (showingEmailVerification === 'true' && splashVideo) {
-                            splashVideo.pause();
-                            splashVideo.currentTime = 0;
-                            splashVideo.removeAttribute('autoplay');
-                        }
-                        
-                        // If showing email verification, make sure it's visible
-                        if (showingEmailVerification === 'true' && emailVerificationSection) {
-                            if (signUpSection) {
-                                signUpSection.classList.add('d-none');
-                            }
-                            emailVerificationSection.classList.remove('d-none');
-                            emailVerificationSection.style.display = 'flex'; // Match auth-container CSS
                         }
                     } catch(e) {
                         console.error('Error hiding elements:', e);
@@ -2196,6 +2292,27 @@
             <div id="splashLoading"></div>
         </div>
     </div>
+    
+    <!-- Welcome Message Screen -->
+    <div id="welcomeMessageScreen">
+        <div class="welcome-message-container">
+            <h1 class="welcome-title">Welcome to Tool Tracking</h1>
+            <p class="welcome-message">
+                In aviation, <strong>every tool matters</strong>. Proper registration ensures safety, 
+                accountability, and operational excellence. Use this system wisely to maintain 
+                the highest standards of tool management and contribute to flight safety.
+            </p>
+            <div class="welcome-buttons">
+                <a href="signin.html" class="welcome-btn">
+                    <i class="fas fa-sign-in-alt"></i> Sign In
+                </a>
+                <a href="signup.html" class="welcome-btn">
+                    <i class="fas fa-user-plus"></i> Create Account
+                </a>
+            </div>
+        </div>
+    </div>
+    
     <!-- Removed old static splash/logo section -->
 
     <div id="headerBranding">
@@ -2309,39 +2426,6 @@
                         </span>
                     </button>
                     </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- Email Verification Message Section -->
-        <div id="emailVerificationSection" class="auth-container d-none">
-            <div class="card auth-card">
-                <div class="card-body text-center">
-                    <div class="mb-4">
-                        <i class="fas fa-envelope-circle-check" style="font-size: 4rem; color: #4CAF50; margin-bottom: 1rem;"></i>
-                        <h3 class="mb-3">Check Your Email</h3>
-                        <p class="lead mb-3">We've sent a verification email to:</p>
-                        <p class="h5 mb-4" id="verificationEmailDisplay" style="color: #2196F3; font-weight: bold;"></p>
-                    </div>
-                    
-                    <div class="alert alert-info mb-4" role="alert">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>Please verify your email address</strong><br>
-                        Click the verification link in the email to activate your account.<br>
-                        <strong>Don't forget to check your spam/junk folder!</strong>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <p class="text-muted">Once you've verified your email, you can sign in to your account.</p>
-                    </div>
-                    
-                    <button onclick="showLogin()" class="btn btn-primary w-100 mb-2" id="signInAfterVerificationBtn">
-                        <i class="fas fa-sign-in-alt me-2"></i> Sign In After Verification
-                    </button>
-                    
-                    <button onclick="showSignUp()" class="btn btn-outline-secondary w-100">
-                        <i class="fas fa-arrow-left me-2"></i> Back to Sign Up
-                    </button>
                 </div>
             </div>
         </div>
@@ -3483,13 +3567,6 @@
         
         // Set custom error messages for unverified emails
         auth.onAuthStateChanged(function(user) {
-            // Don't sign out if we're showing email verification screen
-            const showingEmailVerification = sessionStorage.getItem('showingEmailVerification');
-            if (showingEmailVerification === 'true') {
-                // We're in the registration flow, don't interfere
-                return;
-            }
-            
             if (user && !user.emailVerified) {
                 // Force sign out if user is not verified
                 auth.signOut();
@@ -3551,83 +3628,12 @@
 
         // Show/Hide login/signup
         function showSignUp() {
-            // Clear email verification flag
-            sessionStorage.removeItem('showingEmailVerification');
-            
             document.getElementById('loginSection').classList.add('d-none');
             document.getElementById('signUpSection').classList.remove('d-none');
-            document.getElementById('emailVerificationSection').classList.add('d-none');
         }
         function showLogin() {
-            // Clear email verification flag
-            sessionStorage.removeItem('showingEmailVerification');
-            
             document.getElementById('signUpSection').classList.add('d-none');
             document.getElementById('loginSection').classList.remove('d-none');
-            document.getElementById('emailVerificationSection').classList.add('d-none');
-        }
-        
-        // Show email verification message screen
-        function showEmailVerificationMessage(email) {
-            console.log('Showing email verification message for:', email);
-            
-            // Set flag to prevent splash screen from showing
-            sessionStorage.setItem('showingEmailVerification', 'true');
-            console.log('Set showingEmailVerification flag to true');
-            
-            // Hide splash screen immediately and STOP video
-            const splashScreen = document.getElementById('splashScreen');
-            const orangeOverlay = document.getElementById('orangeOverlay');
-            const splashVideo = document.getElementById('splashVideo');
-            
-            if (splashVideo) {
-                splashVideo.pause();
-                splashVideo.currentTime = 0;
-                splashVideo.removeAttribute('autoplay');
-                console.log('Splash video paused and autoplay removed');
-            }
-            
-            if (splashScreen) {
-                splashScreen.style.display = 'none';
-                splashScreen.classList.add('splash-hidden');
-                console.log('Splash screen hidden');
-            }
-            if (orangeOverlay) {
-                orangeOverlay.classList.add('hidden');
-                orangeOverlay.style.display = 'none';
-                console.log('Orange overlay hidden');
-            }
-            
-            // Hide login and signup sections
-            const loginSection = document.getElementById('loginSection');
-            const signUpSection = document.getElementById('signUpSection');
-            if (loginSection) {
-                loginSection.classList.add('d-none');
-                loginSection.style.display = 'none';
-                console.log('Login section hidden');
-            }
-            if (signUpSection) {
-                signUpSection.classList.add('d-none');
-                console.log('Sign up section hidden');
-            }
-            
-            // Show email verification section
-            const emailVerificationSection = document.getElementById('emailVerificationSection');
-            if (emailVerificationSection) {
-                emailVerificationSection.classList.remove('d-none');
-                emailVerificationSection.style.display = 'flex'; // Match auth-container CSS
-                console.log('Email verification section shown');
-            } else {
-                console.error('Email verification section not found!');
-            }
-            
-            const verificationEmailDisplay = document.getElementById('verificationEmailDisplay');
-            if (verificationEmailDisplay) {
-                verificationEmailDisplay.textContent = email;
-                console.log('Email displayed:', email);
-            } else {
-                console.error('Verification email display element not found!');
-            }
         }
 
         // Forgot password modal
@@ -3886,14 +3892,13 @@
                 });
                 console.log('Pending registration document created for:', email);
                 
-                // Show email verification message screen BEFORE signing out
-                // This ensures the screen is shown before any auth state changes
-                alertBox.classList.add('d-none');
-                showEmailVerificationMessage(email);
-                
-                // Sign out the user immediately to prevent access (after showing message)
+                // Sign out the user immediately to prevent access
                 await auth.signOut();
                 console.log('User signed out after registration');
+
+                alertBox.classList.add('d-none');
+                showLogin();
+                alert('Account created successfully! Please check your email inbox (and spam folder) for a verification email. Click the verification link in the email, then you can sign in. You will not be able to sign in until you verify your email address.');
             } catch (error) {
                 console.error('Sign up error:', error);
                 alertBox.textContent = error.message;
@@ -6884,43 +6889,9 @@
 
         // On auth state change, show menu after login (not register tools)
         auth.onAuthStateChanged(function(user) {
-            // Check if we're showing email verification - don't interfere
-            const showingEmailVerification = sessionStorage.getItem('showingEmailVerification');
-            if (showingEmailVerification === 'true') {
-                if (!user) {
-                    // User signed out during registration - keep showing verification message
-                    console.log('User signed out during registration - keeping email verification screen visible');
-                    // Ensure verification section is visible
-                    const emailVerificationSection = document.getElementById('emailVerificationSection');
-                    if (emailVerificationSection) {
-                        emailVerificationSection.classList.remove('d-none');
-                        emailVerificationSection.style.display = 'flex'; // Match auth-container CSS
-                        // Hide other sections
-                        const loginSection = document.getElementById('loginSection');
-                        const signUpSection = document.getElementById('signUpSection');
-                        if (loginSection) {
-                            loginSection.classList.add('d-none');
-                        }
-                        if (signUpSection) {
-                            signUpSection.classList.add('d-none');
-                        }
-                    }
-                    return; // Don't process auth state change
-                } else {
-                    // User logged in - clear flag and proceed normally
-                    sessionStorage.removeItem('showingEmailVerification');
-                }
-            }
-            
             if (user) {
                 loginSection.style.display = 'none';
                 signUpSection.classList.add('d-none');
-                // Hide email verification section if user is logged in
-                const emailVerificationSection = document.getElementById('emailVerificationSection');
-                if (emailVerificationSection) {
-                    emailVerificationSection.classList.add('d-none');
-                }
-                sessionStorage.removeItem('showingEmailVerification'); // Clear flag
                 adminSection.style.display = 'none';
                 const adminButton = document.getElementById('adminButton');
                 if (adminButton) {
@@ -7605,39 +7576,6 @@
                 return; // Exit early, don't show splash
             }
             
-            // Check if we're showing email verification message - don't show splash
-            const showingEmailVerificationFlag = sessionStorage.getItem('showingEmailVerification');
-            if (showingEmailVerificationFlag === 'true') {
-                console.log('Email verification screen active - skipping splash');
-                // Hide splash screen immediately
-                if (splashScreen) {
-                    splashScreen.style.display = 'none';
-                    splashScreen.classList.add('splash-hidden');
-                }
-                if (orangeOverlay) {
-                    orangeOverlay.classList.add('hidden');
-                    orangeOverlay.style.display = 'none';
-                }
-                // Make sure email verification section is visible
-                const emailVerificationSection = document.getElementById('emailVerificationSection');
-                if (emailVerificationSection) {
-                    emailVerificationSection.classList.remove('d-none');
-                    emailVerificationSection.style.display = 'flex'; // Match auth-container CSS
-                }
-                // Hide login and signup sections
-                const loginSection = document.getElementById('loginSection');
-                const signUpSection = document.getElementById('signUpSection');
-                if (loginSection) {
-                    loginSection.style.display = 'none';
-                    loginSection.classList.add('d-none');
-                }
-                if (signUpSection) {
-                    signUpSection.classList.add('d-none');
-                }
-                // CRITICAL: Return immediately to prevent ANY splash screen logic from running
-                return; // Exit early, don't show splash
-            }
-            
             // iOS Safari autoplay workaround
             function attemptVideoPlay() {
                 if (splashVideo) {
@@ -7676,55 +7614,30 @@
                     splashContent.style.display = 'block';
                 }
                 
-                // Hide splash after 3 seconds
+                // Hide splash after 3 seconds and show welcome message
                 setTimeout(() => {
                     splashScreen.classList.add('splash-hidden');
                     setTimeout(() => {
                         splashScreen.style.display = 'none';
+                        // Show welcome message screen after splash
+                        const welcomeScreen = document.getElementById('welcomeMessageScreen');
+                        if (welcomeScreen) {
+                            welcomeScreen.classList.add('show');
+                        }
                     }, 500);
                 }, 3000);
             }
             
             // Show orange overlay for 0.5s, then attempt video splash
-            // BUT skip if skipSplash flag is set OR if showing email verification
+            // BUT skip if skipSplash flag is set
             const skipSplashCheck = sessionStorage.getItem('skipSplash');
-            const showingEmailVerificationCheck = sessionStorage.getItem('showingEmailVerification');
-            if (skipSplashCheck === 'true' || showingEmailVerificationCheck === 'true') {
+            if (skipSplashCheck === 'true') {
                 // Already handled above, don't show splash video
-                console.log('Skipping splash video - skipSplash or email verification flag is set');
-                // Make sure video is paused and hidden
-                if (splashVideo) {
-                    splashVideo.pause();
-                    splashVideo.currentTime = 0;
-                }
-                if (splashScreen) {
-                    splashScreen.style.display = 'none';
-                    splashScreen.classList.add('splash-hidden');
-                }
+                console.log('Skipping splash video - skipSplash flag is set');
                 return; // Exit early, don't show splash
             }
             
             setTimeout(() => {
-                // Double-check flag before playing video (in case it was set during the timeout)
-                const showingEmailVerificationCheck = sessionStorage.getItem('showingEmailVerification');
-                if (showingEmailVerificationCheck === 'true') {
-                    console.log('Email verification flag detected in setTimeout - skipping video');
-                    if (splashVideo) {
-                        splashVideo.pause();
-                        splashVideo.currentTime = 0;
-                        splashVideo.removeAttribute('autoplay');
-                    }
-                    if (splashScreen) {
-                        splashScreen.style.display = 'none';
-                        splashScreen.classList.add('splash-hidden');
-                    }
-                    if (orangeOverlay) {
-                        orangeOverlay.classList.add('hidden');
-                        orangeOverlay.style.display = 'none';
-                    }
-                    return; // Don't play video
-                }
-                
                 orangeOverlay.classList.add('hidden');
                 
                 if (splashVideo) {
@@ -7734,6 +7647,11 @@
                             splashScreen.classList.add('splash-hidden');
                             setTimeout(() => {
                                 splashScreen.style.display = 'none';
+                                // Show welcome message screen after splash
+                                const welcomeScreen = document.getElementById('welcomeMessageScreen');
+                                if (welcomeScreen) {
+                                    welcomeScreen.classList.add('show');
+                                }
                             }, 500);
                             splashHidden = true;
                         }
@@ -7784,7 +7702,16 @@
                     });
                     
                     // Fallback: hide after 6 seconds if video doesn't end
-                    setTimeout(hideSplashScreen, 6000);
+                    setTimeout(() => {
+                        hideSplashScreen();
+                        // Show welcome message screen after splash
+                        setTimeout(() => {
+                            const welcomeScreen = document.getElementById('welcomeMessageScreen');
+                            if (welcomeScreen) {
+                                welcomeScreen.classList.add('show');
+                            }
+                        }, 500);
+                    }, 6000);
                 } else {
                     showFallbackSplash();
                 }
@@ -9945,29 +9872,12 @@
     function createWorkLocationToolCard(tool, statusClass) {
         const toolName = tool.toolName || 'Unknown Tool';
         const toolId = tool.toolId || tool.id || 'N/A';
-        const partNumber = tool.partNumber || 'N/A';
+        const partNumber = tool.serialNumber || tool.partNumber || 'N/A';
         const status = (tool.status || tool.action || 'N/A').toUpperCase();
         const technician = tool.technician || 'N/A';
-        
-        // Handle calDueDate with multiple format support
-        let calDueDate = 'N/A';
-        if (tool.calDueDate) {
-            let calDate = null;
-            if (tool.calDueDate.toDate && typeof tool.calDueDate.toDate === 'function') {
-                calDate = tool.calDueDate.toDate();
-            } else if (tool.calDueDate instanceof Date) {
-                calDate = tool.calDueDate;
-            } else if (typeof tool.calDueDate === 'string') {
-                calDate = new Date(tool.calDueDate);
-            } else if (tool.calDueDate.seconds) {
-                // Firestore timestamp object
-                calDate = new Date(tool.calDueDate.seconds * 1000);
-            }
-            
-            if (calDate && !isNaN(calDate.getTime())) {
-                calDueDate = calDate.toLocaleDateString('en-GB');
-            }
-        }
+        const calDueDate = tool.calDueDate ? 
+            (tool.calDueDate.toDate ? tool.calDueDate.toDate().toLocaleDateString('en-GB') : tool.calDueDate) : 
+            'N/A';
         
         const timestamp = tool.timestamp ? 
             (tool.timestamp.toDate ? 
@@ -12334,7 +12244,6 @@
         window.signInWithGoogle = signInWithGoogle;
         window.showSignUp = showSignUp;
         window.showLogin = showLogin;
-        window.showEmailVerificationMessage = showEmailVerificationMessage;
         window.showAdminLogin = showAdminLogin;
         window.login = login;
         window.signUp = signUp;
