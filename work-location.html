@@ -864,14 +864,10 @@
                     ${collection} - Owner: ${owner} (${totalInCollection} entries - OUT: ${collectionTools.out.length}, IN: ${collectionTools.in.length})
                 </div>`;
                 
-                // Display OUT tools first
-                collectionTools.out.forEach(tool => {
-                    html += createWorkLocationToolCard(tool, 'out');
-                });
-                
-                // Then IN tools
-                collectionTools.in.forEach(tool => {
-                    html += createWorkLocationToolCard(tool, 'in');
+                // Display all tools - card color will be based on current status
+                const allTools = [...collectionTools.out, ...collectionTools.in];
+                allTools.forEach(tool => {
+                    html += createWorkLocationToolCard(tool);
                 });
             });
             
@@ -879,13 +875,12 @@
         }
 
         // Create tool card HTML with 3D effects
-        function createWorkLocationToolCard(tool, statusClass) {
+        function createWorkLocationToolCard(tool) {
             const toolName = tool.toolName || 'Unknown Tool';
             const toolId = tool.toolId || tool.id || 'N/A';
             const partNumber = tool.partNumber || 'N/A';
-            const historicalStatus = (tool.status || tool.action || 'N/A').toUpperCase();
             // Get current status from tools collection - use the "status" field value directly
-            const currentStatus = tool.currentStatus && tool.currentStatus !== 'N/A' 
+            const status = tool.currentStatus && tool.currentStatus !== 'N/A' 
                 ? tool.currentStatus.toUpperCase() 
                 : 'N/A';
             const technician = tool.technician || 'N/A';
@@ -924,10 +919,17 @@
                     new Date(tool.timestamp).toLocaleString('en-GB')) : 
                 'N/A';
             
-            const statusColorClass = statusClass === 'out' ? 'workloc-status-out' : 'workloc-status-in';
-            const currentStatusColorClass = currentStatus === 'OUT' ? 'workloc-status-out' : 
-                                          currentStatus === 'IN' ? 'workloc-status-in' : 
-                                          'workloc-tool-value';
+            // Determine card color class based on current status
+            let statusClass = 'in'; // Default to 'in' style
+            if (status === 'OUT') {
+                statusClass = 'out';
+            } else if (status === 'IN') {
+                statusClass = 'in';
+            }
+            
+            const statusColorClass = status === 'OUT' ? 'workloc-status-out' : 
+                                   status === 'IN' ? 'workloc-status-in' : 
+                                   'workloc-tool-value';
             
             return `
                 <div class="workloc-tool-card ${statusClass}">
@@ -938,11 +940,10 @@
                     </div>
                     <div class="workloc-tool-info" style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                         <span><span class="workloc-tool-label">Cal Due Date:</span> <span class="workloc-tool-value">${calDueDate}</span></span>
-                        <span><span class="workloc-tool-label">History Status:</span> <span class="${statusColorClass}">${historicalStatus}</span></span>
+                        <span><span class="workloc-tool-label">Status:</span> <span class="${statusColorClass}">${status}</span></span>
                     </div>
-                    <div class="workloc-tool-info" style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                        <span><span class="workloc-tool-label">Current Status:</span> <span class="${currentStatusColorClass}">${currentStatus}</span></span>
-                        <span><span class="workloc-tool-label">Last Technician:</span> <span class="workloc-tool-value">${technician}</span></span>
+                    <div class="workloc-tool-info" style="margin-bottom: 6px;">
+                        <span class="workloc-tool-label">Last Technician:</span> <span class="workloc-tool-value">${technician}</span>
                     </div>
                     <div class="workloc-tool-info">
                         <span class="workloc-tool-label">Time:</span> <span class="workloc-tool-value">${timestamp}</span>
