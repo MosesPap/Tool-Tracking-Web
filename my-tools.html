@@ -788,8 +788,9 @@
                 <div class="modal-body">
                     <form id="addCollectionForm">
                         <div class="mb-3">
-                            <label for="collectionNameInput" class="form-label"><strong>Collection Name *</strong></label>
-                            <input type="text" class="form-control" id="collectionNameInput" placeholder="e.g., Col-1, AV-1" required>
+                            <label for="collectionNameInput" class="form-label"><strong>Collection Name</strong></label>
+                            <input type="text" class="form-control" id="collectionNameInput" readonly style="background-color: #f5f5f5;">
+                            <small class="form-text text-muted">Collection name will be auto-generated as Col-(N)</small>
                         </div>
                         <div class="mb-3">
                             <label for="collectionDescriptionInput" class="form-label"><strong>Description</strong></label>
@@ -1109,44 +1110,27 @@
             const body = document.getElementById('collectionSelectBody');
             body.innerHTML = '<div class="text-center">Loading...</div>';
             try {
-                // 1. Query tools for this owner
-                const toolsSnapshot = await db.collection('tools').where('owner', '==', fullName).get();
-                if (toolsSnapshot.empty) {
-                    body.innerHTML = '<div class="text-center text-danger">No tools found for you.</div>';
-                    modal.show();
-                    return;
-                }
-                // 2. Extract unique collectionCodes
-                const collectionCodes = [...new Set(toolsSnapshot.docs.map(doc => doc.data().collectionCode).filter(Boolean))];
+                // Query collections by owner field
+                const collectionsSnapshot = await db.collection('collections')
+                    .where('owner', '==', fullName)
+                    .get();
                 
                 // Include newly created collection if it exists
-                if (window.newlyCreatedCollectionName && !collectionCodes.includes(window.newlyCreatedCollectionName)) {
-                    collectionCodes.push(window.newlyCreatedCollectionName);
+                if (window.newlyCreatedCollectionName) {
+                    // The newly created collection should already be in the query, but ensure it's included
+                    window.newlyCreatedCollectionName = null;
                 }
                 
-                if (collectionCodes.length === 0) {
-                    body.innerHTML = '<div class="text-center text-danger">No collections found for your tools.</div>';
-                    modal.show();
-                    return;
-                }
-                // 3. Query collections for those codes (batch if >10)
-                let collections = [];
-                if (collectionCodes.length <= 10) {
-                    const colSnap = await db.collection('collections').where('collectionName', 'in', collectionCodes).get();
-                    collections = colSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                } else {
-                    // Firestore 'in' query limit is 10, so batch if needed
-                    for (let i = 0; i < collectionCodes.length; i += 10) {
-                        const batch = collectionCodes.slice(i, i + 10);
-                        const colSnap = await db.collection('collections').where('collectionName', 'in', batch).get();
-                        collections = collections.concat(colSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                    }
-                }
+                let collections = collectionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 
-                // Clear the newly created collection flag after using it
-                window.newlyCreatedCollectionName = null;
+                // Sort collections by name
+                collections.sort((a, b) => {
+                    const nameA = (a.collectionName || '').toLowerCase();
+                    const nameB = (b.collectionName || '').toLowerCase();
+                    return nameA.localeCompare(nameB);
+                });
                 if (collections.length === 0) {
-                    body.innerHTML = '<div class="text-center text-danger">No collections found for your tools.</div>';
+                    body.innerHTML = '<div class="text-center text-danger">No collections found.</div>';
                 } else {
                     let html = '<div class="list-group">';
                     collections.forEach(data => {
@@ -1199,13 +1183,63 @@
             }
         }
 
+        // Generate next available collection name in Col-(N) format
+        async function generateNextCollectionName() {
+            const db = window.db || firebase.firestore();
+            const auth = window.auth || firebase.auth();
+            const user = auth.currentUser;
+            const fullName = localStorage.getItem('fullName') || (user ? user.email : null);
+            
+            if (!fullName) return 'Col-1';
+            
+            try {
+                // Get all collections owned by this user
+                const collectionsSnapshot = await db.collection('collections')
+                    .where('owner', '==', fullName)
+                    .get();
+                
+                // Extract numbers from existing Col-(N) names
+                const existingNumbers = [];
+                collectionsSnapshot.docs.forEach(doc => {
+                    const name = doc.data().collectionName || '';
+                    const match = name.match(/^Col-(\d+)$/i);
+                    if (match) {
+                        existingNumbers.push(parseInt(match[1], 10));
+                    }
+                });
+                
+                // Find the next available number
+                let nextNumber = 1;
+                if (existingNumbers.length > 0) {
+                    existingNumbers.sort((a, b) => a - b);
+                    // Find first gap or use next number after highest
+                    for (let i = 0; i < existingNumbers.length; i++) {
+                        if (existingNumbers[i] !== i + 1) {
+                            nextNumber = i + 1;
+                            break;
+                        }
+                        nextNumber = existingNumbers[i] + 1;
+                    }
+                }
+                
+                return `Col-${nextNumber}`;
+            } catch (error) {
+                console.error('Error generating collection name:', error);
+                return 'Col-1';
+            }
+        }
+
         // Show Add Collection Modal
-        function showAddCollectionModal() {
+        async function showAddCollectionModal() {
             const modalElement = document.getElementById('addCollectionModal');
             const modal = new bootstrap.Modal(modalElement);
             document.getElementById('addCollectionForm').reset();
             document.getElementById('addCollectionError').style.display = 'none';
             document.getElementById('addCollectionError').textContent = '';
+            
+            // Generate and set collection name
+            const generatedName = await generateNextCollectionName();
+            document.getElementById('collectionNameInput').value = generatedName;
             
             // Reset the success flag
             window.collectionSaveSuccess = false;
@@ -1228,10 +1262,63 @@
             modal.show();
         }
 
+        // Normalize collection name to handle Greek/English character confusion
+        // Converts Greek letters that look identical to English letters to their English equivalents
+        function normalizeCollectionName(name) {
+            if (!name) return '';
+            
+            // Map of Greek letters to their visually identical English equivalents
+            const greekToEnglish = {
+                // Uppercase Greek to English
+                '\u0391': 'A', // Greek Α → English A
+                '\u0392': 'B', // Greek Β → English B
+                '\u0395': 'E', // Greek Ε → English E
+                '\u0396': 'Z', // Greek Ζ → English Z
+                '\u0397': 'H', // Greek Η → English H
+                '\u0399': 'I', // Greek Ι → English I
+                '\u039A': 'K', // Greek Κ → English K
+                '\u039C': 'M', // Greek Μ → English M
+                '\u039D': 'N', // Greek Ν → English N
+                '\u039F': 'O', // Greek Ο → English O
+                '\u03A1': 'P', // Greek Ρ → English P
+                '\u03A4': 'T', // Greek Τ → English T
+                '\u03A5': 'Y', // Greek Υ → English Y
+                '\u03A7': 'X', // Greek Χ → English X
+                // Lowercase Greek to English
+                '\u03B1': 'a', // Greek α → English a
+                '\u03B2': 'b', // Greek β → English b
+                '\u03B5': 'e', // Greek ε → English e
+                '\u03B6': 'z', // Greek ζ → English z
+                '\u03B7': 'h', // Greek η → English h
+                '\u03B9': 'i', // Greek ι → English i
+                '\u03BA': 'k', // Greek κ → English k
+                '\u03BC': 'm', // Greek μ → English m
+                '\u03BD': 'n', // Greek ν → English n
+                '\u03BF': 'o', // Greek ο → English o
+                '\u03C1': 'p', // Greek ρ → English p
+                '\u03C4': 't', // Greek τ → English t
+                '\u03C5': 'y', // Greek υ → English y
+                '\u03C7': 'x'  // Greek χ → English x
+            };
+            
+            // Convert to lowercase and normalize Greek characters
+            return name.toLowerCase().split('').map(char => {
+                return greekToEnglish[char] || char;
+            }).join('');
+        }
+
         // Save new collection to Firebase
         async function saveNewCollection() {
             const db = window.db || firebase.firestore();
             const storage = window.storage || firebase.storage();
+            const auth = window.auth || firebase.auth();
+            const user = auth.currentUser;
+            const fullName = localStorage.getItem('fullName') || (user ? user.email : null);
+            
+            if (!fullName) {
+                alert('Error: User information not available. Please refresh the page.');
+                return;
+            }
             
             const collectionName = document.getElementById('collectionNameInput').value.trim();
             const description = document.getElementById('collectionDescriptionInput').value.trim();
@@ -1245,15 +1332,18 @@
                 return;
             }
             
-            // Check if collection already exists (case-insensitive check)
-            const allCollections = await db.collection('collections').get();
-            const existingCollection = allCollections.docs.find(doc => {
+            // Check if collection already exists for this owner (normalized comparison for Greek/English character confusion)
+            const userCollections = await db.collection('collections').where('owner', '==', fullName).get();
+            const normalizedNewName = normalizeCollectionName(collectionName);
+            const existingCollection = userCollections.docs.find(doc => {
                 const existingName = doc.data().collectionName;
-                return existingName && existingName.toLowerCase() === collectionName.toLowerCase();
+                if (!existingName) return false;
+                const normalizedExistingName = normalizeCollectionName(existingName);
+                return normalizedExistingName === normalizedNewName;
             });
             
             if (existingCollection) {
-                errorDiv.textContent = 'A collection with this name already exists. Please choose a different name.';
+                errorDiv.textContent = 'A collection with this name already exists (including visually similar names with different character sets). Please choose a different name.';
                 errorDiv.style.display = 'block';
                 return;
             }
@@ -1318,6 +1408,7 @@
                 // Create collection document in Firestore
                 const collectionData = {
                     collectionName: collectionName,
+                    owner: fullName,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                     photoUrls: photoUrls
                 };

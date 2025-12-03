@@ -3758,6 +3758,18 @@
                 await auth.signOut();
                 console.log('User signed out after registration');
 
+                // Hide splash screen immediately to prevent it from showing
+                const splashScreen = document.getElementById('splashScreen');
+                const orangeOverlay = document.getElementById('orangeOverlay');
+                if (splashScreen) {
+                    splashScreen.style.display = 'none';
+                    splashScreen.classList.add('splash-hidden');
+                }
+                if (orangeOverlay) {
+                    orangeOverlay.classList.add('hidden');
+                    orangeOverlay.style.display = 'none';
+                }
+
                 // Clear the form
                 document.getElementById('signUpFullName').value = '';
                 document.getElementById('signUpEmail').value = '';
@@ -3768,7 +3780,14 @@
                 alertBox.classList.add('d-none');
                 showLogin();
                 
-                // Show success message in login alert box after a small delay to ensure DOM is ready
+                // Ensure login section is visible (not hidden by splash)
+                const loginSection = document.getElementById('loginSection');
+                if (loginSection) {
+                    loginSection.style.display = 'block';
+                    loginSection.classList.remove('d-none');
+                }
+                
+                // Show success message in login alert box after a small delay
                 setTimeout(() => {
                     const loginAlert = document.getElementById('loginAlert');
                     if (loginAlert) {
