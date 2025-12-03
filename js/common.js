@@ -81,24 +81,10 @@ auth.onAuthStateChanged(async function(user) {
             const technicianDoc = await db.collection('technicians').doc(user.uid).get();
             
             if (!technicianDoc.exists) {
-                // Check if there's a pending registration with the full name
-                let fullName = user.displayName || user.email;
-                
-                try {
-                    const pendingDoc = await db.collection('pendingRegistrations').doc(user.email).get();
-                    if (pendingDoc.exists) {
-                        const pendingData = pendingDoc.data();
-                        fullName = pendingData.fullName || fullName;
-                        console.log('Using fullName from pending registration:', fullName);
-                    }
-                } catch (pendingError) {
-                    console.log('Could not check pending registrations, using displayName or email');
-                }
-                
                 // Create technician document for new users
                 console.log('Creating technician document for new user:', user.uid);
                 const technicianData = {
-                    fullName: fullName,
+                    fullName: user.displayName || user.email,
                     email: user.email,
                     isAdmin: false,
                     lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
@@ -106,8 +92,8 @@ auth.onAuthStateChanged(async function(user) {
                 };
                 
                 await db.collection('technicians').doc(user.uid).set(technicianData);
-                localStorage.setItem('fullName', fullName);
-                console.log('Technician document created successfully with fullName:', fullName);
+                localStorage.setItem('fullName', technicianData.fullName || user.email);
+                console.log('Technician document created successfully');
             } else {
                 // Update lastSignIn for existing users
                 await db.collection('technicians').doc(user.uid).update({
