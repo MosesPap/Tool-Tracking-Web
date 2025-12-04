@@ -1585,7 +1585,7 @@
                                     </button>
                                 </div>
                                 <div class="col-md-6">
-                                    <button class="btn btn-success w-100 py-3" onclick="showToolsByOwner()">
+                                    <button class="btn btn-success w-100 py-3" onclick="window.location.href='tools-by-owner.html'">
                                         <i class="fas fa-users-cog fa-2x d-block mb-2"></i>
                                         <strong>Tools By Owner</strong>
                                         <small class="d-block">View tools grouped by collection owner</small>
@@ -2061,31 +2061,31 @@
             
             async function initializeAdmin(auth, db, storage) {
 
-                // DOM Elements
-                const loginSection = document.getElementById('loginSection');
-                const adminDashboard = document.getElementById('adminDashboard');
+        // DOM Elements
+        const loginSection = document.getElementById('loginSection');
+        const adminDashboard = document.getElementById('adminDashboard');
                 
                 // Hide login screen by default - use seamless navigation
                 if (loginSection) loginSection.style.display = 'none';
                 if (adminDashboard) adminDashboard.style.display = 'none';
 
-                // Check if user is admin
-                async function checkAdminStatus(user) {
+        // Check if user is admin
+        async function checkAdminStatus(user) {
                     const db = window.db || firebase.firestore();
-                    try {
-                        const doc = await db.collection('technicians').doc(user.uid).get();
-                        if (doc.exists) {
-                            const userData = doc.data();
-                            if (userData.isAdmin === true) {
-                                return { isAdmin: true, name: userData.fullName || user.email };
-                            }
-                        }
-                        return { isAdmin: false, name: null };
-                    } catch (error) {
-                        console.error('Error checking admin status:', error);
-                        return { isAdmin: false, name: null };
+            try {
+                const doc = await db.collection('technicians').doc(user.uid).get();
+                if (doc.exists) {
+                    const userData = doc.data();
+                    if (userData.isAdmin === true) {
+                        return { isAdmin: true, name: userData.fullName || user.email };
                     }
                 }
+                return { isAdmin: false, name: null };
+            } catch (error) {
+                console.error('Error checking admin status:', error);
+                return { isAdmin: false, name: null };
+            }
+        }
 
                 // Load Admin Dashboard
                 function loadAdminDashboard(adminName) {
@@ -2151,10 +2151,10 @@
                     
                     if (user) {
                         console.log('[ADMIN] User found, checking admin status...');
-                        const { isAdmin, name } = await checkAdminStatus(user);
-                        if (isAdmin) {
+                const { isAdmin, name } = await checkAdminStatus(user);
+                if (isAdmin) {
                             console.log('[ADMIN] ✓ Admin confirmed, loading dashboard');
-                            loadAdminDashboard(name);
+                    loadAdminDashboard(name);
                             
                             // Verify auth in background (non-blocking)
                             setTimeout(() => {
@@ -2162,7 +2162,7 @@
                                 if (currentUser) {
                                     console.log('[ADMIN] ✓ Auth confirmed via currentUser:', currentUser.email);
                                     localStorage.setItem('authVerified', 'true');
-                                } else {
+                } else {
                                     // Set up onAuthStateChanged listener
                                     const unsubscribe = auth.onAuthStateChanged(async function(user) {
                                         if (user) {
@@ -2175,14 +2175,14 @@
                                                 localStorage.removeItem('authVerified');
                                                 window.location.href = 'main-menu.html';
                                             }
-                                        } else {
+                } else {
                                             console.log('[ADMIN] ✗ No user found, redirecting to main-menu.html');
                                             localStorage.removeItem('authVerified');
                                             window.location.href = 'main-menu.html';
                                         }
                                         unsubscribe();
                                     });
-                                }
+            }
                             }, 300);
                             
                             return; // Exit - page initialized
@@ -2253,7 +2253,7 @@
             // Start waiting for common.js
             waitForAuth();
         });
-        
+
         // Custom schedule helpers for email frequency (defined outside initializeAdmin)
         const emailCheckFrequencySelect = document.getElementById('emailCheckFrequency');
         const customScheduleContainer = document.getElementById('customScheduleContainer');

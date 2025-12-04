@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <title>Tools by Owner - Tool Tracking</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/common.css">
+    <style>
+        /* Reset body and html margins for full-width title bars */
+        body, html {
+            margin: 0;
+            padding: 0;
+        }
+        
+        /* Full-width title bar styles */
+        .full-width-title-bar {
+            width: 100vw !important;
+            margin-left: calc(50% - 50vw) !important;
+            margin-right: calc(50% - 50vw) !important;
+            margin-top: 0 !important;
+        }
+
+        /* Owner Tool Card Styles with 3D effects */
+        .owner-collection-header {
+            background: #FF9800;
+            color: white;
+            font-weight: bold;
+            font-size: 1.3rem;
+            border-radius: 6px 6px 0 0;
+            padding: 10px 16px;
+            margin-top: 1.5rem;
+            box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .owner-tool-card {
+            background: #fff;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.6),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        /* Responsive owner-tool-card widths */
+        @media (min-width: 576px) {
+            .owner-tool-card {
+                max-width: 550px;
+            }
+        }
+        
+        @media (min-width: 768px) {
+            .owner-tool-card {
+                max-width: 600px;
+            }
+        }
+        
+        @media (min-width: 992px) {
+            .owner-tool-card {
+                max-width: 700px;
+            }
+        }
+        
+        @media (min-width: 1200px) {
+            .owner-tool-card {
+                max-width: 800px;
+            }
+        }
+
+        .owner-tool-card:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.7),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+        }
+
+        .owner-tool-card:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .owner-tool-card.out {
+            background: linear-gradient(135deg, #FFCDD2 0%, #EF9A9A 100%);
+            border-color: #EF9A9A;
+        }
+
+        .owner-tool-card.in {
+            background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
+            border-color: #A5D6A7;
+        }
+
+        .owner-tool-name {
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: #000;
+            margin-bottom: 8px;
+        }
+
+        .owner-tool-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 1rem;
+        }
+
+        .owner-tool-label {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .owner-tool-value {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .owner-status-out {
+            color: #d32f2f;
+            font-weight: bold;
+        }
+
+        .owner-status-in {
+            color: #388E3C;
+            font-weight: bold;
+        }
+
+        /* Back to Admin button 3D interactive Grey - positioned in title bar */
+        #backToAdminFromOwnerBtn {
+            position: absolute;
+            right: 18px;
+            top: 50%;
+            transform: translateY(-50%) perspective(1000px) rotateX(0deg);
+            z-index: 10;
+            padding: 6px 12px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            border-radius: 12px;
+            border: 2px solid #bdbdbd;
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
+            color: #333;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        #backToAdminFromOwnerBtn:hover {
+            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%);
+            border-color: #adadad;
+            transform: translateY(calc(-50% - 2px)) perspective(1000px) rotateX(5deg);
+            box-shadow: 0 4px 12px rgba(189, 189, 189, 0.4),
+                        0 2px 4px rgba(0, 0, 0, 0.2),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.5),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+        }
+
+        #backToAdminFromOwnerBtn:active {
+            transform: translateY(calc(-50% + 0px)) perspective(1000px) rotateX(2deg);
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        }
+
+        /* Card styles with 3D effects */
+        .card {
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.6),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+            transform: perspective(1000px) rotateX(1deg);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.2),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.7),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        /* 3D Orange Interactive Button for Primary Actions */
+        .btn-primary {
+            position: relative;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 16px;
+            border: 2px solid #F57C00;
+            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(245, 124, 0, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            transform: perspective(1000px) rotateX(0deg);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #F57C00 0%, #E65100 100%);
+            border-color: #E65100;
+            transform: perspective(1000px) rotateX(5deg) translateY(-2px);
+            box-shadow: 0 4px 12px rgba(245, 124, 0, 0.4),
+                       0 2px 4px rgba(0, 0, 0, 0.2),
+                       inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                       inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+        }
+
+        .btn-primary:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(0px);
+            box-shadow: 0 2px 4px rgba(245, 124, 0, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-primary:disabled {
+            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%) !important;
+            border: 2px solid #616161 !important;
+            border-color: #616161 !important;
+            color: #666 !important;
+            cursor: not-allowed;
+            transform: perspective(1000px) rotateX(0deg);
+            box-shadow: 0 2px 4px rgba(158, 158, 158, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <!-- Tools by Owner Screen -->
+    <div id="toolsByOwnerScreen">
+      <!-- Purple Title Bar -->
+      <div class="full-width-title-bar" style="background: #9C27B0; color: white; padding: 10px 0 8px 0; position: relative; box-shadow: 0 2px 8px rgba(156,39,176,0.10); margin-bottom: 0.5rem; overflow: visible;">
+        <div class="container">
+          <h2 style="color: white; font-weight: bold; font-size: 1.3rem; margin: 0 0 0 20px; letter-spacing: 1px; padding-right: 160px;">Tools by Owner</h2>
+          <button id="backToAdminFromOwnerBtn" title="Back to Admin">
+            <i class="fas fa-arrow-left"></i> Back to Admin
+          </button>
+        </div>
+      </div>
+      
+      <div class="container py-4">
+        <!-- Owner Selection -->
+        <div id="ownerSelectionDiv" class="card mb-4">
+          <div class="card-body">
+            <h4 class="mb-3"><i class="fas fa-user"></i> Select Owner</h4>
+            <select id="ownerSelect" class="form-select form-select-lg mb-3">
+              <option value="">-- Select an Owner --</option>
+              <option value="ALL">All Owners</option>
+            </select>
+            <button id="loadToolsByOwnerBtn" class="btn btn-primary btn-lg w-100" disabled>
+              <i class="fas fa-search"></i> Load Tools
+            </button>
+          </div>
+        </div>
+
+        <!-- Tools Display Section (hidden initially) -->
+        <div id="toolsDisplaySection" style="display: none;">
+          <!-- Currently OUT Tools Section -->
+          <div class="card mb-3">
+            <div class="card-body">
+              <h5 class="mb-3" style="color: #dc3545; font-weight: bold;">
+                <i class="fas fa-exclamation-triangle"></i> Currently OUT Tools
+              </h5>
+              <div id="ownerCurrentOutSummary" class="text-muted mb-2">
+                <!-- Summary will be populated here -->
+              </div>
+              <div id="ownerCurrentOutList" style="max-height: 400px; overflow-y: auto;">
+                <!-- Currently OUT tools will be populated here -->
+              </div>
+            </div>
+          </div>
+
+          <!-- All Tools Section -->
+          <div class="card mb-3">
+            <div class="card-body">
+              <h5 class="mb-3" style="color: #667eea; font-weight: bold;" id="allToolsTitle">
+                <i class="fas fa-tools"></i> All Tools
+              </h5>
+              <div id="ownerToolsSummary" class="text-muted mb-2">
+                <!-- Summary will be populated here -->
+              </div>
+              <!-- Tools List by Collection -->
+              <div id="ownerToolsList" style="max-height: 400px; overflow-y: auto;">
+                <!-- Tools will be populated here -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Firebase SDK - must load before common.js -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+    
+    <!-- Common Firebase configuration and utilities -->
+    <script src="js/common.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Global variables
+        let ownerToolsData = [];
+        let ownerCurrentOutTools = [];
+        let currentOwner = '';
+
+        // Wait for common.js to load and use global Firebase instances
+        document.addEventListener('DOMContentLoaded', function() {
+            function waitForAuth() {
+                const auth = window.auth;
+                const db = window.db;
+                
+                if (!auth || !db) {
+                    console.log('[TOOLS-BY-OWNER] Waiting for common.js to load...');
+                    setTimeout(waitForAuth, 50);
+                    return;
+                }
+                
+                console.log('[TOOLS-BY-OWNER] ✓ Using global Firebase instances from common.js');
+                initializePage(auth, db);
+            }
+            
+            async function checkAdminStatus(user) {
+                const db = window.db || firebase.firestore();
+                try {
+                    const doc = await db.collection('technicians').doc(user.uid).get();
+                    if (doc.exists) {
+                        const userData = doc.data();
+                        if (userData.isAdmin === true) {
+                            return { isAdmin: true, name: userData.fullName || user.email };
+                        }
+                    }
+                    return { isAdmin: false, name: null };
+                } catch (error) {
+                    console.error('Error checking admin status:', error);
+                    return { isAdmin: false, name: null };
+                }
+            }
+            
+            function initializePage(auth, db) {
+                console.log('[TOOLS-BY-OWNER] ====== initializePage() called ======');
+                console.log('[TOOLS-BY-OWNER] Timestamp:', new Date().toISOString());
+                console.log('[TOOLS-BY-OWNER] localStorage.authVerified:', localStorage.getItem('authVerified'));
+                console.log('[TOOLS-BY-OWNER] localStorage.fullName:', localStorage.getItem('fullName'));
+                console.log('[TOOLS-BY-OWNER] auth.currentUser (sync):', auth ? (auth.currentUser ? auth.currentUser.email : 'null') : 'auth not initialized');
+                
+                // Back to Admin button
+                const backBtn = document.getElementById('backToAdminFromOwnerBtn');
+                if (backBtn) {
+                    backBtn.onclick = null;
+                    backBtn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        handleBackNavigation();
+                    });
+                    console.log('[TOOLS-BY-OWNER] Back button event listener attached');
+                } else {
+                    console.error('[TOOLS-BY-OWNER] Back button element not found!');
+                }
+
+                // Enable load button when owner is selected
+                const ownerSelect = document.getElementById('ownerSelect');
+                if (ownerSelect) {
+                    ownerSelect.addEventListener('change', function() {
+                        const loadBtn = document.getElementById('loadToolsByOwnerBtn');
+                        if (loadBtn) {
+                            loadBtn.disabled = !this.value;
+                        }
+                    });
+                }
+
+                // Load tools by owner button
+                const loadBtn = document.getElementById('loadToolsByOwnerBtn');
+                if (loadBtn) {
+                    loadBtn.addEventListener('click', async function() {
+                        currentOwner = ownerSelect.value;
+                        if (!currentOwner) return;
+                        
+                        const currentOutList = document.getElementById('ownerCurrentOutList');
+                        const toolsList = document.getElementById('ownerToolsList');
+                        const toolsDisplaySection = document.getElementById('toolsDisplaySection');
+                        
+                        if (currentOutList) {
+                            currentOutList.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><div class="mt-2">Loading currently OUT tools...</div></div>';
+                        }
+                        if (toolsList) {
+                            toolsList.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><div class="mt-2">Loading tools...</div></div>';
+                        }
+                        if (toolsDisplaySection) {
+                            toolsDisplaySection.style.display = 'block';
+                        }
+                        
+                        try {
+                            // Update title with selected owner
+                            const titleElement = document.getElementById('allToolsTitle');
+                            if (titleElement) {
+                                const ownerName = currentOwner === 'ALL' ? 'All Owners' : currentOwner;
+                                titleElement.innerHTML = `<i class="fas fa-tools"></i> All Tools For : ${ownerName}`;
+                            }
+                            
+                            // Load currently OUT tools from tools collection
+                            await loadCurrentOutTools();
+                            
+                            // Load all tools
+                            await loadAllTools();
+                            
+                        } catch (error) {
+                            console.error('Error loading tools by owner:', error);
+                            if (currentOutList) {
+                                currentOutList.innerHTML = '<div class="text-center text-danger">Error loading tools. Please try again.</div>';
+                            }
+                            if (toolsList) {
+                                toolsList.innerHTML = '<div class="text-center text-danger">Error loading tools. Please try again.</div>';
+                            }
+                        }
+                    });
+                }
+
+                // SEAMLESS NAVIGATION: Check localStorage first - if flag exists, proceed IMMEDIATELY
+                const authVerified = localStorage.getItem('authVerified');
+                const storedFullName = localStorage.getItem('fullName');
+                
+                console.log('[TOOLS-BY-OWNER] Checking auth flags...');
+                console.log('[TOOLS-BY-OWNER] authVerified:', authVerified);
+                console.log('[TOOLS-BY-OWNER] storedFullName:', storedFullName);
+                
+                if (authVerified === 'true' && storedFullName) {
+                    // User was authenticated - proceed IMMEDIATELY (no waiting)
+                    console.log('[TOOLS-BY-OWNER] ✓ Auth verified flag found - proceeding immediately');
+                    
+                    // Load owners immediately
+                    loadOwners();
+                    
+                    // Verify auth and admin status in background (non-blocking)
+                    setTimeout(async () => {
+                        const currentUser = auth.currentUser;
+                        if (currentUser) {
+                            console.log('[TOOLS-BY-OWNER] ✓ Auth confirmed via currentUser:', currentUser.email);
+                            const { isAdmin } = await checkAdminStatus(currentUser);
+                            if (isAdmin) {
+                                localStorage.setItem('authVerified', 'true');
+                            } else {
+                                console.log('[TOOLS-BY-OWNER] ✗ User is not admin, redirecting to admin.html');
+                                localStorage.removeItem('authVerified');
+                                window.location.href = 'admin.html';
+                            }
+                        } else {
+                            // Set up onAuthStateChanged listener
+                            const unsubscribe = auth.onAuthStateChanged(async function(user) {
+                                if (user) {
+                                    console.log('[TOOLS-BY-OWNER] ✓ Auth confirmed via onAuthStateChanged');
+                                    const { isAdmin } = await checkAdminStatus(user);
+                                    if (isAdmin) {
+                                        localStorage.setItem('authVerified', 'true');
+                                    } else {
+                                        console.log('[TOOLS-BY-OWNER] ✗ User is not admin, redirecting to admin.html');
+                                        localStorage.removeItem('authVerified');
+                                        window.location.href = 'admin.html';
+                                    }
+                                } else {
+                                    console.log('[TOOLS-BY-OWNER] ✗ No user found, redirecting to admin.html');
+                                    localStorage.removeItem('authVerified');
+                                    window.location.href = 'admin.html';
+                                }
+                                unsubscribe();
+                            });
+                        }
+                    }, 300);
+                    
+                    return; // Exit - page initialized
+                }
+                
+                // No stored flag - wait for Firebase auth
+                console.log('[TOOLS-BY-OWNER] ✗ No auth flag found - waiting for Firebase auth');
+                console.log('[TOOLS-BY-OWNER] Setting up onAuthStateChanged listener...');
+                auth.onAuthStateChanged(async function(user) {
+                    console.log('[TOOLS-BY-OWNER] onAuthStateChanged fired, user:', user ? user.email : 'null');
+                    if (user && !user.emailVerified) {
+                        console.log('[TOOLS-BY-OWNER] ✗ User email not verified, signing out...');
+                        auth.signOut();
+                        localStorage.removeItem('authVerified');
+                        window.location.href = 'admin.html';
+                        return;
+                    }
+                    
+                    if (user) {
+                        console.log('[TOOLS-BY-OWNER] ✓ User authenticated, checking admin status...');
+                        const { isAdmin, name } = await checkAdminStatus(user);
+                        if (isAdmin) {
+                            console.log('[TOOLS-BY-OWNER] ✓ User is admin, initializing...');
+                            localStorage.setItem('authVerified', 'true');
+                            if (!localStorage.getItem('fullName')) {
+                                localStorage.setItem('fullName', name || user.email);
+                            }
+                            loadOwners();
+                        } else {
+                            console.log('[TOOLS-BY-OWNER] ✗ User is not admin, redirecting to admin.html');
+                            await auth.signOut();
+                            localStorage.removeItem('authVerified');
+                            window.location.href = 'admin.html';
+                        }
+                    } else {
+                        console.log('[TOOLS-BY-OWNER] ✗ No user found, redirecting to admin.html');
+                        localStorage.removeItem('authVerified');
+                        window.location.href = 'admin.html';
+                    }
+                });
+            }
+            
+            // Start waiting for common.js
+            waitForAuth();
+        });
+
+        // Function to handle back navigation (used by both button and phone back button)
+        window.handleBackNavigation = function handleBackNavigation() {
+            window.location.href = 'admin.html';
+        }
+
+        // Load available owners from tools
+        async function loadOwners() {
+            const db = window.db || firebase.firestore();
+            try {
+                const snapshot = await db.collection('tools').get();
+                const owners = new Set();
+                
+                snapshot.forEach(doc => {
+                    const owner = doc.data().owner;
+                    if (owner && owner.trim()) {
+                        owners.add(owner.trim());
+                    }
+                });
+                
+                const select = document.getElementById('ownerSelect');
+                if (!select) return;
+                
+                // Keep first two options (empty and ALL)
+                select.innerHTML = '<option value="">-- Select an Owner --</option><option value="ALL">All Owners</option>';
+                
+                // Add all unique owners alphabetically
+                Array.from(owners).sort().forEach(owner => {
+                    const option = document.createElement('option');
+                    option.value = owner;
+                    option.textContent = owner;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading owners:', error);
+                alert('Error loading owners. Please try again.');
+            }
+        }
+
+        // Load currently OUT tools from tools collection
+        async function loadCurrentOutTools() {
+            const db = window.db || firebase.firestore();
+            try {
+                let query = db.collection('tools').where('status', '==', 'OUT');
+                
+                if (currentOwner !== 'ALL') {
+                    query = query.where('owner', '==', currentOwner);
+                }
+                
+                const snapshot = await query.get();
+                
+                ownerCurrentOutTools = [];
+                snapshot.forEach(doc => {
+                    const toolData = doc.data();
+                    ownerCurrentOutTools.push({
+                        id: doc.id,
+                        toolId: doc.id,
+                        toolName: toolData.toolName || 'Unknown Tool',
+                        serialNumber: toolData.serialNumber || toolData.partNumber || 'N/A',
+                        partNumber: toolData.partNumber || 'N/A',
+                        calDueDate: toolData.calDueDate,
+                        technician: toolData.technician || 'N/A',
+                        WorkOn: toolData.WorkOn || 'N/A',
+                        status: 'OUT',
+                        timestamp: toolData.timestamp,
+                        collectionCode: toolData.collectionCode || 'Unknown Collection',
+                        owner: toolData.owner || 'N/A',
+                        ...toolData
+                    });
+                });
+                
+                console.log('Loaded', ownerCurrentOutTools.length, 'currently OUT tools');
+                displayCurrentOutTools();
+                
+            } catch (error) {
+                console.error('Error loading currently OUT tools:', error);
+                // Check if index error - try without owner filter for ALL
+                if (currentOwner === 'ALL') {
+                    try {
+                        const snapshot = await db.collection('tools').where('status', '==', 'OUT').get();
+                        ownerCurrentOutTools = [];
+                        snapshot.forEach(doc => {
+                            const toolData = doc.data();
+                            ownerCurrentOutTools.push({
+                                id: doc.id,
+                                toolId: doc.id,
+                                toolName: toolData.toolName || 'Unknown Tool',
+                                serialNumber: toolData.serialNumber || toolData.partNumber || 'N/A',
+                                partNumber: toolData.partNumber || 'N/A',
+                                calDueDate: toolData.calDueDate,
+                                technician: toolData.technician || 'N/A',
+                                WorkOn: toolData.WorkOn || 'N/A',
+                                status: 'OUT',
+                                timestamp: toolData.timestamp,
+                                collectionCode: toolData.collectionCode || 'Unknown Collection',
+                                owner: toolData.owner || 'N/A',
+                                ...toolData
+                            });
+                        });
+                        displayCurrentOutTools();
+                    } catch (error2) {
+                        console.error('Error loading currently OUT tools (fallback):', error2);
+                        const container = document.getElementById('ownerCurrentOutList');
+                        if (container) {
+                            container.innerHTML = '<div class="text-center text-danger">Error loading currently OUT tools. Please try again.</div>';
+                        }
+                    }
+                } else {
+                    const container = document.getElementById('ownerCurrentOutList');
+                    if (container) {
+                        container.innerHTML = '<div class="text-center text-danger">Error loading currently OUT tools. Please check Firebase indexes.</div>';
+                    }
+                }
+            }
+        }
+
+        // Load all tools from tools collection
+        async function loadAllTools() {
+            const db = window.db || firebase.firestore();
+            try {
+                let query = db.collection('tools');
+                
+                if (currentOwner !== 'ALL') {
+                    query = query.where('owner', '==', currentOwner);
+                }
+                
+                const snapshot = await query.get();
+                
+                ownerToolsData = [];
+                snapshot.forEach(doc => {
+                    const toolData = doc.data();
+                    ownerToolsData.push({
+                        id: doc.id,
+                        toolId: doc.id,
+                        toolName: toolData.toolName || 'Unknown Tool',
+                        serialNumber: toolData.serialNumber || toolData.partNumber || 'N/A',
+                        partNumber: toolData.partNumber || 'N/A',
+                        calDueDate: toolData.calDueDate,
+                        technician: toolData.technician || 'N/A',
+                        WorkOn: toolData.WorkOn || 'N/A',
+                        status: toolData.status || 'N/A',
+                        timestamp: toolData.timestamp,
+                        collectionCode: toolData.collectionCode || 'Unknown Collection',
+                        owner: toolData.owner || 'N/A',
+                        ...toolData
+                    });
+                });
+                
+                console.log('Loaded', ownerToolsData.length, 'tools');
+                displayAllTools();
+                
+            } catch (error) {
+                console.error('Error loading tools:', error);
+                // Check if index error - try without owner filter for ALL
+                if (currentOwner === 'ALL') {
+                    try {
+                        const snapshot = await db.collection('tools').get();
+                        ownerToolsData = [];
+                        snapshot.forEach(doc => {
+                            const toolData = doc.data();
+                            ownerToolsData.push({
+                                id: doc.id,
+                                toolId: doc.id,
+                                toolName: toolData.toolName || 'Unknown Tool',
+                                serialNumber: toolData.serialNumber || toolData.partNumber || 'N/A',
+                                partNumber: toolData.partNumber || 'N/A',
+                                calDueDate: toolData.calDueDate,
+                                technician: toolData.technician || 'N/A',
+                                WorkOn: toolData.WorkOn || 'N/A',
+                                status: toolData.status || 'N/A',
+                                timestamp: toolData.timestamp,
+                                collectionCode: toolData.collectionCode || 'Unknown Collection',
+                                owner: toolData.owner || 'N/A',
+                                ...toolData
+                            });
+                        });
+                        displayAllTools();
+                    } catch (error2) {
+                        console.error('Error loading tools (fallback):', error2);
+                        const container = document.getElementById('ownerToolsList');
+                        if (container) {
+                            container.innerHTML = '<div class="text-center text-danger">Error loading tools. Please try again.</div>';
+                        }
+                    }
+                } else {
+                    const container = document.getElementById('ownerToolsList');
+                    if (container) {
+                        container.innerHTML = '<div class="text-center text-danger">Error loading tools. Please check Firebase indexes.</div>';
+                    }
+                }
+            }
+        }
+
+        // Display currently OUT tools
+        function displayCurrentOutTools() {
+            const container = document.getElementById('ownerCurrentOutList');
+            const summaryContainer = document.getElementById('ownerCurrentOutSummary');
+            
+            if (!container) return;
+            
+            if (ownerCurrentOutTools.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted">No tools currently OUT for this owner.</div>';
+                if (summaryContainer) {
+                    summaryContainer.innerHTML = '<strong>Total OUT Tools:</strong> 0';
+                }
+                return;
+            }
+            
+            // Group by collection
+            const byCollection = {};
+            ownerCurrentOutTools.forEach(tool => {
+                const collection = tool.collectionCode || 'Unknown Collection';
+                
+                if (!byCollection[collection]) {
+                    byCollection[collection] = {
+                        tools: []
+                    };
+                }
+                byCollection[collection].tools.push(tool);
+            });
+            
+            // Update summary
+            if (summaryContainer) {
+                summaryContainer.innerHTML = `<strong>Total OUT Tools:</strong> ${ownerCurrentOutTools.length}`;
+            }
+            
+            // Build HTML
+            let html = '';
+            const collections = Object.keys(byCollection).sort();
+            
+            collections.forEach(collection => {
+                const collectionData = byCollection[collection];
+                const ownerName = currentOwner === 'ALL' ? 'All Owners' : currentOwner;
+                
+                html += `<div class="owner-collection-header">
+                    ${collection} (${collectionData.tools.length} Entries For ${ownerName})
+                </div>`;
+                
+                collectionData.tools.forEach(tool => {
+                    html += createOwnerToolCard(tool);
+                });
+            });
+            
+            container.innerHTML = html;
+        }
+
+        // Display all tools grouped by collection
+        function displayAllTools() {
+            const container = document.getElementById('ownerToolsList');
+            const summaryContainer = document.getElementById('ownerToolsSummary');
+            
+            if (!container) return;
+            
+            if (ownerToolsData.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted">No tools found for this owner.</div>';
+                if (summaryContainer) {
+                    summaryContainer.innerHTML = '<strong>Total Tools:</strong> 0';
+                }
+                return;
+            }
+            
+            // Group by collection
+            const byCollection = {};
+            ownerToolsData.forEach(tool => {
+                const collection = tool.collectionCode || 'Unknown Collection';
+                
+                if (!byCollection[collection]) {
+                    byCollection[collection] = {
+                        tools: []
+                    };
+                }
+                byCollection[collection].tools.push(tool);
+            });
+            
+            // Update summary
+            if (summaryContainer) {
+                summaryContainer.innerHTML = `<strong>Total Tools:</strong> ${ownerToolsData.length}`;
+            }
+            
+            // Build HTML
+            let html = '';
+            const collections = Object.keys(byCollection).sort();
+            
+            collections.forEach(collection => {
+                const collectionTools = byCollection[collection];
+                const totalInCollection = collectionTools.tools.length;
+                const ownerName = currentOwner === 'ALL' ? 'All Owners' : currentOwner;
+                
+                html += `<div class="owner-collection-header">
+                    ${collection} (${totalInCollection} Entries For ${ownerName})
+                </div>`;
+                
+                // Display all tools - card color will be based on current status
+                collectionTools.tools.forEach(tool => {
+                    html += createOwnerToolCard(tool);
+                });
+            });
+            
+            container.innerHTML = html;
+        }
+
+        // Create tool card HTML with 3D effects
+        function createOwnerToolCard(tool) {
+            const toolName = tool.toolName || 'Unknown Tool';
+            const toolId = tool.toolId || tool.id || 'N/A';
+            const partNumber = tool.partNumber || 'N/A';
+            const status = tool.status ? tool.status.toUpperCase() : 'N/A';
+            const technician = tool.technician || 'N/A';
+            
+            // Handle calDueDate with multiple format support
+            let calDueDate = 'N/A';
+            if (tool.calDueDate) {
+                let calDate = null;
+                if (tool.calDueDate.toDate && typeof tool.calDueDate.toDate === 'function') {
+                    calDate = tool.calDueDate.toDate();
+                } else if (tool.calDueDate instanceof Date) {
+                    calDate = tool.calDueDate;
+                } else if (typeof tool.calDueDate === 'string') {
+                    calDate = new Date(tool.calDueDate);
+                } else if (tool.calDueDate.seconds) {
+                    // Firestore timestamp object
+                    calDate = new Date(tool.calDueDate.seconds * 1000);
+                }
+                
+                if (calDate && !isNaN(calDate.getTime())) {
+                    calDueDate = calDate.toLocaleDateString('en-GB');
+                }
+            }
+            
+            // Determine card color class based on current status
+            let statusClass = 'in'; // Default to 'in' style
+            if (status === 'OUT') {
+                statusClass = 'out';
+            } else if (status === 'IN') {
+                statusClass = 'in';
+            }
+            
+            const statusColorClass = status === 'OUT' ? 'owner-status-out' : 
+                                   status === 'IN' ? 'owner-status-in' : 
+                                   'owner-tool-value';
+            
+            return `
+                <div class="owner-tool-card ${statusClass}">
+                    <div class="owner-tool-name" style="font-weight: bold; margin-bottom: 8px;">${toolName}</div>
+                    <div class="owner-tool-info" style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <span><span class="owner-tool-label">Tid:</span> <span class="owner-tool-value">${toolId}</span></span>
+                        <span><span class="owner-tool-label">P/N:</span> <span class="owner-tool-value">${partNumber}</span></span>
+                    </div>
+                    <div class="owner-tool-info" style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <span><span class="owner-tool-label">Cal Due Date:</span> <span class="owner-tool-value">${calDueDate}</span></span>
+                        <span><span class="owner-tool-label">Status:</span> <span class="${statusColorClass}">${status}</span></span>
+                    </div>
+                    <div class="owner-tool-info" style="margin-bottom: 6px;">
+                        <span class="owner-tool-label">Technician:</span> <span class="owner-tool-value">${technician}</span>
+                    </div>
+                    ${tool.WorkOn ? `<div class="owner-tool-info">
+                        <span class="owner-tool-label">Work Location:</span> <span class="owner-tool-value">${tool.WorkOn}</span>
+                    </div>` : ''}
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
+
