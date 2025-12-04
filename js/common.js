@@ -110,8 +110,15 @@ auth.onAuthStateChanged(async function(user) {
                 localStorage.setItem('fullName', fullName);
                 console.log('Technician document created successfully with fullName:', fullName);
                 
-                // If we used pending registration, don't delete it here - let the login function handle it
-                // This prevents race conditions
+                // Delete pending registration document if it exists
+                if (pendingDoc.exists) {
+                    try {
+                        await db.collection('pendingRegistrations').doc(user.email).delete();
+                        console.log('Pending registration document deleted successfully for:', user.email);
+                    } catch (error) {
+                        console.error('Error deleting pending registration document:', error);
+                    }
+                }
             } else {
                 // Update lastSignIn for existing users
                 await db.collection('technicians').doc(user.uid).update({
