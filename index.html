@@ -304,7 +304,7 @@
     </script>
     <div id="orangeOverlay"></div>
     <div id="splashScreen">
-        <video id="splashVideo" autoplay muted playsinline webkit-playsinline preload="auto">
+        <video id="splashVideo" autoplay muted playsinline webkit-playsinline preload="auto" loop="false">
             <source src="src/main/res/raw/helicopter_animation.mp4" type="video/mp4">
             <source src="src/helicopter_animation.mp4" type="video/mp4">
         </video>
@@ -364,6 +364,9 @@
             const splashScreen = document.getElementById('splashScreen');
             const welcomeMessageScreen = document.getElementById('welcomeMessageScreen');
             const orangeOverlay = document.getElementById('orangeOverlay');
+            let videoHasEnded = false;
+            let videoHasError = false;
+            let videoStartedPlaying = false;
             
             function hideSplashScreen() {
                 if (splashScreen) {
@@ -381,47 +384,112 @@
             }
             
             function showFallbackSplash() {
+                if (videoHasEnded) return; // Don't show fallback if video already ended
+                videoHasError = true;
                 const splashContent = document.getElementById('splashContent');
                 if (splashContent) {
                     splashContent.style.display = 'block';
                 }
+                // Show fallback for 3 seconds, then hide splash
                 setTimeout(hideSplashScreen, 3000);
             }
             
-            // Handle video end or error
+            // Handle video playback
             if (splashVideo) {
-                splashVideo.addEventListener('ended', hideSplashScreen);
-                splashVideo.addEventListener('error', showFallbackSplash);
+                // Wait for video metadata to be loaded
+                splashVideo.addEventListener('loadedmetadata', function() {
+                    console.log('Splash video metadata loaded, duration:', splashVideo.duration);
+                });
                 
-                // Fallback timeout
-                setTimeout(() => {
-                    if (splashScreen && splashScreen.style.display !== 'none') {
+                // Wait for video data to be loaded
+                splashVideo.addEventListener('loadeddata', function() {
+                    console.log('Splash video data loaded, attempting to play');
+                    const playPromise = splashVideo.play();
+                    if (playPromise !== undefined) {
+                        playPromise.then(function() {
+                            console.log('Splash video started playing');
+                            videoStartedPlaying = true;
+                        }).catch(function(error) {
+                            console.error('Error playing video:', error);
+                            if (!videoHasEnded) {
+                                showFallbackSplash();
+                            }
+                        });
+                    }
+                });
+                
+                // Track when video actually starts playing
+                splashVideo.addEventListener('playing', function() {
+                    console.log('Splash video is now playing');
+                    videoStartedPlaying = true;
+                });
+                
+                // When video ends, hide splash and show welcome
+                splashVideo.addEventListener('ended', function() {
+                    console.log('Splash video ended - duration was:', splashVideo.duration);
+                    videoHasEnded = true;
+                    hideSplashScreen();
+                });
+                
+                // Handle video errors - but only if video hasn't started playing
+                splashVideo.addEventListener('error', function(e) {
+                    console.error('Splash video error:', e, splashVideo.error);
+                    // Check if video actually failed to load
+                    if (splashVideo.error && splashVideo.error.code === 4) {
+                        // MEDIA_ERR_SRC_NOT_SUPPORTED
+                        console.error('Video source not supported');
+                    }
+                    if (!videoHasEnded && !videoStartedPlaying) {
+                        console.log('Video error and not playing, showing fallback');
                         showFallbackSplash();
                     }
-                }, 5000);
+                });
+                
+                // Fallback timeout - only if video hasn't started after 20 seconds
+                // This gives the video plenty of time to load and start playing
+                setTimeout(() => {
+                    if (splashScreen && splashScreen.style.display !== 'none' && !videoHasEnded && !videoHasError && !videoStartedPlaying) {
+                        console.log('Video timeout after 20 seconds - video did not start playing, showing fallback');
+                        showFallbackSplash();
+                    }
+                }, 20000);
+                
+                // Ensure video plays - try to play immediately if already loaded
+                if (splashVideo.readyState >= 2) {
+                    console.log('Video already loaded, attempting to play');
+                    splashVideo.play().catch(function(error) {
+                        console.error('Error playing pre-loaded video:', error);
+                    });
+                }
             } else {
                 showFallbackSplash();
             }
             
-            // Check authentication state
+            // Check authentication state (but don't interfere with video playback)
             auth.onAuthStateChanged(function(user) {
                 if (user && user.emailVerified) {
-                    // User is authenticated - redirect to main menu
+                    // User is authenticated - wait for video to finish, then redirect
                     const skipSplash = sessionStorage.getItem('skipSplash');
                     if (skipSplash === 'true') {
                         // Skip splash and welcome, go directly to menu
                         sessionStorage.removeItem('skipSplash');
                         window.location.href = 'main-menu.html';
                     } else {
-                        // Show splash, then welcome, then redirect
-                        // (splash handling is above)
-                        setTimeout(() => {
-                            window.location.href = 'main-menu.html';
-                        }, 3000);
+                        // Wait for video to end, then redirect to menu
+                        // The video 'ended' event will handle showing welcome screen first
+                        // Then we redirect after a short delay
+                        const checkAndRedirect = setInterval(function() {
+                            if (videoHasEnded || videoHasError) {
+                                clearInterval(checkAndRedirect);
+                                setTimeout(() => {
+                                    window.location.href = 'main-menu.html';
+                                }, 2000); // Give time to see welcome message
+                            }
+                        }, 100);
                     }
                 } else {
                     // User not authenticated - show welcome screen after splash
-                    // (handled by hideSplashScreen function)
+                    // (handled by hideSplashScreen function when video ends)
                 }
             });
         })();
