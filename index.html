@@ -31,6 +31,7 @@
             justify-content: center;
             align-items: center;
             transition: opacity 0.5s ease-out;
+            overflow: hidden; /* Ensure video doesn't overflow */
         }
         
         #splashVideo {
@@ -40,6 +41,7 @@
             position: absolute;
             top: 0;
             left: 0;
+            z-index: 1; /* Above splash screen background */
         }
         
         @media (min-width: 800px) {
@@ -241,20 +243,6 @@
             }
         }
         
-        /* Orange Overlay */
-        #orangeOverlay {
-          position: fixed;
-          top: 0; left: 0; right: 0; bottom: 0;
-          width: 100vw; height: 100vh;
-          background: #FF9800;
-          z-index: 10000;
-          transition: opacity 0.3s;
-        }
-        #orangeOverlay.hidden {
-          opacity: 0;
-          pointer-events: none;
-        }
-        
         .hidden { display: none; }
     </style>
 </head>
@@ -270,15 +258,9 @@
                 const hideElements = function() {
                     try {
                         const splashScreen = document.getElementById('splashScreen');
-                        const orangeOverlay = document.getElementById('orangeOverlay');
                         if (splashScreen) {
                             splashScreen.style.display = 'none';
                             splashScreen.style.visibility = 'hidden';
-                        }
-                        if (orangeOverlay) {
-                            orangeOverlay.classList.add('hidden');
-                            orangeOverlay.style.display = 'none';
-                            orangeOverlay.style.visibility = 'hidden';
                         }
                     } catch(e) {
                         console.error('Error hiding elements:', e);
@@ -302,7 +284,6 @@
             }
         })();
     </script>
-    <div id="orangeOverlay"></div>
     <div id="splashScreen">
         <video id="splashVideo" autoplay muted playsinline webkit-playsinline preload="auto" loop="false">
             <source src="src/main/res/raw/helicopter_animation.mp4" type="video/mp4">
@@ -363,7 +344,6 @@
             const splashVideo = document.getElementById('splashVideo');
             const splashScreen = document.getElementById('splashScreen');
             const welcomeMessageScreen = document.getElementById('welcomeMessageScreen');
-            const orangeOverlay = document.getElementById('orangeOverlay');
             let videoHasEnded = false;
             let videoHasError = false;
             let videoStartedPlaying = false;
@@ -377,9 +357,6 @@
                             welcomeMessageScreen.classList.add('show');
                         }
                     }, 500);
-                }
-                if (orangeOverlay) {
-                    orangeOverlay.classList.add('hidden');
                 }
             }
             
