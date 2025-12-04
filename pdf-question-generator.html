@@ -2457,13 +2457,15 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 // Second batch: Set required status for all questions
                 const updateRequests = [];
                 requiredItemIndices.forEach(index => {
-                    if (items[index] && items[index].questionItem) {
+                    const item = items[index];
+                    // Only update items that have questionItem (skip page breaks and other item types)
+                    if (item && item.questionItem && item.itemId) {
                         updateRequests.push({
                             updateItem: {
                                 item: {
+                                    itemId: item.itemId,
                                     questionItem: {
-                                        required: true,
-                                        question: items[index].questionItem.question || {}
+                                        required: true
                                     }
                                 },
                                 location: { index },
@@ -2475,23 +2477,28 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 
                 // Update required status if there are items to update
                 if (updateRequests.length > 0) {
-                    const updateResponse = await fetch(`${GOOGLE_FORMS_API}/${formId}:batchUpdate`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${googleAccessToken}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ requests: updateRequests })
-                    });
+                    try {
+                        const updateResponse = await fetch(`${GOOGLE_FORMS_API}/${formId}:batchUpdate`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${googleAccessToken}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ requests: updateRequests })
+                        });
 
-                    if (!updateResponse.ok) {
-                        const error = await updateResponse.json().catch(() => ({}));
-                        const errorMessage = error.error?.message || 'Unknown error';
-                        // Only log if it's not the expected "required field" error (which we've now fixed)
-                        if (!errorMessage.includes('required') && !errorMessage.includes('Unknown name')) {
-                            console.warn('Failed to set required status:', errorMessage);
+                        if (!updateResponse.ok) {
+                            const error = await updateResponse.json().catch(() => ({}));
+                            const errorMessage = error.error?.message || 'Unknown error';
+                            // Log error details for debugging, but don't fail the form creation
+                            if (errorMessage && !errorMessage.includes('Invalid JSON')) {
+                                console.warn('Failed to set required status for some items:', errorMessage);
+                            }
+                            // Non-critical error, continue anyway - form is already created successfully
                         }
-                        // Non-critical error, continue anyway
+                    } catch (updateError) {
+                        // Silently handle update errors - form creation was successful
+                        console.debug('Optional required status update failed (non-critical):', updateError);
                     }
                 }
 
