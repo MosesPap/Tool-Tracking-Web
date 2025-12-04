@@ -395,30 +395,94 @@
             box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
         }
 
-        /* Location Photo Button */
-        #locationPhotoBtn {
-            border-radius: 16px;
-            border: 2px solid;
+        /* 3D Medium Grey Interactive Button for Select Collection */
+        #selectDifferentCollectionBtn {
+            position: relative;
+            padding: 12px 24px;
+            font-size: 1rem;
             font-weight: bold;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.1);
-            transform: perspective(1000px) rotateX(2deg);
+            border-radius: 24px;
+            border: 2px solid #9e9e9e;
+            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%);
+            color: #333;
+            text-decoration: none;
             transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(158, 158, 158, 0.3);
+            cursor: pointer;
+            transform: perspective(1000px) rotateX(0deg);
+        }
+
+        #selectDifferentCollectionBtn:hover {
+            background: linear-gradient(135deg, #adadad 0%, #8e8e8e 100%);
+            border-color: #8e8e8e;
+            transform: perspective(1000px) rotateX(5deg) translateY(-2px);
+            box-shadow: 0 4px 12px rgba(158, 158, 158, 0.4),
+                       0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        #selectDifferentCollectionBtn:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(0px);
+            box-shadow: 0 2px 4px rgba(158, 158, 158, 0.3);
+        }
+
+        /* 3D Dark Grey Interactive Button for Add Location Photo */
+        #locationPhotoBtn {
+            position: relative;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 24px;
+            border: 2px solid #616161;
+            background: linear-gradient(135deg, #757575 0%, #616161 100%);
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(97, 97, 97, 0.3);
+            cursor: pointer;
+            transform: perspective(1000px) rotateX(0deg);
         }
 
         #locationPhotoBtn:hover {
-            transform: perspective(1000px) rotateX(0deg) translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+            background: linear-gradient(135deg, #616161 0%, #424242 100%);
+            border-color: #424242;
+            transform: perspective(1000px) rotateX(5deg) translateY(-2px);
+            box-shadow: 0 4px 12px rgba(97, 97, 97, 0.4),
+                       0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
         #locationPhotoBtn:active {
             transform: perspective(1000px) rotateX(2deg) translateY(0px);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 4px rgba(97, 97, 97, 0.3);
+        }
+
+        /* 3D Light Grey Interactive Button for Location Photos */
+        .location-photos-btn-3d {
+            position: relative;
+            padding: 6px 12px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            border-radius: 16px;
+            border: 2px solid #bdbdbd;
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
+            color: #333;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
+            cursor: pointer;
+            transform: perspective(1000px) rotateX(0deg);
+        }
+
+        .location-photos-btn-3d:hover {
+            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%);
+            border-color: #adadad;
+            transform: perspective(1000px) rotateX(5deg) translateY(-2px);
+            box-shadow: 0 4px 12px rgba(189, 189, 189, 0.4),
+                       0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .location-photos-btn-3d:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(0px);
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
         }
 
         /* Photo buttons in tool cards */
@@ -530,14 +594,14 @@
                     </button>
                 </div>
                 <div class="col-6">
-                    <button id="selectDifferentCollectionBtn" class="btn btn-primary w-100">
+                    <button id="selectDifferentCollectionBtn" class="w-100">
                         <i class="fas fa-exchange-alt"></i> Select Collection
                     </button>
                 </div>
             </div>
             <!-- Add Location Photo Button -->
             <div class="mb-3">
-                <button id="locationPhotoBtn" class="btn btn-info w-100">
+                <button id="locationPhotoBtn" class="w-100">
                     <i class="fas fa-camera"></i> Add Location Photo
                 </button>
             </div>
@@ -1489,7 +1553,7 @@
                         
                         html += `<div style="background:#FF9800;color:white;font-weight:bold;font-size:1.1em;padding:4px 12px;border-radius:6px 6px 0 0;position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;">
                             <span>Location: ${loc} (Total: ${toolsAtLoc.length} tools)</span>
-                            <button class="btn btn-sm btn-info ms-2" style="background:#1976d2;color:white;font-weight:bold;" onclick="event.stopPropagation(); showLocationPhotosFromTitleBar('${collectionName}','${loc}')">
+                            <button class="location-photos-btn-3d ms-2" onclick="event.stopPropagation(); showLocationPhotosFromTitleBar('${collectionName}','${loc}')">
                                 <i class="fas fa-images"></i> ${photoText}
                             </button>
                         </div>`;
