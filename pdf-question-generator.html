@@ -2360,52 +2360,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 // Track item indices for setting required status later
                 const requiredItemIndices = [];
                 
-                // Add Section 1: Chapter info and name field
-                requests.push({
-                    createItem: {
-                        item: {
-                            title: 'Chapter Number',
-                            questionItem: {
-                                question: {
-                                    textQuestion: {}
-                                }
-                            }
-                        },
-                        location: { index: questionIndex }
-                    }
-                });
-                requiredItemIndices.push(questionIndex++);
-                
-                requests.push({
-                    createItem: {
-                        item: {
-                            title: 'Chapter Title',
-                            questionItem: {
-                                question: {
-                                    textQuestion: {}
-                                }
-                            }
-                        },
-                        location: { index: questionIndex }
-                    }
-                });
-                requiredItemIndices.push(questionIndex++);
-                
-                requests.push({
-                    createItem: {
-                        item: {
-                            title: 'Date',
-                            questionItem: {
-                                question: {
-                                    textQuestion: {}
-                                }
-                            }
-                        },
-                        location: { index: questionIndex }
-                    }
-                });
-                requiredItemIndices.push(questionIndex++);
-                
+                // Add Section 1: Full Name field only
                 requests.push({
                     createItem: {
                         item: {
