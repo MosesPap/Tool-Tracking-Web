@@ -485,28 +485,64 @@
             box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
         }
 
-        /* Photo buttons in tool cards */
-        .mytools-photo-btn {
-            border: 2px solid !important;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.1) !important;
-            transform: perspective(1000px) rotateX(2deg) !important;
-            transition: all 0.3s ease !important;
+        /* 3D Dark Grey Interactive Button for Add Photo in tool cards */
+        .mytools-add-photo-btn-3d {
+            position: relative;
+            padding: 6px 12px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            border-radius: 16px;
+            border: 2px solid #616161;
+            background: linear-gradient(135deg, #757575 0%, #616161 100%);
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(97, 97, 97, 0.3);
+            cursor: pointer;
+            transform: perspective(1000px) rotateX(0deg);
         }
 
-        .mytools-photo-btn:hover {
-            transform: perspective(1000px) rotateX(0deg) translateY(-2px) !important;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.1) !important;
+        .mytools-add-photo-btn-3d:hover {
+            background: linear-gradient(135deg, #616161 0%, #424242 100%);
+            border-color: #424242;
+            transform: perspective(1000px) rotateX(5deg) translateY(-2px);
+            box-shadow: 0 4px 12px rgba(97, 97, 97, 0.4),
+                       0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
-        .mytools-photo-btn:active {
-            transform: perspective(1000px) rotateX(2deg) translateY(0px) !important;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.1) !important;
+        .mytools-add-photo-btn-3d:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(0px);
+            box-shadow: 0 2px 4px rgba(97, 97, 97, 0.3);
+        }
+
+        /* 3D Light Grey Interactive Button for Photos in tool cards */
+        .mytools-photos-btn-3d {
+            position: relative;
+            padding: 6px 12px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            border-radius: 16px;
+            border: 2px solid #bdbdbd;
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
+            color: #333;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
+            cursor: pointer;
+            transform: perspective(1000px) rotateX(0deg);
+        }
+
+        .mytools-photos-btn-3d:hover {
+            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%);
+            border-color: #adadad;
+            transform: perspective(1000px) rotateX(5deg) translateY(-2px);
+            box-shadow: 0 4px 12px rgba(189, 189, 189, 0.4),
+                       0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .mytools-photos-btn-3d:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(0px);
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
         }
 
         /* Responsive font sizes for mobile */
@@ -1583,17 +1619,15 @@
                                 </div>
                                 <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;">
                                     <button onclick="event.stopPropagation(); createPhotoUploadInput('${tool.id}', '${tool.partNumber || tool.id}')" 
-                                            class="mytools-photo-btn"
-                                            style="background:#FF9800;color:white;border:2px solid #F57C00;border-radius:16px;padding:6px 12px;font-size:0.9rem;font-weight:bold;cursor:pointer;">
+                                            class="mytools-add-photo-btn-3d">
                                         <i class="fas fa-camera"></i> ${getResponsiveButtonText('Add Photo', 'Add')}
                                     </button>
                                     ${tool.photoUrls && tool.photoUrls.length > 0 ? 
                                         `<button onclick="event.stopPropagation(); showToolPhotoGallery(this)" 
-                                                class="mytools-photo-btn"
+                                                class="mytools-photos-btn-3d"
                                                 data-photo-urls='${JSON.stringify(tool.photoUrls)}'
                                                 data-tool-id='${tool.id}'
-                                                data-part-number='${tool.partNumber || tool.id}'
-                                                style="background:#1976d2;color:white;border:2px solid #1565C0;border-radius:16px;padding:6px 12px;font-size:0.9rem;font-weight:bold;cursor:pointer;">
+                                                data-part-number='${tool.partNumber || tool.id}'>
                                             <i class="fas fa-images"></i> ${getResponsiveButtonText('Photos', 'Pics')} (${tool.photoUrls.length})
                                         </button>` : ''
                                     }
@@ -1718,9 +1752,9 @@
                                 }
                                 html += `</div>`;
                                 html += `<div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;">`;
-                                html += `<button onclick="event.stopPropagation(); createPhotoUploadInput('${tool.id}', '${tool.partNumber || tool.id}')" class="mytools-photo-btn" style="background:#FF9800;color:white;border:2px solid #F57C00;border-radius:16px;padding:6px 12px;font-size:0.9rem;font-weight:bold;cursor:pointer;"><i class="fas fa-camera"></i> Add Photo</button>`;
+                                html += `<button onclick="event.stopPropagation(); createPhotoUploadInput('${tool.id}', '${tool.partNumber || tool.id}')" class="mytools-add-photo-btn-3d"><i class="fas fa-camera"></i> Add Photo</button>`;
                                 if (tool.photoUrls && tool.photoUrls.length > 0) {
-                                    html += `<button onclick="event.stopPropagation(); showToolPhotoGallery(this)" class="mytools-photo-btn" data-photo-urls='${JSON.stringify(tool.photoUrls)}' data-tool-id='${tool.id}' data-part-number='${tool.partNumber || tool.id}' style="background:#1976d2;color:white;border:2px solid #1565C0;border-radius:16px;padding:6px 12px;font-size:0.9rem;font-weight:bold;cursor:pointer;"><i class="fas fa-images"></i> Photos (${tool.photoUrls.length})</button>`;
+                                    html += `<button onclick="event.stopPropagation(); showToolPhotoGallery(this)" class="mytools-photos-btn-3d" data-photo-urls='${JSON.stringify(tool.photoUrls)}' data-tool-id='${tool.id}' data-part-number='${tool.partNumber || tool.id}'><i class="fas fa-images"></i> Photos (${tool.photoUrls.length})</button>`;
                                 }
                                 html += `</div>`;
                                 html += `</div>`;
