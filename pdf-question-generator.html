@@ -2471,6 +2471,16 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 });
 
                 // First batch: Create all items
+                // Debug: Log requests to verify no 'required' field in createItem
+                console.log('Creating form with', requests.length, 'requests');
+                requests.forEach((req, idx) => {
+                    if (req.createItem && req.createItem.item && req.createItem.item.questionItem) {
+                        if (req.createItem.item.questionItem.hasOwnProperty('required')) {
+                            console.error(`ERROR: Request ${idx} has 'required' field in createItem!`, req);
+                        }
+                    }
+                });
+                
                 const batchCreateResponse = await fetch(`${GOOGLE_FORMS_API}/${formId}:batchUpdate`, {
                     method: 'POST',
                     headers: {
