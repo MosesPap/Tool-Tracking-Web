@@ -285,7 +285,7 @@
         })();
     </script>
     <div id="splashScreen">
-        <video id="splashVideo" autoplay muted playsinline webkit-playsinline preload="auto" loop="false">
+        <video id="splashVideo" autoplay muted playsinline webkit-playsinline preload="auto">
             <source src="src/main/res/raw/helicopter_animation.mp4" type="video/mp4">
             <source src="src/helicopter_animation.mp4" type="video/mp4">
         </video>
@@ -373,19 +373,32 @@
             
             // Handle video playback
             if (splashVideo) {
+                // Explicitly disable looping
+                splashVideo.loop = false;
+                
+                // Store video duration for timeout fallback
+                let videoDuration = 0;
+                
                 // Wait for video metadata to be loaded
                 splashVideo.addEventListener('loadedmetadata', function() {
-                    console.log('Splash video metadata loaded, duration:', splashVideo.duration);
+                    videoDuration = splashVideo.duration;
+                    console.log('Splash video metadata loaded, duration:', videoDuration);
+                    // Explicitly disable looping again after metadata loads
+                    splashVideo.loop = false;
                 });
                 
                 // Wait for video data to be loaded
                 splashVideo.addEventListener('loadeddata', function() {
                     console.log('Splash video data loaded, attempting to play');
+                    // Ensure loop is disabled
+                    splashVideo.loop = false;
                     const playPromise = splashVideo.play();
                     if (playPromise !== undefined) {
                         playPromise.then(function() {
                             console.log('Splash video started playing');
                             videoStartedPlaying = true;
+                            // Ensure loop is disabled
+                            splashVideo.loop = false;
                         }).catch(function(error) {
                             console.error('Error playing video:', error);
                             if (!videoHasEnded) {
@@ -399,13 +412,30 @@
                 splashVideo.addEventListener('playing', function() {
                     console.log('Splash video is now playing');
                     videoStartedPlaying = true;
+                    // Ensure loop is disabled
+                    splashVideo.loop = false;
                 });
                 
                 // When video ends, hide splash and show welcome
                 splashVideo.addEventListener('ended', function() {
                     console.log('Splash video ended - duration was:', splashVideo.duration);
                     videoHasEnded = true;
+                    // Stop the video explicitly
+                    splashVideo.pause();
+                    splashVideo.currentTime = splashVideo.duration;
                     hideSplashScreen();
+                });
+                
+                // Also listen for timeupdate to detect when video reaches the end
+                splashVideo.addEventListener('timeupdate', function() {
+                    // If video is very close to the end (within 0.1 seconds), trigger end
+                    if (splashVideo.currentTime >= splashVideo.duration - 0.1 && !videoHasEnded) {
+                        console.log('Video reached end via timeupdate');
+                        videoHasEnded = true;
+                        splashVideo.pause();
+                        splashVideo.currentTime = splashVideo.duration;
+                        hideSplashScreen();
+                    }
                 });
                 
                 // Handle video errors - but only if video hasn't started playing
@@ -422,8 +452,7 @@
                     }
                 });
                 
-                // Fallback timeout - only if video hasn't started after 20 seconds
-                // This gives the video plenty of time to load and start playing
+                // Fallback timeout - if video hasn't started after 20 seconds
                 setTimeout(() => {
                     if (splashScreen && splashScreen.style.display !== 'none' && !videoHasEnded && !videoHasError && !videoStartedPlaying) {
                         console.log('Video timeout after 20 seconds - video did not start playing, showing fallback');
@@ -431,9 +460,26 @@
                     }
                 }, 20000);
                 
+                // Safety timeout - if video duration is known, wait for duration + 2 seconds, then force end
+                splashVideo.addEventListener('loadedmetadata', function() {
+                    videoDuration = splashVideo.duration;
+                    if (videoDuration > 0) {
+                        setTimeout(() => {
+                            if (!videoHasEnded && splashScreen && splashScreen.style.display !== 'none') {
+                                console.log('Safety timeout: Video should have ended by now, forcing end');
+                                videoHasEnded = true;
+                                splashVideo.pause();
+                                splashVideo.currentTime = splashVideo.duration;
+                                hideSplashScreen();
+                            }
+                        }, (videoDuration * 1000) + 2000); // Duration in ms + 2 second buffer
+                    }
+                });
+                
                 // Ensure video plays - try to play immediately if already loaded
                 if (splashVideo.readyState >= 2) {
                     console.log('Video already loaded, attempting to play');
+                    splashVideo.loop = false;
                     splashVideo.play().catch(function(error) {
                         console.error('Error playing pre-loaded video:', error);
                     });
