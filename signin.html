@@ -258,21 +258,25 @@
                 const pendingDoc = await db.collection('pendingRegistrations').doc(email).get();
                 
                 if (pendingDoc.exists) {
-                    // This is the first verified login, create technician document
+                    // This is the first verified login, create or update technician document
                     const pendingData = pendingDoc.data();
-                    console.log('Creating technician document for verified user:', user.uid);
+                    console.log('Found pending registration for verified user:', user.uid);
+                    
+                    const technicianDoc = await db.collection('technicians').doc(user.uid).get();
                     
                     const technicianData = {
-                        fullName: pendingData.fullName,
+                        fullName: pendingData.fullName, // Always use fullName from pending registration
                         email: email,
                         isAdmin: false,
                         lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        createdAt: technicianDoc.exists ? 
+                            (technicianDoc.data().createdAt || firebase.firestore.FieldValue.serverTimestamp()) :
+                            firebase.firestore.FieldValue.serverTimestamp()
                     };
                     
-                    // Create technician document
+                    // Create or update technician document with correct fullName
                     await db.collection('technicians').doc(user.uid).set(technicianData);
-                    console.log('Technician document created successfully');
+                    console.log('Technician document created/updated successfully with fullName:', pendingData.fullName);
                     
                     // Remove from pending registrations
                     await db.collection('pendingRegistrations').doc(email).delete();
@@ -296,6 +300,22 @@
                         });
                         localStorage.setItem('fullName', user.displayName || email);
                     } else {
+                        // Check if fullName is incorrect (equals email) and there's a pending registration
+                        const currentData = technicianDoc.data();
+                        if (currentData.fullName === email || currentData.fullName === user.email) {
+                            // Check if there's a pending registration with the correct name
+                            const pendingCheck = await db.collection('pendingRegistrations').doc(email).get();
+                            if (pendingCheck.exists) {
+                                const pendingData = pendingCheck.data();
+                                // Update with correct fullName
+                                await db.collection('technicians').doc(user.uid).update({
+                                    fullName: pendingData.fullName
+                                });
+                                localStorage.setItem('fullName', pendingData.fullName);
+                                await db.collection('pendingRegistrations').doc(email).delete();
+                                console.log('Updated technician document with correct fullName from pending registration');
+                            }
+                        }
                         // Update technician data
                         await saveTechnicianToFirestore(user);
                     }
