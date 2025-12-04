@@ -2405,36 +2405,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         questionIndex++;
                     }
                     
-                    // Add section title and description for each level (first time we see it)
-                    if (lastLevel !== level) {
-                        const sectionTitle = levelGroup.levelName;
-                        const sectionDesc = sectionDescriptions[level] || '';
-                        
-                        // Combine title and description into one formatted text item (non-required, just for display)
-                        let combinedText = sectionTitle;
-                        if (sectionDesc) {
-                            combinedText = `${sectionTitle}\n\n${sectionDesc}`;
-                        }
-                        
-                        // Add as a single text question item (non-required, just for display)
-                        // Note: required field cannot be set in createItem, only in updateItem
-                        // Since we don't add this to requiredItemIndices, it won't be marked as required later
-                        requests.push({
-                            createItem: {
-                                item: {
-                                    title: combinedText,
-                                    questionItem: {
-                                        question: {
-                                            textQuestion: {}
-                                        }
-                                    }
-                                },
-                                location: { index: questionIndex }
-                            }
-                        });
-                        // Don't add to requiredItemIndices - this is just informational
-                        questionIndex++;
-                    }
+                    // Note: Section titles are not added as items since Google Forms API
+                    // doesn't support non-question title items. Page breaks separate sections.
                     
                     lastLevel = level;
 
@@ -2471,16 +2443,6 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 });
 
                 // First batch: Create all items
-                // Debug: Log requests to verify no 'required' field in createItem
-                console.log('Creating form with', requests.length, 'requests');
-                requests.forEach((req, idx) => {
-                    if (req.createItem && req.createItem.item && req.createItem.item.questionItem) {
-                        if (req.createItem.item.questionItem.hasOwnProperty('required')) {
-                            console.error(`ERROR: Request ${idx} has 'required' field in createItem!`, req);
-                        }
-                    }
-                });
-                
                 const batchCreateResponse = await fetch(`${GOOGLE_FORMS_API}/${formId}:batchUpdate`, {
                     method: 'POST',
                     headers: {
