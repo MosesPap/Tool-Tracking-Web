@@ -2417,6 +2417,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         }
                         
                         // Add as a single text question item (non-required, just for display)
+                        // Note: required field cannot be set in createItem, only in updateItem
+                        // Since we don't add this to requiredItemIndices, it won't be marked as required later
                         requests.push({
                             createItem: {
                                 item: {
@@ -2424,8 +2426,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                     questionItem: {
                                         question: {
                                             textQuestion: {}
-                                        },
-                                        required: false
+                                        }
                                     }
                                 },
                                 location: { index: questionIndex }
