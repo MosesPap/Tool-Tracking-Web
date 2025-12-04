@@ -2410,39 +2410,29 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                         const sectionTitle = levelGroup.levelName;
                         const sectionDesc = sectionDescriptions[level] || '';
                         
-                        // Add section title as a text question (non-required, just for display)
+                        // Combine title and description into one formatted text item (non-required, just for display)
+                        let combinedText = sectionTitle;
+                        if (sectionDesc) {
+                            combinedText = `${sectionTitle}\n\n${sectionDesc}`;
+                        }
+                        
+                        // Add as a single text question item (non-required, just for display)
                         requests.push({
                             createItem: {
                                 item: {
-                                    title: sectionTitle,
+                                    title: combinedText,
                                     questionItem: {
                                         question: {
                                             textQuestion: {}
-                                        }
+                                        },
+                                        required: false
                                     }
                                 },
                                 location: { index: questionIndex }
                             }
                         });
+                        // Don't add to requiredItemIndices - this is just informational
                         questionIndex++;
-                        
-                        // Add section description if available
-                        if (sectionDesc) {
-                            requests.push({
-                                createItem: {
-                                    item: {
-                                        title: sectionDesc,
-                                        questionItem: {
-                                            question: {
-                                                textQuestion: {}
-                                            }
-                                        }
-                                    },
-                                    location: { index: questionIndex }
-                                }
-                            });
-                            questionIndex++;
-                        }
                     }
                     
                     lastLevel = level;
