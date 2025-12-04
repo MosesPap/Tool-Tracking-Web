@@ -246,9 +246,9 @@
             font-size: 0.9rem;
             font-weight: bold;
             border-radius: 12px;
-            border: 2px solid #616161;
-            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
-            color: #333;
+            border: 2px solid #616161 !important;
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%) !important;
+            color: #333 !important;
             text-decoration: none;
             transition: all 0.3s ease;
             box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3),
@@ -259,8 +259,9 @@
         }
 
         .filter-date-btn:hover {
-            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%);
-            border-color: #616161;
+            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%) !important;
+            border: 2px solid #616161 !important;
+            border-color: #616161 !important;
             transform: perspective(1000px) rotateX(5deg) translateY(-2px);
             box-shadow: 0 4px 12px rgba(189, 189, 189, 0.4),
                        0 2px 4px rgba(0, 0, 0, 0.2),
@@ -807,9 +808,10 @@
             collections.forEach(collection => {
                 const collectionData = byCollection[collection];
                 const owner = collectionData.owner || 'N/A';
+                const stationName = currentWorkLocation === 'ALL' ? 'All Locations' : currentWorkLocation;
                 
                 html += `<div class="workloc-collection-header">
-                    ${collection} - Owner: ${owner} (${collectionData.tools.length} tools)
+                    ${collection} - Owner: ${owner} (${collectionData.tools.length} Entries For ${stationName})
                 </div>`;
                 
                 collectionData.tools.forEach(tool => {
@@ -931,9 +933,10 @@
                 const collectionTools = byCollection[collection];
                 const totalInCollection = collectionTools.out.length + collectionTools.in.length;
                 const owner = collectionTools.owner || 'N/A';
+                const stationName = currentWorkLocation === 'ALL' ? 'All Locations' : currentWorkLocation;
                 
                 html += `<div class="workloc-collection-header">
-                    ${collection} - Owner: ${owner} (${totalInCollection} entries - OUT: ${collectionTools.out.length}, IN: ${collectionTools.in.length})
+                    ${collection} - Owner: ${owner} (${totalInCollection} Entries For ${stationName})
                 </div>`;
                 
                 // Display all tools - card color will be based on current status
