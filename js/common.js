@@ -81,10 +81,25 @@ auth.onAuthStateChanged(async function(user) {
             const technicianDoc = await db.collection('technicians').doc(user.uid).get();
             
             if (!technicianDoc.exists) {
+                // Check if user exists in pendingRegistrations first (for email/password signups)
+                const pendingDoc = await db.collection('pendingRegistrations').doc(user.email).get();
+                
+                let fullName;
+                if (pendingDoc.exists) {
+                    // Use fullName from pending registration
+                    const pendingData = pendingDoc.data();
+                    fullName = pendingData.fullName || user.displayName || user.email;
+                    console.log('Using fullName from pending registration:', fullName);
+                } else {
+                    // For Google Sign-In or other cases, use displayName or email
+                    fullName = user.displayName || user.email;
+                    console.log('Using fullName from user profile:', fullName);
+                }
+                
                 // Create technician document for new users
                 console.log('Creating technician document for new user:', user.uid);
                 const technicianData = {
-                    fullName: user.displayName || user.email,
+                    fullName: fullName,
                     email: user.email,
                     isAdmin: false,
                     lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
@@ -92,8 +107,11 @@ auth.onAuthStateChanged(async function(user) {
                 };
                 
                 await db.collection('technicians').doc(user.uid).set(technicianData);
-                localStorage.setItem('fullName', technicianData.fullName || user.email);
-                console.log('Technician document created successfully');
+                localStorage.setItem('fullName', fullName);
+                console.log('Technician document created successfully with fullName:', fullName);
+                
+                // If we used pending registration, don't delete it here - let the login function handle it
+                // This prevents race conditions
             } else {
                 // Update lastSignIn for existing users
                 await db.collection('technicians').doc(user.uid).update({
