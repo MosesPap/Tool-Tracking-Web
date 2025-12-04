@@ -2368,17 +2368,6 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     }
                 });
                 requiredItemIndices.push(questionIndex++);
-                
-                // Add page break after Section 1
-                requests.push({
-                    createItem: {
-                        item: {
-                            title: '',
-                            pageBreakItem: {}
-                        },
-                        location: { index: questionIndex++ }
-                    }
-                });
 
                 selectedQuestions.forEach((item) => {
                     const { levelGroup, question, level } = item;
@@ -2387,8 +2376,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     if (lastLevel !== level) {
                         const sectionTitle = levelGroup.levelName;
                         
-                        // Add page break with section title as header
-                        // This creates a proper section header in Google Forms
+                        // Add page break with section title as header only when level changes
+                        // Skip page break for the first section to avoid blank section after Section 1
                         if (lastLevel !== null) {
                             // Add page break before new section (when level changes)
                             requests.push({
@@ -2401,19 +2390,9 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                                 }
                             });
                             questionIndex++;
-                        } else {
-                            // For the first section, add section title as page break header
-                            requests.push({
-                                createItem: {
-                                    item: {
-                                        title: sectionTitle,
-                                        pageBreakItem: {}
-                                    },
-                                    location: { index: questionIndex }
-                                }
-                            });
-                            questionIndex++;
                         }
+                        // For the first question section, we don't add a page break
+                        // It will flow directly after Section 1 (Full Name)
                     }
                     
                     lastLevel = level;
