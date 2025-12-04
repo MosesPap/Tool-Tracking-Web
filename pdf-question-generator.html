@@ -2347,13 +2347,6 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     }
                 });
                 
-                // Section descriptions mapping
-                const sectionDescriptions = {
-                    1: 'Simple descriptions, common terms',
-                    2: 'Theoretical fundamentals, procedures, schematics',
-                    3: 'Interrelationships, manufacturer instructions, corrective actions'
-                };
-                
                 let questionIndex = 0;
                 let lastLevel = null;
                 
@@ -2390,23 +2383,38 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 selectedQuestions.forEach((item) => {
                     const { levelGroup, question, level } = item;
                     
-                    // Add a page break/section for each level (only if level changed)
-                    if (lastLevel !== null && lastLevel !== level && questionIndex > 0) {
-                        // Add page break before new section
-                        requests.push({
-                            createItem: {
-                                item: {
-                                    title: '',
-                                    pageBreakItem: {}
-                                },
-                                location: { index: questionIndex }
-                            }
-                        });
-                        questionIndex++;
+                    // Add section header for each level (first time we see it)
+                    if (lastLevel !== level) {
+                        const sectionTitle = levelGroup.levelName;
+                        
+                        // Add page break with section title as header
+                        // This creates a proper section header in Google Forms
+                        if (lastLevel !== null) {
+                            // Add page break before new section (when level changes)
+                            requests.push({
+                                createItem: {
+                                    item: {
+                                        title: sectionTitle,
+                                        pageBreakItem: {}
+                                    },
+                                    location: { index: questionIndex }
+                                }
+                            });
+                            questionIndex++;
+                        } else {
+                            // For the first section, add section title as page break header
+                            requests.push({
+                                createItem: {
+                                    item: {
+                                        title: sectionTitle,
+                                        pageBreakItem: {}
+                                    },
+                                    location: { index: questionIndex }
+                                }
+                            });
+                            questionIndex++;
+                        }
                     }
-                    
-                    // Note: Section titles are not added as items since Google Forms API
-                    // doesn't support non-question title items. Page breaks separate sections.
                     
                     lastLevel = level;
 
