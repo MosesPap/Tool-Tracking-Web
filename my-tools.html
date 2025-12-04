@@ -65,6 +65,38 @@
             box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
         }
 
+        /* 3D Interactive Grey Button for Add Collection */
+        .add-collection-btn-3d {
+            position: relative;
+            width: 100%;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 12px;
+            border: 2px solid #bdbdbd;
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
+            color: #333;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
+            cursor: pointer;
+            transform: perspective(1000px) rotateX(0deg);
+            margin-top: 10px;
+        }
+
+        .add-collection-btn-3d:hover {
+            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%);
+            border-color: #adadad;
+            transform: perspective(1000px) rotateX(5deg) translateY(-2px);
+            box-shadow: 0 4px 12px rgba(189, 189, 189, 0.4),
+                       0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .add-collection-btn-3d:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(0px);
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3);
+        }
+
         .mytools-collection {
             background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
             color: white;
@@ -790,10 +822,44 @@
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title" id="collectionSelectModalLabel">Select Collection</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close" id="collectionSelectModalCloseBtn" aria-label="Close"></button>
                 </div>
                 <div class="modal-body" id="collectionSelectBody">
                     <!-- Collections will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add New Collection Modal -->
+    <div class="modal fade" id="addCollectionModal" tabindex="-1" aria-labelledby="addCollectionModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="addCollectionModalLabel">Add New Collection</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addCollectionForm">
+                        <div class="mb-3">
+                            <label for="collectionNameInput" class="form-label"><strong>Collection Name *</strong></label>
+                            <input type="text" class="form-control" id="collectionNameInput" placeholder="e.g., Col-1, AV-1" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="collectionDescriptionInput" class="form-label"><strong>Description</strong></label>
+                            <textarea class="form-control" id="collectionDescriptionInput" rows="3" placeholder="Enter collection description"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="collectionPhotoInput" class="form-label"><strong>Collection Photo</strong></label>
+                            <input type="file" class="form-control" id="collectionPhotoInput" accept="image/*">
+                            <small class="form-text text-muted">Optional: Upload a photo for this collection</small>
+                        </div>
+                        <div id="addCollectionError" class="text-danger mb-3" style="display: none;"></div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveCollectionBtn">Save Collection</button>
                 </div>
             </div>
         </div>
@@ -1097,37 +1163,24 @@
             const body = document.getElementById('collectionSelectBody');
             body.innerHTML = '<div class="text-center">Loading...</div>';
             try {
-                // 1. Query tools for this owner
-                const toolsSnapshot = await db.collection('tools').where('owner', '==', fullName).get();
-                if (toolsSnapshot.empty) {
-                    body.innerHTML = '<div class="text-center text-danger">No tools found for you.</div>';
-                    modal.show();
-                    return;
-                }
-                // 2. Extract unique collectionCodes
-                const collectionCodes = [...new Set(toolsSnapshot.docs.map(doc => doc.data().collectionCode).filter(Boolean))];
-                if (collectionCodes.length === 0) {
-                    body.innerHTML = '<div class="text-center text-danger">No collections found for your tools.</div>';
-                    modal.show();
-                    return;
-                }
-                // 3. Query collections for those codes (batch if >10)
-                let collections = [];
-                if (collectionCodes.length <= 10) {
-                    const colSnap = await db.collection('collections').where('collectionName', 'in', collectionCodes).get();
-                    collections = colSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                } else {
-                    // Firestore 'in' query limit is 10, so batch if needed
-                    for (let i = 0; i < collectionCodes.length; i += 10) {
-                        const batch = collectionCodes.slice(i, i + 10);
-                        const colSnap = await db.collection('collections').where('collectionName', 'in', batch).get();
-                        collections = collections.concat(colSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                    }
-                }
+                // Query collections by owner field
+                const collectionsSnapshot = await db.collection('collections')
+                    .where('owner', '==', fullName)
+                    .get();
+                
+                let collections = collectionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                // Sort collections by name
+                collections.sort((a, b) => {
+                    const nameA = (a.collectionName || '').toLowerCase();
+                    const nameB = (b.collectionName || '').toLowerCase();
+                    return nameA.localeCompare(nameB);
+                });
+                
                 if (collections.length === 0) {
-                    body.innerHTML = '<div class="text-center text-danger">No collections found for your tools.</div>';
+                    body.innerHTML = '<div class="text-center text-danger mb-3">No collections found.</div>';
                 } else {
-                    let html = '<div class="list-group">';
+                    let html = '<div class="list-group mb-3">';
                     collections.forEach(data => {
                         const isCurrentCollection = data.collectionName === lastViewedCollectionName;
                         html += `<button class="list-group-item list-group-item-action collection-select-btn ${isCurrentCollection ? 'active' : ''}" style="font-weight:bold;color:${isCurrentCollection ? 'white' : '#1976d2'};" data-collection="${data.collectionName}">
@@ -1147,12 +1200,214 @@
                         };
                     });
                 }
+                
+                // Add "Add New Collection" button with 3D interactive grey style
+                const addButton = document.createElement('button');
+                addButton.className = 'add-collection-btn-3d';
+                addButton.innerHTML = '<i class="fas fa-plus me-2"></i>Add New Collection';
+                addButton.onclick = function(e) {
+                    e.stopPropagation();
+                    modal.hide();
+                    showAddCollectionModal();
+                };
+                body.appendChild(addButton);
+                
+                // Handle X button to return to main menu
+                const modalElement = document.getElementById('collectionSelectModal');
+                const closeBtn = document.getElementById('collectionSelectModalCloseBtn');
+                if (closeBtn) {
+                    closeBtn.onclick = function() {
+                        modal.hide();
+                        setTimeout(() => {
+                            handleBackNavigation();
+                        }, 300);
+                    };
+                }
+                
                 modal.show();
             } catch (e) {
                 body.innerHTML = '<div class="text-center text-danger">Error loading collections.</div>';
                 modal.show();
             }
         }
+
+        // Normalize collection name to handle Greek/English character confusion
+        function normalizeCollectionName(name) {
+            if (!name) return '';
+            
+            const greekToEnglish = {
+                '\u0391': 'A', '\u0392': 'B', '\u0395': 'E', '\u0396': 'Z', '\u0397': 'H', '\u0399': 'I',
+                '\u039A': 'K', '\u039C': 'M', '\u039D': 'N', '\u039F': 'O', '\u03A1': 'P', '\u03A4': 'T',
+                '\u03A5': 'Y', '\u03A7': 'X',
+                '\u03B1': 'a', '\u03B2': 'b', '\u03B5': 'e', '\u03B6': 'z', '\u03B7': 'h', '\u03B9': 'i',
+                '\u03BA': 'k', '\u03BC': 'm', '\u03BD': 'n', '\u03BF': 'o', '\u03C1': 'p', '\u03C4': 't',
+                '\u03C5': 'y', '\u03C7': 'x'
+            };
+            
+            return name.toLowerCase().split('').map(char => {
+                return greekToEnglish[char] || char;
+            }).join('');
+        }
+
+        // Show Add Collection Modal
+        function showAddCollectionModal() {
+            const modalElement = document.getElementById('addCollectionModal');
+            const modal = new bootstrap.Modal(modalElement);
+            document.getElementById('addCollectionForm').reset();
+            document.getElementById('addCollectionError').style.display = 'none';
+            document.getElementById('addCollectionError').textContent = '';
+            
+            window.collectionSaveSuccess = false;
+            
+            const handleModalClose = function() {
+                if (!window.collectionSaveSuccess) {
+                    setTimeout(() => {
+                        showCollectionSelectionDialog();
+                    }, 100);
+                }
+                window.collectionSaveSuccess = false;
+            };
+            
+            modalElement.removeEventListener('hidden.bs.modal', handleModalClose);
+            modalElement.addEventListener('hidden.bs.modal', handleModalClose);
+            
+            modal.show();
+        }
+
+        // Save new collection to Firebase
+        async function saveNewCollection() {
+            const db = window.db || firebase.firestore();
+            const storage = window.storage || firebase.storage();
+            const auth = window.auth || firebase.auth();
+            const user = auth.currentUser;
+            const fullName = localStorage.getItem('fullName') || (user ? user.email : null);
+            
+            if (!fullName) {
+                alert('Error: User information not available. Please refresh the page.');
+                return;
+            }
+            
+            const collectionName = document.getElementById('collectionNameInput').value.trim();
+            const description = document.getElementById('collectionDescriptionInput').value.trim();
+            const photoFile = document.getElementById('collectionPhotoInput').files[0];
+            const errorDiv = document.getElementById('addCollectionError');
+            
+            if (!collectionName) {
+                errorDiv.textContent = 'Collection name is required.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            // Check if collection already exists for this owner (normalized comparison)
+            const userCollections = await db.collection('collections').where('owner', '==', fullName).get();
+            const normalizedNewName = normalizeCollectionName(collectionName);
+            const existingCollection = userCollections.docs.find(doc => {
+                const existingName = doc.data().collectionName;
+                if (!existingName) return false;
+                const normalizedExistingName = normalizeCollectionName(existingName);
+                return normalizedExistingName === normalizedNewName;
+            });
+            
+            if (existingCollection) {
+                errorDiv.textContent = 'A collection with this name already exists (including visually similar names with different character sets). Please choose a different name.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            try {
+                errorDiv.style.display = 'none';
+                const saveBtn = document.getElementById('saveCollectionBtn');
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Saving...';
+                
+                let photoUrls = [];
+                
+                if (photoFile) {
+                    const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                    loadingModal.show();
+                    document.getElementById('photoUploadProgress').textContent = 'Processing image...';
+                    
+                    const compressedBlob = await compressImage(photoFile);
+                    if (!compressedBlob) {
+                        loadingModal.hide();
+                        errorDiv.textContent = 'Failed to compress image.';
+                        errorDiv.style.display = 'block';
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = 'Save Collection';
+                        return;
+                    }
+                    
+                    document.getElementById('photoUploadProgress').textContent = 'Uploading to storage...';
+                    
+                    const fileName = `${collectionName}_photo1.jpg`;
+                    const photoRef = storage.ref('Collection%20Photo/' + fileName);
+                    const uploadTask = photoRef.put(compressedBlob);
+                    
+                    await new Promise((resolve, reject) => {
+                        uploadTask.on('state_changed',
+                            (snapshot) => {
+                                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                                document.getElementById('photoUploadProgress').textContent = `Uploading... ${Math.round(progress)}%`;
+                            },
+                            (error) => {
+                                loadingModal.hide();
+                                reject(error);
+                            },
+                            async () => {
+                                try {
+                                    const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                                    photoUrls = [downloadURL];
+                                    loadingModal.hide();
+                                    resolve();
+                                } catch (error) {
+                                    loadingModal.hide();
+                                    reject(error);
+                                }
+                            }
+                        );
+                    });
+                }
+                
+                const collectionData = {
+                    collectionName: collectionName,
+                    owner: fullName,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    photoUrls: photoUrls
+                };
+                
+                if (description) {
+                    collectionData.description = description;
+                }
+                
+                // Use collection name as document ID
+                await db.collection('collections').doc(collectionName).set(collectionData);
+                
+                window.newlyCreatedCollectionName = collectionName;
+                window.collectionSaveSuccess = true;
+                
+                const addModal = bootstrap.Modal.getInstance(document.getElementById('addCollectionModal'));
+                if (addModal) addModal.hide();
+                
+                alert('Collection created successfully!');
+                await showCollectionSelectionDialog();
+                
+            } catch (error) {
+                console.error('Error saving collection:', error);
+                errorDiv.textContent = 'Error saving collection: ' + error.message;
+                errorDiv.style.display = 'block';
+                const saveBtn = document.getElementById('saveCollectionBtn');
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save Collection';
+            }
+        }
+
+        // Set up event listener for save collection button
+        document.addEventListener('DOMContentLoaded', function() {
+            const saveBtn = document.getElementById('saveCollectionBtn');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', saveNewCollection);
+            }
+        });
 
         // Show My Tools by Collection (matching index.html)
         async function showMyToolsByCollection(collectionName) {
