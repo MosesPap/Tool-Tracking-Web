@@ -154,34 +154,36 @@
     </div>
 
     <script>
-        // Use global Firebase instances from common.js
-        const auth = window.auth;
-        const db = window.db;
-        
-        // Show/Hide password logic
-        const signUpPassword = document.getElementById('signUpPassword');
-        document.getElementById('toggleSignUpPassword').onclick = function() {
-            if (signUpPassword.type === 'password') {
-                signUpPassword.type = 'text';
-                this.innerHTML = '<i class="fas fa-eye-slash"></i>';
-            } else {
-                signUpPassword.type = 'password';
-                this.innerHTML = '<i class="fas fa-eye"></i>';
-            }
-        };
-        const signUpConfirmPassword = document.getElementById('signUpConfirmPassword');
-        document.getElementById('toggleSignUpConfirmPassword').onclick = function() {
-            if (signUpConfirmPassword.type === 'password') {
-                signUpConfirmPassword.type = 'text';
-                this.innerHTML = '<i class="fas fa-eye-slash"></i>';
-            } else {
-                signUpConfirmPassword.type = 'password';
-                this.innerHTML = '<i class="fas fa-eye"></i>';
-            }
-        };
+        // Wrap in IIFE to avoid variable conflicts
+        (function() {
+            // Use global Firebase instances from common.js
+            const auth = window.auth;
+            const db = window.db;
+            
+            // Show/Hide password logic
+            const signUpPassword = document.getElementById('signUpPassword');
+            document.getElementById('toggleSignUpPassword').onclick = function() {
+                if (signUpPassword.type === 'password') {
+                    signUpPassword.type = 'text';
+                    this.innerHTML = '<i class="fas fa-eye-slash"></i>';
+                } else {
+                    signUpPassword.type = 'password';
+                    this.innerHTML = '<i class="fas fa-eye"></i>';
+                }
+            };
+            const signUpConfirmPassword = document.getElementById('signUpConfirmPassword');
+            document.getElementById('toggleSignUpConfirmPassword').onclick = function() {
+                if (signUpConfirmPassword.type === 'password') {
+                    signUpConfirmPassword.type = 'text';
+                    this.innerHTML = '<i class="fas fa-eye-slash"></i>';
+                } else {
+                    signUpConfirmPassword.type = 'password';
+                    this.innerHTML = '<i class="fas fa-eye"></i>';
+                }
+            };
 
-        // Full name validation and formatting functions
-        function validateFullName(input) {
+            // Full name validation and formatting functions - expose to global scope
+            window.validateFullName = function validateFullName(input) {
             const value = input.value;
             const validationDiv = document.getElementById('fullNameValidation');
             
@@ -223,9 +225,9 @@
             // All validations passed
             validationDiv.textContent = '✓ Valid name format';
             validationDiv.className = 'form-text text-success';
-        }
-        
-        function formatFullName(input) {
+            }
+            
+            window.formatFullName = function formatFullName(input) {
             const value = input.value.trim();
             if (!value) return;
             
@@ -244,10 +246,10 @@
                 validationDiv.textContent = '✓ Name formatted correctly';
                 validationDiv.className = 'form-text text-success';
             }
-        }
+            }
 
-        // Sign up logic
-        async function signUp() {
+            // Sign up logic - expose to global scope
+            window.signUp = async function signUp() {
             let fullName = document.getElementById('signUpFullName').value.trim();
             const email = document.getElementById('signUpEmail').value.trim();
             const password = document.getElementById('signUpPassword').value.trim();
@@ -320,15 +322,16 @@
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
             }
-        }
-        
-        // Check if user is already logged in
-        auth.onAuthStateChanged(function(user) {
-            if (user && user.emailVerified) {
-                // User is already logged in, redirect to main menu
-                window.location.href = 'main-menu.html';
             }
-        });
+            
+            // Check if user is already logged in
+            auth.onAuthStateChanged(function(user) {
+                if (user && user.emailVerified) {
+                    // User is already logged in, redirect to main menu
+                    window.location.href = 'main-menu.html';
+                }
+            });
+        })();
     </script>
 </body>
 </html>

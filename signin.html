@@ -190,34 +190,36 @@
     </div>
 
     <script>
-        // Use global Firebase instances from common.js
-        const auth = window.auth;
-        const db = window.db;
-        
-        // Show/Hide password logic
-        const loginPassword = document.getElementById('loginPassword');
-        document.getElementById('toggleLoginPassword').onclick = function() {
-            if (loginPassword.type === 'password') {
-                loginPassword.type = 'text';
-                this.innerHTML = '<i class="fas fa-eye-slash"></i>';
-            } else {
-                loginPassword.type = 'password';
-                this.innerHTML = '<i class="fas fa-eye"></i>';
-            }
-        };
+        // Wrap in IIFE to avoid variable conflicts
+        (function() {
+            // Use global Firebase instances from common.js
+            const auth = window.auth;
+            const db = window.db;
+            
+            // Show/Hide password logic
+            const loginPassword = document.getElementById('loginPassword');
+            document.getElementById('toggleLoginPassword').onclick = function() {
+                if (loginPassword.type === 'password') {
+                    loginPassword.type = 'text';
+                    this.innerHTML = '<i class="fas fa-eye-slash"></i>';
+                } else {
+                    loginPassword.type = 'password';
+                    this.innerHTML = '<i class="fas fa-eye"></i>';
+                }
+            };
 
-        // Forgot password modal
-        const forgotPasswordLink = document.getElementById('forgotPasswordLink');
-        forgotPasswordLink.onclick = function() {
-            const email = document.getElementById('loginEmail').value;
-            document.getElementById('resetEmail').value = email;
-            document.getElementById('resetAlert').classList.add('d-none');
-            const modal = new bootstrap.Modal(document.getElementById('forgotPasswordModal'));
-            modal.show();
-        };
+            // Forgot password modal
+            const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+            forgotPasswordLink.onclick = function() {
+                const email = document.getElementById('loginEmail').value;
+                document.getElementById('resetEmail').value = email;
+                document.getElementById('resetAlert').classList.add('d-none');
+                const modal = new bootstrap.Modal(document.getElementById('forgotPasswordModal'));
+                modal.show();
+            };
 
-        // Login logic
-        async function login() {
+            // Login logic - expose to global scope
+            window.login = async function login() {
             const email = document.getElementById('loginEmail').value.trim();
             const password = document.getElementById('loginPassword').value.trim();
             const alertBox = document.getElementById('loginAlert');
@@ -309,10 +311,10 @@
                 loginBtn.querySelector('.btn-text').textContent = originalText;
                 loginBtn.disabled = false;
             }
-        }
+            }
 
-        // Password reset logic
-        async function resetPassword() {
+            // Password reset logic - expose to global scope
+            window.resetPassword = async function resetPassword() {
             const email = document.getElementById('resetEmail').value.trim();
             const alertBox = document.getElementById('resetAlert');
             alertBox.classList.add('d-none');
@@ -329,10 +331,10 @@
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
             }
-        }
+            }
 
-        // Google Sign-In function
-        async function signInWithGoogle() {
+            // Google Sign-In function - expose to global scope
+            window.signInWithGoogle = async function signInWithGoogle() {
             const alertBox = document.getElementById('loginAlert');
             alertBox.classList.add('d-none');
             try {
@@ -378,15 +380,16 @@
                 alertBox.textContent = error.message;
                 alertBox.classList.remove('d-none');
             }
-        }
-        
-        // Check if user is already logged in
-        auth.onAuthStateChanged(function(user) {
-            if (user && user.emailVerified) {
-                // User is already logged in, redirect to main menu
-                window.location.href = 'main-menu.html';
             }
-        });
+            
+            // Check if user is already logged in
+            auth.onAuthStateChanged(function(user) {
+                if (user && user.emailVerified) {
+                    // User is already logged in, redirect to main menu
+                    window.location.href = 'main-menu.html';
+                }
+            });
+        })();
     </script>
 </body>
 </html>
