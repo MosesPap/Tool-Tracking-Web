@@ -596,6 +596,24 @@
         </div>
     </div>
 
+    <!-- Checkout Info Modal for Tools by Owner -->
+    <div class="modal fade" id="checkoutInfoModal" tabindex="-1" aria-labelledby="checkoutInfoModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="checkoutInfoModalTitle">Tool Checkout Information</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="checkoutInfoModalBody">
+                    <!-- Checkout info will be populated here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDK - must load before common.js -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -1461,9 +1479,125 @@
             }
         }
 
-        // Placeholder functions - basic implementations
-        function showToolDetailsFromMyTools(tool) {
-            alert(`Tool: ${tool.toolName || 'Unknown'}\nTID: ${tool.id}\nPart #: ${tool.partNumber || 'N/A'}\nStatus: ${tool.status || 'N/A'}\nLocation: ${tool.location || 'N/A'}`);
+        // Show tool details from My Tools (same as my-tools.html)
+        async function showToolDetailsFromMyTools(tool) {
+            const db = window.db || firebase.firestore();
+            const formatTimestamp = (timestamp) => {
+                if (!timestamp) return 'N/A';
+                if (timestamp.toDate) {
+                    return timestamp.toDate().toLocaleString('en-GB', {
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                    });
+                }
+                if (timestamp.seconds) {
+                    return new Date(timestamp.seconds * 1000).toLocaleString('en-GB', {
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                    });
+                }
+                return timestamp;
+            };
+
+            const modal = new bootstrap.Modal(document.getElementById('checkoutInfoModal'));
+            const modalTitle = document.getElementById('checkoutInfoModalTitle');
+            const modalBody = document.getElementById('checkoutInfoModalBody');
+
+            modalTitle.textContent = 'Loading...';
+            modalBody.innerHTML = '<div class="text-center">Loading checkout information...</div>';
+            modal.show();
+
+            try {
+                const status = tool.status || 'N/A';
+                let title = '';
+                let field1Label = '';
+                let field1Value = '';
+                let field2Label = '';
+                let field2Value = '';
+                let workOnValue = 'N/A';
+
+                // Get WorkOn value from tool data
+                const toolDoc = await db.collection('tools').doc(tool.id).get();
+                if (toolDoc.exists) {
+                    const toolData = toolDoc.data();
+                    workOnValue = (typeof toolData.WorkOn === 'string' && toolData.WorkOn.trim()) ? toolData.WorkOn : 'N/A';
+                } else {
+                    workOnValue = (typeof tool.WorkOn === 'string' && tool.WorkOn.trim()) ? tool.WorkOn : 'N/A';
+                }
+
+                if (status === 'OUT') {
+                    title = 'Tool Checkout Information';
+                    field1Label = 'Checked Out By:';
+                    field2Label = 'ChkOut Date:';
+
+                    if (toolDoc.exists) {
+                        const toolData = toolDoc.data();
+                        field1Value = toolData.technician || 'N/A';
+                        field2Value = formatTimestamp(toolData.timestamp);
+                    } else {
+                        field1Value = 'N/A';
+                        field2Value = 'N/A';
+                    }
+                } else if (status === 'IN') {
+                    title = 'Last Tool Movement Information';
+                    field1Label = 'Technician:';
+                    field2Label = 'Date:';
+                    try {
+                        const logSnapshot = await db.collection('logtoolmovements')
+                            .where('toolId', '==', tool.id)
+                            .orderBy('timestamp', 'desc')
+                            .limit(1)
+                            .get();
+                        if (!logSnapshot.empty) {
+                            const lastLogEntry = logSnapshot.docs[0].data();
+                            field1Value = lastLogEntry.technician || 'N/A';
+                            field2Value = formatTimestamp(lastLogEntry.timestamp);
+                        } else {
+                            field1Value = tool.technician || 'N/A';
+                            field2Value = formatTimestamp(tool.timestamp);
+                        }
+                    } catch (logError) {
+                        console.error('Error querying logtoolmovements:', logError);
+                        field1Value = tool.technician || 'N/A';
+                        field2Value = formatTimestamp(tool.timestamp);
+                    }
+                } else {
+                    title = 'Tool Information';
+                    field1Label = 'Status:';
+                    field1Value = tool.status || 'N/A';
+                    field2Label = 'Technician:';
+                    field2Value = tool.technician || 'N/A';
+                }
+
+                modalTitle.textContent = title;
+                modalBody.innerHTML = `
+                    <div class="mb-3">
+                        <strong style="color: #222; font-size: 1.1em;">${field1Label}</strong>
+                        <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${field1Value}</div>
+                    </div>
+                    <div class="mb-3">
+                        <strong style="color: #222; font-size: 1.1em;">${field2Label}</strong>
+                        <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${field2Value}</div>
+                    </div>
+                    <div class="mb-3">
+                        <strong style="color: #222; font-size: 1.1em;">Last WorkOn:</strong>
+                        <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${workOnValue}</div>
+                    </div>
+                `;
+
+                window.history.pushState({ modal: 'checkoutInfo' }, '', '');
+                modal.show();
+            } catch (error) {
+                console.error('Error fetching checkout information:', error);
+                modalTitle.textContent = 'Error';
+                modalBody.innerHTML = `
+                    <div class="text-center text-danger">
+                        Error loading checkout information. Please try again.<br>
+                        <small>Status: ${tool.status || 'N/A'}<br>
+                        Tool ID: ${tool.id || 'N/A'}</small>
+                    </div>
+                `;
+            }
         }
 
         function createPhotoUploadInput(toolId, partNumber) {

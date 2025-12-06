@@ -1076,7 +1076,7 @@
                         if (user) {
                             console.log('[MY-TOOLS] ✓ Auth confirmed via onAuthStateChanged:', user.email);
                             localStorage.setItem('authVerified', 'true');
-                        } else {
+                } else {
                             // Only redirect if we're certain user is logged out
                             console.log('[MY-TOOLS] ⚠ Background auth check: no user found after delay');
                             console.log('[MY-TOOLS] Scheduling double-check (500ms delay)...');
@@ -1112,7 +1112,7 @@
                             localStorage.removeItem('authVerified');
                             window.location.href = 'main-menu.html';
                             return;
-                        }
+                }
                         
                         if (user) {
                             console.log('[MY-TOOLS] ✓ User authenticated, setting flags and initializing...');
@@ -1130,7 +1130,7 @@
                     });
                 }
             }
-            
+
             // Setup event listeners
             setupEventListeners();
             
@@ -1247,8 +1247,8 @@
                         // Continue with storedFullName - we'll use it below
                     } else {
                         console.log('[MY-TOOLS] showCollectionSelectionDialog: No user and no stored credentials, cannot show dialog');
-                        return;
-                    }
+                    return;
+                }
                 } else {
                     console.log('[MY-TOOLS] showCollectionSelectionDialog: User found after waiting:', user.email);
                 }
@@ -1815,13 +1815,22 @@
                 let field1Value = '';
                 let field2Label = '';
                 let field2Value = '';
+                let workOnValue = 'N/A';
+
+                // Get WorkOn value from tool data
+                const toolDoc = await db.collection('tools').doc(tool.id).get();
+                if (toolDoc.exists) {
+                    const toolData = toolDoc.data();
+                    workOnValue = (typeof toolData.WorkOn === 'string' && toolData.WorkOn.trim()) ? toolData.WorkOn : 'N/A';
+                } else {
+                    workOnValue = (typeof tool.WorkOn === 'string' && tool.WorkOn.trim()) ? tool.WorkOn : 'N/A';
+                }
 
                 if (status === 'OUT') {
                     title = 'Tool Checkout Information';
                     field1Label = 'Checked Out By:';
                     field2Label = 'ChkOut Date:';
 
-                    const toolDoc = await db.collection('tools').doc(tool.id).get();
                     if (toolDoc.exists) {
                         const toolData = toolDoc.data();
                         field1Value = toolData.technician || 'N/A';
@@ -1870,6 +1879,10 @@
                     <div class="mb-3">
                         <strong style="color: #222; font-size: 1.1em;">${field2Label}</strong>
                         <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${field2Value}</div>
+                    </div>
+                    <div class="mb-3">
+                        <strong style="color: #222; font-size: 1.1em;">Last WorkOn:</strong>
+                        <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${workOnValue}</div>
                     </div>
                 `;
 
