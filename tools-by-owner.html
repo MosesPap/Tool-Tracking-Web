@@ -508,6 +508,82 @@
                         inset 0 1px 0 rgba(255, 255, 255, 0.3),
                         inset 0 -1px 0 rgba(0, 0, 0, 0.1);
         }
+
+        /* 3D Grey Interactive Button for Add New Collection */
+        .add-collection-btn-3d {
+            position: relative;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 16px;
+            border: 2px solid #bdbdbd;
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
+            color: #333;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            transform: perspective(1000px) rotateX(0deg);
+            width: 100%;
+            margin-top: 1rem;
+        }
+
+        .add-collection-btn-3d:hover {
+            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%);
+            border-color: #adadad;
+            transform: perspective(1000px) rotateX(5deg) translateY(-2px);
+            box-shadow: 0 4px 12px rgba(189, 189, 189, 0.4),
+                       0 2px 4px rgba(0, 0, 0, 0.2),
+                       inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                       inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+        }
+
+        .add-collection-btn-3d:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(0px);
+            box-shadow: 0 2px 4px rgba(189, 189, 189, 0.3),
+                       inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                       inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        }
+
+        /* 3D Red Interactive Button for Delete Collection */
+        .delete-collection-btn-3d {
+            position: relative;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 16px;
+            border: 2px solid #d32f2f;
+            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(211, 47, 47, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            transform: perspective(1000px) rotateX(0deg);
+            width: 100%;
+            margin-top: 0.5rem;
+        }
+
+        .delete-collection-btn-3d:hover {
+            background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%);
+            border-color: #b71c1c;
+            transform: perspective(1000px) rotateX(5deg) translateY(-2px);
+            box-shadow: 0 4px 12px rgba(211, 47, 47, 0.4),
+                       0 2px 4px rgba(0, 0, 0, 0.2),
+                       inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                       inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+        }
+
+        .delete-collection-btn-3d:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(0px);
+            box-shadow: 0 2px 4px rgba(211, 47, 47, 0.3),
+                       inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                       inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        }
     </style>
 </head>
 <body>
@@ -591,6 +667,69 @@
                 </div>
                 <div class="modal-body" id="collectionSelectBody">
                     <!-- Collections will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add New Collection Modal -->
+    <div class="modal fade" id="addCollectionModal" tabindex="-1" aria-labelledby="addCollectionModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="addCollectionModalLabel">Add New Collection</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addCollectionForm">
+                        <div class="mb-3">
+                            <label for="collectionNameInput" class="form-label"><strong>Collection Name *</strong></label>
+                            <input type="text" class="form-control" id="collectionNameInput" placeholder="e.g., Col-1, AV-1" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="collectionDescriptionInput" class="form-label"><strong>Description</strong></label>
+                            <textarea class="form-control" id="collectionDescriptionInput" rows="3" placeholder="Enter collection description"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="collectionPhotoInput" class="form-label"><strong>Collection Photo</strong></label>
+                            <input type="file" class="form-control" id="collectionPhotoInput" accept="image/*">
+                            <small class="form-text text-muted">Optional: Upload a photo for this collection</small>
+                        </div>
+                        <div id="addCollectionError" class="text-danger mb-3" style="display: none;"></div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveCollectionBtn">Save Collection</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Collection Confirmation Modal -->
+    <div class="modal fade" id="deleteCollectionModal" tabindex="-1" aria-labelledby="deleteCollectionModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteCollectionModalLabel">Delete Collection</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p><strong>Warning:</strong> This will delete all tools from the collection "<span id="deleteCollectionName"></span>".</p>
+                    <div class="alert alert-warning">
+                        <strong>Soft Delete:</strong> Tools will be moved to a deleted state and kept for 7 days before permanent deletion.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-check-label">
+                            <input type="checkbox" class="form-check-input" id="permanentDeleteCheckbox">
+                            <strong>Delete permanently immediately</strong> (cannot be undone)
+                        </label>
+                    </div>
+                    <div id="deleteCollectionError" class="text-danger mb-3" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteCollectionBtn">Delete Collection</button>
                 </div>
             </div>
         </div>
@@ -1413,12 +1552,342 @@
                     });
                 }
                 
+                // Add "Add New Collection" button with 3D interactive grey style
+                const addButton = document.createElement('button');
+                addButton.className = 'add-collection-btn-3d';
+                addButton.innerHTML = '<i class="fas fa-plus me-2"></i>Add New Collection';
+                addButton.onclick = function(e) {
+                    e.stopPropagation();
+                    modal.hide();
+                    showAddCollectionModal();
+                };
+                body.appendChild(addButton);
+                
+                // Add "Delete Collection" button with 3D interactive red style (only if collections exist)
+                if (collections.length > 0) {
+                    const deleteButton = document.createElement('button');
+                    deleteButton.className = 'delete-collection-btn-3d';
+                    deleteButton.innerHTML = '<i class="fas fa-trash me-2"></i>Delete Collection';
+                    deleteButton.onclick = function(e) {
+                        e.stopPropagation();
+                        showDeleteCollectionModal();
+                    };
+                    body.appendChild(deleteButton);
+                }
+                
                 modal.show();
             } catch (error) {
                 console.error('Error loading collections:', error);
                 body.innerHTML = '<div class="text-center text-danger">Error loading collections. Please try again.</div>';
             }
         }
+
+        // Normalize collection name for duplicate checking (handles Greek/English similar characters)
+        function normalizeCollectionName(name) {
+            if (!name) return '';
+            const greekToEnglish = {
+                '\u0391': 'A', '\u0392': 'B', '\u0395': 'E', '\u0396': 'Z', '\u0397': 'H', '\u0399': 'I', '\u039A': 'K', '\u039C': 'M', '\u039D': 'N', '\u039F': 'O', '\u03A1': 'P', '\u03A4': 'T', '\u03A5': 'Y', '\u03A7': 'X',
+                '\u03B1': 'a', '\u03B2': 'b', '\u03B5': 'e', '\u03B6': 'z', '\u03B7': 'h', '\u03B9': 'i', '\u03BA': 'k', '\u03BC': 'm', '\u03BD': 'n', '\u03BF': 'o', '\u03C1': 'p', '\u03C4': 't', '\u03C5': 'y', '\u03C7': 'x'
+            };
+            return name.toLowerCase().split('').map(char => greekToEnglish[char] || char).join('');
+        }
+
+        // Show Add Collection Modal
+        function showAddCollectionModal() {
+            const modalElement = document.getElementById('addCollectionModal');
+            const modal = new bootstrap.Modal(modalElement);
+            document.getElementById('addCollectionForm').reset();
+            document.getElementById('addCollectionError').style.display = 'none';
+            document.getElementById('addCollectionError').textContent = '';
+            
+            window.collectionSaveSuccess = false;
+            
+            const handleModalClose = function() {
+                if (!window.collectionSaveSuccess) {
+                    setTimeout(() => {
+                        showCollectionSelectionDialog();
+                    }, 100);
+                }
+                window.collectionSaveSuccess = false;
+            };
+            
+            modalElement.removeEventListener('hidden.bs.modal', handleModalClose);
+            modalElement.addEventListener('hidden.bs.modal', handleModalClose);
+            
+            modal.show();
+        }
+
+        // Save new collection to Firebase
+        async function saveNewCollection() {
+            const db = window.db || firebase.firestore();
+            const storage = window.storage || firebase.storage();
+            
+            if (!currentOwner || currentOwner === '' || currentOwner === 'ALL') {
+                alert('Error: Please select a specific owner first.');
+                return;
+            }
+            
+            const collectionName = document.getElementById('collectionNameInput').value.trim();
+            const description = document.getElementById('collectionDescriptionInput').value.trim();
+            const photoFile = document.getElementById('collectionPhotoInput').files[0];
+            const errorDiv = document.getElementById('addCollectionError');
+            
+            if (!collectionName) {
+                errorDiv.textContent = 'Collection name is required.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            // Check if collection already exists for this owner (normalized comparison)
+            const userCollections = await db.collection('collections').where('owner', '==', currentOwner).get();
+            const normalizedNewName = normalizeCollectionName(collectionName);
+            const existingCollection = userCollections.docs.find(doc => {
+                const existingName = doc.data().collectionName;
+                if (!existingName) return false;
+                const normalizedExistingName = normalizeCollectionName(existingName);
+                return normalizedExistingName === normalizedNewName;
+            });
+            
+            if (existingCollection) {
+                errorDiv.textContent = 'A collection with this name already exists (including visually similar names with different character sets). Please choose a different name.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            try {
+                errorDiv.style.display = 'none';
+                const saveBtn = document.getElementById('saveCollectionBtn');
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Saving...';
+                
+                let photoUrls = [];
+                
+                if (photoFile) {
+                    const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                    loadingModal.show();
+                    document.getElementById('photoUploadProgress').textContent = 'Processing image...';
+                    
+                    const compressedBlob = await compressImage(photoFile);
+                    if (!compressedBlob) {
+                        loadingModal.hide();
+                        errorDiv.textContent = 'Failed to compress image.';
+                        errorDiv.style.display = 'block';
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = 'Save Collection';
+                        return;
+                    }
+                    
+                    document.getElementById('photoUploadProgress').textContent = 'Uploading to storage...';
+                    
+                    const fileName = `${collectionName}_photo1.jpg`;
+                    const photoRef = storage.ref('Collection%20Photo/' + fileName);
+                    const uploadTask = photoRef.put(compressedBlob);
+                    
+                    await new Promise((resolve, reject) => {
+                        uploadTask.on('state_changed',
+                            (snapshot) => {
+                                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                                document.getElementById('photoUploadProgress').textContent = `Uploading... ${Math.round(progress)}%`;
+                            },
+                            (error) => {
+                                loadingModal.hide();
+                                reject(error);
+                            },
+                            async () => {
+                                try {
+                                    const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                                    photoUrls = [downloadURL];
+                                    loadingModal.hide();
+                                    resolve();
+                                } catch (error) {
+                                    loadingModal.hide();
+                                    reject(error);
+                                }
+                            }
+                        );
+                    });
+                }
+                
+                const collectionData = {
+                    collectionName: collectionName,
+                    owner: currentOwner,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    photoUrls: photoUrls
+                };
+                
+                if (description) {
+                    collectionData.description = description;
+                }
+                
+                // Use collection name as document ID
+                await db.collection('collections').doc(collectionName).set(collectionData);
+                
+                window.newlyCreatedCollectionName = collectionName;
+                window.collectionSaveSuccess = true;
+                
+                const addModal = bootstrap.Modal.getInstance(document.getElementById('addCollectionModal'));
+                if (addModal) addModal.hide();
+                
+                alert('Collection created successfully!');
+                await showCollectionSelectionDialog();
+                
+            } catch (error) {
+                console.error('Error saving collection:', error);
+                errorDiv.textContent = 'Error saving collection: ' + error.message;
+                errorDiv.style.display = 'block';
+                const saveBtn = document.getElementById('saveCollectionBtn');
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save Collection';
+            }
+        }
+
+        // Show Delete Collection Modal
+        function showDeleteCollectionModal() {
+            if (!lastViewedCollectionName) {
+                alert('No collection selected.');
+                return;
+            }
+            
+            document.getElementById('deleteCollectionName').textContent = lastViewedCollectionName;
+            document.getElementById('permanentDeleteCheckbox').checked = false;
+            document.getElementById('deleteCollectionError').style.display = 'none';
+            
+            const modal = new bootstrap.Modal(document.getElementById('deleteCollectionModal'));
+            modal.show();
+        }
+
+        // Delete Collection (with soft delete and permanent delete options)
+        async function deleteCollection() {
+            const db = window.db || firebase.firestore();
+            const storage = window.storage || firebase.storage();
+            
+            if (!lastViewedCollectionName) {
+                alert('No collection selected.');
+                return;
+            }
+            
+            const permanentDelete = document.getElementById('permanentDeleteCheckbox').checked;
+            const errorDiv = document.getElementById('deleteCollectionError');
+            const confirmBtn = document.getElementById('confirmDeleteCollectionBtn');
+            
+            try {
+                errorDiv.style.display = 'none';
+                confirmBtn.disabled = true;
+                confirmBtn.textContent = 'Deleting...';
+                
+                // Get all tools in this collection
+                const toolsSnapshot = await db.collection('tools')
+                    .where('collectionCode', '==', lastViewedCollectionName)
+                    .get();
+                
+                if (toolsSnapshot.empty) {
+                    alert('No tools found in this collection.');
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Delete Collection';
+                    return;
+                }
+                
+                const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                loadingModal.show();
+                document.getElementById('photoUploadProgress').textContent = 'Deleting tools...';
+                
+                const deleteDate = new Date();
+                const permanentDeleteDate = new Date(deleteDate);
+                permanentDeleteDate.setDate(permanentDeleteDate.getDate() + 7);
+                
+                const batch = db.batch();
+                let deletedCount = 0;
+                
+                // Process each tool
+                for (const doc of toolsSnapshot.docs) {
+                    const toolData = doc.data();
+                    
+                    if (permanentDelete) {
+                        // Delete permanently immediately
+                        // Delete photos from storage
+                        if (toolData.photoUrls && Array.isArray(toolData.photoUrls)) {
+                            for (const photoUrl of toolData.photoUrls) {
+                                try {
+                                    const urlParts = photoUrl.split('/');
+                                    const encodedPath = urlParts[urlParts.length - 1].split('?')[0];
+                                    const decodedPath = decodeURIComponent(encodedPath);
+                                    const photoRef = storage.ref().child(decodedPath);
+                                    await photoRef.delete();
+                                } catch (storageError) {
+                                    console.warn('Could not delete photo from storage:', storageError);
+                                }
+                            }
+                        }
+                        // Delete the tool document
+                        batch.delete(doc.ref);
+                        deletedCount++;
+                    } else {
+                        // Soft delete - move to deletedTools collection
+                        const deletedToolData = {
+                            ...toolData,
+                            originalId: doc.id,
+                            collectionCode: lastViewedCollectionName,
+                            deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            permanentDeleteDate: firebase.firestore.Timestamp.fromDate(permanentDeleteDate),
+                            deletedBy: currentOwner || 'Admin'
+                        };
+                        
+                        // Add to deletedTools collection
+                        batch.set(db.collection('deletedTools').doc(doc.id), deletedToolData);
+                        
+                        // Delete from tools collection
+                        batch.delete(doc.ref);
+                        deletedCount++;
+                    }
+                }
+                
+                // Commit the batch
+                await batch.commit();
+                
+                loadingModal.hide();
+                
+                if (permanentDelete) {
+                    alert(`✅ ${deletedCount} tool(s) permanently deleted from collection "${lastViewedCollectionName}".`);
+                } else {
+                    alert(`✅ ${deletedCount} tool(s) moved to deleted state. They will be permanently deleted after 7 days.`);
+                }
+                
+                // Close the delete modal
+                const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteCollectionModal'));
+                if (deleteModal) deleteModal.hide();
+                
+                // Close collection selection modal if open
+                const collectionModal = bootstrap.Modal.getInstance(document.getElementById('collectionSelectModal'));
+                if (collectionModal) collectionModal.hide();
+                
+                // Return to owner selection
+                document.getElementById('toolsByOwnerScreen').style.display = 'block';
+                document.getElementById('myToolsByCollectionScreen').style.display = 'none';
+                lastViewedCollectionName = '';
+                
+            } catch (error) {
+                console.error('Error deleting collection:', error);
+                errorDiv.textContent = 'Error deleting collection: ' + error.message;
+                errorDiv.style.display = 'block';
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = 'Delete Collection';
+                const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
+                if (loadingModal) loadingModal.hide();
+            }
+        }
+
+        // Set up event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            const saveBtn = document.getElementById('saveCollectionBtn');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', saveNewCollection);
+            }
+            
+            const deleteBtn = document.getElementById('confirmDeleteCollectionBtn');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', deleteCollection);
+            }
+        });
 
         // Show My Tools by Collection (adapted from my-tools.html for selected owner)
         async function showMyToolsByCollection(collectionName) {
