@@ -2933,7 +2933,9 @@ Thank you!`;
                 tableBody.innerHTML = '';
                 mobileCards.innerHTML = '';
 
+                let userIndex = 0;
                 snapshot.forEach(doc => {
+                    userIndex++;
                     const userData = doc.data();
                     
                     // Desktop table row
@@ -2949,6 +2951,9 @@ Thank you!`;
                     
                     const row = document.createElement('tr');
                     row.innerHTML = `
+                        <td>
+                            <span class="user-number-3d">${userIndex}</span>
+                        </td>
                         <td>${userData.fullName || 'N/A'}</td>
                         <td>${userData.email || 'N/A'}</td>
                         <td>
@@ -2964,6 +2969,9 @@ Thank you!`;
                                 </button>
                                 <button class="btn btn-sm btn-${isAvionics ? 'danger' : 'warning'}" onclick="toggleAvionics('${doc.id}', ${!isAvionics})">
                                     ${isAvionics ? '<i class="fas fa-cog"></i> Remove Avionics' : '<i class="fas fa-cog"></i> Make Avionics'}
+                                </button>
+                                <button class="btn btn-sm btn-danger delete-user-btn-3d" onclick="deleteUser('${doc.id}', '${(userData.email || '').replace(/'/g, "\\'")}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}')" title="Delete User">
+                                    <i class="fas fa-trash-alt"></i> Delete
                                 </button>
                             </div>
                         </td>
