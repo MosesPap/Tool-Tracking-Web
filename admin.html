@@ -2099,6 +2099,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-functions-compat.js"></script>
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Common Firebase configuration and utilities -->
@@ -2112,18 +2113,19 @@
                 const auth = window.auth;
                 const db = window.db;
                 const storage = window.storage;
+                const functions = window.functions;
                 
-                if (!auth || !db || !storage) {
+                if (!auth || !db || !storage || !functions) {
                     console.log('[ADMIN] Waiting for common.js to load...');
                     setTimeout(waitForAuth, 50);
                     return;
                 }
                 
                 console.log('[ADMIN] ✓ Using global Firebase instances from common.js');
-                initializeAdmin(auth, db, storage);
+                initializeAdmin(auth, db, storage, functions);
             }
             
-            async function initializeAdmin(auth, db, storage) {
+            async function initializeAdmin(auth, db, storage, functions) {
 
         // DOM Elements
         const loginSection = document.getElementById('loginSection');
@@ -3090,24 +3092,68 @@ Thank you!`;
         // Delete User
         window.deleteUser = async function(userId, userEmail, userName) {
             const db = window.db || firebase.firestore();
+            const auth = window.auth || firebase.auth();
+            const functions = window.functions || firebase.functions();
             
-            const confirmMsg = `Are you sure you want to delete user "${userName}" (${userEmail})?\n\nThis will:\n- Delete the user from the technicians collection\n\n⚠️ Note: To delete from Firebase Authentication, you'll need to:\n1. Use Firebase Console (Authentication > Users)\n2. Or implement a Cloud Function with Admin SDK\n\nThis action cannot be undone!`;
+            // Check if user is authenticated
+            const currentUser = auth.currentUser;
+            if (!currentUser) {
+                alert('❌ You must be logged in to delete users. Please refresh the page and log in again.');
+                return;
+            }
+            
+            // Verify user is authenticated and get fresh token
+            try {
+                const token = await currentUser.getIdToken(true); // Force refresh
+                console.log('User authenticated, token obtained');
+            } catch (authError) {
+                console.error('Auth error:', authError);
+                alert('❌ Authentication error. Please refresh the page and log in again.');
+                return;
+            }
+            
+            const confirmMsg = `Are you sure you want to delete user "${userName}" (${userEmail})?\n\nThis will:\n- Delete the user from the technicians collection\n- Delete the user from Firebase Authentication\n\n⚠️ If Firebase Authentication deletion fails, the user will NOT be deleted from either location.\n\nThis action cannot be undone!`;
             
             if (!confirm(confirmMsg)) return;
 
             try {
-                // Delete from technicians collection
-                await db.collection('technicians').doc(userId).delete();
-                console.log('User deleted from technicians collection:', userId);
+                // Call Cloud Function to delete user from both Firestore and Firebase Auth
+                // The Cloud Function ensures that if Auth deletion fails, nothing is deleted
+                const deleteUserFunction = functions.httpsCallable('deleteUser');
+                const result = await deleteUserFunction({
+                    userId: userId,
+                    userEmail: userEmail
+                });
 
-                alert(`✅ User "${userName}" deleted from technicians collection successfully!\n\n⚠️ Remember: Delete the user from Firebase Authentication manually via Firebase Console (Authentication > Users) or implement a Cloud Function with Admin SDK for automatic deletion.`);
+                if (result.data.success) {
+                    alert(`✅ ${result.data.message}`);
+                } else {
+                    alert(`⚠️ User deletion completed with warnings: ${result.data.message || 'Unknown error'}`);
+                }
 
                 // Reload users list
                 loadUsers();
                 loadStatistics(); // Refresh stats
             } catch (error) {
                 console.error('Error deleting user:', error);
-                alert('Failed to delete user: ' + error.message);
+                
+                // Don't delete from Firestore if Cloud Function fails
+                // This ensures data consistency - either both are deleted or neither
+                let errorMessage = 'Failed to delete user: ';
+                
+                if (error.code === 'functions/unavailable' || error.code === 'functions/not-found') {
+                    errorMessage = 'Cloud Function is not available. User was not deleted. Please try again later or contact support.';
+                } else if (error.code === 'functions/permission-denied') {
+                    errorMessage = 'Permission denied. You do not have permission to delete users.';
+                } else if (error.code === 'functions/internal') {
+                    errorMessage = error.message || 'Failed to delete user. The user was not deleted from either Firestore or Firebase Authentication.';
+                } else if (error.code === 'functions/unauthenticated') {
+                    errorMessage = 'Authentication error. Please refresh the page and log in again.';
+                } else {
+                    errorMessage += (error.message || error);
+                }
+                
+                alert(`❌ ${errorMessage}`);
             }
         };
 
