@@ -741,32 +741,33 @@
         </div>
     </div>
 
-    <!-- Restore Deleted Collection Modal -->
+    <!-- Restore Deleted Tools Modal -->
     <div class="modal fade" id="restoreCollectionModal" tabindex="-1" aria-labelledby="restoreCollectionModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title" id="restoreCollectionModalLabel">Restore Deleted Collection</h5>
+                    <h5 class="modal-title" id="restoreCollectionModalLabel">Restore Deleted Tools</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p>Select deleted tools to restore by owner. Only tools deleted within the last 7 days can be restored.</p>
+                    <p>Select deleted tools to restore. Only tools deleted within the last 7 days can be restored.</p>
                     <div class="mb-3">
-                        <label for="restoreCollectionSelect" class="form-label"><strong>Select Owner's Deleted Tools:</strong></label>
-                        <select id="restoreCollectionSelect" class="form-select">
-                            <option value="">-- Select Deleted Tools to Restore --</option>
-                        </select>
+                        <label class="form-check-label">
+                            <input type="checkbox" class="form-check-input" id="selectAllDeletedTools">
+                            <strong>Select All</strong>
+                        </label>
                     </div>
-                    <div id="restoreCollectionInfo" class="alert alert-info" style="display: none;">
-                        <strong>Owner:</strong> <span id="restoreCollectionName"></span><br>
-                        <strong>Deleted:</strong> <span id="restoreDeletedDate"></span><br>
-                        <strong>Tools:</strong> <span id="restoreToolsCount"></span>
+                    <div id="restoreToolsList" style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px;">
+                        <!-- Deleted tools will be listed here -->
+                    </div>
+                    <div id="restoreCollectionInfo" class="alert alert-info mt-3" style="display: none;">
+                        <strong>Selected:</strong> <span id="restoreSelectedCount">0</span> tool(s)
                     </div>
                     <div id="restoreCollectionError" class="text-danger mb-3" style="display: none;"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-success" id="confirmRestoreCollectionBtn" disabled>Restore Collection</button>
+                    <button type="button" class="btn btn-success" id="confirmRestoreCollectionBtn" disabled>Restore Selected Tools</button>
                 </div>
             </div>
         </div>
@@ -1940,16 +1941,14 @@
                         deletedCount++;
                     } else {
                         // Soft delete - move to deletedTools collection
+                        // Preserve the original collectionCode from the tool
                         const deletedToolData = {
                             ...toolData,
                             originalId: doc.id,
-                            collectionCode: toolData.collectionCode || collectionName,
+                            collectionCode: toolData.collectionCode || collectionName, // Preserve original collectionCode
                             deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
                             permanentDeleteDate: firebase.firestore.Timestamp.fromDate(permanentDeleteDate),
-                            deletedBy: currentOwner || 'Admin',
-                            deletedCollectionName: collectionName
-                        };
-                            deletedCollectionName: collectionName
+                            deletedBy: currentOwner || 'Admin'
                         };
                         
                         // Add to deletedTools collection
@@ -2001,23 +2000,26 @@
             }
         }
 
-        // Show Restore Deleted Collection Modal (temporarily restore by owner)
+        // Show Restore Deleted Tools Modal (by owner)
         async function showRestoreCollectionModal() {
             const db = window.db || firebase.firestore();
             const modal = new bootstrap.Modal(document.getElementById('restoreCollectionModal'));
-            const selectElement = document.getElementById('restoreCollectionSelect');
+            const toolsListDiv = document.getElementById('restoreToolsList');
             const infoDiv = document.getElementById('restoreCollectionInfo');
             const confirmBtn = document.getElementById('confirmRestoreCollectionBtn');
             const errorDiv = document.getElementById('restoreCollectionError');
+            const selectAllCheckbox = document.getElementById('selectAllDeletedTools');
             
             // Reset form
-            selectElement.innerHTML = '<option value="">-- Select Deleted Tools to Restore --</option>';
+            toolsListDiv.innerHTML = '<div class="text-center">Loading...</div>';
             infoDiv.style.display = 'none';
             confirmBtn.disabled = true;
             errorDiv.style.display = 'none';
+            selectAllCheckbox.checked = false;
+            window.selectedDeletedTools = [];
             
             try {
-                // Get all deleted tools for this owner (temporarily restore by owner, not by collection)
+                // Get all deleted tools for this owner
                 let deletedToolsQuery;
                 if (currentOwner === 'ALL') {
                     deletedToolsQuery = await db.collection('deletedTools').get();
@@ -2027,10 +2029,13 @@
                         .get();
                 }
                 
-                // Filter tools that are still within 7 days and group by owner
-                const ownerToolsMap = new Map();
-                let totalTools = 0;
+                if (deletedToolsQuery.empty) {
+                    toolsListDiv.innerHTML = '<div class="text-center text-muted">No deleted tools found for this owner.</div>';
+                    return;
+                }
                 
+                // Filter tools that are still within 7 days
+                const availableTools = [];
                 deletedToolsQuery.forEach(doc => {
                     const data = doc.data();
                     const permanentDeleteDate = data.permanentDeleteDate;
@@ -2045,59 +2050,86 @@
                     }
                     
                     if (canRestore) {
-                        const owner = data.owner || data.deletedBy || 'Unknown';
-                        if (!ownerToolsMap.has(owner)) {
-                            const firstDeletedAt = data.deletedAt;
-                            ownerToolsMap.set(owner, {
-                                owner: owner,
-                                deletedAt: firstDeletedAt,
-                                toolCount: 0,
-                                toolIds: []
-                            });
-                        }
-                        ownerToolsMap.get(owner).toolCount++;
-                        ownerToolsMap.get(owner).toolIds.push(doc.id);
-                        totalTools++;
+                        availableTools.push({
+                            id: doc.id,
+                            originalId: data.originalId || doc.id,
+                            ...data
+                        });
                     }
                 });
                 
-                const owners = Array.from(ownerToolsMap.values());
+                if (availableTools.length === 0) {
+                    toolsListDiv.innerHTML = '<div class="text-center text-muted">No deleted tools available for restoration (7-day window expired).</div>';
+                    return;
+                }
                 
-                if (owners.length === 0 || totalTools === 0) {
-                    selectElement.innerHTML = '<option value="">No deleted tools available for restoration (must be within 7 days)</option>';
-                    selectElement.disabled = true;
-                } else {
-                    // Populate dropdown with owner options
-                    owners.forEach(ownerData => {
-                        const option = document.createElement('option');
-                        option.value = ownerData.owner;
-                        const deletedDate = ownerData.deletedAt ? 
-                            (ownerData.deletedAt.toDate ? ownerData.deletedAt.toDate() : new Date(ownerData.deletedAt.seconds * 1000)) : 
-                            new Date();
-                        option.textContent = `${ownerData.owner} (${ownerData.toolCount} tools, deleted ${deletedDate.toLocaleDateString()})`;
-                        option.setAttribute('data-owner', JSON.stringify(ownerData));
-                        selectElement.appendChild(option);
+                // Display tools in a list with checkboxes
+                let html = '<div class="list-group">';
+                availableTools.forEach((tool, index) => {
+                    const deletedDate = tool.deletedAt ? 
+                        (tool.deletedAt.toDate ? tool.deletedAt.toDate() : new Date(tool.deletedAt.seconds * 1000)) : 
+                        new Date();
+                    const toolName = tool.toolName || tool.documentId || tool.originalId || 'Unknown Tool';
+                    const collectionCode = tool.collectionCode || 'No Collection';
+                    const partNumber = tool.partNumber || 'N/A';
+                    
+                    html += `
+                        <div class="list-group-item">
+                            <div class="form-check">
+                                <input class="form-check-input restore-tool-checkbox" type="checkbox" 
+                                       id="restoreTool${index}" 
+                                       data-tool-id="${tool.id}"
+                                       data-original-id="${tool.originalId}">
+                                <label class="form-check-label" for="restoreTool${index}" style="width: 100%;">
+                                    <strong>${toolName}</strong> (ID: ${tool.originalId})<br>
+                                    <small class="text-muted">
+                                        Collection: ${collectionCode} | P/N: ${partNumber} | Deleted: ${deletedDate.toLocaleString()}
+                                    </small>
+                                </label>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                toolsListDiv.innerHTML = html;
+                
+                // Add event listeners for checkboxes
+                const checkboxes = toolsListDiv.querySelectorAll('.restore-tool-checkbox');
+                checkboxes.forEach(checkbox => {
+                    checkbox.addEventListener('change', function() {
+                        updateRestoreSelection();
+                    });
+                });
+                
+                // Select all checkbox handler
+                selectAllCheckbox.addEventListener('change', function() {
+                    checkboxes.forEach(checkbox => {
+                        checkbox.checked = this.checked;
+                    });
+                    updateRestoreSelection();
+                });
+                
+                function updateRestoreSelection() {
+                    window.selectedDeletedTools = [];
+                    checkboxes.forEach(checkbox => {
+                        if (checkbox.checked) {
+                            window.selectedDeletedTools.push({
+                                id: checkbox.getAttribute('data-tool-id'),
+                                originalId: checkbox.getAttribute('data-original-id')
+                            });
+                        }
                     });
                     
-                    // Handle selection change
-                    selectElement.onchange = function() {
-                        const selectedOption = this.options[this.selectedIndex];
-                        if (selectedOption.value) {
-                            const ownerData = JSON.parse(selectedOption.getAttribute('data-owner'));
-                            const deletedDate = ownerData.deletedAt ? 
-                                (ownerData.deletedAt.toDate ? ownerData.deletedAt.toDate() : new Date(ownerData.deletedAt.seconds * 1000)) : 
-                                new Date();
-                            
-                            document.getElementById('restoreCollectionName').textContent = ownerData.owner;
-                            document.getElementById('restoreDeletedDate').textContent = deletedDate.toLocaleString();
-                            document.getElementById('restoreToolsCount').textContent = ownerData.toolCount;
-                            infoDiv.style.display = 'block';
-                            confirmBtn.disabled = false;
-                        } else {
-                            infoDiv.style.display = 'none';
-                            confirmBtn.disabled = true;
-                        }
-                    };
+                    const count = window.selectedDeletedTools.length;
+                    document.getElementById('restoreSelectedCount').textContent = count;
+                    
+                    if (count > 0) {
+                        infoDiv.style.display = 'block';
+                        confirmBtn.disabled = false;
+                    } else {
+                        infoDiv.style.display = 'none';
+                        confirmBtn.disabled = true;
+                    }
                 }
                 
                 modal.show();
@@ -2105,21 +2137,19 @@
                 console.error('Error loading deleted tools:', error);
                 errorDiv.textContent = 'Error loading deleted tools: ' + error.message;
                 errorDiv.style.display = 'block';
+                toolsListDiv.innerHTML = '<div class="text-center text-danger">Error loading deleted tools.</div>';
             }
         }
 
-        // Restore Deleted Collection (temporarily restore by owner)
+        // Restore Deleted Tools (by owner)
         async function restoreCollection() {
             const db = window.db || firebase.firestore();
-            const selectElement = document.getElementById('restoreCollectionSelect');
-            const selectedOption = selectElement.options[selectElement.selectedIndex];
             
-            if (!selectedOption || !selectedOption.value) {
-                alert('Please select tools to restore.');
+            if (!window.selectedDeletedTools || window.selectedDeletedTools.length === 0) {
+                alert('Please select at least one tool to restore.');
                 return;
             }
             
-            const selectedOwner = selectedOption.value;
             const errorDiv = document.getElementById('restoreCollectionError');
             const confirmBtn = document.getElementById('confirmRestoreCollectionBtn');
             
@@ -2128,46 +2158,6 @@
                 confirmBtn.disabled = true;
                 confirmBtn.textContent = 'Restoring...';
                 
-                // Get all deleted tools for this owner (temporarily restore by owner, not by collection)
-                let deletedToolsQuery;
-                if (currentOwner === 'ALL') {
-                    deletedToolsQuery = await db.collection('deletedTools')
-                        .where('owner', '==', selectedOwner)
-                        .get();
-                } else {
-                    deletedToolsQuery = await db.collection('deletedTools')
-                        .where('owner', '==', selectedOwner)
-                        .where('deletedBy', '==', currentOwner)
-                        .get();
-                }
-                
-                // Filter to only include tools within 7 days
-                const toolsToRestore = [];
-                deletedToolsQuery.forEach(doc => {
-                    const data = doc.data();
-                    const permanentDeleteDate = data.permanentDeleteDate;
-                    
-                    // Check if still within 7 days
-                    let canRestore = true;
-                    if (permanentDeleteDate) {
-                        const deleteDate = permanentDeleteDate.toDate ? permanentDeleteDate.toDate() : new Date(permanentDeleteDate.seconds * 1000);
-                        if (deleteDate < new Date()) {
-                            canRestore = false;
-                        }
-                    }
-                    
-                    if (canRestore) {
-                        toolsToRestore.push({ doc: doc, data: data });
-                    }
-                });
-                
-                if (toolsToRestore.length === 0) {
-                    alert('No deleted tools found for this owner that are still within the 7-day restoration window.');
-                    confirmBtn.disabled = false;
-                    confirmBtn.textContent = 'Restore Collection';
-                    return;
-                }
-                
                 const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
                 loadingModal.show();
                 document.getElementById('photoUploadProgress').textContent = 'Restoring tools...';
@@ -2175,9 +2165,17 @@
                 const batch = db.batch();
                 let restoredCount = 0;
                 
-                // Restore each tool
-                for (const { doc, data: deletedToolData } of toolsToRestore) {
-                    const originalId = deletedToolData.originalId || doc.id;
+                // Restore each selected tool
+                for (const selectedTool of window.selectedDeletedTools) {
+                    const deletedToolDoc = await db.collection('deletedTools').doc(selectedTool.id).get();
+                    
+                    if (!deletedToolDoc.exists) {
+                        console.warn(`Tool ${selectedTool.id} not found in deletedTools`);
+                        continue;
+                    }
+                    
+                    const deletedToolData = deletedToolDoc.data();
+                    const originalId = selectedTool.originalId || deletedToolData.originalId || selectedTool.id;
                     
                     // Remove deletion-related fields
                     const restoredToolData = { ...deletedToolData };
@@ -2185,13 +2183,12 @@
                     delete restoredToolData.permanentDeleteDate;
                     delete restoredToolData.deletedBy;
                     delete restoredToolData.originalId;
-                    delete restoredToolData.deletedCollectionName;
                     
                     // Restore to tools collection
                     batch.set(db.collection('tools').doc(originalId), restoredToolData);
                     
                     // Delete from deletedTools collection
-                    batch.delete(doc.ref);
+                    batch.delete(deletedToolDoc.ref);
                     restoredCount++;
                 }
                 
@@ -2199,7 +2196,7 @@
                 await batch.commit();
                 
                 loadingModal.hide();
-                alert(`✅ ${restoredCount} tool(s) restored for owner "${selectedOwner}".`);
+                alert(`✅ ${restoredCount} tool(s) restored successfully.`);
                 
                 // Close the restore modal
                 const restoreModal = bootstrap.Modal.getInstance(document.getElementById('restoreCollectionModal'));
@@ -2209,11 +2206,11 @@
                 await showCollectionSelectionDialog();
                 
             } catch (error) {
-                console.error('Error restoring collection:', error);
-                errorDiv.textContent = 'Error restoring collection: ' + error.message;
+                console.error('Error restoring tools:', error);
+                errorDiv.textContent = 'Error restoring tools: ' + error.message;
                 errorDiv.style.display = 'block';
                 confirmBtn.disabled = false;
-                confirmBtn.textContent = 'Restore Collection';
+                confirmBtn.textContent = 'Restore Selected Tools';
                 const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
                 if (loadingModal) loadingModal.hide();
             }
