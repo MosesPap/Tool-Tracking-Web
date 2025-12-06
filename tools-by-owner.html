@@ -715,11 +715,17 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p><strong>Warning:</strong> This will delete all tools from the collection "<span id="deleteCollectionName"></span>".</p>
-                    <div class="alert alert-warning">
+                    <div class="mb-3" id="deleteCollectionSelectDiv">
+                        <label for="deleteCollectionSelect" class="form-label"><strong>Select Collection to Delete:</strong></label>
+                        <select id="deleteCollectionSelect" class="form-select">
+                            <option value="">-- Select a Collection --</option>
+                        </select>
+                    </div>
+                    <p id="deleteCollectionWarning" style="display: none;"><strong>Warning:</strong> This will delete all tools from the collection "<span id="deleteCollectionName"></span>".</p>
+                    <div class="alert alert-warning" id="deleteCollectionAlert" style="display: none;">
                         <strong>Soft Delete:</strong> Tools will be moved to a deleted state and kept for 7 days before permanent deletion.
                     </div>
-                    <div class="mb-3">
+                    <div class="mb-3" id="deleteCollectionOptions" style="display: none;">
                         <label class="form-check-label">
                             <input type="checkbox" class="form-check-input" id="permanentDeleteCheckbox">
                             <strong>Delete permanently immediately</strong> (cannot be undone)
@@ -729,7 +735,38 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" id="confirmDeleteCollectionBtn">Delete Collection</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteCollectionBtn" disabled>Delete Collection</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Restore Deleted Collection Modal -->
+    <div class="modal fade" id="restoreCollectionModal" tabindex="-1" aria-labelledby="restoreCollectionModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="restoreCollectionModalLabel">Restore Deleted Collection</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Select a deleted collection to restore. Only collections deleted within the last 7 days can be restored.</p>
+                    <div class="mb-3">
+                        <label for="restoreCollectionSelect" class="form-label"><strong>Select Deleted Collection:</strong></label>
+                        <select id="restoreCollectionSelect" class="form-select">
+                            <option value="">-- Select a Collection --</option>
+                        </select>
+                    </div>
+                    <div id="restoreCollectionInfo" class="alert alert-info" style="display: none;">
+                        <strong>Collection:</strong> <span id="restoreCollectionName"></span><br>
+                        <strong>Deleted:</strong> <span id="restoreDeletedDate"></span><br>
+                        <strong>Tools:</strong> <span id="restoreToolsCount"></span>
+                    </div>
+                    <div id="restoreCollectionError" class="text-danger mb-3" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmRestoreCollectionBtn" disabled>Restore Collection</button>
                 </div>
             </div>
         </div>
@@ -1570,10 +1607,21 @@
                     deleteButton.innerHTML = '<i class="fas fa-trash me-2"></i>Delete Collection';
                     deleteButton.onclick = function(e) {
                         e.stopPropagation();
-                        showDeleteCollectionModal();
+                        showDeleteCollectionModal(collections);
                     };
                     body.appendChild(deleteButton);
                 }
+                
+                // Add "Restore Deleted Collection" button with 3D interactive green style
+                const restoreButton = document.createElement('button');
+                restoreButton.className = 'btn btn-success w-100 mt-2';
+                restoreButton.style.cssText = 'padding: 12px 24px; font-size: 1rem; font-weight: bold; border-radius: 16px;';
+                restoreButton.innerHTML = '<i class="fas fa-undo me-2"></i>Restore Deleted Collection';
+                restoreButton.onclick = function(e) {
+                    e.stopPropagation();
+                    showRestoreCollectionModal();
+                };
+                body.appendChild(restoreButton);
                 
                 modal.show();
             } catch (error) {
@@ -1742,17 +1790,83 @@
         }
 
         // Show Delete Collection Modal
-        function showDeleteCollectionModal() {
-            if (!lastViewedCollectionName) {
-                alert('No collection selected.');
-                return;
-            }
+        async function showDeleteCollectionModal(collections = null) {
+            const db = window.db || firebase.firestore();
+            const modal = new bootstrap.Modal(document.getElementById('deleteCollectionModal'));
+            const selectDiv = document.getElementById('deleteCollectionSelectDiv');
+            const selectElement = document.getElementById('deleteCollectionSelect');
+            const warningDiv = document.getElementById('deleteCollectionWarning');
+            const alertDiv = document.getElementById('deleteCollectionAlert');
+            const optionsDiv = document.getElementById('deleteCollectionOptions');
+            const confirmBtn = document.getElementById('confirmDeleteCollectionBtn');
             
-            document.getElementById('deleteCollectionName').textContent = lastViewedCollectionName;
+            // Reset form
             document.getElementById('permanentDeleteCheckbox').checked = false;
             document.getElementById('deleteCollectionError').style.display = 'none';
+            warningDiv.style.display = 'none';
+            alertDiv.style.display = 'none';
+            optionsDiv.style.display = 'none';
+            confirmBtn.disabled = true;
             
-            const modal = new bootstrap.Modal(document.getElementById('deleteCollectionModal'));
+            // If collection name is already set (from viewing tools), use it
+            if (lastViewedCollectionName) {
+                selectDiv.style.display = 'none';
+                selectElement.value = lastViewedCollectionName;
+                document.getElementById('deleteCollectionName').textContent = lastViewedCollectionName;
+                warningDiv.style.display = 'block';
+                alertDiv.style.display = 'block';
+                optionsDiv.style.display = 'block';
+                confirmBtn.disabled = false;
+            } else {
+                // Show collection selection dropdown
+                selectDiv.style.display = 'block';
+                selectElement.innerHTML = '<option value="">-- Select a Collection --</option>';
+                
+                // Load collections if not provided
+                if (!collections) {
+                    try {
+                        let collectionsQuery;
+                        if (currentOwner === 'ALL') {
+                            collectionsQuery = await db.collection('collections').get();
+                        } else {
+                            collectionsQuery = await db.collection('collections')
+                                .where('owner', '==', currentOwner)
+                                .get();
+                        }
+                        collections = collectionsQuery.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    } catch (error) {
+                        console.error('Error loading collections:', error);
+                        alert('Error loading collections. Please try again.');
+                        return;
+                    }
+                }
+                
+                // Populate dropdown
+                collections.forEach(collection => {
+                    const option = document.createElement('option');
+                    option.value = collection.collectionName || collection.id;
+                    option.textContent = collection.collectionName || collection.id;
+                    selectElement.appendChild(option);
+                });
+                
+                // Handle selection change
+                selectElement.onchange = function() {
+                    const selectedCollection = this.value;
+                    if (selectedCollection) {
+                        document.getElementById('deleteCollectionName').textContent = selectedCollection;
+                        warningDiv.style.display = 'block';
+                        alertDiv.style.display = 'block';
+                        optionsDiv.style.display = 'block';
+                        confirmBtn.disabled = false;
+                    } else {
+                        warningDiv.style.display = 'none';
+                        alertDiv.style.display = 'none';
+                        optionsDiv.style.display = 'none';
+                        confirmBtn.disabled = true;
+                    }
+                };
+            }
+            
             modal.show();
         }
 
@@ -1761,8 +1875,11 @@
             const db = window.db || firebase.firestore();
             const storage = window.storage || firebase.storage();
             
-            if (!lastViewedCollectionName) {
-                alert('No collection selected.');
+            const selectElement = document.getElementById('deleteCollectionSelect');
+            const collectionName = lastViewedCollectionName || selectElement.value;
+            
+            if (!collectionName) {
+                alert('Please select a collection to delete.');
                 return;
             }
             
@@ -1777,7 +1894,7 @@
                 
                 // Get all tools in this collection
                 const toolsSnapshot = await db.collection('tools')
-                    .where('collectionCode', '==', lastViewedCollectionName)
+                    .where('collectionCode', '==', collectionName)
                     .get();
                 
                 if (toolsSnapshot.empty) {
@@ -1847,7 +1964,7 @@
                 loadingModal.hide();
                 
                 if (permanentDelete) {
-                    alert(`✅ ${deletedCount} tool(s) permanently deleted from collection "${lastViewedCollectionName}".`);
+                    alert(`✅ ${deletedCount} tool(s) permanently deleted from collection "${collectionName}".`);
                 } else {
                     alert(`✅ ${deletedCount} tool(s) moved to deleted state. They will be permanently deleted after 7 days.`);
                 }
@@ -1865,12 +1982,218 @@
                 document.getElementById('myToolsByCollectionScreen').style.display = 'none';
                 lastViewedCollectionName = '';
                 
+                // Refresh collection selection dialog if needed
+                if (lastViewedCollectionName === collectionName) {
+                    lastViewedCollectionName = '';
+                }
+                
             } catch (error) {
                 console.error('Error deleting collection:', error);
                 errorDiv.textContent = 'Error deleting collection: ' + error.message;
                 errorDiv.style.display = 'block';
                 confirmBtn.disabled = false;
                 confirmBtn.textContent = 'Delete Collection';
+                const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
+                if (loadingModal) loadingModal.hide();
+            }
+        }
+
+        // Show Restore Deleted Collection Modal
+        async function showRestoreCollectionModal() {
+            const db = window.db || firebase.firestore();
+            const modal = new bootstrap.Modal(document.getElementById('restoreCollectionModal'));
+            const selectElement = document.getElementById('restoreCollectionSelect');
+            const infoDiv = document.getElementById('restoreCollectionInfo');
+            const confirmBtn = document.getElementById('confirmRestoreCollectionBtn');
+            const errorDiv = document.getElementById('restoreCollectionError');
+            
+            // Reset form
+            selectElement.innerHTML = '<option value="">-- Select a Collection --</option>';
+            infoDiv.style.display = 'none';
+            confirmBtn.disabled = true;
+            errorDiv.style.display = 'none';
+            
+            try {
+                // Get all deleted collections for this owner
+                let deletedCollectionsQuery;
+                if (currentOwner === 'ALL') {
+                    deletedCollectionsQuery = await db.collection('deletedTools').get();
+                } else {
+                    deletedCollectionsQuery = await db.collection('deletedTools')
+                        .where('deletedBy', '==', currentOwner)
+                        .get();
+                }
+                
+                // Group by collectionCode and get unique collections
+                const collectionsMap = new Map();
+                deletedCollectionsQuery.forEach(doc => {
+                    const data = doc.data();
+                    const collectionCode = data.collectionCode;
+                    if (collectionCode && !collectionsMap.has(collectionCode)) {
+                        const deletedAt = data.deletedAt;
+                        const permanentDeleteDate = data.permanentDeleteDate;
+                        
+                        // Check if still within 7 days
+                        let canRestore = true;
+                        if (permanentDeleteDate) {
+                            const deleteDate = permanentDeleteDate.toDate ? permanentDeleteDate.toDate() : new Date(permanentDeleteDate.seconds * 1000);
+                            if (deleteDate < new Date()) {
+                                canRestore = false;
+                            }
+                        }
+                        
+                        if (canRestore) {
+                            collectionsMap.set(collectionCode, {
+                                collectionCode: collectionCode,
+                                deletedAt: deletedAt,
+                                permanentDeleteDate: permanentDeleteDate,
+                                toolCount: 0
+                            });
+                        }
+                    }
+                    
+                    // Count tools in this collection
+                    if (collectionsMap.has(collectionCode)) {
+                        collectionsMap.get(collectionCode).toolCount++;
+                    }
+                });
+                
+                const collections = Array.from(collectionsMap.values());
+                
+                if (collections.length === 0) {
+                    selectElement.innerHTML = '<option value="">No deleted collections available for restoration</option>';
+                    selectElement.disabled = true;
+                } else {
+                    // Populate dropdown
+                    collections.forEach(collection => {
+                        const option = document.createElement('option');
+                        option.value = collection.collectionCode;
+                        const deletedDate = collection.deletedAt ? 
+                            (collection.deletedAt.toDate ? collection.deletedAt.toDate() : new Date(collection.deletedAt.seconds * 1000)) : 
+                            new Date();
+                        option.textContent = `${collection.collectionCode} (${collection.toolCount} tools, deleted ${deletedDate.toLocaleDateString()})`;
+                        option.setAttribute('data-collection', JSON.stringify(collection));
+                        selectElement.appendChild(option);
+                    });
+                    
+                    // Handle selection change
+                    selectElement.onchange = function() {
+                        const selectedOption = this.options[this.selectedIndex];
+                        if (selectedOption.value) {
+                            const collection = JSON.parse(selectedOption.getAttribute('data-collection'));
+                            const deletedDate = collection.deletedAt ? 
+                                (collection.deletedAt.toDate ? collection.deletedAt.toDate() : new Date(collection.deletedAt.seconds * 1000)) : 
+                                new Date();
+                            const permanentDeleteDate = collection.permanentDeleteDate ? 
+                                (collection.permanentDeleteDate.toDate ? collection.permanentDeleteDate.toDate() : new Date(collection.permanentDeleteDate.seconds * 1000)) : 
+                                null;
+                            
+                            document.getElementById('restoreCollectionName').textContent = collection.collectionCode;
+                            document.getElementById('restoreDeletedDate').textContent = deletedDate.toLocaleString();
+                            document.getElementById('restoreToolsCount').textContent = collection.toolCount;
+                            infoDiv.style.display = 'block';
+                            confirmBtn.disabled = false;
+                        } else {
+                            infoDiv.style.display = 'none';
+                            confirmBtn.disabled = true;
+                        }
+                    };
+                }
+                
+                modal.show();
+            } catch (error) {
+                console.error('Error loading deleted collections:', error);
+                errorDiv.textContent = 'Error loading deleted collections: ' + error.message;
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        // Restore Deleted Collection
+        async function restoreCollection() {
+            const db = window.db || firebase.firestore();
+            const selectElement = document.getElementById('restoreCollectionSelect');
+            const selectedOption = selectElement.options[selectElement.selectedIndex];
+            
+            if (!selectedOption || !selectedOption.value) {
+                alert('Please select a collection to restore.');
+                return;
+            }
+            
+            const collectionCode = selectedOption.value;
+            const errorDiv = document.getElementById('restoreCollectionError');
+            const confirmBtn = document.getElementById('confirmRestoreCollectionBtn');
+            
+            try {
+                errorDiv.style.display = 'none';
+                confirmBtn.disabled = true;
+                confirmBtn.textContent = 'Restoring...';
+                
+                // Get all deleted tools for this collection
+                let deletedToolsQuery;
+                if (currentOwner === 'ALL') {
+                    deletedToolsQuery = await db.collection('deletedTools')
+                        .where('collectionCode', '==', collectionCode)
+                        .get();
+                } else {
+                    deletedToolsQuery = await db.collection('deletedTools')
+                        .where('collectionCode', '==', collectionCode)
+                        .where('deletedBy', '==', currentOwner)
+                        .get();
+                }
+                
+                if (deletedToolsQuery.empty) {
+                    alert('No deleted tools found for this collection.');
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Restore Collection';
+                    return;
+                }
+                
+                const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                loadingModal.show();
+                document.getElementById('photoUploadProgress').textContent = 'Restoring tools...';
+                
+                const batch = db.batch();
+                let restoredCount = 0;
+                
+                // Restore each tool
+                for (const doc of deletedToolsQuery.docs) {
+                    const deletedToolData = doc.data();
+                    const originalId = deletedToolData.originalId || doc.id;
+                    
+                    // Remove deletion-related fields
+                    const restoredToolData = { ...deletedToolData };
+                    delete restoredToolData.deletedAt;
+                    delete restoredToolData.permanentDeleteDate;
+                    delete restoredToolData.deletedBy;
+                    delete restoredToolData.originalId;
+                    
+                    // Restore to tools collection
+                    batch.set(db.collection('tools').doc(originalId), restoredToolData);
+                    
+                    // Delete from deletedTools collection
+                    batch.delete(doc.ref);
+                    restoredCount++;
+                }
+                
+                // Commit the batch
+                await batch.commit();
+                
+                loadingModal.hide();
+                alert(`✅ ${restoredCount} tool(s) restored from collection "${collectionCode}".`);
+                
+                // Close the restore modal
+                const restoreModal = bootstrap.Modal.getInstance(document.getElementById('restoreCollectionModal'));
+                if (restoreModal) restoreModal.hide();
+                
+                // Refresh collection selection dialog
+                await showCollectionSelectionDialog();
+                
+            } catch (error) {
+                console.error('Error restoring collection:', error);
+                errorDiv.textContent = 'Error restoring collection: ' + error.message;
+                errorDiv.style.display = 'block';
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = 'Restore Collection';
                 const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
                 if (loadingModal) loadingModal.hide();
             }
@@ -1886,6 +2209,11 @@
             const deleteBtn = document.getElementById('confirmDeleteCollectionBtn');
             if (deleteBtn) {
                 deleteBtn.addEventListener('click', deleteCollection);
+            }
+            
+            const restoreBtn = document.getElementById('confirmRestoreCollectionBtn');
+            if (restoreBtn) {
+                restoreBtn.addEventListener('click', restoreCollection);
             }
         });
 
