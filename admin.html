@@ -1676,13 +1676,6 @@
                                         <small class="d-block">Download tools data</small>
                                     </button>
                                 </div>
-                                <div class="col-md-4">
-                                    <button class="btn btn-warning w-100 py-3" onclick="fixNullCollectionCodes()">
-                                        <i class="fas fa-wrench fa-2x d-block mb-2"></i>
-                                        <strong>Fix Null Collection Codes</strong>
-                                        <small class="d-block">Update null collectionCode to Z4</small>
-                                    </button>
-                                </div>
                             </div>
                         </div>
 
@@ -2106,7 +2099,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-functions-compat.js"></script>
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Common Firebase configuration and utilities -->
@@ -3098,48 +3090,24 @@ Thank you!`;
         // Delete User
         window.deleteUser = async function(userId, userEmail, userName) {
             const db = window.db || firebase.firestore();
-            const functions = firebase.functions();
             
-            const confirmMsg = `Are you sure you want to delete user "${userName}" (${userEmail})?\n\nThis will:\n- Delete the user from the technicians collection\n- Delete the user from Firebase Authentication\n\n⚠️ If Firebase Authentication deletion fails, the user will NOT be deleted from either location.\n\nThis action cannot be undone!`;
+            const confirmMsg = `Are you sure you want to delete user "${userName}" (${userEmail})?\n\nThis will:\n- Delete the user from the technicians collection\n\n⚠️ Note: To delete from Firebase Authentication, you'll need to:\n1. Use Firebase Console (Authentication > Users)\n2. Or implement a Cloud Function with Admin SDK\n\nThis action cannot be undone!`;
             
             if (!confirm(confirmMsg)) return;
 
             try {
-                // Call Cloud Function to delete user from both Firestore and Firebase Auth
-                // The Cloud Function ensures that if Auth deletion fails, nothing is deleted
-                const deleteUserFunction = functions.httpsCallable('deleteUser');
-                const result = await deleteUserFunction({
-                    userId: userId,
-                    userEmail: userEmail
-                });
+                // Delete from technicians collection
+                await db.collection('technicians').doc(userId).delete();
+                console.log('User deleted from technicians collection:', userId);
 
-                if (result.data.success) {
-                    alert(`✅ ${result.data.message}`);
-                } else {
-                    alert(`⚠️ User deletion completed with warnings: ${result.data.message || 'Unknown error'}`);
-                }
+                alert(`✅ User "${userName}" deleted from technicians collection successfully!\n\n⚠️ Remember: Delete the user from Firebase Authentication manually via Firebase Console (Authentication > Users) or implement a Cloud Function with Admin SDK for automatic deletion.`);
 
                 // Reload users list
                 loadUsers();
                 loadStatistics(); // Refresh stats
             } catch (error) {
                 console.error('Error deleting user:', error);
-                
-                // Don't delete from Firestore if Cloud Function fails
-                // This ensures data consistency - either both are deleted or neither
-                let errorMessage = 'Failed to delete user: ';
-                
-                if (error.code === 'functions/unavailable' || error.code === 'functions/not-found') {
-                    errorMessage = 'Cloud Function is not available. User was not deleted. Please try again later or contact support.';
-                } else if (error.code === 'functions/permission-denied') {
-                    errorMessage = 'Permission denied. You do not have permission to delete users.';
-                } else if (error.code === 'functions/internal') {
-                    errorMessage = error.message || 'Failed to delete user. The user was not deleted from either Firestore or Firebase Authentication.';
-                } else {
-                    errorMessage += (error.message || error);
-                }
-                
-                alert(`❌ ${errorMessage}`);
+                alert('Failed to delete user: ' + error.message);
             }
         };
 
@@ -3873,132 +3841,6 @@ Thank you!`;
             // This function is replaced by the new tools menu system
             console.log('Tools section now uses submenu navigation');
         }
-
-        // Fix Null Collection Codes (Temporary Utility Function)
-        window.fixNullCollectionCodes = async function() {
-            const db = window.db || firebase.firestore();
-            
-            if (!confirm('⚠️ This will update all tools with null or empty collectionCode to "Z4".\n\nAre you sure you want to proceed?')) {
-                return;
-            }
-            
-            try {
-                // Show loading
-                const loadingModal = document.createElement('div');
-                loadingModal.className = 'modal fade';
-                loadingModal.id = 'fixCollectionCodeModal';
-                loadingModal.innerHTML = `
-                    <div class="modal-dialog modal-sm">
-                        <div class="modal-content">
-                            <div class="modal-header bg-warning text-white">
-                                <h5 class="modal-title">Fixing Collection Codes</h5>
-                            </div>
-                            <div class="modal-body text-center">
-                                <div class="spinner-border text-warning mb-3" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <div id="fixCollectionCodeProgress">Loading tools...</div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(loadingModal);
-                const modal = new bootstrap.Modal(loadingModal);
-                modal.show();
-                
-                document.getElementById('fixCollectionCodeProgress').textContent = 'Fetching all tools...';
-                
-                // Get all tools
-                const toolsSnapshot = await db.collection('tools').get();
-                
-                if (toolsSnapshot.empty) {
-                    modal.hide();
-                    loadingModal.remove();
-                    alert('No tools found in database.');
-                    return;
-                }
-                
-                document.getElementById('fixCollectionCodeProgress').textContent = `Checking ${toolsSnapshot.size} tools...`;
-                
-                // Find tools with null/empty collectionCode
-                const toolsToUpdate = [];
-                toolsSnapshot.forEach(doc => {
-                    const data = doc.data();
-                    const collectionCode = data.collectionCode;
-                    
-                    // Check if collectionCode is null, undefined, or empty string
-                    if (!collectionCode || collectionCode === '' || collectionCode === null) {
-                        toolsToUpdate.push({
-                            id: doc.id,
-                            toolName: data.toolName || doc.id,
-                            currentValue: collectionCode || 'null/empty'
-                        });
-                    }
-                });
-                
-                if (toolsToUpdate.length === 0) {
-                    modal.hide();
-                    loadingModal.remove();
-                    alert('✅ No tools found with null or empty collectionCode. All tools already have a collectionCode value.');
-                    return;
-                }
-                
-                // Show confirmation with count
-                modal.hide();
-                loadingModal.remove();
-                
-                const confirmMessage = `Found ${toolsToUpdate.length} tool(s) with null or empty collectionCode:\n\n` +
-                    toolsToUpdate.slice(0, 10).map((tool, idx) => `${idx + 1}. ${tool.toolName} (ID: ${tool.id})`).join('\n') +
-                    (toolsToUpdate.length > 10 ? `\n... and ${toolsToUpdate.length - 10} more` : '') +
-                    `\n\nUpdate all to "Z4"?`;
-                
-                if (!confirm(confirmMessage)) {
-                    return;
-                }
-                
-                // Show progress again
-                document.body.appendChild(loadingModal);
-                modal.show();
-                document.getElementById('fixCollectionCodeProgress').textContent = `Updating ${toolsToUpdate.length} tools...`;
-                
-                // Update tools in batches (Firestore batch limit is 500)
-                const batchSize = 500;
-                let updatedCount = 0;
-                
-                for (let i = 0; i < toolsToUpdate.length; i += batchSize) {
-                    const batch = db.batch();
-                    const batchTools = toolsToUpdate.slice(i, i + batchSize);
-                    
-                    batchTools.forEach(tool => {
-                        const toolRef = db.collection('tools').doc(tool.id);
-                        batch.update(toolRef, {
-                            collectionCode: 'Z4'
-                        });
-                    });
-                    
-                    await batch.commit();
-                    updatedCount += batchTools.length;
-                    
-                    document.getElementById('fixCollectionCodeProgress').textContent = 
-                        `Updated ${updatedCount} of ${toolsToUpdate.length} tools...`;
-                }
-                
-                modal.hide();
-                loadingModal.remove();
-                
-                alert(`✅ Successfully updated ${updatedCount} tool(s) with collectionCode = "Z4"`);
-                
-            } catch (error) {
-                console.error('Error fixing collection codes:', error);
-                alert('❌ Error fixing collection codes: ' + error.message);
-                const loadingModal = document.getElementById('fixCollectionCodeModal');
-                if (loadingModal) {
-                    const modal = bootstrap.Modal.getInstance(loadingModal);
-                    if (modal) modal.hide();
-                    loadingModal.remove();
-                }
-            }
-        };
 
         // Delete Tool
         window.deleteTool = async function(toolId, toolName) {
