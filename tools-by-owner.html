@@ -14,6 +14,8 @@
         body, html {
             margin: 0;
             padding: 0;
+            height: auto;
+            overflow-y: auto;
         }
         
         /* Full-width title bar styles */
@@ -271,33 +273,29 @@
         <!-- Tools Display Section (hidden initially) -->
         <div id="toolsDisplaySection" style="display: none;">
           <!-- Currently OUT Tools Section -->
-          <div class="card mb-3">
-            <div class="card-body">
-              <h5 class="mb-3" style="color: #dc3545; font-weight: bold;">
-                <i class="fas fa-exclamation-triangle"></i> Currently OUT Tools
-              </h5>
-              <div id="ownerCurrentOutSummary" class="text-muted mb-2">
-                <!-- Summary will be populated here -->
-              </div>
-              <div id="ownerCurrentOutList" style="max-height: 400px; overflow-y: auto;">
-                <!-- Currently OUT tools will be populated here -->
-              </div>
+          <div class="mb-4">
+            <h5 class="mb-3" style="color: #dc3545; font-weight: bold;">
+              <i class="fas fa-exclamation-triangle"></i> Currently OUT Tools
+            </h5>
+            <div id="ownerCurrentOutSummary" class="text-muted mb-2">
+              <!-- Summary will be populated here -->
+            </div>
+            <div id="ownerCurrentOutList">
+              <!-- Currently OUT tools will be populated here -->
             </div>
           </div>
 
           <!-- All Tools Section -->
-          <div class="card mb-3">
-            <div class="card-body">
-              <h5 class="mb-3" style="color: #667eea; font-weight: bold;" id="allToolsTitle">
-                <i class="fas fa-tools"></i> All Tools
-              </h5>
-              <div id="ownerToolsSummary" class="text-muted mb-2">
-                <!-- Summary will be populated here -->
-              </div>
-              <!-- Tools List by Collection -->
-              <div id="ownerToolsList" style="max-height: 400px; overflow-y: auto;">
-                <!-- Tools will be populated here -->
-              </div>
+          <div class="mb-4">
+            <h5 class="mb-3" style="color: #667eea; font-weight: bold;" id="allToolsTitle">
+              <i class="fas fa-tools"></i> All Tools
+            </h5>
+            <div id="ownerToolsSummary" class="text-muted mb-2">
+              <!-- Summary will be populated here -->
+            </div>
+            <!-- Tools List by Collection -->
+            <div id="ownerToolsList">
+              <!-- Tools will be populated here -->
             </div>
           </div>
         </div>
