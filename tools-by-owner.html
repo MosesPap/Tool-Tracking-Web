@@ -1623,6 +1623,17 @@
                 };
                 body.appendChild(restoreButton);
                 
+                // Add "Migrate Deleted Tools" button (for fixing empty collectionCode)
+                const migrateButton = document.createElement('button');
+                migrateButton.className = 'btn btn-warning w-100 mt-2';
+                migrateButton.style.cssText = 'padding: 12px 24px; font-size: 1rem; font-weight: bold; border-radius: 16px;';
+                migrateButton.innerHTML = '<i class="fas fa-database me-2"></i>Migrate Deleted Tools (Fix Empty Collection Code)';
+                migrateButton.onclick = function(e) {
+                    e.stopPropagation();
+                    migrateDeletedToolsCollectionCode();
+                };
+                body.appendChild(migrateButton);
+                
                 modal.show();
             } catch (error) {
                 console.error('Error loading collections:', error);
@@ -1940,10 +1951,15 @@
                         deletedCount++;
                     } else {
                         // Soft delete - move to deletedTools collection
+                        // Preserve original collectionCode if lastViewedCollectionName is empty
+                        const originalCollectionCode = toolData.collectionCode || '';
+                        const finalCollectionCode = collectionName || originalCollectionCode || '';
+                        
                         const deletedToolData = {
                             ...toolData,
                             originalId: doc.id,
-                            collectionCode: lastViewedCollectionName,
+                            collectionCode: finalCollectionCode,
+                            deletedCollectionName: collectionName, // Always store the collection name used for deletion
                             deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
                             permanentDeleteDate: firebase.firestore.Timestamp.fromDate(permanentDeleteDate),
                             deletedBy: currentOwner || 'Admin'
@@ -2194,6 +2210,164 @@
                 errorDiv.style.display = 'block';
                 confirmBtn.disabled = false;
                 confirmBtn.textContent = 'Restore Collection';
+                const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
+                if (loadingModal) loadingModal.hide();
+            }
+        }
+
+        // Migration function to fix empty collectionCode in deletedTools
+        async function migrateDeletedToolsCollectionCode() {
+            const db = window.db || firebase.firestore();
+            
+            if (!confirm('This will update all deleted tools with empty collectionCode. Continue?')) {
+                return;
+            }
+            
+            try {
+                const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                loadingModal.show();
+                document.getElementById('photoUploadProgress').textContent = 'Loading deleted tools...';
+                
+                // Get all deleted tools
+                const deletedToolsSnapshot = await db.collection('deletedTools').get();
+                
+                if (deletedToolsSnapshot.empty) {
+                    loadingModal.hide();
+                    alert('No deleted tools found.');
+                    return;
+                }
+                
+                document.getElementById('photoUploadProgress').textContent = 'Analyzing deleted tools...';
+                
+                const batch = db.batch();
+                let updatedCount = 0;
+                let skippedCount = 0;
+                const needsManualReview = [];
+                
+                // Group tools by owner and deletedBy to help identify collections
+                const toolsByOwner = new Map();
+                
+                for (const doc of deletedToolsSnapshot.docs) {
+                    const data = doc.data();
+                    const collectionCode = data.collectionCode || '';
+                    const deletedCollectionName = data.deletedCollectionName || '';
+                    
+                    // If collectionCode is empty or missing
+                    if (!collectionCode && !deletedCollectionName) {
+                        const owner = data.owner || 'Unknown';
+                        const deletedBy = data.deletedBy || 'Unknown';
+                        const key = `${owner}_${deletedBy}`;
+                        
+                        if (!toolsByOwner.has(key)) {
+                            toolsByOwner.set(key, []);
+                        }
+                        toolsByOwner.get(key).push({
+                            docId: doc.id,
+                            data: data,
+                            originalId: data.originalId || doc.id
+                        });
+                    }
+                }
+                
+                // Try to find collectionCode from original tool data or infer from groups
+                for (const [key, tools] of toolsByOwner.entries()) {
+                    const [owner, deletedBy] = key.split('_');
+                    
+                    // Try to find collectionCode from the tools collection using originalId
+                    for (const tool of tools) {
+                        let foundCollectionCode = null;
+                        
+                        // First, check if the original tool still exists in tools collection
+                        try {
+                            const originalToolDoc = await db.collection('tools').doc(tool.originalId).get();
+                            if (originalToolDoc.exists) {
+                                const originalData = originalToolDoc.data();
+                                foundCollectionCode = originalData.collectionCode || null;
+                            }
+                        } catch (error) {
+                            console.log(`Could not find original tool ${tool.originalId}:`, error);
+                        }
+                        
+                        // If not found, check if the deleted tool data itself has collectionCode (from original tool data)
+                        if (!foundCollectionCode && tool.data.collectionCode) {
+                            foundCollectionCode = tool.data.collectionCode;
+                        }
+                        
+                        // If still not found, try to infer from collections collection
+                        if (!foundCollectionCode) {
+                            try {
+                                // Query collections for this owner
+                                const collectionsQuery = await db.collection('collections')
+                                    .where('owner', '==', owner)
+                                    .get();
+                                
+                                if (!collectionsQuery.empty) {
+                                    // If only one collection for this owner, use it
+                                    if (collectionsQuery.docs.length === 1) {
+                                        foundCollectionCode = collectionsQuery.docs[0].data().collectionName;
+                                    } else {
+                                        // Multiple collections - need manual review
+                                        needsManualReview.push({
+                                            toolId: tool.docId,
+                                            owner: owner,
+                                            collections: collectionsQuery.docs.map(d => d.data().collectionName)
+                                        });
+                                        continue;
+                                    }
+                                }
+                            } catch (error) {
+                                console.log(`Error querying collections for ${owner}:`, error);
+                            }
+                        }
+                        
+                        // Update the document if we found a collectionCode
+                        if (foundCollectionCode) {
+                            const docRef = db.collection('deletedTools').doc(tool.docId);
+                            batch.update(docRef, {
+                                collectionCode: foundCollectionCode,
+                                deletedCollectionName: foundCollectionCode
+                            });
+                            updatedCount++;
+                        } else {
+                            skippedCount++;
+                            needsManualReview.push({
+                                toolId: tool.docId,
+                                owner: owner,
+                                reason: 'Could not determine collection'
+                            });
+                        }
+                    }
+                }
+                
+                // Commit batch updates
+                if (updatedCount > 0) {
+                    document.getElementById('photoUploadProgress').textContent = `Updating ${updatedCount} tool(s)...`;
+                    await batch.commit();
+                }
+                
+                loadingModal.hide();
+                
+                let message = `Migration completed!\n\n`;
+                message += `✅ Updated: ${updatedCount} tool(s)\n`;
+                message += `⏭️ Skipped: ${skippedCount} tool(s)\n`;
+                
+                if (needsManualReview.length > 0) {
+                    message += `\n⚠️ ${needsManualReview.length} tool(s) need manual review:\n`;
+                    needsManualReview.slice(0, 10).forEach(item => {
+                        message += `- Tool ${item.toolId} (Owner: ${item.owner})\n`;
+                    });
+                    if (needsManualReview.length > 10) {
+                        message += `... and ${needsManualReview.length - 10} more\n`;
+                    }
+                    message += `\nCheck console for full list.`;
+                    console.log('Tools needing manual review:', needsManualReview);
+                }
+                
+                alert(message);
+                
+            } catch (error) {
+                console.error('Migration error:', error);
+                alert('Migration failed: ' + error.message);
                 const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
                 if (loadingModal) loadingModal.hide();
             }
