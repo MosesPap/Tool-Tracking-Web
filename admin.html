@@ -749,6 +749,69 @@
             padding: 4px 8px;
         }
 
+        /* 3D Numbering Style for Users */
+        .user-number-3d {
+            display: inline-block;
+            width: 35px;
+            height: 35px;
+            line-height: 35px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1rem;
+            color: #333;
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
+            border: 2px solid #9e9e9e;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(158, 158, 158, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+            transform: perspective(1000px) rotateX(2deg);
+            transition: all 0.3s ease;
+        }
+
+        .user-number-3d:hover {
+            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%);
+            border-color: #757575;
+            transform: perspective(1000px) rotateX(0deg) translateY(-2px);
+            box-shadow: 0 4px 8px rgba(158, 158, 158, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.5),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+        }
+
+        /* 3D Delete Button Style */
+        .delete-user-btn-3d {
+            position: relative;
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            font-weight: bold;
+            border-radius: 8px;
+            border: 2px solid #c62828;
+            background: linear-gradient(135deg, #e53935 0%, #c62828 100%);
+            color: white;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(198, 40, 40, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+            transform: perspective(1000px) rotateX(2deg);
+        }
+
+        .delete-user-btn-3d:hover {
+            background: linear-gradient(135deg, #c62828 0%, #b71c1c 100%);
+            border-color: #b71c1c;
+            transform: perspective(1000px) rotateX(0deg) translateY(-2px);
+            box-shadow: 0 4px 8px rgba(198, 40, 40, 0.4),
+                        0 2px 4px rgba(0, 0, 0, 0.2),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+        }
+
+        .delete-user-btn-3d:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(0px);
+            box-shadow: 0 2px 4px rgba(198, 40, 40, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        }
+
         .alert-custom {
             border-radius: 10px;
             border: none;
@@ -1550,6 +1613,7 @@
                                 <table class="table table-hover">
                                     <thead>
                                         <tr>
+                                            <th style="width: 60px;">#</th>
                                             <th>Name</th>
                                             <th>Email</th>
                                             <th>Roles</th>
@@ -2916,7 +2980,10 @@ Thank you!`;
                     if (mobileBadges.length === 0) mobileBadges.push('<span class="badge-user">User</span>');
                     
                     card.innerHTML = `
-                        <h6><i class="fas fa-user"></i> ${userData.fullName || 'N/A'}</h6>
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                            <span class="user-number-3d">${userIndex}</span>
+                            <h6 style="margin: 0; flex: 1;"><i class="fas fa-user"></i> ${userData.fullName || 'N/A'}</h6>
+                        </div>
                         <p><i class="fas fa-envelope"></i> ${userData.email || 'N/A'}</p>
                         <p>
                             <div class="role-badges">${mobileBadges.join('')}</div>
@@ -2931,6 +2998,9 @@ Thank you!`;
                             <button class="btn btn-sm btn-${isAvionics ? 'danger' : 'warning'}" onclick="toggleAvionics('${doc.id}', ${!isAvionics})">
                                 ${isAvionics ? '<i class="fas fa-cog"></i> Remove Avionics' : '<i class="fas fa-cog"></i> Make Avionics'}
                             </button>
+                            <button class="btn btn-sm btn-danger delete-user-btn-3d" onclick="deleteUser('${doc.id}', '${(userData.email || '').replace(/'/g, "\\'")}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}')" title="Delete User">
+                                <i class="fas fa-trash-alt"></i> Delete
+                            </button>
                         </div>
                     `;
                     mobileCards.appendChild(card);
@@ -2939,7 +3009,7 @@ Thank you!`;
                 loading.style.display = 'none';
             } catch (error) {
                 console.error('Error loading users:', error);
-                tableBody.innerHTML = '<tr><td colspan="4" class="text-danger">Error loading users</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="5" class="text-danger">Error loading users</td></tr>';
                 mobileCards.innerHTML = '<p class="text-danger">Error loading users</p>';
                 loading.style.display = 'none';
             }
@@ -3006,6 +3076,30 @@ Thank you!`;
             } catch (error) {
                 console.error('Error updating user:', error);
                 alert('Failed to update user: ' + error.message);
+            }
+        };
+
+        // Delete User
+        window.deleteUser = async function(userId, userEmail, userName) {
+            const db = window.db || firebase.firestore();
+            
+            const confirmMsg = `Are you sure you want to delete user "${userName}" (${userEmail})?\n\nThis will:\n- Delete the user from the technicians collection\n\n⚠️ Note: To delete from Firebase Authentication, you'll need to:\n1. Use Firebase Console (Authentication > Users)\n2. Or implement a Cloud Function with Admin SDK\n\nThis action cannot be undone!`;
+            
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                // Delete from technicians collection
+                await db.collection('technicians').doc(userId).delete();
+                console.log('User deleted from technicians collection:', userId);
+
+                alert(`✅ User "${userName}" deleted from technicians collection successfully!\n\n⚠️ Remember: Delete the user from Firebase Authentication manually via Firebase Console (Authentication > Users) or implement a Cloud Function with Admin SDK for automatic deletion.`);
+
+                // Reload users list
+                loadUsers();
+                loadStatistics(); // Refresh stats
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                alert('Failed to delete user: ' + error.message);
             }
         };
 
