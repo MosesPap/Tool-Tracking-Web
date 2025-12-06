@@ -19,12 +19,14 @@ if (!firebase.apps.length) {
 const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
+const functions = firebase.functions();
 
 // Make Firebase instances globally accessible so all pages use the same instances
 // This ensures LOCAL persistence works correctly across page navigations
 window.auth = auth;
 window.db = db;
 window.storage = storage;
+window.functions = functions;
 
 // Configure Firebase Auth
 auth.useDeviceLanguage();
