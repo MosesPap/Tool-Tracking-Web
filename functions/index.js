@@ -673,11 +673,29 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
     try {
       userRecord = await admin.auth().getUserByEmail(userEmail);
     } catch (authError) {
-      // If user doesn't exist in Auth, that's okay - just delete from Firestore
-      console.log(`User ${userEmail} not found in Firebase Auth, proceeding with Firestore deletion only.`);
+      // If user doesn't exist in Auth, that's okay - we can still proceed
+      console.log(`User ${userEmail} not found in Firebase Auth.`);
     }
 
-    // Delete from technicians collection
+    // First, delete from Firebase Authentication if user exists
+    // If this fails, we won't delete from Firestore either
+    if (userRecord && userRecord.uid) {
+      try {
+        await admin.auth().deleteUser(userRecord.uid);
+        console.log(`User ${userEmail} (UID: ${userRecord.uid}) deleted from Firebase Authentication.`);
+      } catch (authDeleteError) {
+        console.error('Failed to delete user from Firebase Authentication:', authDeleteError);
+        throw new functions.https.HttpsError(
+          'internal',
+          `Failed to delete user from Firebase Authentication: ${authDeleteError.message}. User was not deleted from technicians collection.`
+        );
+      }
+    } else {
+      // If user doesn't exist in Auth, we can still delete from Firestore
+      console.log(`User ${userEmail} does not exist in Firebase Authentication, proceeding with Firestore deletion only.`);
+    }
+
+    // Only delete from technicians collection if Auth deletion succeeded (or user doesn't exist in Auth)
     await admin.firestore()
       .collection('technicians')
       .doc(userId)
@@ -685,18 +703,18 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
 
     console.log(`User ${userId} deleted from technicians collection.`);
 
-    // Delete from Firebase Authentication if user exists
-    if (userRecord && userRecord.uid) {
-      await admin.auth().deleteUser(userRecord.uid);
-      console.log(`User ${userEmail} (UID: ${userRecord.uid}) deleted from Firebase Authentication.`);
-    }
-
     return {
       success: true,
-      message: `User ${userEmail} deleted successfully from both technicians collection and Firebase Authentication.`
+      message: userRecord && userRecord.uid 
+        ? `User ${userEmail} deleted successfully from both technicians collection and Firebase Authentication.`
+        : `User ${userEmail} deleted from technicians collection. (User did not exist in Firebase Authentication)`
     };
   } catch (error) {
     console.error('Error deleting user:', error);
+    // If it's already an HttpsError, re-throw it
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
     throw new functions.https.HttpsError(
       'internal',
       `Failed to delete user: ${error.message}`
