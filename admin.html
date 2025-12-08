@@ -3143,6 +3143,15 @@ Thank you!`;
                 console.log('Fresh token obtained before function call');
                 console.log('Token length:', freshToken ? freshToken.length : 'null');
                 
+                // Debug: decode token payload to verify project/audience
+                try {
+                    const payloadPart = freshToken.split('.')[1];
+                    const payload = JSON.parse(atob(payloadPart.replace(/-/g, '+').replace(/_/g, '/')));
+                    console.log('Token payload aud:', payload.aud, 'iss:', payload.iss, 'sub:', payload.sub);
+                } catch (e) {
+                    console.warn('Failed to decode token payload:', e);
+                }
+                
                 // Ensure functions instance is using the same Firebase app and auth
                 // Create a fresh functions instance right before the call to ensure auth context
                 const app = firebase.app();
@@ -3261,6 +3270,15 @@ Thank you!`;
                 
                 console.log('Final auth check passed, calling function...');
                 console.log('Functions instance app:', freshFunctions.app ? freshFunctions.app.name : 'no app');
+                
+                // Optional debug: verify auth context on server
+                try {
+                    const debugAuth = freshFunctions.httpsCallable('debugAuthContext');
+                    const debugRes = await debugAuth();
+                    console.log('debugAuthContext response:', debugRes.data);
+                } catch (e) {
+                    console.warn('debugAuthContext call failed (non-blocking):', e);
+                }
                 
                 // Create the callable function reference
                 const deleteUserFunction = freshFunctions.httpsCallable('deleteUser');
@@ -3741,7 +3759,7 @@ Thank you!`;
                 // Commit the batch update
                 await batch.commit();
                 
-                // Log the check-in action with full tool data (excluding photoUrls)
+                // Log the check-in action with full tool data (excluding photoUrls), ordered fields
                 const logPromises = toolIds.map(async (toolId) => {
                     let toolData = {};
                     try {
@@ -3751,21 +3769,25 @@ Thank you!`;
                         console.warn('Could not fetch tool data for logging:', toolId, e);
                     }
                     
+                    const logTimestamp = firebase.firestore.FieldValue.serverTimestamp();
                     const logData = {
-                        ...toolData,
                         toolId: toolId,
+                        toolName: toolData.toolName || 'Unknown',
+                        partNumber: toolData.partNumber || toolId,
+                        serialNumber: toolData.serialNumber || '',
+                        calDueDate: toolData.calDueDate || null,
+                        collectionCode: toolData.collectionCode || toolData.collectionName || '',
+                        location: toolData.location || '',
+                        owner: toolData.owner || '',
+                        WorkOn: toolData.WorkOn || toolData.workLocation || 'Admin Check-in',
+                        status: 'IN',
                         technician: currentToolsUser.name,
-                        action: 'CHECK-IN',
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                        status: 'IN'
+                        timestamp: logTimestamp,
+                        action: 'CHECK-IN'
                     };
-                    delete logData.photoUrls;
                     
-                    if (!logData.WorkOn) {
-                        logData.WorkOn = 'Admin Check-in';
-                    }
-                    
-                    return db.collection('logtoolmovements').add(logData);
+                    const logId = `${Date.now()}-${toolId}`;
+                    return db.collection('logtoolmovements').doc(logId).set(logData);
                 });
                 
                 await Promise.all(logPromises);
