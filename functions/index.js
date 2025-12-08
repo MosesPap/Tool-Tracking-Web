@@ -722,3 +722,20 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
   }
 });
 
+// Debug helper to inspect auth context from callable clients
+exports.debugAuthContext = functions.https.onCall((data, context) => {
+  if (!context.auth) {
+    return {
+      authenticated: false,
+      message: 'No auth in context'
+    };
+  }
+
+  return {
+    authenticated: true,
+    uid: context.auth.uid,
+    tokenClaims: context.auth.token,
+    projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || null
+  };
+});
+
