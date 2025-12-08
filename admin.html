@@ -3143,24 +3143,131 @@ Thank you!`;
                 console.log('Fresh token obtained before function call');
                 console.log('Token length:', freshToken ? freshToken.length : 'null');
                 
-                // Ensure functions instance is using the same Firebase app
-                // Re-initialize functions if needed to ensure auth context
-                let functionsToUse = functions;
-                if (!functionsToUse || !functionsToUse.app) {
-                    console.warn('Functions instance may not have auth context, reinitializing...');
-                    const app = firebase.app();
+                // Ensure functions instance is using the same Firebase app and auth
+                // Create a fresh functions instance right before the call to ensure auth context
+                const app = firebase.app();
+                let functionsToUse;
+                try {
+                    // Try to get functions from the app instance
                     if (typeof app.functions === 'function') {
                         functionsToUse = app.functions('us-central1');
-                    } else {
+                    } else if (typeof firebase.functions === 'function') {
                         functionsToUse = firebase.functions('us-central1');
+                    } else {
+                        functionsToUse = functions;
                     }
+                } catch (e) {
+                    console.warn('Error creating functions instance:', e);
+                    functionsToUse = functions;
+                }
+                
+                if (!functionsToUse) {
+                    alert('❌ Firebase Functions not available. Please refresh the page.');
+                    return;
+                }
+                
+                // Verify auth state one more time
+                const finalUserCheck = auth.currentUser;
+                if (!finalUserCheck || finalUserCheck.uid !== currentUser.uid) {
+                    alert('❌ Authentication state changed. Please refresh the page and try again.');
+                    return;
+                }
+                
+                // Get another fresh token right before the call to ensure it's valid
+                const finalToken = await finalUserCheck.getIdToken(true);
+                console.log('Final token obtained, length:', finalToken ? finalToken.length : 'null');
+                
+                // Ensure the functions instance is using the same Firebase app as auth
+                // Create a completely fresh instance to ensure auth context is properly linked
+                const firebaseApp = firebase.app();
+                
+                // Verify the app has auth
+                const appAuth = firebaseApp.auth();
+                const appAuthUser = appAuth.currentUser;
+                console.log('App auth current user:', appAuthUser ? appAuthUser.uid : 'null');
+                
+                if (!appAuthUser || appAuthUser.uid !== finalUserCheck.uid) {
+                    console.error('Auth mismatch between functions and auth instances');
+                    alert('❌ Authentication mismatch detected. Please refresh the page and try again.');
+                    return;
+                }
+                
+                // CRITICAL FIX: Create functions instance using firebase.functions() directly
+                // instead of app.functions() to ensure proper auth token inclusion
+                // The issue is that app.functions() might not properly link to auth.currentUser
+                let freshFunctions;
+                try {
+                    // Use firebase.functions() directly - this ensures it uses the default app
+                    // which has the authenticated user
+                    if (typeof firebase.functions === 'function') {
+                        freshFunctions = firebase.functions('us-central1');
+                        console.log('Created functions instance using firebase.functions()');
+                    } else {
+                        console.error('firebase.functions is not a function');
+                        alert('❌ Firebase Functions SDK not loaded. Please refresh the page.');
+                        return;
+                    }
+                } catch (e) {
+                    console.error('Error creating functions instance:', e);
+                    // Fallback to window.functions if available
+                    freshFunctions = window.functions || functions;
+                    if (!freshFunctions) {
+                        alert('❌ Could not initialize Firebase Functions. Please refresh the page.');
+                        return;
+                    }
+                }
+                
+                if (!freshFunctions) {
+                    alert('❌ Could not initialize Firebase Functions. Please refresh the page.');
+                    return;
+                }
+                
+                // Verify auth state one final time
+                const verifyAuth = auth.currentUser; // Use the global auth instance
+                if (!verifyAuth || verifyAuth.uid !== finalUserCheck.uid) {
+                    console.error('Final auth verification failed');
+                    alert('❌ Authentication verification failed. Please refresh the page and try again.');
+                    return;
                 }
                 
                 // Call Cloud Function to delete user from both Firestore and Firebase Auth
                 // The Cloud Function ensures that if Auth deletion fails, nothing is deleted
                 // httpsCallable automatically includes the auth token from the current user
-                const deleteUserFunction = functionsToUse.httpsCallable('deleteUser');
                 console.log('Calling deleteUser Cloud Function...');
+                console.log('Using functions instance from app:', firebaseApp.name);
+                console.log('Auth current user UID:', verifyAuth.uid);
+                console.log('Auth current user email:', verifyAuth.email);
+                console.log('Functions instance type:', typeof freshFunctions);
+                console.log('Functions httpsCallable type:', typeof freshFunctions.httpsCallable);
+                
+                // CRITICAL: Ensure the functions instance uses the same auth as the app
+                // The httpsCallable method should automatically include the auth token,
+                // but we need to ensure the functions instance is properly linked to auth
+                
+                // Wait a moment to ensure auth state is fully propagated
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                // Verify auth one more time after the delay
+                const finalAuthCheck = firebaseApp.auth().currentUser;
+                if (!finalAuthCheck || finalAuthCheck.uid !== verifyAuth.uid) {
+                    console.error('Auth state changed during delay');
+                    alert('❌ Authentication state changed. Please refresh the page and try again.');
+                    return;
+                }
+                
+                // Get a final fresh token to ensure it's valid
+                const finalTokenCheck = await finalAuthCheck.getIdToken(true);
+                console.log('Final token check passed, length:', finalTokenCheck ? finalTokenCheck.length : 'null');
+                
+                console.log('Final auth check passed, calling function...');
+                console.log('Functions instance app:', freshFunctions.app ? freshFunctions.app.name : 'no app');
+                
+                // Create the callable function reference
+                const deleteUserFunction = freshFunctions.httpsCallable('deleteUser');
+                
+                // Call the function - httpsCallable should automatically include the auth token
+                // The token is included in the Authorization header automatically
+                console.log('Making callable function request...');
                 const result = await deleteUserFunction({
                     userId: userId,
                     userEmail: userEmail
