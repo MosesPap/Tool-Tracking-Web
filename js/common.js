@@ -13,17 +13,27 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase (only if not already initialized)
+let app;
 if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
+    app = firebase.initializeApp(firebaseConfig);
+} else {
+    app = firebase.app();
 }
 const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
 
 // Initialize Functions only if available (not all pages load the Functions script)
+// Use the same app instance to ensure auth context is shared
+// Specify region to match Cloud Function deployment (us-central1)
 let functions = null;
 if (typeof firebase.functions === 'function') {
-    functions = firebase.functions();
+    try {
+        functions = app.functions('us-central1');
+    } catch (e) {
+        // Fallback if region specification fails
+        functions = app.functions();
+    }
 } else {
     console.log('[COMMON] Firebase Functions not available - some pages may not load the Functions script');
 }
