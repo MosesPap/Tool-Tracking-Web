@@ -19,14 +19,23 @@ if (!firebase.apps.length) {
 const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
-const functions = firebase.functions();
+
+// Initialize Functions only if available (not all pages load the Functions script)
+let functions = null;
+if (typeof firebase.functions === 'function') {
+    functions = firebase.functions();
+} else {
+    console.log('[COMMON] Firebase Functions not available - some pages may not load the Functions script');
+}
 
 // Make Firebase instances globally accessible so all pages use the same instances
 // This ensures LOCAL persistence works correctly across page navigations
 window.auth = auth;
 window.db = db;
 window.storage = storage;
-window.functions = functions;
+if (functions) {
+    window.functions = functions;
+}
 
 // Configure Firebase Auth
 auth.useDeviceLanguage();
