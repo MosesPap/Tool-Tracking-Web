@@ -3276,6 +3276,10 @@ Thank you!`;
                     const debugAuth = freshFunctions.httpsCallable('debugAuthContext');
                     const debugRes = await debugAuth();
                     console.log('debugAuthContext response:', debugRes.data);
+                    if (!debugRes.data || debugRes.data.authenticated === false) {
+                        alert('❌ Server reports unauthenticated. Please refresh, sign in again, and retry. Details in console.');
+                        return;
+                    }
                 } catch (e) {
                     console.warn('debugAuthContext call failed (non-blocking):', e);
                 }
