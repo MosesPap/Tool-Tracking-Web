@@ -2180,7 +2180,11 @@
                                 await auth.signOut();
                                 localStorage.removeItem('authVerified');
                                 localStorage.removeItem('fullName');
-                                window.location.href = 'main-menu.html';
+                                localStorage.removeItem('techniciansId');
+                                // Small delay to ensure signOut completes before redirect
+                                setTimeout(() => {
+                                    window.location.href = 'main-menu.html';
+                                }, 100);
                             } catch (error) {
                                 console.error('Logout error:', error);
                                 alert('Logout failed: ' + error.message);
