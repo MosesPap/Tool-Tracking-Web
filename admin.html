@@ -3741,16 +3741,31 @@ Thank you!`;
                 // Commit the batch update
                 await batch.commit();
                 
-                // Log the check-in action
-                const logPromises = toolIds.map(toolId => {
-                    return db.collection('logtoolmovements').add({
+                // Log the check-in action with full tool data (excluding photoUrls)
+                const logPromises = toolIds.map(async (toolId) => {
+                    let toolData = {};
+                    try {
+                        const toolDoc = await db.collection('tools').doc(toolId).get();
+                        toolData = toolDoc.exists ? (toolDoc.data() || {}) : {};
+                    } catch (e) {
+                        console.warn('Could not fetch tool data for logging:', toolId, e);
+                    }
+                    
+                    const logData = {
+                        ...toolData,
                         toolId: toolId,
                         technician: currentToolsUser.name,
                         action: 'CHECK-IN',
                         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                        WorkOn: 'Admin Check-in',
                         status: 'IN'
-                    });
+                    };
+                    delete logData.photoUrls;
+                    
+                    if (!logData.WorkOn) {
+                        logData.WorkOn = 'Admin Check-in';
+                    }
+                    
+                    return db.collection('logtoolmovements').add(logData);
                 });
                 
                 await Promise.all(logPromises);

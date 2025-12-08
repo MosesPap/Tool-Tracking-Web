@@ -1362,16 +1362,15 @@
                 
                 await toolRef.update(updateData);
                 
-                // Add log entry with WorkOn field
+                // Add log entry with full tool data (excluding photoUrls)
                 const logData = {
+                    ...data,
                     toolId: code,
-                    toolName: data.toolName || 'Unknown',
-                    partNumber: data.partNumber || code,
-                    location: data.location || '',
                     status: 'OUT',
                     technician: technicianName,
                     timestamp: timestamp
                 };
+                delete logData.photoUrls;
                 
                 if (selectedWorkLocation) {
                     logData.WorkOn = selectedWorkLocation;
@@ -1846,16 +1845,15 @@
                     
                     await toolRef.update(updateData);
                     
-                    // Add log entry
+                    // Add log entry with full tool data (excluding photoUrls)
                     const logData = {
+                        ...data,
                         toolId: code,
-                        toolName: data.toolName || 'Unknown',
-                        partNumber: data.partNumber || code,
-                        location: data.location || '',
                         status: status,
                         technician: technicianName,
                         timestamp: timestamp
                     };
+                    delete logData.photoUrls;
                     
                     if (status === 'OUT' && selectedWorkLocation) {
                         logData.WorkOn = selectedWorkLocation;
@@ -2115,16 +2113,15 @@
                 
                 await toolRef.update(updateData);
                 
-                // Log movement
+                // Log movement with full tool data (excluding photoUrls)
                 const logData = {
+                    ...data,
                     toolId: code,
-                    toolName: data.toolName || 'Unknown',
-                    partNumber: data.partNumber || code,
-                    location: data.location || '',
                     status: newStatus,
                     technician: technicianName,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 };
+                delete logData.photoUrls;
                 
                 if (newStatus === 'OUT' && selectedWorkLocation) {
                     logData.WorkOn = selectedWorkLocation;
@@ -2407,16 +2404,15 @@
                     
                     await toolRef.update(updateData);
 
-                    // Add log entry with WorkOn field
+                    // Add log entry with full tool data (excluding photoUrls)
                     const logData = {
+                        ...data,
                         toolId: code,
-                        toolName: data.toolName || 'Unknown',
-                        partNumber: data.partNumber || code,
-                        location: data.location || '',
                         status: status,
                         technician: technicianName,
                         timestamp: timestamp
                     };
+                    delete logData.photoUrls;
                     
                     if (status === 'OUT' && selectedWorkLocation) {
                         logData.WorkOn = selectedWorkLocation;
