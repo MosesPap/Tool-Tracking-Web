@@ -1139,7 +1139,7 @@
                         console.log('[REGISTER-TOOLS] Attempting to show location selection modal...');
                         if (typeof showLocationSelectionModalForRegisterTools === 'function') {
                             try {
-                                showLocationSelectionModalForRegisterTools();
+                            showLocationSelectionModalForRegisterTools();
                                 console.log('[REGISTER-TOOLS] Location selection modal shown successfully');
                             } catch (error) {
                                 console.error('[REGISTER-TOOLS] Error showing location selection modal:', error);
@@ -1217,8 +1217,8 @@
                                 }
                             } else {
                                         console.log('[REGISTER-TOOLS] ✓ User found in double-check, staying on page');
-                                    }
-                                }, 500);
+                        }
+                    }, 500);
                             }
                             unsubscribe(); // Clean up listener
                             console.log('[REGISTER-TOOLS] Background auth check completed, listener unsubscribed');
@@ -1436,8 +1436,8 @@
             if (backToMenuBtn) {
                 backToMenuBtn.onclick = function() {
                     console.log('Back to Menu button clicked');
-                    handleBackNavigation();
-                };
+                handleBackNavigation();
+            };
             } else {
                 console.error('backToMenuBtn element not found!');
                 // Retry after a short delay
@@ -2387,6 +2387,13 @@
                         }
                     }
 
+                    // Require a station/work location when checking OUT
+                    if (status === 'OUT' && !selectedWorkLocation) {
+                        console.warn('Checkout blocked: no station selected. Prompting user to pick a station.');
+                        showLocationSelectionModalForToolSubmission(code);
+                        return;
+                    }
+
                     // Update tool status with WorkOn field
                     const updateData = {
                         status: status,
@@ -2593,7 +2600,7 @@
                                 alert('Offline tool details not available');
                             }
                         } else {
-                            showToolDetails(buildToolDetailsObject(tool.doc, data), 'registerTools');
+                        showToolDetails(buildToolDetailsObject(tool.doc, data), 'registerTools');
                         }
                     };
                     
@@ -2671,7 +2678,7 @@
                             ${status === 'OUT' ? `
                                 <div style="display: flex; gap: 8px; align-items: center; flex: 1; justify-content: flex-end;">
                                     <div id="countdown-${tool.id}" class="cooldown-countdown" style="background: #FF9800; color: white; padding: 6px 8px; border-radius: 4px; font-weight: bold; text-align: center; white-space: nowrap; display: none;" onclick="event.stopPropagation();">
-                                        <span style="font-weight: bold;">Time for Check-in:</span> <span class="countdown-value">Loading...</span>
+                                <span style="font-weight: bold;">Time for Check-in:</span> <span class="countdown-value">Loading...</span>
                                     </div>
                                     <button id="tool-in-btn-${tool.id}" 
                                             class="tool-in-btn-3d" 
