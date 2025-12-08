@@ -3834,7 +3834,10 @@ Thank you!`;
                 else if (status === 'LOST') statusClass = 'lost';
                 else if (status === 'CALIBRATION') statusClass = 'calibration';
                 
-                const workOnValue = latestEntry.WorkOn || latestEntry.workLocation || 'N/A';
+                const isAdminCheckIn = (latestEntry.WorkOn === 'Admin Check-in');
+                const workOnValue = isAdminCheckIn
+                    ? (latestEntry.workLocation || latestEntry.location || 'N/A')
+                    : (latestEntry.WorkOn || latestEntry.workLocation || latestEntry.location || 'N/A');
                 const serialNumber = latestEntry.serialNumber || latestEntry.partNumber || 'N/A';
                 const calDueDate = latestEntry.calDueDate ? 
                     (latestEntry.calDueDate.toDate ? latestEntry.calDueDate.toDate().toLocaleDateString('en-GB') : latestEntry.calDueDate) : 
@@ -3869,7 +3872,7 @@ Thank you!`;
                         <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000; text-align: left; padding-right: 30px;">
                             ${index + 1}. ${latestEntry.toolName || 'Unknown Tool'}
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; position: relative;">
                             <div style="color: #666; font-size: 0.9rem;">
                                 ${time}
                             </div>
@@ -3877,6 +3880,7 @@ Thank you!`;
                                 <span style="color: black; font-weight: bold;">WorkOn:</span> 
                                 <span style="color: #666; font-weight: bold;">${workOnValue}</span>
                             </div>
+                            ${isAdminCheckIn ? `<span class="badge bg-secondary" style="position: absolute; right: 0; bottom: -18px;">Admin Check-in</span>` : ''}
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                             <div style="text-align: left;">
@@ -3911,11 +3915,12 @@ Thank you!`;
                         showToolHistoryDetails(toolId, toolEntries);
                     };
                     
+                    card.style.position = 'relative';
                     card.innerHTML = `
                         <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000; text-align: left;">
                             ${index + 1}. ${latestEntry.toolName || 'Unknown Tool'}
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; position: relative;">
                             <div style="color: #666; font-size: 0.9rem;">
                                 ${time}
                             </div>
@@ -3923,6 +3928,7 @@ Thank you!`;
                                 <span style="color: black; font-weight: bold;">WorkOn:</span> 
                                 <span style="color: #666; font-weight: bold;">${workOnValue}</span>
                             </div>
+                            ${isAdminCheckIn ? `<span class="badge bg-secondary" style="position: absolute; right: 0; bottom: -18px;">Admin Check-in</span>` : ''}
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                             <div style="text-align: left;">
