@@ -13,50 +13,18 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase (only if not already initialized)
-let app;
 if (!firebase.apps.length) {
-    app = firebase.initializeApp(firebaseConfig);
-} else {
-    app = firebase.app();
+    firebase.initializeApp(firebaseConfig);
 }
 const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
-
-// Initialize Functions only if available (not all pages load the Functions script)
-// Use the same app instance to ensure auth context is shared
-// Specify region to match Cloud Function deployment (us-central1)
-// IMPORTANT: Functions instance must be created AFTER auth is initialized
-// to ensure auth tokens are properly included in httpsCallable requests
-let functions = null;
-if (typeof firebase.functions === 'function') {
-    try {
-        // Use app.functions() to ensure it's linked to the same app instance as auth
-        functions = app.functions('us-central1');
-        // Ensure functions instance is aware of auth
-        // The httpsCallable method should automatically use auth.currentUser
-        console.log('[COMMON] Firebase Functions initialized with region: us-central1');
-    } catch (e) {
-        console.warn('[COMMON] Error initializing functions with region, trying without region:', e);
-        // Fallback if region specification fails
-        try {
-            functions = app.functions();
-        } catch (e2) {
-            console.error('[COMMON] Failed to initialize functions:', e2);
-        }
-    }
-} else {
-    console.log('[COMMON] Firebase Functions not available - some pages may not load the Functions script');
-}
 
 // Make Firebase instances globally accessible so all pages use the same instances
 // This ensures LOCAL persistence works correctly across page navigations
 window.auth = auth;
 window.db = db;
 window.storage = storage;
-if (functions) {
-    window.functions = functions;
-}
 
 // Configure Firebase Auth
 auth.useDeviceLanguage();
