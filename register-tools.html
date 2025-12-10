@@ -1362,24 +1362,22 @@
                 
                 await toolRef.update(updateData);
                 
-                // Add log entry with full tool data (excluding photoUrls), ordered fields
+                // Add log entry with WorkOn field
                 const logData = {
                     toolId: code,
                     toolName: data.toolName || 'Unknown',
                     partNumber: data.partNumber || code,
-                    serialNumber: data.serialNumber || '',
-                    calDueDate: data.calDueDate || null,
-                    collectionCode: data.collectionCode || data.collectionName || '',
                     location: data.location || '',
-                    owner: data.owner || '',
-                    WorkOn: selectedWorkLocation || data.WorkOn || data.workLocation || '',
                     status: 'OUT',
                     technician: technicianName,
                     timestamp: timestamp
                 };
                 
-                const logId = `${Date.now()}-${code}`;
-                await db.collection('logtoolmovements').doc(logId).set(logData);
+                if (selectedWorkLocation) {
+                    logData.WorkOn = selectedWorkLocation;
+                }
+                
+                await db.collection('logtoolmovements').add(logData);
                 
                 // Show success message
                 const alertDiv = document.createElement('div');
@@ -1848,24 +1846,22 @@
                     
                     await toolRef.update(updateData);
                     
-                    // Add log entry with full tool data (excluding photoUrls), ordered fields
+                    // Add log entry
                     const logData = {
                         toolId: code,
                         toolName: data.toolName || 'Unknown',
                         partNumber: data.partNumber || code,
-                        serialNumber: data.serialNumber || '',
-                        calDueDate: data.calDueDate || null,
-                        collectionCode: data.collectionCode || data.collectionName || '',
                         location: data.location || '',
-                        owner: data.owner || '',
-                        WorkOn: (status === 'OUT' ? (selectedWorkLocation || data.WorkOn || data.workLocation || '') : (data.WorkOn || data.workLocation || '')),
                         status: status,
                         technician: technicianName,
                         timestamp: timestamp
                     };
                     
-                    const logId = `${Date.now()}-${code}`;
-                    await db.collection('logtoolmovements').doc(logId).set(logData);
+                    if (status === 'OUT' && selectedWorkLocation) {
+                        logData.WorkOn = selectedWorkLocation;
+                    }
+                    
+                    await db.collection('logtoolmovements').add(logData);
                     
                     successCount++;
                 } catch (error) {
@@ -2119,25 +2115,22 @@
                 
                 await toolRef.update(updateData);
                 
-                // Log movement with full tool data (excluding photoUrls), ordered fields
-                const logTimestamp = firebase.firestore.FieldValue.serverTimestamp();
+                // Log movement
                 const logData = {
                     toolId: code,
                     toolName: data.toolName || 'Unknown',
                     partNumber: data.partNumber || code,
-                    serialNumber: data.serialNumber || '',
-                    calDueDate: data.calDueDate || null,
-                    collectionCode: data.collectionCode || data.collectionName || '',
                     location: data.location || '',
-                    owner: data.owner || '',
-                    WorkOn: (newStatus === 'OUT' ? (selectedWorkLocation || data.WorkOn || data.workLocation || '') : (data.WorkOn || data.workLocation || '')),
                     status: newStatus,
                     technician: technicianName,
-                    timestamp: logTimestamp
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 };
                 
-                const logId = `${Date.now()}-${code}`;
-                await db.collection('logtoolmovements').doc(logId).set(logData);
+                if (newStatus === 'OUT' && selectedWorkLocation) {
+                    logData.WorkOn = selectedWorkLocation;
+                }
+                
+                await db.collection('logtoolmovements').add(logData);
                 
                 // Add to history list
                 bulkScannedTools.push({
@@ -2394,13 +2387,6 @@
                         }
                     }
 
-                    // Require a station/work location when checking OUT
-                    if (status === 'OUT' && !selectedWorkLocation) {
-                        console.warn('Checkout blocked: no station selected. Prompting user to pick a station.');
-                        showLocationSelectionModalForToolSubmission(code);
-                        return;
-                    }
-
                     // Update tool status with WorkOn field
                     const updateData = {
                         status: status,
@@ -2414,15 +2400,16 @@
                     
                     await toolRef.update(updateData);
 
-                    // Add log entry with full tool data (excluding photoUrls)
+                    // Add log entry with WorkOn field
                     const logData = {
-                        ...data,
                         toolId: code,
+                        toolName: data.toolName || 'Unknown',
+                        partNumber: data.partNumber || code,
+                        location: data.location || '',
                         status: status,
                         technician: technicianName,
                         timestamp: timestamp
                     };
-                    delete logData.photoUrls;
                     
                     if (status === 'OUT' && selectedWorkLocation) {
                         logData.WorkOn = selectedWorkLocation;

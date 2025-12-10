@@ -239,8 +239,7 @@
             const db = window.db;
             
             if (!auth || !db) {
-                // Use console.log instead of console.error to reduce noise
-                console.log('[MAIN-MENU] Waiting for common.js to load...');
+                console.error('[MAIN-MENU] window.auth or window.db not available! Retrying in 100ms...');
                 setTimeout(initializeMainMenu, 100);
                 return;
             }
@@ -579,15 +578,7 @@
         }
         
         // Start initialization - wait for common.js to load
-        // Use a small delay to ensure common.js has executed
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', function() {
-                setTimeout(initializeMainMenu, 50);
-            });
-        } else {
-            // DOM already loaded, but wait a bit for common.js
-            setTimeout(initializeMainMenu, 50);
-        }
+        initializeMainMenu();
     </script>
 </body>
 </html>

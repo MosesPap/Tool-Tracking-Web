@@ -748,8 +748,8 @@
             font-size: 0.75rem;
             padding: 4px 8px;
         }
-
-        /* 3D Numbering Style for Users */
+        
+        /* 3D Numbering Style */
         .user-number-3d {
             display: inline-block;
             width: 35px;
@@ -758,58 +758,124 @@
             text-align: center;
             font-weight: bold;
             font-size: 1rem;
-            color: #333;
-            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
-            border: 2px solid #9e9e9e;
-            border-radius: 50%;
-            box-shadow: 0 2px 4px rgba(158, 158, 158, 0.3),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
-            transform: perspective(1000px) rotateX(2deg);
-            transition: all 0.3s ease;
-        }
-
-        .user-number-3d:hover {
-            background: linear-gradient(135deg, #d0d0d0 0%, #adadad 100%);
-            border-color: #757575;
-            transform: perspective(1000px) rotateX(0deg) translateY(-2px);
-            box-shadow: 0 4px 8px rgba(158, 158, 158, 0.4),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.5),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.25);
-        }
-
-        /* 3D Delete Button Style */
-        .delete-user-btn-3d {
-            position: relative;
-            font-size: 0.75rem;
-            padding: 4px 8px;
-            font-weight: bold;
-            border-radius: 8px;
-            border: 2px solid #c62828;
-            background: linear-gradient(135deg, #e53935 0%, #c62828 100%);
             color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: 2px solid #5568d3;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
             transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(198, 40, 40, 0.3),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
             transform: perspective(1000px) rotateX(2deg);
         }
-
-        .delete-user-btn-3d:hover {
-            background: linear-gradient(135deg, #c62828 0%, #b71c1c 100%);
-            border-color: #b71c1c;
-            transform: perspective(1000px) rotateX(0deg) translateY(-2px);
-            box-shadow: 0 4px 8px rgba(198, 40, 40, 0.4),
-                        0 2px 4px rgba(0, 0, 0, 0.2),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+        
+        .user-number-3d:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
         }
-
-        .delete-user-btn-3d:active {
-            transform: perspective(1000px) rotateX(2deg) translateY(0px);
-            box-shadow: 0 2px 4px rgba(198, 40, 40, 0.3),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        
+        /* 3D Button Styles for Admin Actions */
+        .btn-3d-admin {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            border: 2px solid #1e7e34;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        .btn-3d-admin:hover {
+            background: linear-gradient(135deg, #218838 0%, #1aa179 100%);
+            border-color: #1c7430;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(40, 167, 69, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+        
+        .btn-3d-admin:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+        
+        .btn-3d-instructor {
+            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+            border: 2px solid #117a8b;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        .btn-3d-instructor:hover {
+            background: linear-gradient(135deg, #138496 0%, #117a8b 100%);
+            border-color: #0f6674;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(23, 162, 184, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+        
+        .btn-3d-instructor:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 4px 8px rgba(23, 162, 184, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+        
+        .btn-3d-avionics {
+            background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+            border: 2px solid #e0a800;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        .btn-3d-avionics:hover {
+            background: linear-gradient(135deg, #e0a800 0%, #f57c00 100%);
+            border-color: #d39e00;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(255, 193, 7, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+        
+        .btn-3d-avionics:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 4px 8px rgba(255, 193, 7, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+        
+        .btn-3d-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            border: 2px solid #bd2130;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        .btn-3d-danger:hover {
+            background: linear-gradient(135deg, #c82333 0%, #bd2130 100%);
+            border-color: #a71e2a;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(220, 53, 69, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+        
+        .btn-3d-danger:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+        
+        .btn-3d-delete {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            border: 2px solid #bd2130;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        .btn-3d-delete:hover {
+            background: linear-gradient(135deg, #c82333 0%, #bd2130 100%);
+            border-color: #a71e2a;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(220, 53, 69, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+        
+        .btn-3d-delete:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
         }
 
         .alert-custom {
@@ -840,25 +906,6 @@
 
         .section-modal.active {
             display: block;
-        }
-        
-        /* Re-authentication modal must appear above section modals */
-        #reauthModal {
-            z-index: 10000 !important;
-        }
-        
-        #reauthModal.show {
-            z-index: 10000 !important;
-        }
-        
-        /* Ensure modal backdrop appears above section modals but below the modal */
-        body > .modal-backdrop {
-            z-index: 9999 !important;
-        }
-        
-        /* When reauth modal is shown, ensure it's on top */
-        #reauthModal.modal.show {
-            z-index: 10000 !important;
         }
 
         .section-modal-content {
@@ -2113,52 +2160,11 @@
         </div>
     </div>
 
-    <!-- Re-Authentication Modal for User Deletion -->
-    <div class="modal fade" id="reauthModal" tabindex="-1" aria-labelledby="reauthModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title" id="reauthModalLabel">
-                        <i class="fas fa-shield-alt"></i> Re-Authentication Required
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-warning">
-                        <i class="fas fa-exclamation-triangle"></i> 
-                        <strong>Security Check:</strong> Please enter your password to confirm this sensitive action.
-                    </div>
-                    <div class="mb-3">
-                        <label for="reauthEmail" class="form-label">Email</label>
-                        <input type="email" class="form-control" id="reauthEmail" readonly>
-                    </div>
-                    <div class="mb-3">
-                        <label for="reauthPassword" class="form-label">Password</label>
-                        <div class="input-group">
-                            <input type="password" class="form-control" id="reauthPassword" placeholder="Enter your password" autocomplete="current-password">
-                            <button class="btn btn-outline-secondary" type="button" id="reauthTogglePassword" tabindex="-1">
-                                <i class="fas fa-eye" id="reauthTogglePasswordIcon"></i>
-                            </button>
-                        </div>
-                        <div id="reauthError" class="text-danger mt-2" style="display: none;"></div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" id="reauthConfirmBtn">
-                        <i class="fas fa-check"></i> Confirm & Delete
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-functions-compat.js"></script>
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Common Firebase configuration and utilities -->
@@ -2172,19 +2178,18 @@
                 const auth = window.auth;
                 const db = window.db;
                 const storage = window.storage;
-                const functions = window.functions;
                 
-                if (!auth || !db || !storage || !functions) {
+                if (!auth || !db || !storage) {
                     console.log('[ADMIN] Waiting for common.js to load...');
                     setTimeout(waitForAuth, 50);
                     return;
                 }
                 
                 console.log('[ADMIN] ✓ Using global Firebase instances from common.js');
-                initializeAdmin(auth, db, storage, functions);
+                initializeAdmin(auth, db, storage);
             }
             
-            async function initializeAdmin(auth, db, storage, functions) {
+            async function initializeAdmin(auth, db, storage) {
 
         // DOM Elements
         const loginSection = document.getElementById('loginSection');
@@ -2239,11 +2244,7 @@
                                 await auth.signOut();
                                 localStorage.removeItem('authVerified');
                                 localStorage.removeItem('fullName');
-                                localStorage.removeItem('techniciansId');
-                                // Small delay to ensure signOut completes before redirect
-                                setTimeout(() => {
-                                    window.location.href = 'main-menu.html';
-                                }, 100);
+                                window.location.href = 'main-menu.html';
                             } catch (error) {
                                 console.error('Logout error:', error);
                                 alert('Logout failed: ' + error.message);
@@ -2998,10 +2999,27 @@ Thank you!`;
                 tableBody.innerHTML = '';
                 mobileCards.innerHTML = '';
 
-                let userIndex = 0;
+                // Collect all users and sort alphabetically by fullName
+                const users = [];
                 snapshot.forEach(doc => {
-                    userIndex++;
-                    const userData = doc.data();
+                    users.push({
+                        id: doc.id,
+                        data: doc.data()
+                    });
+                });
+                
+                // Sort alphabetically by fullName
+                users.sort((a, b) => {
+                    const nameA = (a.data.fullName || '').toLowerCase();
+                    const nameB = (b.data.fullName || '').toLowerCase();
+                    return nameA.localeCompare(nameB);
+                });
+
+                // Render sorted users with numbering
+                users.forEach((user, index) => {
+                    const userData = user.data;
+                    const userId = user.id;
+                    const userNumber = index + 1;
                     
                     // Desktop table row
                     const isAdmin = userData.isAdmin || false;
@@ -3017,7 +3035,7 @@ Thank you!`;
                     const row = document.createElement('tr');
                     row.innerHTML = `
                         <td>
-                            <span class="user-number-3d">${userIndex}</span>
+                            <span class="user-number-3d">${userNumber}</span>
                         </td>
                         <td>${userData.fullName || 'N/A'}</td>
                         <td>${userData.email || 'N/A'}</td>
@@ -3026,16 +3044,16 @@ Thank you!`;
                         </td>
                         <td>
                             <div class="role-buttons">
-                                <button class="btn btn-sm btn-${isAdmin ? 'danger' : 'success'}" onclick="toggleAdmin('${doc.id}', ${!isAdmin})">
+                                <button class="btn btn-sm ${isAdmin ? 'btn-3d-danger' : 'btn-3d-admin'}" onclick="toggleAdmin('${userId}', ${!isAdmin})">
                                     ${isAdmin ? '<i class="fas fa-shield-alt"></i> Remove Admin' : '<i class="fas fa-shield-alt"></i> Make Admin'}
                                 </button>
-                                <button class="btn btn-sm btn-${isInstructor ? 'danger' : 'info'}" onclick="toggleInstructor('${doc.id}', ${!isInstructor})">
+                                <button class="btn btn-sm ${isInstructor ? 'btn-3d-danger' : 'btn-3d-instructor'}" onclick="toggleInstructor('${userId}', ${!isInstructor})">
                                     ${isInstructor ? '<i class="fas fa-chalkboard-teacher"></i> Remove Instructor' : '<i class="fas fa-chalkboard-teacher"></i> Make Instructor'}
                                 </button>
-                                <button class="btn btn-sm btn-${isAvionics ? 'danger' : 'warning'}" onclick="toggleAvionics('${doc.id}', ${!isAvionics})">
+                                <button class="btn btn-sm ${isAvionics ? 'btn-3d-danger' : 'btn-3d-avionics'}" onclick="toggleAvionics('${userId}', ${!isAvionics})">
                                     ${isAvionics ? '<i class="fas fa-cog"></i> Remove Avionics' : '<i class="fas fa-cog"></i> Make Avionics'}
                                 </button>
-                                <button class="btn btn-sm btn-danger delete-user-btn-3d" onclick="deleteUser('${doc.id}', '${(userData.email || '').replace(/'/g, "\\'")}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}')" title="Delete User">
+                                <button class="btn btn-sm btn-3d-delete" onclick="deleteUser('${userId}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}')">
                                     <i class="fas fa-trash-alt"></i> Delete
                                 </button>
                             </div>
@@ -3054,24 +3072,24 @@ Thank you!`;
                     
                     card.innerHTML = `
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                            <span class="user-number-3d">${userIndex}</span>
-                            <h6 style="margin: 0; flex: 1;"><i class="fas fa-user"></i> ${userData.fullName || 'N/A'}</h6>
+                            <span class="user-number-3d">${userNumber}</span>
+                            <h6 style="margin: 0;"><i class="fas fa-user"></i> ${userData.fullName || 'N/A'}</h6>
                         </div>
                         <p><i class="fas fa-envelope"></i> ${userData.email || 'N/A'}</p>
                         <p>
                             <div class="role-badges">${mobileBadges.join('')}</div>
                         </p>
                         <div class="role-buttons" style="flex-direction: column; gap: 8px;">
-                            <button class="btn btn-sm btn-${isAdmin ? 'danger' : 'success'}" onclick="toggleAdmin('${doc.id}', ${!isAdmin})">
+                            <button class="btn btn-sm ${isAdmin ? 'btn-3d-danger' : 'btn-3d-admin'}" onclick="toggleAdmin('${userId}', ${!isAdmin})">
                                 ${isAdmin ? '<i class="fas fa-shield-alt"></i> Remove Admin' : '<i class="fas fa-shield-alt"></i> Make Admin'}
                             </button>
-                            <button class="btn btn-sm btn-${isInstructor ? 'danger' : 'info'}" onclick="toggleInstructor('${doc.id}', ${!isInstructor})">
+                            <button class="btn btn-sm ${isInstructor ? 'btn-3d-danger' : 'btn-3d-instructor'}" onclick="toggleInstructor('${userId}', ${!isInstructor})">
                                 ${isInstructor ? '<i class="fas fa-chalkboard-teacher"></i> Remove Instructor' : '<i class="fas fa-chalkboard-teacher"></i> Make Instructor'}
                             </button>
-                            <button class="btn btn-sm btn-${isAvionics ? 'danger' : 'warning'}" onclick="toggleAvionics('${doc.id}', ${!isAvionics})">
+                            <button class="btn btn-sm ${isAvionics ? 'btn-3d-danger' : 'btn-3d-avionics'}" onclick="toggleAvionics('${userId}', ${!isAvionics})">
                                 ${isAvionics ? '<i class="fas fa-cog"></i> Remove Avionics' : '<i class="fas fa-cog"></i> Make Avionics'}
                             </button>
-                            <button class="btn btn-sm btn-danger delete-user-btn-3d" onclick="deleteUser('${doc.id}', '${(userData.email || '').replace(/'/g, "\\'")}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}')" title="Delete User">
+                            <button class="btn btn-sm btn-3d-delete" onclick="deleteUser('${userId}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}')">
                                 <i class="fas fa-trash-alt"></i> Delete
                             </button>
                         </div>
@@ -3151,225 +3169,26 @@ Thank you!`;
                 alert('Failed to update user: ' + error.message);
             }
         };
-
-        // Delete User with Re-Authentication
-        window.deleteUser = async function(userId, userEmail, userName) {
+        
+        // Delete User
+        window.deleteUser = async function(userId, userName) {
             const db = window.db || firebase.firestore();
-            const auth = window.auth || firebase.auth();
-            
-            // Check if user is authenticated
-            const currentUser = auth.currentUser;
-            if (!currentUser) {
-                alert('❌ You must be logged in to delete users. Please refresh the page and log in again.');
-                return;
-            }
-            
-            // First confirmation
-            const confirmMsg = `Are you sure you want to delete user "${userName}" (${userEmail})?\n\nThis will:\n- Delete the user from the technicians collection\n- Delete the user from Firebase Authentication\n\n⚠️ If Firebase Authentication deletion fails, the user will NOT be deleted from either location.\n\nThis action cannot be undone!`;
+            const confirmMsg = `⚠️ WARNING: Are you sure you want to delete user "${userName}"?\n\nThis action cannot be undone and will permanently remove the user from the technicians collection.`;
             
             if (!confirm(confirmMsg)) return;
+            
+            // Double confirmation
+            const doubleConfirm = confirm(`⚠️ FINAL CONFIRMATION: Delete user "${userName}"?\n\nThis is your last chance to cancel.`);
+            if (!doubleConfirm) return;
 
-            // Show re-authentication modal
-            const reauthModalElement = document.getElementById('reauthModal');
-            if (!reauthModalElement) {
-                console.error('Re-authentication modal element not found!');
-                alert('❌ Re-authentication modal not found. Please refresh the page.');
-                return;
-            }
-            
-            // Check if Bootstrap is loaded
-            if (typeof bootstrap === 'undefined') {
-                console.error('Bootstrap is not loaded!');
-                alert('❌ Bootstrap is not loaded. Please refresh the page.');
-                return;
-            }
-            
-            const reauthEmailInput = document.getElementById('reauthEmail');
-            const reauthPasswordInput = document.getElementById('reauthPassword');
-            const reauthErrorDiv = document.getElementById('reauthError');
-            const reauthConfirmBtn = document.getElementById('reauthConfirmBtn');
-            const reauthTogglePasswordBtn = document.getElementById('reauthTogglePassword');
-            
-            // Verify all elements exist
-            if (!reauthEmailInput || !reauthPasswordInput || !reauthErrorDiv || !reauthConfirmBtn || !reauthTogglePasswordBtn) {
-                console.error('Re-authentication modal elements not found:', {
-                    email: !!reauthEmailInput,
-                    password: !!reauthPasswordInput,
-                    error: !!reauthErrorDiv,
-                    confirm: !!reauthConfirmBtn,
-                    toggle: !!reauthTogglePasswordBtn
-                });
-                alert('❌ Re-authentication modal elements not found. Please refresh the page.');
-                return;
-            }
-            
-            // Set email (read-only)
-            reauthEmailInput.value = currentUser.email;
-            reauthPasswordInput.value = '';
-            reauthErrorDiv.style.display = 'none';
-            reauthErrorDiv.textContent = '';
-            reauthConfirmBtn.disabled = false;
-            reauthConfirmBtn.innerHTML = '<i class="fas fa-check"></i> Confirm & Delete';
-            
-            // Store delete parameters for use after re-auth
-            let deleteParams = { userId, userEmail, userName };
-            
-            // Clear any previous event listeners by cloning and replacing
-            const newConfirmBtn = reauthConfirmBtn.cloneNode(true);
-            reauthConfirmBtn.parentNode.replaceChild(newConfirmBtn, reauthConfirmBtn);
-            const newToggleBtn = reauthTogglePasswordBtn.cloneNode(true);
-            reauthTogglePasswordBtn.parentNode.replaceChild(newToggleBtn, reauthTogglePasswordBtn);
-            
-            // Get fresh references after cloning
-            const freshConfirmBtn = document.getElementById('reauthConfirmBtn');
-            const freshToggleBtn = document.getElementById('reauthTogglePassword');
-            const freshPasswordInput = document.getElementById('reauthPassword');
-            
-            // Password toggle functionality
-            freshToggleBtn.onclick = function() {
-                const type = freshPasswordInput.type === 'password' ? 'text' : 'password';
-                freshPasswordInput.type = type;
-                const icon = document.getElementById('reauthTogglePasswordIcon');
-                if (icon) {
-                    icon.className = type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
-                }
-            };
-            
-            // Handle Enter key in password field
-            freshPasswordInput.onkeypress = function(e) {
-                if (e.key === 'Enter') {
-                    freshConfirmBtn.click();
-                }
-            };
-            
-            // Create Bootstrap modal instance
-            const reauthModal = new bootstrap.Modal(reauthModalElement, {
-                backdrop: 'static',
-                keyboard: false
-            });
-            
-            // Ensure modal appears on top by setting z-index after creation
-            reauthModalElement.style.zIndex = '10000';
-            
-            // Handle confirm button click
-            freshConfirmBtn.onclick = async function() {
-                const password = freshPasswordInput.value.trim();
-                
-                if (!password) {
-                    reauthErrorDiv.textContent = 'Please enter your password';
-                    reauthErrorDiv.style.display = 'block';
-                    return;
-                }
-                
-                // Disable button and show loading
-                freshConfirmBtn.disabled = true;
-                freshConfirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Authenticating...';
-                reauthErrorDiv.style.display = 'none';
-                
-                try {
-                    // Re-authenticate user
-                    const email = currentUser.email;
-                    const credential = firebase.auth.EmailAuthProvider.credential(email, password);
-                    
-                    console.log('Re-authenticating user before delete operation...');
-                    await currentUser.reauthenticateWithCredential(credential);
-                    console.log('Re-authentication successful');
-                    
-                    // Close modal
-                    reauthModal.hide();
-                    
-                    // Now proceed with deletion
-                    await performUserDeletion(deleteParams.userId, deleteParams.userEmail, deleteParams.userName);
-                    
-                } catch (reauthError) {
-                    console.error('Re-authentication error:', reauthError);
-                    freshConfirmBtn.disabled = false;
-                    freshConfirmBtn.innerHTML = '<i class="fas fa-check"></i> Confirm & Delete';
-                    
-                    let errorMsg = 'Authentication failed. ';
-                    if (reauthError.code === 'auth/wrong-password') {
-                        errorMsg += 'Incorrect password. Please try again.';
-                    } else if (reauthError.code === 'auth/user-mismatch') {
-                        errorMsg += 'User mismatch. Please refresh the page and try again.';
-                    } else if (reauthError.code === 'auth/user-not-found') {
-                        errorMsg += 'User not found. Please refresh the page and log in again.';
-                    } else if (reauthError.code === 'auth/network-request-failed') {
-                        errorMsg += 'Network error. Please check your connection and try again.';
-                    } else {
-                        errorMsg += reauthError.message || 'Please try again.';
-                    }
-                    
-                    reauthErrorDiv.textContent = errorMsg;
-                    reauthErrorDiv.style.display = 'block';
-                }
-            };
-            
-        };
-        
-        // Perform the actual user deletion after re-authentication
-        async function performUserDeletion(userId, userEmail, userName) {
-            const auth = window.auth || firebase.auth();
-            const functions = window.functions;
-            
             try {
-                // Ensure we're still authenticated after re-auth
-                const userAfterReauth = auth.currentUser;
-                if (!userAfterReauth) {
-                    alert('❌ Session expired after re-authentication. Please refresh the page and log in again.');
-                    return;
-                }
-                
-                if (!functions) {
-                    alert('❌ Firebase Functions not initialized. Please refresh the page.');
-                    return;
-                }
-                
-                // Get a fresh token after re-authentication
-                const freshToken = await userAfterReauth.getIdToken(true);
-                console.log('Calling deleteUser Cloud Function after re-authentication...');
-                console.log('Auth current user UID:', userAfterReauth.uid);
-                console.log('Auth current user email:', userAfterReauth.email);
-                console.log('Fresh token length:', freshToken ? freshToken.length : 'null');
-                
-                // Create the callable function reference
-                const deleteUserFunction = functions.httpsCallable('deleteUser');
-                
-                // Call the function - httpsCallable automatically includes the auth token
-                console.log('Making callable function request...');
-                const result = await deleteUserFunction({
-                    userId: userId,
-                    userEmail: userEmail
-                });
-
-                if (result.data.success) {
-                    alert(`✅ ${result.data.message}`);
-                } else {
-                    alert(`⚠️ User deletion completed with warnings: ${result.data.message || 'Unknown error'}`);
-                }
-
-                // Reload users list
-                loadUsers();
+                await db.collection('technicians').doc(userId).delete();
+                alert(`✅ User "${userName}" has been deleted successfully!`);
+                loadUsers(); // Reload users list
                 loadStatistics(); // Refresh stats
             } catch (error) {
                 console.error('Error deleting user:', error);
-                
-                // Don't delete from Firestore if Cloud Function fails
-                // This ensures data consistency - either both are deleted or neither
-                let errorMessage = 'Failed to delete user: ';
-                
-                if (error.code === 'functions/unavailable' || error.code === 'functions/not-found') {
-                    errorMessage = 'Cloud Function is not available. User was not deleted. Please try again later or contact support.';
-                } else if (error.code === 'functions/permission-denied') {
-                    errorMessage = 'Permission denied. You do not have permission to delete users.';
-                } else if (error.code === 'functions/internal') {
-                    errorMessage = error.message || 'Failed to delete user. The user was not deleted from either Firestore or Firebase Authentication.';
-                } else if (error.code === 'functions/unauthenticated') {
-                    errorMessage = 'Authentication error. The re-authentication may have expired. Please try again.';
-                } else {
-                    errorMessage += (error.message || error);
-                }
-                
-                alert(`❌ ${errorMessage}`);
+                alert('Failed to delete user: ' + error.message);
             }
         };
 
@@ -3809,35 +3628,16 @@ Thank you!`;
                 // Commit the batch update
                 await batch.commit();
                 
-                // Log the check-in action with full tool data (excluding photoUrls), ordered fields
-                const logPromises = toolIds.map(async (toolId) => {
-                    let toolData = {};
-                    try {
-                        const toolDoc = await db.collection('tools').doc(toolId).get();
-                        toolData = toolDoc.exists ? (toolDoc.data() || {}) : {};
-                    } catch (e) {
-                        console.warn('Could not fetch tool data for logging:', toolId, e);
-                    }
-                    
-                    const logTimestamp = firebase.firestore.FieldValue.serverTimestamp();
-                    const logData = {
+                // Log the check-in action
+                const logPromises = toolIds.map(toolId => {
+                    return db.collection('logtoolmovements').add({
                         toolId: toolId,
-                        toolName: toolData.toolName || 'Unknown',
-                        partNumber: toolData.partNumber || toolId,
-                        serialNumber: toolData.serialNumber || '',
-                        calDueDate: toolData.calDueDate || null,
-                        collectionCode: toolData.collectionCode || toolData.collectionName || '',
-                        location: toolData.location || '',
-                        owner: toolData.owner || '',
-                        WorkOn: toolData.WorkOn || toolData.workLocation || 'Admin Check-in',
-                        status: 'IN',
                         technician: currentToolsUser.name,
-                        timestamp: logTimestamp,
-                        action: 'CHECK-IN'
-                    };
-                    
-                    const logId = `${Date.now()}-${toolId}`;
-                    return db.collection('logtoolmovements').doc(logId).set(logData);
+                        action: 'CHECK-IN',
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                        WorkOn: 'Admin Check-in',
+                        status: 'IN'
+                    });
                 });
                 
                 await Promise.all(logPromises);
@@ -3921,10 +3721,7 @@ Thank you!`;
                 else if (status === 'LOST') statusClass = 'lost';
                 else if (status === 'CALIBRATION') statusClass = 'calibration';
                 
-                const isAdminCheckIn = (latestEntry.WorkOn === 'Admin Check-in');
-                const workOnValue = isAdminCheckIn
-                    ? (latestEntry.workLocation || latestEntry.location || 'N/A')
-                    : (latestEntry.WorkOn || latestEntry.workLocation || latestEntry.location || 'N/A');
+                const workOnValue = latestEntry.WorkOn || latestEntry.workLocation || 'N/A';
                 const serialNumber = latestEntry.serialNumber || latestEntry.partNumber || 'N/A';
                 const calDueDate = latestEntry.calDueDate ? 
                     (latestEntry.calDueDate.toDate ? latestEntry.calDueDate.toDate().toLocaleDateString('en-GB') : latestEntry.calDueDate) : 
@@ -3959,7 +3756,7 @@ Thank you!`;
                         <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000; text-align: left; padding-right: 30px;">
                             ${index + 1}. ${latestEntry.toolName || 'Unknown Tool'}
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; position: relative;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <div style="color: #666; font-size: 0.9rem;">
                                 ${time}
                             </div>
@@ -3967,7 +3764,6 @@ Thank you!`;
                                 <span style="color: black; font-weight: bold;">WorkOn:</span> 
                                 <span style="color: #666; font-weight: bold;">${workOnValue}</span>
                             </div>
-                            ${isAdminCheckIn ? `<span class="badge bg-secondary" style="position: absolute; right: 0; bottom: -18px;">Admin Check-in</span>` : ''}
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                             <div style="text-align: left;">
@@ -4002,12 +3798,11 @@ Thank you!`;
                         showToolHistoryDetails(toolId, toolEntries);
                     };
                     
-                    card.style.position = 'relative';
                     card.innerHTML = `
                         <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000; text-align: left;">
                             ${index + 1}. ${latestEntry.toolName || 'Unknown Tool'}
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; position: relative;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <div style="color: #666; font-size: 0.9rem;">
                                 ${time}
                             </div>
@@ -4015,7 +3810,6 @@ Thank you!`;
                                 <span style="color: black; font-weight: bold;">WorkOn:</span> 
                                 <span style="color: #666; font-weight: bold;">${workOnValue}</span>
                             </div>
-                            ${isAdminCheckIn ? `<span class="badge bg-secondary" style="position: absolute; right: 0; bottom: -18px;">Admin Check-in</span>` : ''}
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                             <div style="text-align: left;">
