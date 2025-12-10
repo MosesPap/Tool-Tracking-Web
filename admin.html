@@ -841,6 +841,25 @@
         .section-modal.active {
             display: block;
         }
+        
+        /* Re-authentication modal must appear above section modals */
+        #reauthModal {
+            z-index: 10000 !important;
+        }
+        
+        #reauthModal.show {
+            z-index: 10000 !important;
+        }
+        
+        /* Ensure modal backdrop appears above section modals but below the modal */
+        body > .modal-backdrop {
+            z-index: 9999 !important;
+        }
+        
+        /* When reauth modal is shown, ensure it's on top */
+        #reauthModal.modal.show {
+            z-index: 10000 !important;
+        }
 
         .section-modal-content {
             background: #f5f7fa;
@@ -3151,12 +3170,38 @@ Thank you!`;
             if (!confirm(confirmMsg)) return;
 
             // Show re-authentication modal
-            const reauthModal = new bootstrap.Modal(document.getElementById('reauthModal'));
+            const reauthModalElement = document.getElementById('reauthModal');
+            if (!reauthModalElement) {
+                console.error('Re-authentication modal element not found!');
+                alert('❌ Re-authentication modal not found. Please refresh the page.');
+                return;
+            }
+            
+            // Check if Bootstrap is loaded
+            if (typeof bootstrap === 'undefined') {
+                console.error('Bootstrap is not loaded!');
+                alert('❌ Bootstrap is not loaded. Please refresh the page.');
+                return;
+            }
+            
             const reauthEmailInput = document.getElementById('reauthEmail');
             const reauthPasswordInput = document.getElementById('reauthPassword');
             const reauthErrorDiv = document.getElementById('reauthError');
             const reauthConfirmBtn = document.getElementById('reauthConfirmBtn');
             const reauthTogglePasswordBtn = document.getElementById('reauthTogglePassword');
+            
+            // Verify all elements exist
+            if (!reauthEmailInput || !reauthPasswordInput || !reauthErrorDiv || !reauthConfirmBtn || !reauthTogglePasswordBtn) {
+                console.error('Re-authentication modal elements not found:', {
+                    email: !!reauthEmailInput,
+                    password: !!reauthPasswordInput,
+                    error: !!reauthErrorDiv,
+                    confirm: !!reauthConfirmBtn,
+                    toggle: !!reauthTogglePasswordBtn
+                });
+                alert('❌ Re-authentication modal elements not found. Please refresh the page.');
+                return;
+            }
             
             // Set email (read-only)
             reauthEmailInput.value = currentUser.email;
@@ -3169,27 +3214,46 @@ Thank you!`;
             // Store delete parameters for use after re-auth
             let deleteParams = { userId, userEmail, userName };
             
-            // Password toggle functionality
-            reauthTogglePasswordBtn.onclick = function() {
-                const type = reauthPasswordInput.type === 'password' ? 'text' : 'password';
-                reauthPasswordInput.type = type;
-                const icon = document.getElementById('reauthTogglePasswordIcon');
-                icon.className = type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
-            };
+            // Clear any previous event listeners by cloning and replacing
+            const newConfirmBtn = reauthConfirmBtn.cloneNode(true);
+            reauthConfirmBtn.parentNode.replaceChild(newConfirmBtn, reauthConfirmBtn);
+            const newToggleBtn = reauthTogglePasswordBtn.cloneNode(true);
+            reauthTogglePasswordBtn.parentNode.replaceChild(newToggleBtn, reauthTogglePasswordBtn);
             
-            // Handle Enter key in password field
-            reauthPasswordInput.onkeypress = function(e) {
-                if (e.key === 'Enter') {
-                    reauthConfirmBtn.click();
+            // Get fresh references after cloning
+            const freshConfirmBtn = document.getElementById('reauthConfirmBtn');
+            const freshToggleBtn = document.getElementById('reauthTogglePassword');
+            const freshPasswordInput = document.getElementById('reauthPassword');
+            
+            // Password toggle functionality
+            freshToggleBtn.onclick = function() {
+                const type = freshPasswordInput.type === 'password' ? 'text' : 'password';
+                freshPasswordInput.type = type;
+                const icon = document.getElementById('reauthTogglePasswordIcon');
+                if (icon) {
+                    icon.className = type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
                 }
             };
             
-            // Show modal
-            reauthModal.show();
+            // Handle Enter key in password field
+            freshPasswordInput.onkeypress = function(e) {
+                if (e.key === 'Enter') {
+                    freshConfirmBtn.click();
+                }
+            };
+            
+            // Create Bootstrap modal instance
+            const reauthModal = new bootstrap.Modal(reauthModalElement, {
+                backdrop: 'static',
+                keyboard: false
+            });
+            
+            // Ensure modal appears on top by setting z-index after creation
+            reauthModalElement.style.zIndex = '10000';
             
             // Handle confirm button click
-            reauthConfirmBtn.onclick = async function() {
-                const password = reauthPasswordInput.value.trim();
+            freshConfirmBtn.onclick = async function() {
+                const password = freshPasswordInput.value.trim();
                 
                 if (!password) {
                     reauthErrorDiv.textContent = 'Please enter your password';
@@ -3198,8 +3262,8 @@ Thank you!`;
                 }
                 
                 // Disable button and show loading
-                reauthConfirmBtn.disabled = true;
-                reauthConfirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Authenticating...';
+                freshConfirmBtn.disabled = true;
+                freshConfirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Authenticating...';
                 reauthErrorDiv.style.display = 'none';
                 
                 try {
@@ -3219,8 +3283,8 @@ Thank you!`;
                     
                 } catch (reauthError) {
                     console.error('Re-authentication error:', reauthError);
-                    reauthConfirmBtn.disabled = false;
-                    reauthConfirmBtn.innerHTML = '<i class="fas fa-check"></i> Confirm & Delete';
+                    freshConfirmBtn.disabled = false;
+                    freshConfirmBtn.innerHTML = '<i class="fas fa-check"></i> Confirm & Delete';
                     
                     let errorMsg = 'Authentication failed. ';
                     if (reauthError.code === 'auth/wrong-password') {
@@ -3239,6 +3303,7 @@ Thank you!`;
                     reauthErrorDiv.style.display = 'block';
                 }
             };
+            
         };
         
         // Perform the actual user deletion after re-authentication
