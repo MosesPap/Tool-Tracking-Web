@@ -2172,24 +2172,58 @@
 
     <script>
         // Use global Firebase instances from common.js
-        // Wait for common.js to load
-        document.addEventListener('DOMContentLoaded', function() {
+        // Wait for common.js to load with improved detection
+        (function() {
+            let checkCount = 0;
+            const maxChecks = 200; // Maximum 10 seconds (200 * 50ms)
+            let lastLogTime = 0;
+            const logInterval = 1000; // Log every 1 second instead of every check
+            
             function waitForAuth() {
                 const auth = window.auth;
                 const db = window.db;
                 const storage = window.storage;
                 
                 if (!auth || !db || !storage) {
-                    console.log('[ADMIN] Waiting for common.js to load...');
+                    checkCount++;
+                    
+                    // Only log at intervals to reduce console spam
+                    const now = Date.now();
+                    if (now - lastLogTime >= logInterval) {
+                        console.log(`[ADMIN] Waiting for common.js to load... (attempt ${checkCount})`);
+                        lastLogTime = now;
+                    }
+                    
+                    // Timeout after max checks
+                    if (checkCount >= maxChecks) {
+                        console.error('[ADMIN] ✗ Timeout: common.js failed to load after 10 seconds');
+                        console.error('[ADMIN] Please check if js/common.js exists and is accessible');
+                        return;
+                    }
+                    
                     setTimeout(waitForAuth, 50);
                     return;
                 }
                 
-                console.log('[ADMIN] ✓ Using global Firebase instances from common.js');
+                if (checkCount > 0) {
+                    console.log(`[ADMIN] ✓ Using global Firebase instances from common.js (loaded after ${checkCount} checks)`);
+                } else {
+                    console.log('[ADMIN] ✓ Using global Firebase instances from common.js');
+                }
                 initializeAdmin(auth, db, storage);
             }
             
-            async function initializeAdmin(auth, db, storage) {
+            // Start checking immediately (don't wait for DOMContentLoaded)
+            // This allows the check to start as soon as the script runs
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', waitForAuth);
+            } else {
+                // DOM already loaded, start checking immediately
+                waitForAuth();
+            }
+        })();
+        
+        async function initializeAdmin(auth, db, storage) {
 
         // DOM Elements
         const loginSection = document.getElementById('loginSection');
@@ -2378,11 +2412,7 @@
                         window.location.href = 'main-menu.html';
                     }
                 });
-            }
-            
-            // Start waiting for common.js
-            waitForAuth();
-        });
+        }
 
         // Custom schedule helpers for email frequency (defined outside initializeAdmin)
         const emailCheckFrequencySelect = document.getElementById('emailCheckFrequency');
