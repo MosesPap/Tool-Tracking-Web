@@ -253,12 +253,12 @@
         .admin-card h4 {
             font-weight: bold;
             margin-bottom: 20px;
-            color: white;
-            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%);
-            padding: 12px 20px;
-            border-radius: 10px;
-            border: 2px solid #757575;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            color: white !important;
+            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%) !important;
+            padding: 12px 20px !important;
+            border-radius: 10px !important;
+            border: 2px solid #757575 !important;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
             transform: perspective(1000px) rotateX(2deg);
             transition: all 0.3s ease;
             display: inline-block;
@@ -266,17 +266,17 @@
         
         .admin-card h4:hover {
             transform: perspective(1000px) rotateX(0deg) translateY(-3px);
-            box-shadow: 0 6px 12px rgba(158, 158, 158, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+            box-shadow: 0 6px 12px rgba(158, 158, 158, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
         }
         
         /* 3D Grey User Management Title (inherits from above, can be customized if needed) */
         .admin-card h4.user-management-title {
-            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%);
-            color: white;
-            padding: 12px 20px;
-            border-radius: 10px;
-            border: 2px solid #757575;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%) !important;
+            color: white !important;
+            padding: 12px 20px !important;
+            border-radius: 10px !important;
+            border: 2px solid #757575 !important;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
             transform: perspective(1000px) rotateX(2deg);
             transition: all 0.3s ease;
             display: inline-block;
@@ -285,7 +285,7 @@
         
         .admin-card h4.user-management-title:hover {
             transform: perspective(1000px) rotateX(0deg) translateY(-3px);
-            box-shadow: 0 6px 12px rgba(158, 158, 158, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+            box-shadow: 0 6px 12px rgba(158, 158, 158, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
         }
 
         /* Animated Push Buttons */
@@ -917,6 +917,44 @@
             transform: perspective(1000px) rotateX(2deg) translateY(-1px);
             box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
         }
+        
+        /* 3D Interactive Pencil Icon for Editing User Name */
+        .edit-name-icon {
+            display: inline-block;
+            width: 28px;
+            height: 28px;
+            line-height: 28px;
+            text-align: center;
+            font-size: 0.9rem;
+            color: white;
+            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+            border: 2px solid #117a8b;
+            border-radius: 6px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            transform: perspective(1000px) rotateX(2deg);
+            cursor: pointer;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+        
+        .edit-name-icon:hover {
+            background: linear-gradient(135deg, #138496 0%, #117a8b 100%);
+            border-color: #0f6674;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(23, 162, 184, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+        
+        .edit-name-icon:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 4px 8px rgba(23, 162, 184, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+        
+        .user-name-container {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
 
         .alert-custom {
             border-radius: 10px;
@@ -1155,6 +1193,8 @@
             .admin-card h4 {
                 font-size: 1.1rem;
                 margin-bottom: 15px;
+                background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%) !important;
+                color: white !important;
             }
 
             /* Form elements smaller */
@@ -3107,7 +3147,14 @@ Thank you!`;
                         <td>
                             <span class="user-number-3d">${userNumber}</span>
                         </td>
-                        <td>${userData.fullName || 'N/A'}</td>
+                        <td>
+                            <div class="user-name-container">
+                                <span>${userData.fullName || 'N/A'}</span>
+                                <span class="edit-name-icon" onclick="editUserName('${userId}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}')" title="Edit user name">
+                                    <i class="fas fa-pencil-alt"></i>
+                                </span>
+                            </div>
+                        </td>
                         <td>${userData.email || 'N/A'}</td>
                         <td>
                             <div class="role-badges">${badges.join('')}</div>
@@ -3143,7 +3190,13 @@ Thank you!`;
                     card.innerHTML = `
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
                             <span class="user-number-3d">${userNumber}</span>
-                            <h6 style="margin: 0;"><i class="fas fa-user"></i> ${userData.fullName || 'N/A'}</h6>
+                            <h6 style="margin: 0; display: flex; align-items: center; gap: 8px;">
+                                <i class="fas fa-user"></i> 
+                                <span>${userData.fullName || 'N/A'}</span>
+                                <span class="edit-name-icon" onclick="editUserName('${userId}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}')" title="Edit user name">
+                                    <i class="fas fa-pencil-alt"></i>
+                                </span>
+                            </h6>
                         </div>
                         <p><i class="fas fa-envelope"></i> ${userData.email || 'N/A'}</p>
                         <p>
@@ -3237,6 +3290,42 @@ Thank you!`;
             } catch (error) {
                 console.error('Error updating user:', error);
                 alert('Failed to update user: ' + error.message);
+            }
+        };
+        
+        // Edit User Name
+        window.editUserName = async function(userId, currentName) {
+            const db = window.db || firebase.firestore();
+            const newName = prompt(`Edit user name:\n\nCurrent name: ${currentName}\n\nEnter new name:`, currentName);
+            
+            if (!newName) {
+                return; // User cancelled
+            }
+            
+            const trimmedName = newName.trim();
+            if (!trimmedName) {
+                alert('Name cannot be empty!');
+                return;
+            }
+            
+            if (trimmedName === currentName) {
+                return; // No change
+            }
+            
+            if (!confirm(`Are you sure you want to change the name from "${currentName}" to "${trimmedName}"?`)) {
+                return;
+            }
+            
+            try {
+                await db.collection('technicians').doc(userId).update({
+                    fullName: trimmedName
+                });
+                alert(`✅ User name updated successfully from "${currentName}" to "${trimmedName}"!`);
+                loadUsers(); // Reload users list
+                loadStatistics(); // Refresh stats
+            } catch (error) {
+                console.error('Error updating user name:', error);
+                alert('Failed to update user name: ' + error.message);
             }
         };
         
