@@ -2094,6 +2094,46 @@
         </div>
     </div>
 
+    <!-- Re-Authentication Modal for User Deletion -->
+    <div class="modal fade" id="reauthModal" tabindex="-1" aria-labelledby="reauthModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="reauthModalLabel">
+                        <i class="fas fa-shield-alt"></i> Re-Authentication Required
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> 
+                        <strong>Security Check:</strong> Please enter your password to confirm this sensitive action.
+                    </div>
+                    <div class="mb-3">
+                        <label for="reauthEmail" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="reauthEmail" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label for="reauthPassword" class="form-label">Password</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="reauthPassword" placeholder="Enter your password" autocomplete="current-password">
+                            <button class="btn btn-outline-secondary" type="button" id="reauthTogglePassword" tabindex="-1">
+                                <i class="fas fa-eye" id="reauthTogglePasswordIcon"></i>
+                            </button>
+                        </div>
+                        <div id="reauthError" class="text-danger mt-2" style="display: none;"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="reauthConfirmBtn">
+                        <i class="fas fa-check"></i> Confirm & Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -3093,7 +3133,7 @@ Thank you!`;
             }
         };
 
-        // Delete User
+        // Delete User with Re-Authentication
         window.deleteUser = async function(userId, userEmail, userName) {
             const db = window.db || firebase.firestore();
             const auth = window.auth || firebase.auth();
@@ -3105,31 +3145,126 @@ Thank you!`;
                 return;
             }
             
+            // First confirmation
             const confirmMsg = `Are you sure you want to delete user "${userName}" (${userEmail})?\n\nThis will:\n- Delete the user from the technicians collection\n- Delete the user from Firebase Authentication\n\n⚠️ If Firebase Authentication deletion fails, the user will NOT be deleted from either location.\n\nThis action cannot be undone!`;
             
             if (!confirm(confirmMsg)) return;
 
-            try {
-                // Ensure we're still authenticated before calling the function
-                const userBeforeCall = auth.currentUser;
-                if (!userBeforeCall) {
-                    alert('❌ Session expired. Please refresh the page and log in again.');
+            // Show re-authentication modal
+            const reauthModal = new bootstrap.Modal(document.getElementById('reauthModal'));
+            const reauthEmailInput = document.getElementById('reauthEmail');
+            const reauthPasswordInput = document.getElementById('reauthPassword');
+            const reauthErrorDiv = document.getElementById('reauthError');
+            const reauthConfirmBtn = document.getElementById('reauthConfirmBtn');
+            const reauthTogglePasswordBtn = document.getElementById('reauthTogglePassword');
+            
+            // Set email (read-only)
+            reauthEmailInput.value = currentUser.email;
+            reauthPasswordInput.value = '';
+            reauthErrorDiv.style.display = 'none';
+            reauthErrorDiv.textContent = '';
+            reauthConfirmBtn.disabled = false;
+            reauthConfirmBtn.innerHTML = '<i class="fas fa-check"></i> Confirm & Delete';
+            
+            // Store delete parameters for use after re-auth
+            let deleteParams = { userId, userEmail, userName };
+            
+            // Password toggle functionality
+            reauthTogglePasswordBtn.onclick = function() {
+                const type = reauthPasswordInput.type === 'password' ? 'text' : 'password';
+                reauthPasswordInput.type = type;
+                const icon = document.getElementById('reauthTogglePasswordIcon');
+                icon.className = type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+            };
+            
+            // Handle Enter key in password field
+            reauthPasswordInput.onkeypress = function(e) {
+                if (e.key === 'Enter') {
+                    reauthConfirmBtn.click();
+                }
+            };
+            
+            // Show modal
+            reauthModal.show();
+            
+            // Handle confirm button click
+            reauthConfirmBtn.onclick = async function() {
+                const password = reauthPasswordInput.value.trim();
+                
+                if (!password) {
+                    reauthErrorDiv.textContent = 'Please enter your password';
+                    reauthErrorDiv.style.display = 'block';
                     return;
                 }
                 
-                // Use the functions instance from window.functions (initialized in common.js)
-                // This ensures it's using the same Firebase app instance as auth
-                const functions = window.functions;
+                // Disable button and show loading
+                reauthConfirmBtn.disabled = true;
+                reauthConfirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Authenticating...';
+                reauthErrorDiv.style.display = 'none';
+                
+                try {
+                    // Re-authenticate user
+                    const email = currentUser.email;
+                    const credential = firebase.auth.EmailAuthProvider.credential(email, password);
+                    
+                    console.log('Re-authenticating user before delete operation...');
+                    await currentUser.reauthenticateWithCredential(credential);
+                    console.log('Re-authentication successful');
+                    
+                    // Close modal
+                    reauthModal.hide();
+                    
+                    // Now proceed with deletion
+                    await performUserDeletion(deleteParams.userId, deleteParams.userEmail, deleteParams.userName);
+                    
+                } catch (reauthError) {
+                    console.error('Re-authentication error:', reauthError);
+                    reauthConfirmBtn.disabled = false;
+                    reauthConfirmBtn.innerHTML = '<i class="fas fa-check"></i> Confirm & Delete';
+                    
+                    let errorMsg = 'Authentication failed. ';
+                    if (reauthError.code === 'auth/wrong-password') {
+                        errorMsg += 'Incorrect password. Please try again.';
+                    } else if (reauthError.code === 'auth/user-mismatch') {
+                        errorMsg += 'User mismatch. Please refresh the page and try again.';
+                    } else if (reauthError.code === 'auth/user-not-found') {
+                        errorMsg += 'User not found. Please refresh the page and log in again.';
+                    } else if (reauthError.code === 'auth/network-request-failed') {
+                        errorMsg += 'Network error. Please check your connection and try again.';
+                    } else {
+                        errorMsg += reauthError.message || 'Please try again.';
+                    }
+                    
+                    reauthErrorDiv.textContent = errorMsg;
+                    reauthErrorDiv.style.display = 'block';
+                }
+            };
+        };
+        
+        // Perform the actual user deletion after re-authentication
+        async function performUserDeletion(userId, userEmail, userName) {
+            const auth = window.auth || firebase.auth();
+            const functions = window.functions;
+            
+            try {
+                // Ensure we're still authenticated after re-auth
+                const userAfterReauth = auth.currentUser;
+                if (!userAfterReauth) {
+                    alert('❌ Session expired after re-authentication. Please refresh the page and log in again.');
+                    return;
+                }
+                
                 if (!functions) {
                     alert('❌ Firebase Functions not initialized. Please refresh the page.');
                     return;
                 }
                 
-                // Get a fresh token right before the call
-                const freshToken = await userBeforeCall.getIdToken(true);
-                console.log('Calling deleteUser Cloud Function...');
-                console.log('Auth current user UID:', userBeforeCall.uid);
-                console.log('Auth current user email:', userBeforeCall.email);
+                // Get a fresh token after re-authentication
+                const freshToken = await userAfterReauth.getIdToken(true);
+                console.log('Calling deleteUser Cloud Function after re-authentication...');
+                console.log('Auth current user UID:', userAfterReauth.uid);
+                console.log('Auth current user email:', userAfterReauth.email);
+                console.log('Fresh token length:', freshToken ? freshToken.length : 'null');
                 
                 // Create the callable function reference
                 const deleteUserFunction = functions.httpsCallable('deleteUser');
@@ -3164,7 +3299,7 @@ Thank you!`;
                 } else if (error.code === 'functions/internal') {
                     errorMessage = error.message || 'Failed to delete user. The user was not deleted from either Firestore or Firebase Authentication.';
                 } else if (error.code === 'functions/unauthenticated') {
-                    errorMessage = 'Authentication error. Please refresh the page and log in again.';
+                    errorMessage = 'Authentication error. The re-authentication may have expired. Please try again.';
                 } else {
                     errorMessage += (error.message || error);
                 }
