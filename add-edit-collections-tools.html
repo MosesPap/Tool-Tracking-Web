@@ -406,7 +406,7 @@
                     toolsList.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
                     
                     const snapshot = await db.collection('tools')
-                        .where('collection', '==', collectionName)
+                        .where('collectionCode', '==', collectionName)
                         .get();
                     
                     toolsList.innerHTML = '';
@@ -689,12 +689,12 @@
                         
                         // Update all tools in this collection
                         const toolsSnapshot = await db.collection('tools')
-                            .where('collection', '==', oldData.collectionName)
+                            .where('collectionCode', '==', oldData.collectionName)
                             .get();
                         
                         const batch = db.batch();
                         toolsSnapshot.forEach(toolDoc => {
-                            batch.update(toolDoc.ref, { collection: newName });
+                            batch.update(toolDoc.ref, { collectionCode: newName });
                         });
                         await batch.commit();
                     }
@@ -727,7 +727,7 @@
                 try {
                     // Get all tools in this collection
                     const toolsSnapshot = await db.collection('tools')
-                        .where('collection', '==', collectionName)
+                        .where('collectionCode', '==', collectionName)
                         .get();
                     
                     // Delete all tools
