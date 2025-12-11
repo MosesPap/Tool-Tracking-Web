@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Add/Edit Collections - Tools</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .admin-card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        
+        .admin-card h4 {
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: white !important;
+            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%) !important;
+            padding: 12px 20px !important;
+            border-radius: 10px !important;
+            border: 2px solid #757575 !important;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+            transform: perspective(1000px) rotateX(2deg);
+            transition: all 0.3s ease;
+            display: inline-block;
+        }
+        
+        .collection-card {
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .collection-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border-color: #667eea;
+        }
+        
+        .tool-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .tool-card:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+        }
+        
+        .btn-3d {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: 2px solid #5568d3;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        .btn-3d:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+        
+        .btn-3d:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+        }
+        
+        .btn-danger-3d {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            border: 2px solid #bd2130;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        .btn-danger-3d:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(220, 53, 69, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+        
+        .photo-thumbnail {
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin: 5px;
+            cursor: pointer;
+            border: 2px solid #ddd;
+            transition: all 0.3s ease;
+        }
+        
+        .photo-thumbnail:hover {
+            transform: scale(1.1);
+            border-color: #667eea;
+        }
+        
+        .loading-spinner {
+            text-align: center;
+            padding: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Header -->
+        <div class="admin-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <h4><i class="fas fa-edit"></i> Add/Edit Collections - Tools</h4>
+                <button class="btn btn-secondary btn-3d" onclick="window.location.href='admin.html'">
+                    <i class="fas fa-arrow-left"></i> Back to Admin
+                </button>
+            </div>
+        </div>
+        
+        <!-- Collections List -->
+        <div class="admin-card">
+            <h4><i class="fas fa-folder"></i> Collections</h4>
+            <div id="collectionsLoading" class="loading-spinner">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p>Loading collections...</p>
+            </div>
+            <div id="collectionsList"></div>
+        </div>
+        
+        <!-- Selected Collection Details -->
+        <div id="collectionDetailsSection" class="admin-card" style="display: none;">
+            <h4><i class="fas fa-info-circle"></i> Collection Details</h4>
+            <div id="collectionDetails"></div>
+        </div>
+        
+        <!-- Tools List -->
+        <div id="toolsSection" class="admin-card" style="display: none;">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4><i class="fas fa-tools"></i> Tools in Collection</h4>
+                <div>
+                    <button class="btn btn-sm btn-danger-3d" id="deleteSelectedToolsBtn" onclick="deleteSelectedTools()" style="display: none;">
+                        <i class="fas fa-trash-alt"></i> Delete Selected
+                    </button>
+                </div>
+            </div>
+            <div id="toolsList"></div>
+        </div>
+    </div>
+    
+    <!-- Edit Collection Modal -->
+    <div class="modal fade" id="editCollectionModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header" style="background: #667eea; color: white;">
+                    <h5 class="modal-title">Edit Collection</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Collection Name</label>
+                        <input type="text" class="form-control" id="editCollectionName">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="editCollectionDescription" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Collection Photos</label>
+                        <div id="collectionPhotosContainer"></div>
+                        <button class="btn btn-sm btn-primary mt-2" onclick="document.getElementById('collectionPhotoInput').click()">
+                            <i class="fas fa-plus"></i> Add Photo
+                        </button>
+                        <input type="file" id="collectionPhotoInput" accept="image/*" style="display: none;" onchange="uploadCollectionPhoto()">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-3d" onclick="saveCollectionChanges()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Edit Tool Modal -->
+    <div class="modal fade" id="editToolModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header" style="background: #667eea; color: white;">
+                    <h5 class="modal-title">Edit Tool</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tool ID</label>
+                            <input type="text" class="form-control" id="editToolId" readonly>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Part Number</label>
+                            <input type="text" class="form-control" id="editPartNumber">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tool Name</label>
+                            <input type="text" class="form-control" id="editToolName">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Status</label>
+                            <select class="form-select" id="editToolStatus">
+                                <option value="IN">IN</option>
+                                <option value="OUT">OUT</option>
+                                <option value="BROKEN">BROKEN</option>
+                                <option value="LOST">LOST</option>
+                                <option value="CALIBRATION">CALIBRATION</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tool Photos</label>
+                        <div id="toolPhotosContainer"></div>
+                        <button class="btn btn-sm btn-primary mt-2" onclick="document.getElementById('toolPhotoInput').click()">
+                            <i class="fas fa-plus"></i> Add Photo
+                        </button>
+                        <input type="file" id="toolPhotoInput" accept="image/*" style="display: none;" onchange="uploadToolPhoto()">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-3d" onclick="saveToolChanges()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Photo Fullscreen Modal -->
+    <div class="modal fade" id="photoFullscreenModal" tabindex="-1">
+        <div class="modal-dialog modal-fullscreen">
+            <div class="modal-content bg-dark">
+                <div class="modal-header border-0">
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="fullscreenPhoto" src="" style="max-width: 100%; max-height: 90vh; object-fit: contain;">
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+    <script src="js/common.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        (function() {
+            const auth = window.auth;
+            const db = window.db;
+            const storage = window.storage;
+            
+            let currentCollection = null;
+            let currentCollectionDocId = null;
+            let selectedToolIds = new Set();
+            
+            // Wait for Firebase to load
+            function waitForFirebase() {
+                if (!auth || !db || !storage) {
+                    setTimeout(waitForFirebase, 50);
+                    return;
+                }
+                initialize();
+            }
+            
+            function initialize() {
+                // Check admin status
+                auth.onAuthStateChanged(async (user) => {
+                    if (!user) {
+                        window.location.href = 'admin.html';
+                        return;
+                    }
+                    
+                    const technicianDoc = await db.collection('technicians').doc(user.uid).get();
+                    if (!technicianDoc.exists || !technicianDoc.data().isAdmin) {
+                        alert('Access denied. Admin privileges required.');
+                        window.location.href = 'admin.html';
+                        return;
+                    }
+                    
+                    loadCollections();
+                });
+            }
+            
+            // Load all collections
+            async function loadCollections() {
+                try {
+                    document.getElementById('collectionsLoading').style.display = 'block';
+                    const snapshot = await db.collection('collections').get();
+                    const collectionsList = document.getElementById('collectionsList');
+                    collectionsList.innerHTML = '';
+                    
+                    if (snapshot.empty) {
+                        collectionsList.innerHTML = '<p class="text-muted">No collections found.</p>';
+                        document.getElementById('collectionsLoading').style.display = 'none';
+                        return;
+                    }
+                    
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        const card = document.createElement('div');
+                        card.className = 'collection-card';
+                        card.innerHTML = `
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5><i class="fas fa-folder"></i> ${data.collectionName || 'Unnamed'}</h5>
+                                    <p class="text-muted mb-0">${data.description || 'No description'}</p>
+                                    <small class="text-muted">Owner: ${data.owner || 'N/A'}</small>
+                                </div>
+                                <div>
+                                    <button class="btn btn-sm btn-primary btn-3d me-2" onclick="selectCollection('${doc.id}', '${(data.collectionName || '').replace(/'/g, "\\'")}')">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </button>
+                                    <button class="btn btn-sm btn-danger-3d" onclick="deleteCollection('${doc.id}', '${(data.collectionName || '').replace(/'/g, "\\'")}')">
+                                        <i class="fas fa-trash-alt"></i> Delete
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                        collectionsList.appendChild(card);
+                    });
+                    
+                    document.getElementById('collectionsLoading').style.display = 'none';
+                } catch (error) {
+                    console.error('Error loading collections:', error);
+                    alert('Failed to load collections: ' + error.message);
+                    document.getElementById('collectionsLoading').style.display = 'none';
+                }
+            }
+            
+            // Select collection for editing
+            window.selectCollection = async function(docId, collectionName) {
+                currentCollection = collectionName;
+                currentCollectionDocId = docId;
+                
+                try {
+                    const doc = await db.collection('collections').doc(docId).get();
+                    if (!doc.exists) {
+                        alert('Collection not found');
+                        return;
+                    }
+                    
+                    const data = doc.data();
+                    
+                    // Show collection details
+                    document.getElementById('collectionDetailsSection').style.display = 'block';
+                    document.getElementById('collectionDetails').innerHTML = `
+                        <div class="mb-3">
+                            <strong>Collection Name:</strong> ${data.collectionName || 'N/A'}<br>
+                            <strong>Description:</strong> ${data.description || 'No description'}<br>
+                            <strong>Owner:</strong> ${data.owner || 'N/A'}
+                        </div>
+                        <div class="mb-3">
+                            <button class="btn btn-primary btn-3d me-2" onclick="openEditCollectionModal()">
+                                <i class="fas fa-edit"></i> Edit Collection
+                            </button>
+                            <button class="btn btn-danger-3d" onclick="deleteCollection('${docId}', '${(collectionName || '').replace(/'/g, "\\'")}')">
+                                <i class="fas fa-trash-alt"></i> Delete Collection
+                            </button>
+                        </div>
+                    `;
+                    
+                    // Load tools in this collection
+                    await loadToolsInCollection(collectionName);
+                } catch (error) {
+                    console.error('Error loading collection:', error);
+                    alert('Failed to load collection: ' + error.message);
+                }
+            };
+            
+            // Load tools in collection
+            async function loadToolsInCollection(collectionName) {
+                try {
+                    document.getElementById('toolsSection').style.display = 'block';
+                    const toolsList = document.getElementById('toolsList');
+                    toolsList.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
+                    
+                    const snapshot = await db.collection('tools')
+                        .where('collection', '==', collectionName)
+                        .get();
+                    
+                    toolsList.innerHTML = '';
+                    
+                    if (snapshot.empty) {
+                        toolsList.innerHTML = '<p class="text-muted">No tools found in this collection.</p>';
+                        return;
+                    }
+                    
+                    // Add select all checkbox
+                    toolsList.innerHTML = `
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="selectAllTools" onchange="toggleSelectAllTools()">
+                                <label class="form-check-label" for="selectAllTools">
+                                    <strong>Select All Tools</strong>
+                                </label>
+                            </div>
+                        </div>
+                    `;
+                    
+                    snapshot.forEach(doc => {
+                        const tool = doc.data();
+                        const toolCard = document.createElement('div');
+                        toolCard.className = 'tool-card';
+                        toolCard.innerHTML = `
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="form-check">
+                                    <input class="form-check-input tool-checkbox" type="checkbox" value="${doc.id}" onchange="updateSelectedTools()">
+                                    <label class="form-check-label">
+                                        <strong>${tool.toolId || doc.id}</strong> - ${tool.toolName || 'Unnamed'} (${tool.partNumber || 'N/A'})
+                                        <br><small class="text-muted">Status: ${tool.status || 'N/A'}</small>
+                                    </label>
+                                </div>
+                                <div>
+                                    <button class="btn btn-sm btn-primary btn-3d me-2" onclick="editTool('${doc.id}')">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </button>
+                                    <button class="btn btn-sm btn-danger-3d" onclick="deleteTool('${doc.id}', '${(tool.toolId || doc.id).replace(/'/g, "\\'")}')">
+                                        <i class="fas fa-trash-alt"></i> Delete
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                        toolsList.appendChild(toolCard);
+                    });
+                } catch (error) {
+                    console.error('Error loading tools:', error);
+                    alert('Failed to load tools: ' + error.message);
+                }
+            }
+            
+            // Toggle select all tools
+            window.toggleSelectAllTools = function() {
+                const selectAll = document.getElementById('selectAllTools').checked;
+                const checkboxes = document.querySelectorAll('.tool-checkbox');
+                selectedToolIds.clear();
+                
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = selectAll;
+                    if (selectAll) {
+                        selectedToolIds.add(checkbox.value);
+                    }
+                });
+                
+                updateDeleteButton();
+            };
+            
+            // Update selected tools
+            window.updateSelectedTools = function() {
+                selectedToolIds.clear();
+                document.querySelectorAll('.tool-checkbox:checked').forEach(checkbox => {
+                    selectedToolIds.add(checkbox.value);
+                });
+                updateDeleteButton();
+            };
+            
+            // Update delete button visibility
+            function updateDeleteButton() {
+                const btn = document.getElementById('deleteSelectedToolsBtn');
+                if (selectedToolIds.size > 0) {
+                    btn.style.display = 'inline-block';
+                    btn.innerHTML = `<i class="fas fa-trash-alt"></i> Delete Selected (${selectedToolIds.size})`;
+                } else {
+                    btn.style.display = 'none';
+                }
+            }
+            
+            // Delete selected tools
+            window.deleteSelectedTools = async function() {
+                if (selectedToolIds.size === 0) {
+                    alert('No tools selected');
+                    return;
+                }
+                
+                if (!confirm(`Are you sure you want to delete ${selectedToolIds.size} tool(s)? This action cannot be undone.`)) {
+                    return;
+                }
+                
+                try {
+                    const deletePromises = Array.from(selectedToolIds).map(toolId => 
+                        db.collection('tools').doc(toolId).delete()
+                    );
+                    
+                    await Promise.all(deletePromises);
+                    alert(`Successfully deleted ${selectedToolIds.size} tool(s)!`);
+                    selectedToolIds.clear();
+                    if (currentCollection) {
+                        await loadToolsInCollection(currentCollection);
+                    }
+                } catch (error) {
+                    console.error('Error deleting tools:', error);
+                    alert('Failed to delete tools: ' + error.message);
+                }
+            };
+            
+            // Open edit collection modal
+            window.openEditCollectionModal = async function() {
+                if (!currentCollectionDocId) return;
+                
+                try {
+                    const doc = await db.collection('collections').doc(currentCollectionDocId).get();
+                    if (!doc.exists) {
+                        alert('Collection not found');
+                        return;
+                    }
+                    
+                    const data = doc.data();
+                    document.getElementById('editCollectionName').value = data.collectionName || '';
+                    document.getElementById('editCollectionDescription').value = data.description || '';
+                    
+                    // Display collection photos
+                    displayCollectionPhotos(data.photoUrls || []);
+                    
+                    const modal = new bootstrap.Modal(document.getElementById('editCollectionModal'));
+                    modal.show();
+                } catch (error) {
+                    console.error('Error opening edit modal:', error);
+                    alert('Failed to load collection data: ' + error.message);
+                }
+            };
+            
+            // Display collection photos
+            function displayCollectionPhotos(photoUrls) {
+                const container = document.getElementById('collectionPhotosContainer');
+                container.innerHTML = '';
+                
+                if (photoUrls.length === 0) {
+                    container.innerHTML = '<p class="text-muted">No photos</p>';
+                    return;
+                }
+                
+                photoUrls.forEach((url, index) => {
+                    const img = document.createElement('img');
+                    img.src = url;
+                    img.className = 'photo-thumbnail';
+                    img.onclick = () => showFullscreenPhoto(url);
+                    img.style.cursor = 'pointer';
+                    
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'btn btn-sm btn-danger-3d ms-2';
+                    deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                    deleteBtn.onclick = () => deleteCollectionPhoto(index);
+                    
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'd-inline-block me-3 mb-3';
+                    wrapper.appendChild(img);
+                    wrapper.appendChild(deleteBtn);
+                    container.appendChild(wrapper);
+                });
+            }
+            
+            // Upload collection photo
+            window.uploadCollectionPhoto = async function() {
+                const fileInput = document.getElementById('collectionPhotoInput');
+                const file = fileInput.files[0];
+                if (!file) return;
+                
+                try {
+                    const doc = await db.collection('collections').doc(currentCollectionDocId).get();
+                    const data = doc.data();
+                    const currentPhotos = data.photoUrls || [];
+                    const photoNumber = currentPhotos.length + 1;
+                    const collectionName = data.collectionName || 'collection';
+                    
+                    const fileName = `${collectionName}_photo${photoNumber}.jpg`;
+                    const photoRef = storage.ref('Collection%20Photo/' + fileName);
+                    
+                    const uploadTask = photoRef.put(file);
+                    
+                    uploadTask.on('state_changed',
+                        (snapshot) => {
+                            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                            console.log('Upload progress:', progress);
+                        },
+                        (error) => {
+                            console.error('Upload error:', error);
+                            alert('Upload failed: ' + error.message);
+                        },
+                        async () => {
+                            try {
+                                const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                                const newPhotos = [...currentPhotos, downloadURL];
+                                
+                                await db.collection('collections').doc(currentCollectionDocId).update({
+                                    photoUrls: newPhotos
+                                });
+                                
+                                displayCollectionPhotos(newPhotos);
+                                fileInput.value = '';
+                                alert('Photo uploaded successfully!');
+                            } catch (error) {
+                                console.error('Error updating collection:', error);
+                                alert('Failed to update collection: ' + error.message);
+                            }
+                        }
+                    );
+                } catch (error) {
+                    console.error('Error uploading photo:', error);
+                    alert('Failed to upload photo: ' + error.message);
+                }
+            };
+            
+            // Delete collection photo
+            window.deleteCollectionPhoto = async function(index) {
+                if (!confirm('Are you sure you want to delete this photo?')) return;
+                
+                try {
+                    const doc = await db.collection('collections').doc(currentCollectionDocId).get();
+                    const data = doc.data();
+                    const photoUrls = data.photoUrls || [];
+                    
+                    if (index >= photoUrls.length) return;
+                    
+                    // Delete from storage
+                    const photoUrl = photoUrls[index];
+                    try {
+                        const photoRef = storage.refFromURL(photoUrl);
+                        await photoRef.delete();
+                    } catch (error) {
+                        console.warn('Could not delete from storage:', error);
+                    }
+                    
+                    // Remove from array
+                    photoUrls.splice(index, 1);
+                    
+                    await db.collection('collections').doc(currentCollectionDocId).update({
+                        photoUrls: photoUrls
+                    });
+                    
+                    displayCollectionPhotos(photoUrls);
+                    alert('Photo deleted successfully!');
+                } catch (error) {
+                    console.error('Error deleting photo:', error);
+                    alert('Failed to delete photo: ' + error.message);
+                }
+            };
+            
+            // Save collection changes
+            window.saveCollectionChanges = async function() {
+                const newName = document.getElementById('editCollectionName').value.trim();
+                const newDescription = document.getElementById('editCollectionDescription').value.trim();
+                
+                if (!newName) {
+                    alert('Collection name cannot be empty');
+                    return;
+                }
+                
+                try {
+                    const updateData = {
+                        description: newDescription
+                    };
+                    
+                    // If name changed, update it
+                    const doc = await db.collection('collections').doc(currentCollectionDocId).get();
+                    const oldData = doc.data();
+                    
+                    if (newName !== oldData.collectionName) {
+                        updateData.collectionName = newName;
+                        
+                        // Update all tools in this collection
+                        const toolsSnapshot = await db.collection('tools')
+                            .where('collection', '==', oldData.collectionName)
+                            .get();
+                        
+                        const batch = db.batch();
+                        toolsSnapshot.forEach(toolDoc => {
+                            batch.update(toolDoc.ref, { collection: newName });
+                        });
+                        await batch.commit();
+                    }
+                    
+                    await db.collection('collections').doc(currentCollectionDocId).update(updateData);
+                    
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('editCollectionModal'));
+                    modal.hide();
+                    
+                    alert('Collection updated successfully!');
+                    loadCollections();
+                    if (currentCollection) {
+                        await selectCollection(currentCollectionDocId, newName);
+                    }
+                } catch (error) {
+                    console.error('Error saving collection:', error);
+                    alert('Failed to save collection: ' + error.message);
+                }
+            };
+            
+            // Delete collection
+            window.deleteCollection = async function(docId, collectionName) {
+                if (!confirm(`⚠️ WARNING: Are you sure you want to delete the collection "${collectionName}"?\n\nThis will delete:\n- The collection itself\n- ALL tools in this collection\n\nThis action cannot be undone!`)) {
+                    return;
+                }
+                
+                const doubleConfirm = confirm(`⚠️ FINAL CONFIRMATION: Delete collection "${collectionName}" and ALL its tools?\n\nThis is your last chance to cancel.`);
+                if (!doubleConfirm) return;
+                
+                try {
+                    // Get all tools in this collection
+                    const toolsSnapshot = await db.collection('tools')
+                        .where('collection', '==', collectionName)
+                        .get();
+                    
+                    // Delete all tools
+                    const deletePromises = [];
+                    toolsSnapshot.forEach(doc => {
+                        deletePromises.push(db.collection('tools').doc(doc.id).delete());
+                    });
+                    
+                    await Promise.all(deletePromises);
+                    
+                    // Delete collection photos from storage
+                    const collectionDoc = await db.collection('collections').doc(docId).get();
+                    if (collectionDoc.exists) {
+                        const photoUrls = collectionDoc.data().photoUrls || [];
+                        for (const url of photoUrls) {
+                            try {
+                                const photoRef = storage.refFromURL(url);
+                                await photoRef.delete();
+                            } catch (error) {
+                                console.warn('Could not delete photo from storage:', error);
+                            }
+                        }
+                    }
+                    
+                    // Delete collection document
+                    await db.collection('collections').doc(docId).delete();
+                    
+                    alert(`✅ Collection "${collectionName}" and ${toolsSnapshot.size} tool(s) deleted successfully!`);
+                    
+                    currentCollection = null;
+                    currentCollectionDocId = null;
+                    document.getElementById('collectionDetailsSection').style.display = 'none';
+                    document.getElementById('toolsSection').style.display = 'none';
+                    
+                    loadCollections();
+                } catch (error) {
+                    console.error('Error deleting collection:', error);
+                    alert('Failed to delete collection: ' + error.message);
+                }
+            };
+            
+            // Edit tool
+            window.editTool = async function(toolId) {
+                try {
+                    const doc = await db.collection('tools').doc(toolId).get();
+                    if (!doc.exists) {
+                        alert('Tool not found');
+                        return;
+                    }
+                    
+                    const tool = doc.data();
+                    document.getElementById('editToolId').value = tool.toolId || toolId;
+                    document.getElementById('editPartNumber').value = tool.partNumber || '';
+                    document.getElementById('editToolName').value = tool.toolName || '';
+                    document.getElementById('editToolStatus').value = tool.status || 'IN';
+                    
+                    // Store current tool ID for saving
+                    document.getElementById('editToolModal').dataset.toolId = toolId;
+                    
+                    // Display tool photos
+                    displayToolPhotos(tool.photoUrls || []);
+                    
+                    const modal = new bootstrap.Modal(document.getElementById('editToolModal'));
+                    modal.show();
+                } catch (error) {
+                    console.error('Error loading tool:', error);
+                    alert('Failed to load tool: ' + error.message);
+                }
+            };
+            
+            // Display tool photos
+            function displayToolPhotos(photoUrls) {
+                const container = document.getElementById('toolPhotosContainer');
+                container.innerHTML = '';
+                
+                if (photoUrls.length === 0) {
+                    container.innerHTML = '<p class="text-muted">No photos</p>';
+                    return;
+                }
+                
+                photoUrls.forEach((url, index) => {
+                    const img = document.createElement('img');
+                    img.src = url;
+                    img.className = 'photo-thumbnail';
+                    img.onclick = () => showFullscreenPhoto(url);
+                    img.style.cursor = 'pointer';
+                    
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'btn btn-sm btn-danger-3d ms-2';
+                    deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                    deleteBtn.onclick = () => deleteToolPhoto(index);
+                    
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'd-inline-block me-3 mb-3';
+                    wrapper.appendChild(img);
+                    wrapper.appendChild(deleteBtn);
+                    container.appendChild(wrapper);
+                });
+            }
+            
+            // Upload tool photo
+            window.uploadToolPhoto = async function() {
+                const fileInput = document.getElementById('toolPhotoInput');
+                const file = fileInput.files[0];
+                if (!file) return;
+                
+                const toolId = document.getElementById('editToolModal').dataset.toolId;
+                if (!toolId) return;
+                
+                try {
+                    const doc = await db.collection('tools').doc(toolId).get();
+                    const tool = doc.data();
+                    const currentPhotos = tool.photoUrls || [];
+                    const photoNumber = currentPhotos.length + 1;
+                    const partNumber = tool.partNumber || 'tool';
+                    
+                    const fileName = `${partNumber}_photo${photoNumber}.jpg`;
+                    const photoRef = storage.ref('Tool_Photos/' + fileName);
+                    
+                    const uploadTask = photoRef.put(file);
+                    
+                    uploadTask.on('state_changed',
+                        (snapshot) => {
+                            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                            console.log('Upload progress:', progress);
+                        },
+                        (error) => {
+                            console.error('Upload error:', error);
+                            alert('Upload failed: ' + error.message);
+                        },
+                        async () => {
+                            try {
+                                const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                                const newPhotos = [...currentPhotos, downloadURL];
+                                
+                                await db.collection('tools').doc(toolId).update({
+                                    photoUrls: newPhotos
+                                });
+                                
+                                displayToolPhotos(newPhotos);
+                                fileInput.value = '';
+                                alert('Photo uploaded successfully!');
+                            } catch (error) {
+                                console.error('Error updating tool:', error);
+                                alert('Failed to update tool: ' + error.message);
+                            }
+                        }
+                    );
+                } catch (error) {
+                    console.error('Error uploading photo:', error);
+                    alert('Failed to upload photo: ' + error.message);
+                }
+            };
+            
+            // Delete tool photo
+            window.deleteToolPhoto = async function(index) {
+                if (!confirm('Are you sure you want to delete this photo?')) return;
+                
+                const toolId = document.getElementById('editToolModal').dataset.toolId;
+                if (!toolId) return;
+                
+                try {
+                    const doc = await db.collection('tools').doc(toolId).get();
+                    const tool = doc.data();
+                    const photoUrls = tool.photoUrls || [];
+                    
+                    if (index >= photoUrls.length) return;
+                    
+                    // Delete from storage
+                    const photoUrl = photoUrls[index];
+                    try {
+                        const photoRef = storage.refFromURL(photoUrl);
+                        await photoRef.delete();
+                    } catch (error) {
+                        console.warn('Could not delete from storage:', error);
+                    }
+                    
+                    // Remove from array
+                    photoUrls.splice(index, 1);
+                    
+                    await db.collection('tools').doc(toolId).update({
+                        photoUrls: photoUrls
+                    });
+                    
+                    displayToolPhotos(photoUrls);
+                    alert('Photo deleted successfully!');
+                } catch (error) {
+                    console.error('Error deleting photo:', error);
+                    alert('Failed to delete photo: ' + error.message);
+                }
+            };
+            
+            // Save tool changes
+            window.saveToolChanges = async function() {
+                const toolId = document.getElementById('editToolModal').dataset.toolId;
+                if (!toolId) return;
+                
+                const partNumber = document.getElementById('editPartNumber').value.trim();
+                const toolName = document.getElementById('editToolName').value.trim();
+                const status = document.getElementById('editToolStatus').value;
+                
+                if (!toolName) {
+                    alert('Tool name cannot be empty');
+                    return;
+                }
+                
+                try {
+                    await db.collection('tools').doc(toolId).update({
+                        partNumber: partNumber,
+                        toolName: toolName,
+                        status: status
+                    });
+                    
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('editToolModal'));
+                    modal.hide();
+                    
+                    alert('Tool updated successfully!');
+                    if (currentCollection) {
+                        await loadToolsInCollection(currentCollection);
+                    }
+                } catch (error) {
+                    console.error('Error saving tool:', error);
+                    alert('Failed to save tool: ' + error.message);
+                }
+            };
+            
+            // Delete tool
+            window.deleteTool = async function(toolId, toolName) {
+                if (!confirm(`Are you sure you want to delete tool "${toolName}"? This action cannot be undone.`)) {
+                    return;
+                }
+                
+                try {
+                    // Delete tool photos from storage
+                    const doc = await db.collection('tools').doc(toolId).get();
+                    if (doc.exists) {
+                        const photoUrls = doc.data().photoUrls || [];
+                        for (const url of photoUrls) {
+                            try {
+                                const photoRef = storage.refFromURL(url);
+                                await photoRef.delete();
+                            } catch (error) {
+                                console.warn('Could not delete photo from storage:', error);
+                            }
+                        }
+                    }
+                    
+                    await db.collection('tools').doc(toolId).delete();
+                    
+                    alert(`✅ Tool "${toolName}" deleted successfully!`);
+                    if (currentCollection) {
+                        await loadToolsInCollection(currentCollection);
+                    }
+                } catch (error) {
+                    console.error('Error deleting tool:', error);
+                    alert('Failed to delete tool: ' + error.message);
+                }
+            };
+            
+            // Show fullscreen photo
+            window.showFullscreenPhoto = function(url) {
+                document.getElementById('fullscreenPhoto').src = url;
+                const modal = new bootstrap.Modal(document.getElementById('photoFullscreenModal'));
+                modal.show();
+            };
+            
+            waitForFirebase();
+        })();
+    </script>
+</body>
+</html>
+
