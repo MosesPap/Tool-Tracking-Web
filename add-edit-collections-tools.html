@@ -313,15 +313,46 @@
         </div>
     </div>
     
-    <!-- Photo Fullscreen Modal -->
-    <div class="modal fade" id="photoFullscreenModal" tabindex="-1">
+    <!-- Tool Photo Gallery Modal (same as my-tools.html) -->
+    <div class="modal fade" id="toolPhotoGalleryModal" tabindex="-1" aria-labelledby="toolPhotoGalleryModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-fullscreen">
-            <div class="modal-content bg-dark">
+            <div class="modal-content bg-dark text-white">
                 <div class="modal-header border-0">
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    <h5 class="modal-title" id="toolPhotoGalleryModalLabel">Tool Photos</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body text-center">
-                    <img id="fullscreenPhoto" src="" style="max-width: 100%; max-height: 90vh; object-fit: contain;">
+                <div class="modal-body d-flex flex-column align-items-center justify-content-center position-relative" id="toolPhotoGalleryContent">
+                    <!-- Photo will be shown here -->
+                </div>
+                <div class="modal-footer justify-content-center border-0 bg-dark">
+                    <span id="toolPhotoCounter" class="text-white"></span>
+                    <button type="button" class="btn btn-danger ms-3" id="toolPhotoDeleteBtn">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Photo Delete Choice Modal (same as my-tools.html) -->
+    <div class="modal fade" id="photoDeleteChoiceModal" tabindex="-1" aria-labelledby="photoDeleteChoiceModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="photoDeleteChoiceModalLabel">Delete Photo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p><strong>This photo is used by the following tool owners:</strong></p>
+                    <div id="photoDeleteOwnersList"></div>
+                    <div class="d-grid gap-2 mt-3">
+                        <button type="button" class="btn btn-warning" id="deleteMyToolOnlyBtn">
+                            <i class="fas fa-user"></i> Delete from MY Tool Only
+                        </button>
+                        <button type="button" class="btn btn-danger" id="deleteFromAllToolsBtn">
+                            <i class="fas fa-users"></i> Delete from ALL Tools 🔐
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1698,7 +1729,7 @@
                 }
             };
             
-            // Display tool photos
+            // Display tool photos (same as my-tools.html - with gallery button)
             function displayToolPhotos(photoUrls) {
                 const container = document.getElementById('toolPhotosContainer');
                 container.innerHTML = '';
@@ -1708,64 +1739,34 @@
                     return;
                 }
                 
+                // Show thumbnails
                 photoUrls.forEach((url, index) => {
                     const img = document.createElement('img');
                     img.src = url;
                     img.className = 'photo-thumbnail';
-                    img.onclick = () => showFullscreenPhoto(url);
                     img.style.cursor = 'pointer';
-                    
-                    const deleteBtn = document.createElement('button');
-                    deleteBtn.className = 'btn btn-sm btn-danger-3d ms-2';
-                    deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
-                    deleteBtn.onclick = () => deleteToolPhoto(index);
-                    
-                    const wrapper = document.createElement('div');
-                    wrapper.className = 'd-inline-block me-3 mb-3';
-                    wrapper.appendChild(img);
-                    wrapper.appendChild(deleteBtn);
-                    container.appendChild(wrapper);
+                    img.style.marginRight = '8px';
+                    img.style.marginBottom = '8px';
+                    container.appendChild(img);
                 });
+                
+                // Add gallery button
+                const galleryBtn = document.createElement('button');
+                galleryBtn.className = 'btn btn-sm btn-info mt-2';
+                galleryBtn.innerHTML = '<i class="fas fa-images"></i> View Gallery';
+                galleryBtn.onclick = function() {
+                    const toolId = document.getElementById('editToolModal').dataset.toolId;
+                    const partNumber = document.getElementById('editPartNumber').value.trim() || toolId;
+                    const fakeElement = document.createElement('div');
+                    fakeElement.setAttribute('data-photo-urls', JSON.stringify(photoUrls));
+                    fakeElement.setAttribute('data-tool-id', toolId);
+                    fakeElement.setAttribute('data-part-number', partNumber);
+                    showToolPhotoGallery(fakeElement);
+                };
+                container.appendChild(galleryBtn);
             }
             
             
-            // Delete tool photo
-            window.deleteToolPhoto = async function(index) {
-                if (!confirm('Are you sure you want to delete this photo?')) return;
-                
-                const toolId = document.getElementById('editToolModal').dataset.toolId;
-                if (!toolId) return;
-                
-                try {
-                    const doc = await db.collection('tools').doc(toolId).get();
-                    const tool = doc.data();
-                    const photoUrls = tool.photoUrls || [];
-                    
-                    if (index >= photoUrls.length) return;
-                    
-                    // Delete from storage
-                    const photoUrl = photoUrls[index];
-                    try {
-                        const photoRef = storage.refFromURL(photoUrl);
-                        await photoRef.delete();
-                    } catch (error) {
-                        console.warn('Could not delete from storage:', error);
-                    }
-                    
-                    // Remove from array
-                    photoUrls.splice(index, 1);
-                    
-                    await db.collection('tools').doc(toolId).update({
-                        photoUrls: photoUrls
-                    });
-                    
-                    displayToolPhotos(photoUrls);
-                    alert('Photo deleted successfully!');
-                } catch (error) {
-                    console.error('Error deleting photo:', error);
-                    alert('Failed to delete photo: ' + error.message);
-                }
-            };
             
             // Save tool changes
             window.saveToolChanges = async function() {
@@ -1835,11 +1836,197 @@
             };
             
             // Show fullscreen photo
-            window.showFullscreenPhoto = function(url) {
-                document.getElementById('fullscreenPhoto').src = url;
-                const modal = new bootstrap.Modal(document.getElementById('photoFullscreenModal'));
+            // Show tool photo gallery (same as my-tools.html)
+            window.showToolPhotoGallery = function(el) {
+                const photoUrls = JSON.parse(el.getAttribute('data-photo-urls'));
+                const toolId = el.getAttribute('data-tool-id');
+                const partNumber = el.getAttribute('data-part-number');
+                if (!photoUrls || photoUrls.length === 0) return;
+                let currentPhotoIndex = 0;
+                const galleryContent = document.getElementById('toolPhotoGalleryContent');
+                const counter = document.getElementById('toolPhotoCounter');
+                
+                function updatePhoto() {
+                    galleryContent.innerHTML = `<img src="${photoUrls[currentPhotoIndex]}" class="img-fluid rounded shadow" style="max-height:80vh;max-width:100vw;object-fit:contain;">`;
+                    
+                    const prevArrow = document.createElement('button');
+                    prevArrow.type = 'button';
+                    prevArrow.className = 'btn btn-light position-absolute';
+                    prevArrow.id = 'toolPhotoPrevBtn';
+                    prevArrow.style = 'left: 20px; top: 50%; transform: translateY(-50%); z-index: 1000; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;';
+                    prevArrow.innerHTML = '<i class="fas fa-chevron-left"></i>';
+                    prevArrow.onclick = function() {
+                        if (currentPhotoIndex > 0) {
+                            currentPhotoIndex--;
+                            updatePhoto();
+                        }
+                    };
+                    
+                    const nextArrow = document.createElement('button');
+                    nextArrow.type = 'button';
+                    nextArrow.className = 'btn btn-light position-absolute';
+                    nextArrow.id = 'toolPhotoNextBtn';
+                    nextArrow.style = 'right: 20px; top: 50%; transform: translateY(-50%); z-index: 1000; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;';
+                    nextArrow.innerHTML = '<i class="fas fa-chevron-right"></i>';
+                    nextArrow.onclick = function() {
+                        if (currentPhotoIndex < photoUrls.length - 1) {
+                            currentPhotoIndex++;
+                            updatePhoto();
+                        }
+                    };
+                    
+                    galleryContent.appendChild(prevArrow);
+                    galleryContent.appendChild(nextArrow);
+                    
+                    counter.textContent = `${currentPhotoIndex + 1} / ${photoUrls.length}`;
+                    
+                    prevArrow.style.display = currentPhotoIndex === 0 ? 'none' : 'flex';
+                    nextArrow.style.display = currentPhotoIndex === photoUrls.length - 1 ? 'none' : 'flex';
+                    
+                    const deleteBtn = document.getElementById('toolPhotoDeleteBtn');
+                    if (deleteBtn) {
+                        deleteBtn.onclick = function() {
+                            deletePhoto(toolId, partNumber, currentPhotoIndex, photoUrls[currentPhotoIndex]);
+                        };
+                    }
+                }
+                
+                updatePhoto();
+                const modal = new bootstrap.Modal(document.getElementById('toolPhotoGalleryModal'));
                 modal.show();
             };
+            
+            // Delete photo function (same as my-tools.html)
+            async function deletePhoto(toolId, partNumber, photoIndex, photoUrl) {
+                return new Promise(async (resolve, reject) => {
+                    try {
+                        // Find all tools with the same part number to show owners
+                        const toolsWithSamePart = await db.collection('tools')
+                            .where('partNumber', '==', partNumber)
+                            .get();
+                        
+                        // Get unique owners
+                        const owners = [...new Set(toolsWithSamePart.docs.map(doc => doc.data().owner))].filter(Boolean);
+                        
+                        // Format owners as numbered vertical list
+                        let ownersListHTML = '';
+                        if (owners.length === 0) {
+                            ownersListHTML = '<div style="font-size: 1.15rem; font-weight: bold; color: #666;">Unknown</div>';
+                        } else {
+                            ownersListHTML = owners.map((owner, index) => 
+                                `<div style="font-size: 1.15rem; font-weight: bold; color: #333; margin-bottom: 6px;">${index + 1}. ${escapeHtml(owner)}</div>`
+                            ).join('');
+                        }
+                        
+                        // Show custom modal with owner information
+                        document.getElementById('photoDeleteOwnersList').innerHTML = ownersListHTML;
+                        const choiceModal = new bootstrap.Modal(document.getElementById('photoDeleteChoiceModal'));
+                        choiceModal.show();
+                        
+                        let deleteFromAll = false;
+                        
+                        // Handle "Delete from MY Tool Only" button
+                        document.getElementById('deleteMyToolOnlyBtn').onclick = function() {
+                            choiceModal.hide();
+                            
+                            if (!confirm('⚠️ Are you sure you want to delete this photo from this tool?\n\nThis action cannot be undone.')) {
+                                return;
+                            }
+                            
+                            deleteFromAll = false;
+                            proceedWithDeletion();
+                        };
+                        
+                        // Handle "Delete from ALL Tools" button
+                        document.getElementById('deleteFromAllToolsBtn').onclick = async function() {
+                            choiceModal.hide();
+                            
+                            const authorized = await verifyAdminCode('delete photo from ALL tools');
+                            if (!authorized) {
+                                return;
+                            }
+                            
+                            if (!confirm(`⚠️ Are you sure you want to delete this photo from ALL ${toolsWithSamePart.docs.length} tools?\n\nThis will permanently remove the photo from:\n${owners.join('\n')}\n\nThis action CANNOT be undone!`)) {
+                                return;
+                            }
+                            
+                            deleteFromAll = true;
+                            proceedWithDeletion();
+                        };
+                        
+                        async function proceedWithDeletion() {
+                            const toolDoc = await db.collection('tools').doc(toolId).get();
+                            const currentPhotoUrls = toolDoc.exists ? (toolDoc.data().photoUrls || []) : [];
+                            
+                            const updatedPhotoUrls = currentPhotoUrls.filter((url, index) => index !== photoIndex);
+                            
+                            await db.collection('tools').doc(toolId).update({
+                                photoUrls: updatedPhotoUrls
+                            });
+                            
+                            let affectedToolsCount = 1;
+                            
+                            if (deleteFromAll) {
+                                const updatePromises = toolsWithSamePart.docs.map(async (doc) => {
+                                    if (doc.id !== toolId) {
+                                        const existingPhotoUrls = doc.data().photoUrls || [];
+                                        const updatedUrls = existingPhotoUrls.filter(url => url !== photoUrl);
+                                        await doc.ref.update({
+                                            photoUrls: updatedUrls
+                                        });
+                                        console.log('Updated tool', doc.id, 'removed same photo');
+                                    }
+                                });
+                                
+                                await Promise.all(updatePromises);
+                                affectedToolsCount = toolsWithSamePart.docs.length;
+                                
+                                // Try to delete from Firebase Storage
+                                try {
+                                    const urlParts = photoUrl.split('/');
+                                    const encodedPath = urlParts[urlParts.length - 1].split('?')[0];
+                                    const decodedPath = decodeURIComponent(encodedPath);
+                                    const photoRef = storage.ref().child(decodedPath);
+                                    await photoRef.delete();
+                                } catch (storageError) {
+                                    console.warn('Could not delete from storage:', storageError);
+                                }
+                            } else {
+                                // Try to delete from Firebase Storage
+                                try {
+                                    const urlParts = photoUrl.split('/');
+                                    const encodedPath = urlParts[urlParts.length - 1].split('?')[0];
+                                    const decodedPath = decodeURIComponent(encodedPath);
+                                    const photoRef = storage.ref().child(decodedPath);
+                                    await photoRef.delete();
+                                } catch (storageError) {
+                                    console.warn('Could not delete from storage:', storageError);
+                                }
+                            }
+                            
+                            alert(`Photo deleted successfully from ${affectedToolsCount} tool(s)!`);
+                            
+                            const galleryModal = bootstrap.Modal.getInstance(document.getElementById('toolPhotoGalleryModal'));
+                            if (galleryModal) galleryModal.hide();
+                            
+                            // Refresh tool photos display
+                            const toolDoc = await db.collection('tools').doc(toolId).get();
+                            if (toolDoc.exists) {
+                                displayToolPhotos(toolDoc.data().photoUrls || []);
+                            }
+                            
+                            // Refresh tools list if on collection details screen
+                            if (currentCollection) {
+                                await loadToolsInCollection(currentCollection);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Photo delete failed:', error);
+                        alert('Failed to delete photo: ' + error.message);
+                        reject(error);
+                    }
+                });
+            }
             
             waitForFirebase();
         })();
