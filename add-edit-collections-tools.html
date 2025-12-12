@@ -313,6 +313,20 @@
         </div>
     </div>
     
+    <!-- Photo Fullscreen Modal (for collection photos) -->
+    <div class="modal fade" id="photoFullscreenModal" tabindex="-1">
+        <div class="modal-dialog modal-fullscreen">
+            <div class="modal-content bg-dark">
+                <div class="modal-header border-0">
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="fullscreenPhoto" src="" style="max-width: 100%; max-height: 90vh; object-fit: contain;">
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Tool Photo Gallery Modal (same as my-tools.html) -->
     <div class="modal fade" id="toolPhotoGalleryModal" tabindex="-1" aria-labelledby="toolPhotoGalleryModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-fullscreen">
@@ -532,7 +546,7 @@
                                         <strong>Collection Photos:</strong>
                                         <div class="mt-2">
                                             ${data.photoUrls.map((url, index) => `
-                                                <img src="${url}" class="photo-thumbnail" onclick="showFullscreenPhoto('${url}')" style="cursor: pointer;">
+                                                <img src="${url}" class="photo-thumbnail" onclick="showCollectionPhotoFullscreen('${url}')" style="cursor: pointer;">
                                             `).join('')}
                                         </div>
                                     </div>
@@ -772,7 +786,7 @@
                     const img = document.createElement('img');
                     img.src = url;
                     img.className = 'photo-thumbnail';
-                    img.onclick = () => showFullscreenPhoto(url);
+                    img.onclick = () => showCollectionPhotoFullscreen(url);
                     img.style.cursor = 'pointer';
                     
                     const deleteBtn = document.createElement('button');
@@ -787,6 +801,13 @@
                     container.appendChild(wrapper);
                 });
             }
+            
+            // Show collection photo fullscreen (simple viewer)
+            window.showCollectionPhotoFullscreen = function(url) {
+                document.getElementById('fullscreenPhoto').src = url;
+                const modal = new bootstrap.Modal(document.getElementById('photoFullscreenModal'));
+                modal.show();
+            };
             
             // Show collection photo choice modal
             window.showCollectionPhotoChoice = function() {
