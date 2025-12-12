@@ -779,21 +779,21 @@
                 document.getElementById('collectionPhotoInput').click();
             };
             
-            // Show tool photo choice modal (same logic as my-tools.html)
+            // Show tool photo choice modal (same logic as my-tools.html - renamed from createPhotoUploadInput)
             window.showToolPhotoChoice = async function() {
                 const toolId = document.getElementById('editToolModal').dataset.toolId;
                 if (!toolId) return;
                 
+                const partNumber = document.getElementById('editPartNumber').value.trim() || toolId;
+                currentPhotoUploadToolId = toolId;
+                currentPhotoUploadPartNumber = partNumber;
+                photoUploadToAllTools = false;
+                photoUploadAutoShareTargets = [];
+                
                 try {
+                    // Get current tool's photo URLs
                     const toolDoc = await db.collection('tools').doc(toolId).get();
-                    if (!toolDoc.exists) {
-                        alert('Tool not found');
-                        return;
-                    }
-                    
-                    const tool = toolDoc.data();
-                    const partNumber = tool.partNumber || '';
-                    const currentToolPhotoUrls = tool.photoUrls || [];
+                    const currentToolPhotoUrls = toolDoc.exists ? (toolDoc.data().photoUrls || []) : [];
                     
                     // Check if there are other tools with the same part number that have photos
                     const toolsWithSamePart = await db.collection('tools')
@@ -812,23 +812,23 @@
                         }));
                     
                     if (toolsWithPhotos.length > 0) {
-                        // Show photo upload choice modal with existing photos
+                        // Format tools list
                         let toolsListHTML = '';
-                        toolsWithPhotos.forEach(tool => {
-                            toolsListHTML += `<div style="padding: 8px; margin-bottom: 8px; background: white; border-radius: 6px; border-left: 3px solid #2196F3;">
-                                <strong>${escapeHtml(tool.toolName)}</strong> (Owner: ${escapeHtml(tool.owner)}) - ${tool.photoCount} photo(s)
-                            </div>`;
-                        });
+                        toolsListHTML = toolsWithPhotos.map((tool, index) => 
+                            `<div style="font-size: 1.15rem; font-weight: bold; color: #333; margin-bottom: 6px;">
+                                ${index + 1}. ${escapeHtml(tool.toolName)} (Owner: ${escapeHtml(tool.owner)}) - ${tool.photoCount} photo(s)
+                            </div>`
+                        ).join('');
                         
-                        // Collect all unique photo URLs from other tools (excluding current tool's photos)
-                        const allPhotoUrls = [];
-                        toolsWithPhotos.forEach(tool => {
-                            tool.photoUrls.forEach(url => {
-                                if (!currentToolPhotoUrls.includes(url) && !allPhotoUrls.includes(url)) {
-                                    allPhotoUrls.push(url);
-                                }
-                            });
+                    // Collect all unique photo URLs from all tools
+                    const allPhotoUrls = [];
+                    toolsWithPhotos.forEach(tool => {
+                        tool.photoUrls.forEach(url => {
+                            if (!allPhotoUrls.includes(url) && !currentToolPhotoUrls.includes(url)) {
+                                allPhotoUrls.push(url);
+                            }
                         });
+                    });
                         
                         // Initialize selected photos array
                         window.selectedPhotos = [];
@@ -836,78 +836,120 @@
                         // Format photo thumbnails with selection handlers
                         let thumbnailsHTML = '';
                         if (allPhotoUrls.length > 0) {
-                            thumbnailsHTML = allPhotoUrls.map((url, index) => 
-                                `<div style="position: relative; display: inline-block; margin: 4px;">
-                                    <img src="${url}" 
-                                         data-photo-url="${url}"
-                                         data-photo-index="${index}"
-                                         class="photo-thumbnail-selectable"
-                                         style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 2px solid #ddd; cursor: pointer; transition: all 0.2s;" 
-                                         onclick="toggleToolPhotoSelection('${url}', ${index})"
-                                         onmouseover="this.style.transform='scale(1.05)';"
-                                         onmouseout="if(!this.classList.contains('selected')) { this.style.transform='scale(1)'; }"
-                                         title="Click to select/deselect">
-                                    <div class="photo-selected-indicator" style="display: none; position: absolute; top: -5px; right: -5px; background: #4CAF50; color: white; border-radius: 50%; width: 24px; height: 24px; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-                                        <i class="fas fa-check"></i>
-                                    </div>
-                                </div>`
-                            ).join('');
+                        thumbnailsHTML = allPhotoUrls.map((url, index) => 
+                            `<div style="position: relative; display: inline-block;">
+                                <img src="${url}" 
+                                     data-photo-url="${url}"
+                                     data-photo-index="${index}"
+                                     class="photo-thumbnail-selectable"
+                                     style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 2px solid #ddd; cursor: pointer; transition: all 0.2s;" 
+                                     onclick="togglePhotoSelection('${url}', ${index})"
+                                     onmouseover="this.style.transform='scale(1.05)';"
+                                     onmouseout="if(!this.classList.contains('selected')) { this.style.transform='scale(1)'; }"
+                                     title="Click to select/deselect">
+                                <div class="photo-selected-indicator" style="display: none; position: absolute; top: -5px; right: -5px; background: #4CAF50; color: white; border-radius: 50%; width: 24px; height: 24px; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                                    <i class="fas fa-check"></i>
+                                </div>
+                            </div>`
+                        ).join('');
                         } else {
                             thumbnailsHTML = '<div style="color: #999; font-style: italic;">No new shared photos available (this tool already has all of them).</div>';
                         }
                         
                         // Show choice modal
-                        document.getElementById('toolPhotoUploadToolsList').innerHTML = toolsListHTML;
-                        document.getElementById('toolPhotoUploadThumbnails').innerHTML = thumbnailsHTML;
-                        document.getElementById('toolSelectedCount').textContent = '0';
+                        document.getElementById('photoUploadToolsList').innerHTML = toolsListHTML;
+                        document.getElementById('photoUploadThumbnails').innerHTML = thumbnailsHTML;
+                        document.getElementById('selectedCount').textContent = '0';
                         
-                        const addSelectedBtn = document.getElementById('addSelectedToolPhotosBtn');
-                        if (addSelectedBtn) addSelectedBtn.disabled = true;
+                        const addSelectedMyBtn = document.getElementById('addSelectedPhotosMyToolBtn');
+                        const addSelectedAllBtn = document.getElementById('addSelectedPhotosAllToolsBtn');
+                        if (addSelectedMyBtn) addSelectedMyBtn.disabled = true;
+                        if (addSelectedAllBtn) addSelectedAllBtn.disabled = true;
                         
-                        const choiceModal = new bootstrap.Modal(document.getElementById('toolPhotoUploadChoiceModal'));
+                        const choiceModal = new bootstrap.Modal(document.getElementById('photoUploadChoiceModal'));
                         choiceModal.show();
                         
-                        // Store data for use in useSelectedToolPhotos function
-                        window.currentToolPhotoUploadData = {
+                        // Store data for use in useSelectedPhotos function
+                        window.currentPhotoUploadData = {
                             toolId: toolId,
                             partNumber: partNumber,
                             toolsWithSamePart: toolsWithSamePart,
+                            toolsWithPhotos: toolsWithPhotos,
                             allPhotoUrls: allPhotoUrls,
                             currentToolPhotoUrls: currentToolPhotoUrls
                         };
                         
-                        if (addSelectedBtn) {
-                            addSelectedBtn.onclick = function() {
+                        if (addSelectedMyBtn) {
+                            addSelectedMyBtn.onclick = function() {
                                 if (window.selectedPhotos && window.selectedPhotos.length > 0) {
-                                    useSelectedToolPhotos(toolId, partNumber);
+                                    useSelectedPhotos(toolId, partNumber, toolsWithSamePart.docs, false);
                                 }
                             };
                         }
                         
-                        const addNewPhotoBtn = document.getElementById('addNewToolPhotoBtn');
-                        if (addNewPhotoBtn) {
-                            addNewPhotoBtn.onclick = function() {
+                        if (addSelectedAllBtn) {
+                            addSelectedAllBtn.onclick = function() {
+                                if (window.selectedPhotos && window.selectedPhotos.length > 0) {
+                                    useSelectedPhotos(toolId, partNumber, toolsWithSamePart.docs, true);
+                                }
+                            };
+                        }
+                        
+                        const addNewPhotoMyBtn = document.getElementById('addNewPhotoMyToolBtn');
+                        if (addNewPhotoMyBtn) {
+                            addNewPhotoMyBtn.onclick = function() {
+                                photoUploadToAllTools = false;
+                                photoUploadAutoShareTargets = [];
                                 window.selectedPhotos = [];
                                 choiceModal.hide();
-                                showToolPhotoSourceModal(toolId, partNumber);
+                                showPhotoSourceModal(toolId, partNumber);
+                            };
+                        }
+                        
+                        const addNewPhotoAllBtn = document.getElementById('addNewPhotoAllToolsBtn');
+                        if (addNewPhotoAllBtn) {
+                            addNewPhotoAllBtn.onclick = async function() {
+                                const authorized = await verifyAdminCode('add a new photo to ALL matching tools');
+                                if (!authorized) {
+                                    return;
+                                }
+                                photoUploadToAllTools = true;
+                                photoUploadAutoShareTargets = [];
+                                window.selectedPhotos = [];
+                                choiceModal.hide();
+                                showPhotoSourceModal(toolId, partNumber);
                             };
                         }
                     } else {
                         // No other tools with photos, proceed directly to source selection
-                        showToolPhotoSourceModal(toolId, partNumber);
+                        const toolsWithoutPhotos = toolsWithSamePart.docs
+                            .filter(doc => doc.id !== toolId && (!doc.data().photoUrls || doc.data().photoUrls.length === 0));
+                        
+                        photoUploadAutoShareTargets = toolsWithoutPhotos.map(doc => ({
+                            id: doc.id,
+                            ref: doc.ref,
+                            owner: doc.data().owner || 'Unknown',
+                            toolName: doc.data().toolName || 'Unknown Tool',
+                            photoUrls: doc.data().photoUrls || []
+                        }));
+                        
+                        photoUploadToAllTools = false;
+                        window.selectedPhotos = [];
+                        showPhotoSourceModal(toolId, partNumber);
                     }
                 } catch (error) {
                     console.error('Error checking tools with same part number:', error);
-                    // On error, proceed with normal flow
+                    // On error, proceed with normal flow (add to my tool only)
+                    photoUploadToAllTools = false;
                     const toolId = document.getElementById('editToolModal').dataset.toolId;
                     const toolDoc = await db.collection('tools').doc(toolId).get();
                     const partNumber = toolDoc.exists ? (toolDoc.data().partNumber || '') : '';
-                    showToolPhotoSourceModal(toolId, partNumber);
+                    showPhotoSourceModal(toolId, partNumber);
                 }
             };
             
-            // Toggle tool photo selection
-            window.toggleToolPhotoSelection = function(photoUrl, index) {
+            // Toggle photo selection (same as my-tools.html)
+            window.togglePhotoSelection = function(photoUrl, index) {
                 const img = document.querySelector(`img[data-photo-index="${index}"]`);
                 const indicator = img ? img.nextElementSibling : null;
                 
@@ -915,13 +957,15 @@
                     window.selectedPhotos = [];
                 }
                 
-                const selectedIndex = window.selectedPhotos.indexOf(photoUrl);
-                if (selectedIndex > -1) {
+                const isSelected = window.selectedPhotos.includes(photoUrl);
+                
+                if (isSelected) {
                     // Deselect
-                    window.selectedPhotos.splice(selectedIndex, 1);
+                    window.selectedPhotos = window.selectedPhotos.filter(url => url !== photoUrl);
                     if (img) {
                         img.classList.remove('selected');
                         img.style.border = '2px solid #ddd';
+                        img.style.opacity = '1';
                     }
                     if (indicator) indicator.style.display = 'none';
                 } else {
@@ -929,66 +973,151 @@
                     window.selectedPhotos.push(photoUrl);
                     if (img) {
                         img.classList.add('selected');
-                        img.style.border = '2px solid #4CAF50';
+                        img.style.border = '3px solid #4CAF50';
+                        img.style.opacity = '0.9';
                     }
                     if (indicator) indicator.style.display = 'flex';
                 }
                 
-                // Update count and button
+                // Update count and button states
                 const count = window.selectedPhotos.length;
-                document.getElementById('toolSelectedCount').textContent = count.toString();
-                const addSelectedBtn = document.getElementById('addSelectedToolPhotosBtn');
-                if (addSelectedBtn) addSelectedBtn.disabled = count === 0;
+                const selectedCountEl = document.getElementById('selectedCount');
+                if (selectedCountEl) {
+                    selectedCountEl.textContent = count;
+                }
+                const addSelectedMyBtn = document.getElementById('addSelectedPhotosMyToolBtn');
+                const addSelectedAllBtn = document.getElementById('addSelectedPhotosAllToolsBtn');
+                if (addSelectedMyBtn) {
+                    addSelectedMyBtn.disabled = count === 0;
+                }
+                if (addSelectedAllBtn) {
+                    addSelectedAllBtn.disabled = count === 0;
+                }
             };
             
-            // Use selected tool photos
-            async function useSelectedToolPhotos(toolId, partNumber) {
-                if (!window.selectedPhotos || window.selectedPhotos.length === 0) return;
+            // Use multiple selected photos (same as my-tools.html)
+            async function useSelectedPhotos(toolId, partNumber, toolsWithSamePartDocs = [], addToAll = false) {
+                if (!window.selectedPhotos || window.selectedPhotos.length === 0) {
+                    alert('Please select at least one photo.');
+                    return;
+                }
+                
+                // Hide the choice modal
+                const choiceModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadChoiceModal'));
+                if (choiceModal) choiceModal.hide();
                 
                 try {
-                    const toolDoc = await db.collection('tools').doc(toolId).get();
-                    const currentPhotoUrls = toolDoc.exists ? (toolDoc.data().photoUrls || []) : [];
-                    
-                    const newPhotoUrls = [...currentPhotoUrls];
-                    window.selectedPhotos.forEach(url => {
-                        if (!newPhotoUrls.includes(url)) {
-                            newPhotoUrls.push(url);
+                    if (addToAll) {
+                        const authorized = await verifyAdminCode('add the selected photos to ALL matching tools');
+                        if (!authorized) {
+                            return;
                         }
-                    });
+                        
+                        const updatePromises = toolsWithSamePartDocs.map(async (doc) => {
+                            const existingPhotoUrls = doc.data().photoUrls || [];
+                            const updatedPhotoUrls = [...existingPhotoUrls];
+                            
+                            window.selectedPhotos.forEach(photoUrl => {
+                                if (!updatedPhotoUrls.includes(photoUrl)) {
+                                    updatedPhotoUrls.push(photoUrl);
+                                }
+                            });
+                            
+                            if (updatedPhotoUrls.length > existingPhotoUrls.length) {
+                                await doc.ref.update({
+                                    photoUrls: updatedPhotoUrls
+                                });
+                                console.log('Added selected photos to tool', doc.id);
+                            }
+                        });
+                        
+                        await Promise.all(updatePromises);
+                        alert(`✅ ${window.selectedPhotos.length} photo(s) added to ALL ${toolsWithSamePartDocs.length} tool(s)!`);
+                    } else {
+                        // Add photos only to current tool
+                        const toolDoc = await db.collection('tools').doc(toolId).get();
+                        if (toolDoc.exists) {
+                            const currentPhotoUrls = toolDoc.data().photoUrls || [];
+                            let newPhotoUrls = [...currentPhotoUrls];
+                            
+                            window.selectedPhotos.forEach(photoUrl => {
+                                if (!newPhotoUrls.includes(photoUrl)) {
+                                    newPhotoUrls.push(photoUrl);
+                                }
+                            });
+                            
+                            if (newPhotoUrls.length > currentPhotoUrls.length) {
+                                await db.collection('tools').doc(toolId).update({
+                                    photoUrls: newPhotoUrls
+                                });
+                                displayToolPhotos(newPhotoUrls);
+                                alert(`✅ ${newPhotoUrls.length - currentPhotoUrls.length} photo(s) added to this tool!`);
+                            } else {
+                                alert('ℹ️ All selected photos are already in this tool.');
+                            }
+                        }
+                    }
                     
-                    await db.collection('tools').doc(toolId).update({
-                        photoUrls: newPhotoUrls
-                    });
-                    
-                    displayToolPhotos(newPhotoUrls);
-                    
-                    const choiceModal = bootstrap.Modal.getInstance(document.getElementById('toolPhotoUploadChoiceModal'));
-                    if (choiceModal) choiceModal.hide();
-                    
-                    alert(`Successfully added ${window.selectedPhotos.length} photo(s) to this tool!`);
+                    // Reset selection UI
                     window.selectedPhotos = [];
+                    const selectedCountEl = document.getElementById('selectedCount');
+                    if (selectedCountEl) selectedCountEl.textContent = '0';
+                    const addSelectedMyBtn = document.getElementById('addSelectedPhotosMyToolBtn');
+                    const addSelectedAllBtn = document.getElementById('addSelectedPhotosAllToolsBtn');
+                    if (addSelectedMyBtn) addSelectedMyBtn.disabled = true;
+                    if (addSelectedAllBtn) addSelectedAllBtn.disabled = true;
+                    
                 } catch (error) {
-                    console.error('Error adding selected photos:', error);
-                    alert('Failed to add photos: ' + error.message);
+                    console.error('Error using selected photos:', error);
+                    alert('Error adding photos: ' + error.message);
                 }
             }
             
-            // Show tool photo source modal
-            function showToolPhotoSourceModal(toolId, partNumber) {
+            // Verify admin code (same as my-tools.html)
+            async function verifyAdminCode(actionDescription = 'perform this action') {
+                try {
+                    const settingsDoc = await db.collection('settings').doc('admin').get();
+                    const adminCode = settingsDoc.exists ? settingsDoc.data().adminCode : null;
+                    
+                    if (!adminCode) {
+                        alert('Admin code not configured. Please contact system administrator.');
+                        return false;
+                    }
+                    
+                    const enteredCode = prompt(`🔐 Enter admin code to ${actionDescription}:`);
+                    if (enteredCode === null) {
+                        return false;
+                    }
+                    
+                    if (enteredCode === adminCode) {
+                        return true;
+                    } else {
+                        alert('❌ Incorrect admin code. Access denied.');
+                        return false;
+                    }
+                } catch (error) {
+                    console.error('Error verifying admin code:', error);
+                    alert('Error verifying admin code: ' + error.message);
+                    return false;
+                }
+            }
+            
+            // Show photo source modal (same as my-tools.html)
+            function showPhotoSourceModal(toolId, partNumber) {
                 const modalHtml = `
-                    <div class="modal fade" id="toolPhotoSourceModal" tabindex="-1" aria-labelledby="toolPhotoSourceModalLabel" aria-hidden="true">
+                    <div class="modal fade" id="photoSourceModal" tabindex="-1" aria-labelledby="photoSourceModalLabel" aria-hidden="true">
                         <div class="modal-dialog modal-sm">
                             <div class="modal-content">
                                 <div class="modal-header bg-primary text-white">
-                                    <h5 class="modal-title" id="toolPhotoSourceModalLabel">Add Photo</h5>
+                                    <h5 class="modal-title" id="photoSourceModalLabel">Add Photo</h5>
                                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                 </div>
                                 <div class="modal-body text-center">
                                     <div class="d-grid gap-3">
-                                        <button type="button" class="btn btn-primary btn-lg" onclick="takeToolPhotoWithCamera('${toolId}', '${partNumber}')">
+                                        <button type="button" class="btn btn-primary btn-lg" onclick="takePhotoWithCamera('${toolId}', '${partNumber}')">
                                             <i class="fas fa-camera"></i> Take Photo
                                         </button>
-                                        <button type="button" class="btn btn-secondary btn-lg" onclick="selectToolPhotoFromGallery('${toolId}', '${partNumber}')">
+                                        <button type="button" class="btn btn-secondary btn-lg" onclick="selectPhotoFromGallery('${toolId}', '${partNumber}')">
                                             <i class="fas fa-images"></i> Choose from Gallery
                                         </button>
                                     </div>
@@ -998,24 +1127,24 @@
                     </div>
                 `;
                 
-                const existingModal = document.getElementById('toolPhotoSourceModal');
+                const existingModal = document.getElementById('photoSourceModal');
                 if (existingModal) {
                     existingModal.remove();
                 }
                 
                 document.body.insertAdjacentHTML('beforeend', modalHtml);
                 
-                const modal = new bootstrap.Modal(document.getElementById('toolPhotoSourceModal'));
+                const modal = new bootstrap.Modal(document.getElementById('photoSourceModal'));
                 modal.show();
                 
-                document.getElementById('toolPhotoSourceModal').addEventListener('hidden.bs.modal', function() {
+                document.getElementById('photoSourceModal').addEventListener('hidden.bs.modal', function() {
                     this.remove();
                 });
             }
             
-            // Take tool photo with camera
-            window.takeToolPhotoWithCamera = function(toolId, partNumber) {
-                const sourceModal = bootstrap.Modal.getInstance(document.getElementById('toolPhotoSourceModal'));
+            // Take photo with camera (same as my-tools.html)
+            window.takePhotoWithCamera = function(toolId, partNumber) {
+                const sourceModal = bootstrap.Modal.getInstance(document.getElementById('photoSourceModal'));
                 if (sourceModal) sourceModal.hide();
                 
                 const input = document.createElement('input');
@@ -1027,7 +1156,7 @@
                 input.onchange = function(event) {
                     const file = event.target.files[0];
                     if (file) {
-                        uploadToolPhotoWithCompression(toolId, partNumber, file);
+                        uploadToolPhoto(toolId, partNumber, file);
                     }
                     document.body.removeChild(input);
                 };
@@ -1036,9 +1165,9 @@
                 input.click();
             };
             
-            // Select tool photo from gallery
-            window.selectToolPhotoFromGallery = function(toolId, partNumber) {
-                const sourceModal = bootstrap.Modal.getInstance(document.getElementById('toolPhotoSourceModal'));
+            // Select photo from gallery (same as my-tools.html)
+            window.selectPhotoFromGallery = function(toolId, partNumber) {
+                const sourceModal = bootstrap.Modal.getInstance(document.getElementById('photoSourceModal'));
                 if (sourceModal) sourceModal.hide();
                 
                 const input = document.createElement('input');
@@ -1049,7 +1178,7 @@
                 input.onchange = function(event) {
                     const file = event.target.files[0];
                     if (file) {
-                        uploadToolPhotoWithCompression(toolId, partNumber, file);
+                        uploadToolPhoto(toolId, partNumber, file);
                     }
                     document.body.removeChild(input);
                 };
@@ -1110,13 +1239,30 @@
                 });
             }
             
-            // Upload tool photo with compression (same logic as my-tools.html)
-            async function uploadToolPhotoWithCompression(toolId, partNumber, file) {
+            // Global variables for photo upload (same as my-tools.html)
+            let photoUploadToAllTools = false;
+            let photoUploadAutoShareTargets = [];
+            let currentPhotoUploadToolId = null;
+            let currentPhotoUploadPartNumber = null;
+            
+            // Upload tool photo (same logic as my-tools.html)
+            async function uploadToolPhoto(toolId, partNumber, file) {
                 try {
+                    const loadingModal = document.getElementById('photoUploadLoadingModal') ? new bootstrap.Modal(document.getElementById('photoUploadLoadingModal')) : null;
+                    if (loadingModal) {
+                        loadingModal.show();
+                        document.getElementById('photoUploadProgress').textContent = 'Processing image...';
+                    }
+                    
                     const compressedBlob = await compressImage(file);
                     if (!compressedBlob) {
+                        if (loadingModal) loadingModal.hide();
                         alert('Failed to compress image');
                         return;
+                    }
+                    
+                    if (loadingModal) {
+                        document.getElementById('photoUploadProgress').textContent = 'Uploading to storage...';
                     }
                     
                     const toolDoc = await db.collection('tools').doc(toolId).get();
@@ -1130,14 +1276,21 @@
                     uploadTask.on('state_changed',
                         (snapshot) => {
                             const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                            console.log('Upload progress:', progress);
+                            if (document.getElementById('photoUploadProgress')) {
+                                document.getElementById('photoUploadProgress').textContent = `Uploading... ${Math.round(progress)}%`;
+                            }
                         },
                         (error) => {
                             console.error('Upload error:', error);
+                            if (loadingModal) loadingModal.hide();
                             alert('Upload failed: ' + error.message);
                         },
                         async () => {
                             try {
+                                if (document.getElementById('photoUploadProgress')) {
+                                    document.getElementById('photoUploadProgress').textContent = 'Updating database...';
+                                }
+                                
                                 const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
                                 const newPhotoUrls = [...currentPhotoUrls, downloadURL];
                                 
@@ -1145,10 +1298,62 @@
                                     photoUrls: newPhotoUrls
                                 });
                                 
+                                // Share with other tools if user chose "Add to ALL Tools"
+                                const shouldAddToAll = photoUploadToAllTools && currentPhotoUploadToolId === toolId && currentPhotoUploadPartNumber === partNumber;
+                                
+                                if (shouldAddToAll) {
+                                    // Find all tools with the same part number and add the same photo
+                                    const toolsWithSamePart = await db.collection('tools')
+                                        .where('partNumber', '==', partNumber)
+                                        .get();
+                                    
+                                    const updatePromises = toolsWithSamePart.docs.map(async (doc) => {
+                                        if (doc.id !== toolId) {
+                                            const existingPhotoUrls = doc.data().photoUrls || [];
+                                            const updatedPhotoUrls = [...existingPhotoUrls, downloadURL];
+                                            await doc.ref.update({
+                                                photoUrls: updatedPhotoUrls
+                                            });
+                                            console.log('Updated tool', doc.id, 'with same photo');
+                                        }
+                                    });
+                                    
+                                    await Promise.all(updatePromises);
+                                    
+                                    if (loadingModal) loadingModal.hide();
+                                    alert('Photo uploaded successfully! Added to ' + (toolsWithSamePart.docs.length) + ' tools with the same part number.');
+                                } else if (photoUploadAutoShareTargets.length > 0) {
+                                    const sharePromises = photoUploadAutoShareTargets.map(async (target) => {
+                                        const existingPhotoUrls = target.photoUrls || [];
+                                        if (!existingPhotoUrls.includes(downloadURL)) {
+                                            const updatedPhotoUrls = [...existingPhotoUrls, downloadURL];
+                                            await target.ref.update({
+                                                photoUrls: updatedPhotoUrls
+                                            });
+                                            console.log('Auto-shared photo with tool', target.id);
+                                        }
+                                    });
+                                    
+                                    await Promise.all(sharePromises);
+                                    
+                                    if (loadingModal) loadingModal.hide();
+                                    const reportLines = photoUploadAutoShareTargets.map(target => `${target.toolName} (${target.owner})`);
+                                    alert(`✅ Photo uploaded successfully! Also shared with ${photoUploadAutoShareTargets.length} other tool(s) that previously had no photos:\n${reportLines.join('\n')}`);
+                                } else {
+                                    if (loadingModal) loadingModal.hide();
+                                    alert('✅ Photo uploaded successfully! Added to this tool only.');
+                                }
+                                
                                 displayToolPhotos(newPhotoUrls);
-                                alert('Photo uploaded successfully!');
+                                
+                                // Reset the global variables
+                                photoUploadToAllTools = false;
+                                currentPhotoUploadToolId = null;
+                                currentPhotoUploadPartNumber = null;
+                                photoUploadAutoShareTargets = [];
                             } catch (error) {
                                 console.error('Error updating tool:', error);
+                                if (loadingModal) loadingModal.hide();
                                 alert('Failed to update tool: ' + error.message);
                             }
                         }
