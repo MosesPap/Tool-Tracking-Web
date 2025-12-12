@@ -2010,9 +2010,9 @@
                             if (galleryModal) galleryModal.hide();
                             
                             // Refresh tool photos display
-                            const toolDoc = await db.collection('tools').doc(toolId).get();
-                            if (toolDoc.exists) {
-                                displayToolPhotos(toolDoc.data().photoUrls || []);
+                            const updatedToolDoc = await db.collection('tools').doc(toolId).get();
+                            if (updatedToolDoc.exists) {
+                                displayToolPhotos(updatedToolDoc.data().photoUrls || []);
                             }
                             
                             // Refresh tools list if on collection details screen
