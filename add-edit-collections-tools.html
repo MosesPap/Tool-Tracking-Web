@@ -30,15 +30,14 @@
         .admin-card h4 {
             font-weight: bold;
             margin-bottom: 20px;
-            color: white !important;
-            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%) !important;
-            padding: 12px 20px !important;
-            border-radius: 10px !important;
-            border: 2px solid #757575 !important;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
-            transform: perspective(1000px) rotateX(2deg);
-            transition: all 0.3s ease;
-            display: inline-block;
+            color: #333;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .admin-card h4 i {
+            color: #667eea;
+            margin-right: 10px;
         }
         
         .collection-card {
@@ -214,9 +213,11 @@
             </div>
             
             <!-- Tools List -->
-            <div>
+            <div class="mt-4">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5><i class="fas fa-tools"></i> Tools in Collection</h5>
+                    <h5 style="color: #333; font-weight: bold; padding-bottom: 10px; border-bottom: 2px solid #e0e0e0;">
+                        <i class="fas fa-tools" style="color: #667eea; margin-right: 10px;"></i> Tools in Collection
+                    </h5>
                     <div>
                         <button class="btn btn-sm btn-danger-3d" id="deleteSelectedToolsBtn" onclick="deleteSelectedTools()" style="display: none;">
                             <i class="fas fa-trash-alt"></i> Delete Selected
