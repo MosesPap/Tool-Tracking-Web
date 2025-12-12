@@ -249,10 +249,11 @@
                     <div class="mb-3">
                         <label class="form-label">Collection Photos</label>
                         <div id="collectionPhotosContainer"></div>
-                        <button class="btn btn-sm btn-primary mt-2" onclick="document.getElementById('collectionPhotoInput').click()">
+                        <button class="btn btn-sm btn-primary mt-2" onclick="showCollectionPhotoChoice()">
                             <i class="fas fa-plus"></i> Add Photo
                         </button>
-                        <input type="file" id="collectionPhotoInput" accept="image/*" style="display: none;" onchange="uploadCollectionPhoto()">
+                        <input type="file" id="collectionPhotoInput" accept="image/*" style="display: none;" onchange="uploadCollectionPhotoFromFile()">
+                        <input type="file" id="collectionPhotoInputCamera" accept="image/*" capture="environment" style="display: none;" onchange="uploadCollectionPhotoFromFile()">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -299,10 +300,11 @@
                     <div class="mb-3">
                         <label class="form-label">Tool Photos</label>
                         <div id="toolPhotosContainer"></div>
-                        <button class="btn btn-sm btn-primary mt-2" onclick="document.getElementById('toolPhotoInput').click()">
+                        <button class="btn btn-sm btn-primary mt-2" onclick="showToolPhotoChoice()">
                             <i class="fas fa-plus"></i> Add Photo
                         </button>
-                        <input type="file" id="toolPhotoInput" accept="image/*" style="display: none;" onchange="uploadToolPhoto()">
+                        <input type="file" id="toolPhotoInput" accept="image/*" style="display: none;" onchange="uploadToolPhotoFromFile()">
+                        <input type="file" id="toolPhotoInputCamera" accept="image/*" capture="environment" style="display: none;" onchange="uploadToolPhotoFromFile()">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -327,6 +329,87 @@
         </div>
     </div>
     
+    <!-- Collection Photo Choice Modal -->
+    <div class="modal fade" id="collectionPhotoChoiceModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" style="background: #667eea; color: white;">
+                    <h5 class="modal-title"><i class="fas fa-camera"></i> Add Collection Photo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary btn-lg" onclick="takeCollectionPhotoFromCamera()">
+                            <i class="fas fa-camera"></i> Take Photo from Camera
+                        </button>
+                        <button class="btn btn-secondary btn-lg" onclick="selectCollectionPhotoFromGallery()">
+                            <i class="fas fa-images"></i> Select from Gallery
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tool Photo Choice Modal -->
+    <div class="modal fade" id="toolPhotoChoiceModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" style="background: #667eea; color: white;">
+                    <h5 class="modal-title"><i class="fas fa-camera"></i> Add Tool Photo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary btn-lg" onclick="takeToolPhotoFromCamera()">
+                            <i class="fas fa-camera"></i> Take Photo from Camera
+                        </button>
+                        <button class="btn btn-secondary btn-lg" onclick="selectToolPhotoFromGallery()">
+                            <i class="fas fa-images"></i> Select from Gallery
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Camera Capture Modal -->
+    <div class="modal fade" id="cameraCaptureModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header" style="background: #667eea; color: white;">
+                    <h5 class="modal-title"><i class="fas fa-camera"></i> Camera</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" onclick="stopCameraCapture()"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <div id="cameraPreview" style="position: relative; display: inline-block;">
+                        <video id="cameraVideo" autoplay playsinline style="max-width: 100%; max-height: 500px; border-radius: 8px;"></video>
+                        <canvas id="cameraCanvas" style="display: none;"></canvas>
+                    </div>
+                    <div class="mt-3">
+                        <button class="btn btn-success btn-lg me-2" onclick="capturePhoto()">
+                            <i class="fas fa-camera"></i> Capture Photo
+                        </button>
+                        <button class="btn btn-secondary" onclick="stopCameraCapture()">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                    </div>
+                    <div id="capturedPhotoPreview" style="display: none; margin-top: 20px;">
+                        <img id="capturedPhotoImg" src="" style="max-width: 100%; max-height: 400px; border-radius: 8px;">
+                        <div class="mt-3">
+                            <button class="btn btn-primary me-2" onclick="useCapturedPhoto()">
+                                <i class="fas fa-check"></i> Use This Photo
+                            </button>
+                            <button class="btn btn-secondary" onclick="retakePhoto()">
+                                <i class="fas fa-redo"></i> Retake
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -344,6 +427,9 @@
             let currentCollection = null;
             let currentCollectionDocId = null;
             let selectedToolIds = new Set();
+            let cameraStream = null;
+            let capturedPhotoBlob = null;
+            let photoType = null; // 'collection' or 'tool'
             
             // Wait for Firebase to load
             function waitForFirebase() {
@@ -695,11 +781,157 @@
                 });
             }
             
-            // Upload collection photo
-            window.uploadCollectionPhoto = async function() {
+            // Show collection photo choice modal
+            window.showCollectionPhotoChoice = function() {
+                photoType = 'collection';
+                const modal = new bootstrap.Modal(document.getElementById('collectionPhotoChoiceModal'));
+                modal.show();
+            };
+            
+            // Take collection photo from camera
+            window.takeCollectionPhotoFromCamera = function() {
+                photoType = 'collection';
+                const choiceModal = bootstrap.Modal.getInstance(document.getElementById('collectionPhotoChoiceModal'));
+                if (choiceModal) choiceModal.hide();
+                startCameraCapture();
+            };
+            
+            // Select collection photo from gallery
+            window.selectCollectionPhotoFromGallery = function() {
+                const choiceModal = bootstrap.Modal.getInstance(document.getElementById('collectionPhotoChoiceModal'));
+                if (choiceModal) choiceModal.hide();
+                document.getElementById('collectionPhotoInput').click();
+            };
+            
+            // Show tool photo choice modal
+            window.showToolPhotoChoice = function() {
+                photoType = 'tool';
+                const modal = new bootstrap.Modal(document.getElementById('toolPhotoChoiceModal'));
+                modal.show();
+            };
+            
+            // Take tool photo from camera
+            window.takeToolPhotoFromCamera = function() {
+                photoType = 'tool';
+                const choiceModal = bootstrap.Modal.getInstance(document.getElementById('toolPhotoChoiceModal'));
+                if (choiceModal) choiceModal.hide();
+                startCameraCapture();
+            };
+            
+            // Select tool photo from gallery
+            window.selectToolPhotoFromGallery = function() {
+                const choiceModal = bootstrap.Modal.getInstance(document.getElementById('toolPhotoChoiceModal'));
+                if (choiceModal) choiceModal.hide();
+                document.getElementById('toolPhotoInput').click();
+            };
+            
+            // Start camera capture
+            async function startCameraCapture() {
+                try {
+                    const video = document.getElementById('cameraVideo');
+                    const canvas = document.getElementById('cameraCanvas');
+                    const preview = document.getElementById('capturedPhotoPreview');
+                    
+                    preview.style.display = 'none';
+                    capturedPhotoBlob = null;
+                    
+                    const constraints = {
+                        video: {
+                            facingMode: 'environment',
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 }
+                        }
+                    };
+                    
+                    cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+                    video.srcObject = cameraStream;
+                    
+                    const modal = new bootstrap.Modal(document.getElementById('cameraCaptureModal'));
+                    modal.show();
+                    
+                    // Clean up when modal is hidden
+                    document.getElementById('cameraCaptureModal').addEventListener('hidden.bs.modal', function() {
+                        stopCameraCapture();
+                    }, { once: true });
+                    
+                } catch (error) {
+                    console.error('Camera error:', error);
+                    alert('Failed to access camera: ' + error.message);
+                }
+            }
+            
+            // Capture photo from camera
+            window.capturePhoto = function() {
+                const video = document.getElementById('cameraVideo');
+                const canvas = document.getElementById('cameraCanvas');
+                const preview = document.getElementById('capturedPhotoPreview');
+                const img = document.getElementById('capturedPhotoImg');
+                
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0);
+                
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        capturedPhotoBlob = blob;
+                        const url = URL.createObjectURL(blob);
+                        img.src = url;
+                        preview.style.display = 'block';
+                        stopCameraCapture();
+                    }
+                }, 'image/jpeg', 0.9);
+            };
+            
+            // Use captured photo
+            window.useCapturedPhoto = function() {
+                if (!capturedPhotoBlob || !photoType) return;
+                
+                if (photoType === 'collection') {
+                    uploadCollectionPhotoFromBlob(capturedPhotoBlob);
+                } else if (photoType === 'tool') {
+                    uploadToolPhotoFromBlob(capturedPhotoBlob);
+                }
+                
+                const modal = bootstrap.Modal.getInstance(document.getElementById('cameraCaptureModal'));
+                if (modal) modal.hide();
+                
+                capturedPhotoBlob = null;
+                photoType = null;
+            };
+            
+            // Retake photo
+            window.retakePhoto = function() {
+                const preview = document.getElementById('capturedPhotoPreview');
+                preview.style.display = 'none';
+                capturedPhotoBlob = null;
+                startCameraCapture();
+            };
+            
+            // Stop camera capture
+            window.stopCameraCapture = function() {
+                if (cameraStream) {
+                    cameraStream.getTracks().forEach(track => track.stop());
+                    cameraStream = null;
+                }
+                const video = document.getElementById('cameraVideo');
+                if (video) {
+                    video.srcObject = null;
+                }
+            };
+            
+            // Upload collection photo from file input
+            window.uploadCollectionPhotoFromFile = async function() {
                 const fileInput = document.getElementById('collectionPhotoInput');
                 const file = fileInput.files[0];
                 if (!file) return;
+                await uploadCollectionPhotoFromBlob(file);
+                fileInput.value = '';
+            };
+            
+            // Upload collection photo from blob (camera or file)
+            async function uploadCollectionPhotoFromBlob(fileOrBlob) {
+                if (!fileOrBlob) return;
                 
                 try {
                     const doc = await db.collection('collections').doc(currentCollectionDocId).get();
@@ -711,7 +943,7 @@
                     const fileName = `${collectionName}_photo${photoNumber}.jpg`;
                     const photoRef = storage.ref('Collection%20Photo/' + fileName);
                     
-                    const uploadTask = photoRef.put(file);
+                    const uploadTask = photoRef.put(fileOrBlob);
                     
                     uploadTask.on('state_changed',
                         (snapshot) => {
@@ -732,7 +964,6 @@
                                 });
                                 
                                 displayCollectionPhotos(newPhotos);
-                                fileInput.value = '';
                                 alert('Photo uploaded successfully!');
                             } catch (error) {
                                 console.error('Error updating collection:', error);
@@ -944,11 +1175,18 @@
                 });
             }
             
-            // Upload tool photo
-            window.uploadToolPhoto = async function() {
+            // Upload tool photo from file input
+            window.uploadToolPhotoFromFile = async function() {
                 const fileInput = document.getElementById('toolPhotoInput');
                 const file = fileInput.files[0];
                 if (!file) return;
+                await uploadToolPhotoFromBlob(file);
+                fileInput.value = '';
+            };
+            
+            // Upload tool photo from blob (camera or file)
+            async function uploadToolPhotoFromBlob(fileOrBlob) {
+                if (!fileOrBlob) return;
                 
                 const toolId = document.getElementById('editToolModal').dataset.toolId;
                 if (!toolId) return;
@@ -963,7 +1201,7 @@
                     const fileName = `${partNumber}_photo${photoNumber}.jpg`;
                     const photoRef = storage.ref('Tool_Photos/' + fileName);
                     
-                    const uploadTask = photoRef.put(file);
+                    const uploadTask = photoRef.put(fileOrBlob);
                     
                     uploadTask.on('state_changed',
                         (snapshot) => {
@@ -984,7 +1222,6 @@
                                 });
                                 
                                 displayToolPhotos(newPhotos);
-                                fileInput.value = '';
                                 alert('Photo uploaded successfully!');
                             } catch (error) {
                                 console.error('Error updating tool:', error);
