@@ -58,6 +58,49 @@
             border-color: #667eea;
         }
         
+        .collection-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: 2px solid #5568d3;
+            color: white;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transform: perspective(1000px) rotateX(2deg);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .collection-button:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-5px);
+            box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+        
+        .collection-button:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+        }
+        
+        .collection-button i {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .collection-button h5 {
+            margin: 0;
+            font-weight: bold;
+        }
+        
+        .collection-button p {
+            margin: 5px 0 0 0;
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
         .tool-card {
             background: #f8f9fa;
             border: 1px solid #dee2e6;
@@ -138,33 +181,50 @@
             </div>
         </div>
         
-        <!-- Collections List -->
-        <div class="admin-card">
+        <!-- Collections List Screen -->
+        <div id="collectionsListScreen" class="admin-card">
             <h4><i class="fas fa-folder"></i> Collections</h4>
             <div id="collectionsLoading" class="loading-spinner">
                 <div class="spinner-border text-primary" role="status"></div>
                 <p>Loading collections...</p>
             </div>
-            <div id="collectionsList"></div>
+            <div id="collectionsList" class="row g-3"></div>
         </div>
         
-        <!-- Selected Collection Details -->
-        <div id="collectionDetailsSection" class="admin-card" style="display: none;">
-            <h4><i class="fas fa-info-circle"></i> Collection Details</h4>
-            <div id="collectionDetails"></div>
-        </div>
-        
-        <!-- Tools List -->
-        <div id="toolsSection" class="admin-card" style="display: none;">
+        <!-- Collection Details Screen -->
+        <div id="collectionDetailsScreen" class="admin-card" style="display: none;">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4><i class="fas fa-tools"></i> Tools in Collection</h4>
-                <div>
-                    <button class="btn btn-sm btn-danger-3d" id="deleteSelectedToolsBtn" onclick="deleteSelectedTools()" style="display: none;">
-                        <i class="fas fa-trash-alt"></i> Delete Selected
-                    </button>
-                </div>
+                <h4><i class="fas fa-info-circle"></i> Collection Details</h4>
+                <button class="btn btn-secondary btn-3d" onclick="backToCollectionsList()">
+                    <i class="fas fa-arrow-left"></i> Back to Collections
+                </button>
             </div>
-            <div id="toolsList"></div>
+            
+            <!-- Collection Info -->
+            <div id="collectionInfo" class="mb-4"></div>
+            
+            <!-- Collection Actions -->
+            <div class="mb-4">
+                <button class="btn btn-primary btn-3d me-2" onclick="openEditCollectionModal()">
+                    <i class="fas fa-edit"></i> Edit Collection
+                </button>
+                <button class="btn btn-danger-3d" id="deleteCollectionBtn" onclick="deleteCurrentCollection()">
+                    <i class="fas fa-trash-alt"></i> Delete Collection
+                </button>
+            </div>
+            
+            <!-- Tools List -->
+            <div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5><i class="fas fa-tools"></i> Tools in Collection</h5>
+                    <div>
+                        <button class="btn btn-sm btn-danger-3d" id="deleteSelectedToolsBtn" onclick="deleteSelectedTools()" style="display: none;">
+                            <i class="fas fa-trash-alt"></i> Delete Selected
+                        </button>
+                    </div>
+                </div>
+                <div id="toolsList"></div>
+            </div>
         </div>
     </div>
     
@@ -328,26 +388,16 @@
                     
                     snapshot.forEach(doc => {
                         const data = doc.data();
-                        const card = document.createElement('div');
-                        card.className = 'collection-card';
-                        card.innerHTML = `
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <h5><i class="fas fa-folder"></i> ${data.collectionName || 'Unnamed'}</h5>
-                                    <p class="text-muted mb-0">${data.description || 'No description'}</p>
-                                    <small class="text-muted">Owner: ${data.owner || 'N/A'}</small>
-                                </div>
-                                <div>
-                                    <button class="btn btn-sm btn-primary btn-3d me-2" onclick="selectCollection('${doc.id}', '${(data.collectionName || '').replace(/'/g, "\\'")}')">
-                                        <i class="fas fa-edit"></i> Edit
-                                    </button>
-                                    <button class="btn btn-sm btn-danger-3d" onclick="deleteCollection('${doc.id}', '${(data.collectionName || '').replace(/'/g, "\\'")}')">
-                                        <i class="fas fa-trash-alt"></i> Delete
-                                    </button>
-                                </div>
+                        const colDiv = document.createElement('div');
+                        colDiv.className = 'col-md-4 col-sm-6';
+                        colDiv.innerHTML = `
+                            <div class="collection-button" onclick="selectCollection('${doc.id}', '${(data.collectionName || '').replace(/'/g, "\\'")}')">
+                                <i class="fas fa-folder"></i>
+                                <h5>${data.collectionName || 'Unnamed'}</h5>
+                                <p>${data.description || 'No description'}</p>
                             </div>
                         `;
-                        collectionsList.appendChild(card);
+                        collectionsList.appendChild(colDiv);
                     });
                     
                     document.getElementById('collectionsLoading').style.display = 'none';
@@ -358,7 +408,7 @@
                 }
             }
             
-            // Select collection for editing
+            // Select collection for viewing details
             window.selectCollection = async function(docId, collectionName) {
                 currentCollection = collectionName;
                 currentCollectionDocId = docId;
@@ -372,29 +422,56 @@
                     
                     const data = doc.data();
                     
-                    // Show collection details
-                    document.getElementById('collectionDetailsSection').style.display = 'block';
-                    document.getElementById('collectionDetails').innerHTML = `
-                        <div class="mb-3">
-                            <strong>Collection Name:</strong> ${data.collectionName || 'N/A'}<br>
-                            <strong>Description:</strong> ${data.description || 'No description'}<br>
-                            <strong>Owner:</strong> ${data.owner || 'N/A'}
-                        </div>
-                        <div class="mb-3">
-                            <button class="btn btn-primary btn-3d me-2" onclick="openEditCollectionModal()">
-                                <i class="fas fa-edit"></i> Edit Collection
-                            </button>
-                            <button class="btn btn-danger-3d" onclick="deleteCollection('${docId}', '${(collectionName || '').replace(/'/g, "\\'")}')">
-                                <i class="fas fa-trash-alt"></i> Delete Collection
-                            </button>
+                    // Hide collections list, show details screen
+                    document.getElementById('collectionsListScreen').style.display = 'none';
+                    document.getElementById('collectionDetailsScreen').style.display = 'block';
+                    
+                    // Show collection info
+                    document.getElementById('collectionInfo').innerHTML = `
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-folder"></i> ${data.collectionName || 'Unnamed'}</h5>
+                                <p class="card-text"><strong>Description:</strong> ${data.description || 'No description'}</p>
+                                <p class="card-text"><strong>Owner:</strong> ${data.owner || 'N/A'}</p>
+                                ${data.photoUrls && data.photoUrls.length > 0 ? `
+                                    <div class="mt-3">
+                                        <strong>Collection Photos:</strong>
+                                        <div class="mt-2">
+                                            ${data.photoUrls.map((url, index) => `
+                                                <img src="${url}" class="photo-thumbnail" onclick="showFullscreenPhoto('${url}')" style="cursor: pointer;">
+                                            `).join('')}
+                                        </div>
+                                    </div>
+                                ` : '<p class="text-muted">No photos</p>'}
+                            </div>
                         </div>
                     `;
+                    
+                    // Store collection name for delete button
+                    document.getElementById('deleteCollectionBtn').dataset.collectionName = collectionName;
                     
                     // Load tools in this collection
                     await loadToolsInCollection(collectionName);
                 } catch (error) {
                     console.error('Error loading collection:', error);
                     alert('Failed to load collection: ' + error.message);
+                }
+            };
+            
+            // Back to collections list
+            window.backToCollectionsList = function() {
+                document.getElementById('collectionsListScreen').style.display = 'block';
+                document.getElementById('collectionDetailsScreen').style.display = 'none';
+                currentCollection = null;
+                currentCollectionDocId = null;
+                selectedToolIds.clear();
+            };
+            
+            // Delete current collection
+            window.deleteCurrentCollection = function() {
+                const collectionName = document.getElementById('deleteCollectionBtn').dataset.collectionName;
+                if (currentCollectionDocId && collectionName) {
+                    deleteCollection(currentCollectionDocId, collectionName);
                 }
             };
             
@@ -759,9 +836,9 @@
                     
                     currentCollection = null;
                     currentCollectionDocId = null;
-                    document.getElementById('collectionDetailsSection').style.display = 'none';
-                    document.getElementById('toolsSection').style.display = 'none';
                     
+                    // Go back to collections list
+                    backToCollectionsList();
                     loadCollections();
                 } catch (error) {
                     console.error('Error deleting collection:', error);
