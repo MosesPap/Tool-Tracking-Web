@@ -478,18 +478,40 @@
             // Load tools in collection
             async function loadToolsInCollection(collectionName) {
                 try {
-                    document.getElementById('toolsSection').style.display = 'block';
                     const toolsList = document.getElementById('toolsList');
-                    toolsList.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
+                    toolsList.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Loading tools...</p></div>';
                     
+                    console.log('Loading tools for collection:', collectionName);
+                    console.log('Query: tools collection where collectionCode ==', collectionName);
+                    
+                    // Query tools where collectionCode matches the collection name
                     const snapshot = await db.collection('tools')
                         .where('collectionCode', '==', collectionName)
                         .get();
                     
+                    console.log(`Found ${snapshot.size} tools with collectionCode="${collectionName}"`);
+                    
+                    // Debug: Log all tools to see their collectionCode values
+                    if (snapshot.size === 0) {
+                        console.log('No tools found. Checking all tools to see collectionCode values...');
+                        const allTools = await db.collection('tools').limit(10).get();
+                        console.log('Sample tools collectionCode values:');
+                        allTools.forEach(doc => {
+                            const tool = doc.data();
+                            console.log(`Tool ${doc.id}: collectionCode = "${tool.collectionCode}"`);
+                        });
+                    }
+                    
                     toolsList.innerHTML = '';
                     
                     if (snapshot.empty) {
-                        toolsList.innerHTML = '<p class="text-muted">No tools found in this collection.</p>';
+                        toolsList.innerHTML = `
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i> No tools found in this collection.
+                                <br><small>Searching for tools where collectionCode = "${collectionName}"</small>
+                                <br><small class="text-muted">Check browser console for debugging information.</small>
+                            </div>
+                        `;
                         return;
                     }
                     
@@ -507,6 +529,14 @@
                     
                     snapshot.forEach(doc => {
                         const tool = doc.data();
+                        console.log('Tool found:', {
+                            id: doc.id,
+                            toolId: tool.toolId,
+                            toolName: tool.toolName,
+                            collectionCode: tool.collectionCode,
+                            status: tool.status
+                        });
+                        
                         const toolCard = document.createElement('div');
                         toolCard.className = 'tool-card';
                         toolCard.innerHTML = `
@@ -515,7 +545,7 @@
                                     <input class="form-check-input tool-checkbox" type="checkbox" value="${doc.id}" onchange="updateSelectedTools()">
                                     <label class="form-check-label">
                                         <strong>${tool.toolId || doc.id}</strong> - ${tool.toolName || 'Unnamed'} (${tool.partNumber || 'N/A'})
-                                        <br><small class="text-muted">Status: ${tool.status || 'N/A'}</small>
+                                        <br><small class="text-muted">Status: ${tool.status || 'N/A'} | Collection Code: ${tool.collectionCode || 'N/A'}</small>
                                     </label>
                                 </div>
                                 <div>
@@ -530,9 +560,17 @@
                         `;
                         toolsList.appendChild(toolCard);
                     });
+                    
+                    console.log(`Successfully displayed ${snapshot.size} tools in the list`);
                 } catch (error) {
                     console.error('Error loading tools:', error);
-                    alert('Failed to load tools: ' + error.message);
+                    const toolsList = document.getElementById('toolsList');
+                    toolsList.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle"></i> Error loading tools: ${error.message}
+                            <br><small>Make sure you have a Firestore index for collectionCode field if needed.</small>
+                        </div>
+                    `;
                 }
             }
             
