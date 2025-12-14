@@ -288,7 +288,12 @@
         
         <!-- Collections List Screen -->
         <div id="collectionsListScreen" class="admin-card">
-            <h4><i class="fas fa-folder"></i> Collections</h4>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4><i class="fas fa-folder"></i> Collections</h4>
+                <button class="btn btn-primary btn-3d" onclick="showAddCollectionModal()">
+                    <i class="fas fa-plus"></i> Add Collection
+                </button>
+            </div>
             <div id="collectionsLoading" class="loading-spinner">
                 <div class="spinner-border text-primary" role="status"></div>
                 <p>Loading collections...</p>
@@ -325,12 +330,42 @@
                         <i class="fas fa-tools" style="color: #667eea; margin-right: 10px;"></i> Tools in Collection
                     </h5>
                     <div>
+                        <button class="btn btn-sm btn-primary btn-3d me-2" onclick="showAddToolModal()">
+                            <i class="fas fa-plus"></i> Add Tool
+                        </button>
                         <button class="btn btn-sm btn-danger-3d" id="deleteSelectedToolsBtn" onclick="deleteSelectedTools()" style="display: none;">
                             <i class="fas fa-trash-alt"></i> Delete Selected
                         </button>
                     </div>
                 </div>
                 <div id="toolsList"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add Collection Modal -->
+    <div class="modal fade" id="addCollectionModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header" style="background: #667eea; color: white;">
+                    <h5 class="modal-title">Add New Collection</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Collection Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="addCollectionName" placeholder="Enter collection name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="addCollectionDescription" rows="3" placeholder="Enter collection description"></textarea>
+                    </div>
+                    <div id="addCollectionError" class="text-danger mb-3" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-3d" onclick="saveNewCollection()">Create Collection</button>
+                </div>
             </div>
         </div>
     </div>
@@ -536,6 +571,49 @@
                     <button type="button" class="btn btn-warning" id="confirmRestoreToolsBtn" onclick="restoreSelectedTools()" disabled style="display: none;">
                         <i class="fas fa-undo"></i> Restore Selected Tools
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add Tool Modal -->
+    <div class="modal fade" id="addToolModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header" style="background: #667eea; color: white;">
+                    <h5 class="modal-title">Add New Tool</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tool ID <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="addToolId" placeholder="Enter tool ID" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Part Number</label>
+                            <input type="text" class="form-control" id="addPartNumber" placeholder="Enter part number">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tool Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="addToolName" placeholder="Enter tool name" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Status</label>
+                            <select class="form-select" id="addToolStatus">
+                                <option value="IN" selected>IN</option>
+                                <option value="OUT">OUT</option>
+                                <option value="BROKEN">BROKEN</option>
+                                <option value="LOST">LOST</option>
+                                <option value="CALIBRATION">CALIBRATION</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="addToolError" class="text-danger mb-3" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-3d" onclick="saveNewTool()">Create Tool</button>
                 </div>
             </div>
         </div>
@@ -765,6 +843,153 @@
             }
             
             // Load all collections
+            // Show add collection modal
+            window.showAddCollectionModal = function() {
+                const modal = new bootstrap.Modal(document.getElementById('addCollectionModal'));
+                document.getElementById('addCollectionName').value = '';
+                document.getElementById('addCollectionDescription').value = '';
+                document.getElementById('addCollectionError').style.display = 'none';
+                modal.show();
+            };
+            
+            // Save new collection
+            window.saveNewCollection = async function() {
+                const auth = window.auth || firebase.auth();
+                const user = auth.currentUser;
+                const collectionName = document.getElementById('addCollectionName').value.trim();
+                const description = document.getElementById('addCollectionDescription').value.trim();
+                const errorDiv = document.getElementById('addCollectionError');
+                
+                if (!collectionName) {
+                    errorDiv.textContent = 'Collection name is required.';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+                
+                try {
+                    errorDiv.style.display = 'none';
+                    
+                    // Check if collection with this name already exists
+                    const existingCollections = await db.collection('collections')
+                        .where('collectionName', '==', collectionName)
+                        .get();
+                    
+                    if (!existingCollections.empty) {
+                        errorDiv.textContent = 'A collection with this name already exists.';
+                        errorDiv.style.display = 'block';
+                        return;
+                    }
+                    
+                    // Create new collection
+                    const newCollection = {
+                        collectionName: collectionName,
+                        description: description,
+                        photoUrls: [],
+                        owner: user ? (localStorage.getItem('fullName') || user.email || 'Admin') : 'Admin',
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+                    
+                    await db.collection('collections').add(newCollection);
+                    
+                    // Close modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('addCollectionModal'));
+                    if (modal) modal.hide();
+                    
+                    alert(`✅ Collection "${collectionName}" created successfully!`);
+                    
+                    // Refresh collections list
+                    loadCollections();
+                } catch (error) {
+                    console.error('Error creating collection:', error);
+                    errorDiv.textContent = 'Failed to create collection: ' + error.message;
+                    errorDiv.style.display = 'block';
+                }
+            };
+            
+            // Show add tool modal
+            window.showAddToolModal = function() {
+                if (!currentCollection) {
+                    alert('Please select a collection first.');
+                    return;
+                }
+                
+                const modal = new bootstrap.Modal(document.getElementById('addToolModal'));
+                document.getElementById('addToolId').value = '';
+                document.getElementById('addPartNumber').value = '';
+                document.getElementById('addToolName').value = '';
+                document.getElementById('addToolStatus').value = 'IN';
+                document.getElementById('addToolError').style.display = 'none';
+                modal.show();
+            };
+            
+            // Save new tool
+            window.saveNewTool = async function() {
+                if (!currentCollection) {
+                    alert('Please select a collection first.');
+                    return;
+                }
+                
+                const toolId = document.getElementById('addToolId').value.trim();
+                const partNumber = document.getElementById('addPartNumber').value.trim();
+                const toolName = document.getElementById('addToolName').value.trim();
+                const status = document.getElementById('addToolStatus').value;
+                const errorDiv = document.getElementById('addToolError');
+                
+                if (!toolId) {
+                    errorDiv.textContent = 'Tool ID is required.';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+                
+                if (!toolName) {
+                    errorDiv.textContent = 'Tool name is required.';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+                
+                try {
+                    errorDiv.style.display = 'none';
+                    
+                    // Check if tool with this ID already exists
+                    const existingTool = await db.collection('tools').doc(toolId).get();
+                    
+                    if (existingTool.exists) {
+                        errorDiv.textContent = 'A tool with this ID already exists.';
+                        errorDiv.style.display = 'block';
+                        return;
+                    }
+                    
+                    // Create new tool
+                    const auth = window.auth || firebase.auth();
+                    const user = auth.currentUser;
+                    const newTool = {
+                        toolId: toolId,
+                        partNumber: partNumber || '',
+                        toolName: toolName,
+                        status: status,
+                        collectionCode: currentCollection,
+                        photoUrls: [],
+                        owner: user ? (localStorage.getItem('fullName') || user.email || 'Admin') : 'Admin',
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+                    
+                    await db.collection('tools').doc(toolId).set(newTool);
+                    
+                    // Close modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('addToolModal'));
+                    if (modal) modal.hide();
+                    
+                    alert(`✅ Tool "${toolName}" (${toolId}) created successfully!`);
+                    
+                    // Refresh tools list
+                    await loadToolsInCollection(currentCollection);
+                } catch (error) {
+                    console.error('Error creating tool:', error);
+                    errorDiv.textContent = 'Failed to create tool: ' + error.message;
+                    errorDiv.style.display = 'block';
+                }
+            };
+            
             async function loadCollections() {
                 try {
                     document.getElementById('collectionsLoading').style.display = 'block';
