@@ -2384,71 +2384,67 @@
                 
                 if (authVerified === 'true' && storedFullName) {
                     // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
-                    console.log('[ADMIN] ✓ Auth verified flag found - checking admin status immediately');
+                    console.log('[ADMIN] ✓ Auth verified flag found - waiting for Firebase session restore');
                     
-                    // Wait for user to be available (Firebase may need time to restore session)
-                    let user = auth.currentUser;
-                    if (!user) {
-                        console.log('[ADMIN] auth.currentUser is null, waiting for user...');
-                        // Wait up to 1 second for Firebase to restore the session (reduced from 2 seconds)
-                        let waitCount = 0;
-                        while (!user && waitCount < 10) {
-                            await new Promise(resolve => setTimeout(resolve, 100));
-                            user = auth.currentUser;
-                            waitCount++;
-                        }
-                    }
-                    
-                    if (user) {
-                        console.log('[ADMIN] User found, checking admin status...');
-                        const { isAdmin, name } = await checkAdminStatus(user);
-                        console.log('[ADMIN] Admin status check result:', { isAdmin, name, uid: user.uid });
-                        if (isAdmin) {
-                            console.log('[ADMIN] ✓ Admin confirmed, loading dashboard');
-                            loadAdminDashboard(name);
+                    // Use onAuthStateChanged to wait for Firebase to restore the session
+                    // This is more reliable than polling auth.currentUser
+                    return new Promise((resolve) => {
+                        let resolved = false;
+                        let timeoutId = null;
+                        
+                        const processUser = async (user) => {
+                            if (resolved) return;
                             
-                            // Verify auth in background (non-blocking)
-                            setTimeout(() => {
-                                const currentUser = auth.currentUser;
-                                if (currentUser) {
-                                    console.log('[ADMIN] ✓ Auth confirmed via currentUser:', currentUser.email);
+                            if (user) {
+                                console.log('[ADMIN] ✓ User session restored:', user.email);
+                                resolved = true;
+                                if (timeoutId) clearTimeout(timeoutId);
+                                unsubscribe();
+                                
+                                const { isAdmin, name } = await checkAdminStatus(user);
+                                console.log('[ADMIN] Admin status check result:', { isAdmin, name, uid: user.uid });
+                                if (isAdmin) {
+                                    console.log('[ADMIN] ✓ Admin confirmed, loading dashboard');
+                                    loadAdminDashboard(name);
                                     localStorage.setItem('authVerified', 'true');
+                                    resolve();
                                 } else {
-                                    // Set up onAuthStateChanged listener
-                                    const unsubscribe = auth.onAuthStateChanged(async function(user) {
-                                        if (user) {
-                                            const { isAdmin } = await checkAdminStatus(user);
-                                            if (isAdmin) {
-                                                console.log('[ADMIN] ✓ Auth confirmed via onAuthStateChanged');
-                                                localStorage.setItem('authVerified', 'true');
+                                    console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
+                                    localStorage.removeItem('authVerified');
+                                    window.location.href = 'main-menu.html';
+                                    resolve();
+                                }
+                            }
+                        };
+                        
+                        const unsubscribe = auth.onAuthStateChanged(async function(user) {
+                            if (user) {
+                                // User found - process immediately
+                                await processUser(user);
+                            } else {
+                                // No user yet - set a timeout as fallback
+                                if (!timeoutId && !resolved) {
+                                    console.log('[ADMIN] No user yet, waiting for session restore...');
+                                    timeoutId = setTimeout(() => {
+                                        if (!resolved) {
+                                            const currentUser = auth.currentUser;
+                                            if (currentUser) {
+                                                console.log('[ADMIN] ✓ User found after timeout:', currentUser.email);
+                                                processUser(currentUser);
                                             } else {
-                                                console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
+                                                console.log('[ADMIN] ✗ No user found after waiting, redirecting to main-menu.html');
+                                                resolved = true;
+                                                unsubscribe();
                                                 localStorage.removeItem('authVerified');
                                                 window.location.href = 'main-menu.html';
+                                                resolve();
                                             }
-                                        } else {
-                                            console.log('[ADMIN] ✗ No user found, redirecting to main-menu.html');
-                                            localStorage.removeItem('authVerified');
-                                            window.location.href = 'main-menu.html';
                                         }
-                                        unsubscribe();
-                                    });
+                                    }, 3000);
                                 }
-                            }, 300);
-                            
-                            return; // Exit - page initialized
-                        } else {
-                            console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
-                            localStorage.removeItem('authVerified');
-                            window.location.href = 'main-menu.html';
-                            return;
-                        }
-                    } else {
-                        console.log('[ADMIN] ✗ No user found after waiting, redirecting to main-menu.html');
-                        localStorage.removeItem('authVerified');
-                        window.location.href = 'main-menu.html';
-                        return;
-                    }
+                            }
+                        });
+                    });
                 }
                 
                 // No stored flag - check current user immediately, then wait for Firebase auth if needed
