@@ -279,7 +279,7 @@
                     <button class="btn btn-warning btn-3d me-2" onclick="showRestoreModal()">
                         <i class="fas fa-undo"></i> Restore Deleted Items
                     </button>
-                    <button class="btn btn-secondary btn-3d" onclick="window.location.href='admin.html'">
+                    <button class="btn btn-secondary btn-3d" onclick="goBackToAdmin()">
                         <i class="fas fa-arrow-left"></i> Back to Admin
                     </button>
                 </div>
@@ -822,6 +822,30 @@
                 }
                 initialize();
             }
+            
+            // Navigate back to admin page using browser history for faster navigation
+            window.goBackToAdmin = function() {
+                // Check if we have history and can go back
+                // Use browser back button - this preserves state and is faster than full reload
+                if (window.history.length > 1) {
+                    try {
+                        window.history.back();
+                        // If history.back() doesn't work (e.g., no previous page), fall back after a short delay
+                        setTimeout(() => {
+                            // If we're still on this page, navigate directly
+                            if (window.location.pathname.includes('add-edit-collections-tools.html')) {
+                                window.location.href = 'admin.html';
+                            }
+                        }, 100);
+                    } catch (e) {
+                        // Fallback to direct navigation
+                        window.location.href = 'admin.html';
+                    }
+                } else {
+                    // No history, navigate directly
+                    window.location.href = 'admin.html';
+                }
+            };
             
             function initialize() {
                 // Check admin status

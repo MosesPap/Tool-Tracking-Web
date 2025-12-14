@@ -2343,12 +2343,21 @@
                     const adminNameElement = document.getElementById('adminName');
                     if (adminNameElement) adminNameElement.textContent = adminName;
                     
+                    // Check if we're returning from another admin page (fast reload)
+                    const lastLoadTime = sessionStorage.getItem('adminLastLoadTime');
+                    const now = Date.now();
+                    const isFastReload = lastLoadTime && (now - parseInt(lastLoadTime)) < 5000; // 5 seconds
+                    
                     // Load all dashboard data (non-blocking - don't await)
+                    // If fast reload, data might still be fresh, but reload anyway to ensure consistency
                     loadStatistics();
                     loadSettings();
                     loadUsers();
                     loadTools();
                     loadAnalytics();
+                    
+                    // Store load time for future fast reload detection
+                    sessionStorage.setItem('adminLastLoadTime', now.toString());
                 }
                 
                 // Make functions available globally
