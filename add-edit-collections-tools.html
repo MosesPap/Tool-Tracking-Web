@@ -550,7 +550,7 @@
                                 <p class="card-text"><strong>Owner:</strong> ${data.owner || 'N/A'}</p>
                                 ${data.photoUrls && data.photoUrls.length > 0 ? `
                                     <div class="mt-3">
-                                        <strong>Collection Photos:</strong>
+                                        <strong>Collection Photos (${data.photoUrls.length}):</strong>
                                         <div class="mt-2" id="collectionPhotosThumbnails">
                                             ${data.photoUrls.map((url, index) => `
                                                 <img src="${url}" class="photo-thumbnail collection-photo-thumbnail" data-photo-index="${index}" style="cursor: pointer; margin-right: 8px; margin-bottom: 8px;">
@@ -660,6 +660,7 @@
                             status: tool.status
                         });
                         
+                        const photoCount = (tool.photoUrls && tool.photoUrls.length) || 0;
                         const toolCard = document.createElement('div');
                         toolCard.className = 'tool-card';
                         toolCard.innerHTML = `
@@ -668,7 +669,7 @@
                                     <input class="form-check-input tool-checkbox" type="checkbox" value="${doc.id}" onchange="updateSelectedTools()">
                                     <label class="form-check-label">
                                         <strong>${tool.toolId || doc.id}</strong> - ${tool.toolName || 'Unnamed'} (${tool.partNumber || 'N/A'})
-                                        <br><small class="text-muted">Status: ${tool.status || 'N/A'} | Collection Code: ${tool.collectionCode || 'N/A'}</small>
+                                        <br><small class="text-muted">Status: ${tool.status || 'N/A'} | Collection Code: ${tool.collectionCode || 'N/A'} | Photos (${photoCount})</small>
                                     </label>
                                 </div>
                                 <div>
@@ -933,7 +934,7 @@
                                         <p class="card-text"><strong>Owner:</strong> ${updatedData.owner || 'N/A'}</p>
                                         ${updatedPhotoUrls.length > 0 ? `
                                             <div class="mt-3">
-                                                <strong>Collection Photos:</strong>
+                                                <strong>Collection Photos (${updatedPhotoUrls.length}):</strong>
                                                 <div class="mt-2" id="collectionPhotosThumbnails">
                                                     ${updatedPhotoUrls.map((url, index) => `
                                                         <img src="${url}" class="photo-thumbnail collection-photo-thumbnail" data-photo-index="${index}" style="cursor: pointer; margin-right: 8px; margin-bottom: 8px;">
