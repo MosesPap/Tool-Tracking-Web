@@ -551,9 +551,9 @@
                                 ${data.photoUrls && data.photoUrls.length > 0 ? `
                                     <div class="mt-3">
                                         <strong>Collection Photos:</strong>
-                                        <div class="mt-2">
+                                        <div class="mt-2" id="collectionPhotosThumbnails">
                                             ${data.photoUrls.map((url, index) => `
-                                                <img src="${url}" class="photo-thumbnail" onclick="showCollectionPhotoGalleryFromThumbnail('${url}', ${JSON.stringify(data.photoUrls).replace(/'/g, "\\'")})" style="cursor: pointer;">
+                                                <img src="${url}" class="photo-thumbnail collection-photo-thumbnail" data-photo-index="${index}" style="cursor: pointer; margin-right: 8px; margin-bottom: 8px;">
                                             `).join('')}
                                         </div>
                                     </div>
@@ -561,6 +561,14 @@
                             </div>
                         </div>
                     `;
+                    
+                    // Add click handlers to collection photo thumbnails
+                    const photoUrls = data.photoUrls || [];
+                    document.querySelectorAll('.collection-photo-thumbnail').forEach((img, index) => {
+                        img.onclick = function() {
+                            showCollectionPhotoGalleryFromThumbnail(photoUrls[index], photoUrls);
+                        };
+                    });
                     
                     // Store collection name for delete button
                     document.getElementById('deleteCollectionBtn').dataset.collectionName = collectionName;
@@ -916,18 +924,19 @@
                         const updatedDoc = await db.collection('collections').doc(collectionDocId).get();
                         if (updatedDoc.exists) {
                             const updatedData = updatedDoc.data();
+                            const updatedPhotoUrls = updatedData.photoUrls || [];
                             document.getElementById('collectionInfo').innerHTML = `
                                 <div class="card">
                                     <div class="card-body">
                                         <h5 class="card-title"><i class="fas fa-folder"></i> ${updatedData.collectionName || 'Unnamed'}</h5>
                                         <p class="card-text"><strong>Description:</strong> ${updatedData.description || 'No description'}</p>
                                         <p class="card-text"><strong>Owner:</strong> ${updatedData.owner || 'N/A'}</p>
-                                        ${updatedData.photoUrls && updatedData.photoUrls.length > 0 ? `
+                                        ${updatedPhotoUrls.length > 0 ? `
                                             <div class="mt-3">
                                                 <strong>Collection Photos:</strong>
-                                                <div class="mt-2">
-                                                    ${updatedData.photoUrls.map((url, index) => `
-                                                        <img src="${url}" class="photo-thumbnail" onclick="showCollectionPhotoGalleryFromThumbnail('${url}', ${JSON.stringify(updatedData.photoUrls).replace(/'/g, "\\'")})" style="cursor: pointer;">
+                                                <div class="mt-2" id="collectionPhotosThumbnails">
+                                                    ${updatedPhotoUrls.map((url, index) => `
+                                                        <img src="${url}" class="photo-thumbnail collection-photo-thumbnail" data-photo-index="${index}" style="cursor: pointer; margin-right: 8px; margin-bottom: 8px;">
                                                     `).join('')}
                                                 </div>
                                             </div>
@@ -935,6 +944,13 @@
                                     </div>
                                 </div>
                             `;
+                            
+                            // Add click handlers to collection photo thumbnails
+                            document.querySelectorAll('.collection-photo-thumbnail').forEach((img, index) => {
+                                img.onclick = function() {
+                                    showCollectionPhotoGalleryFromThumbnail(updatedPhotoUrls[index], updatedPhotoUrls);
+                                };
+                            });
                         }
                     }
                     
