@@ -2339,15 +2339,12 @@
                     const adminNameElement = document.getElementById('adminName');
                     if (adminNameElement) adminNameElement.textContent = adminName;
                     
-                    // Show dashboard immediately, then load data in background (non-blocking)
-                    // This prevents delays when navigating to admin page
-                    setTimeout(() => {
-                        loadStatistics();
-                        loadSettings();
-                        loadUsers();
-                        loadTools();
-                        loadAnalytics();
-                    }, 0);
+                    // Load all dashboard data (non-blocking - don't await)
+                    loadStatistics();
+                    loadSettings();
+                    loadUsers();
+                    loadTools();
+                    loadAnalytics();
                 }
                 
                 // Make functions available globally
@@ -2400,10 +2397,10 @@
                     
                     if (user) {
                         console.log('[ADMIN] User found, checking admin status...');
-                const { isAdmin, name } = await checkAdminStatus(user);
-                if (isAdmin) {
+                        const { isAdmin, name } = await checkAdminStatus(user);
+                        if (isAdmin) {
                             console.log('[ADMIN] ✓ Admin confirmed, loading dashboard');
-                    loadAdminDashboard(name);
+                            loadAdminDashboard(name);
                             
                             // Verify auth in background (non-blocking)
                             setTimeout(() => {
@@ -2411,7 +2408,7 @@
                                 if (currentUser) {
                                     console.log('[ADMIN] ✓ Auth confirmed via currentUser:', currentUser.email);
                                     localStorage.setItem('authVerified', 'true');
-                } else {
+                                } else {
                                     // Set up onAuthStateChanged listener
                                     const unsubscribe = auth.onAuthStateChanged(async function(user) {
                                         if (user) {
@@ -2424,14 +2421,14 @@
                                                 localStorage.removeItem('authVerified');
                                                 window.location.href = 'main-menu.html';
                                             }
-                } else {
+                                        } else {
                                             console.log('[ADMIN] ✗ No user found, redirecting to main-menu.html');
                                             localStorage.removeItem('authVerified');
                                             window.location.href = 'main-menu.html';
                                         }
                                         unsubscribe();
                                     });
-            }
+                                }
                             }, 300);
                             
                             return; // Exit - page initialized
