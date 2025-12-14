@@ -417,6 +417,64 @@
         </div>
     </div>
     
+    <!-- Delete Tool Modal -->
+    <div class="modal fade" id="deleteToolModal" tabindex="-1" aria-labelledby="deleteToolModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteToolModalLabel">Delete Tool</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="deleteToolWarning"><strong>Warning:</strong> This will delete the tool "<span id="deleteToolName"></span>".</p>
+                    <div class="alert alert-warning" id="deleteToolAlert">
+                        <strong>Soft Delete:</strong> Tool will be moved to a deleted state and kept for 7 days before permanent deletion.
+                    </div>
+                    <div class="mb-3" id="deleteToolOptions">
+                        <label class="form-check-label">
+                            <input type="checkbox" class="form-check-input" id="permanentDeleteToolCheckbox">
+                            <strong>Delete permanently immediately</strong> (cannot be undone)
+                        </label>
+                    </div>
+                    <div id="deleteToolError" class="text-danger mb-3" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteToolBtn" onclick="confirmDeleteTool()">Delete Tool</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Delete Selected Tools Modal -->
+    <div class="modal fade" id="deleteSelectedToolsModal" tabindex="-1" aria-labelledby="deleteSelectedToolsModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteSelectedToolsModalLabel">Delete Selected Tools</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="deleteSelectedToolsWarning"><strong>Warning:</strong> This will delete <span id="deleteSelectedToolsCount"></span> selected tool(s).</p>
+                    <div class="alert alert-warning" id="deleteSelectedToolsAlert">
+                        <strong>Soft Delete:</strong> Tools will be moved to a deleted state and kept for 7 days before permanent deletion.
+                    </div>
+                    <div class="mb-3" id="deleteSelectedToolsOptions">
+                        <label class="form-check-label">
+                            <input type="checkbox" class="form-check-input" id="permanentDeleteSelectedToolsCheckbox">
+                            <strong>Delete permanently immediately</strong> (cannot be undone)
+                        </label>
+                    </div>
+                    <div id="deleteSelectedToolsError" class="text-danger mb-3" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteSelectedToolsBtn" onclick="confirmDeleteSelectedTools()">Delete Selected Tools</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Restore Deleted Items Modal -->
     <div class="modal fade" id="restoreModal" tabindex="-1" aria-labelledby="restoreModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
@@ -1004,7 +1062,7 @@
                                 <button class="btn btn-sm btn-primary btn-3d" onclick="event.stopPropagation(); editTool('${tool.id}')">
                                     <i class="fas fa-edit"></i> Edit
                                 </button>
-                                <button class="btn btn-sm btn-danger-3d" onclick="event.stopPropagation(); deleteTool('${tool.id}', '${(tool.toolId || tool.id).replace(/'/g, "\\'")}')">
+                                <button class="btn btn-sm btn-danger-3d" onclick="event.stopPropagation(); deleteTool('${tool.id}', '${(tool.toolName || tool.toolId || tool.id).replace(/'/g, "\\'")}')">
                                     <i class="fas fa-trash-alt"></i> Delete
                                 </button>
                             </div>
@@ -1223,17 +1281,51 @@
                     return;
                 }
                 
+                showDeleteSelectedToolsModal();
+            };
+            
+            // Show delete selected tools modal
+            window.showDeleteSelectedToolsModal = function() {
+                const modal = new bootstrap.Modal(document.getElementById('deleteSelectedToolsModal'));
+                const errorDiv = document.getElementById('deleteSelectedToolsError');
+                const confirmBtn = document.getElementById('confirmDeleteSelectedToolsBtn');
+                
+                // Reset form
+                document.getElementById('permanentDeleteSelectedToolsCheckbox').checked = false;
+                errorDiv.style.display = 'none';
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = 'Delete Selected Tools';
+                
+                // Set tool count
+                document.getElementById('deleteSelectedToolsCount').textContent = selectedToolIds.size;
+                
+                modal.show();
+            };
+            
+            // Confirm delete selected tools
+            window.confirmDeleteSelectedTools = async function() {
                 const auth = window.auth || firebase.auth();
                 const user = auth.currentUser;
                 const deletedBy = user ? (localStorage.getItem('fullName') || user.email || 'Admin') : 'Admin';
                 
-                if (!confirm(`⚠️ Are you sure you want to delete ${selectedToolIds.size} tool(s)?\n\nTools will be kept for 7 days and can be restored.`)) {
-                    return;
-                }
-                
-                const permanentDelete = confirm(`⚠️ Do you want to permanently delete immediately?\n\nClick OK for permanent deletion (cannot be undone)\nClick Cancel for soft delete (can be restored within 7 days)`);
+                const permanentDelete = document.getElementById('permanentDeleteSelectedToolsCheckbox').checked;
+                const errorDiv = document.getElementById('deleteSelectedToolsError');
+                const confirmBtn = document.getElementById('confirmDeleteSelectedToolsBtn');
                 
                 try {
+                    errorDiv.style.display = 'none';
+                    confirmBtn.disabled = true;
+                    confirmBtn.textContent = 'Deleting...';
+                    
+                    // Close the modal
+                    const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteSelectedToolsModal'));
+                    if (deleteModal) deleteModal.hide();
+                    
+                    // Show loading modal
+                    const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                    loadingModal.show();
+                    document.getElementById('photoUploadProgress').textContent = 'Deleting tools...';
+                    
                     const deleteDate = new Date();
                     const permanentDeleteDate = new Date(deleteDate);
                     permanentDeleteDate.setDate(permanentDeleteDate.getDate() + 7);
@@ -1284,6 +1376,8 @@
                     // Commit the batch
                     await batch.commit();
                     
+                    loadingModal.hide();
+                    
                     if (permanentDelete) {
                         alert(`✅ ${deletedCount} tool(s) permanently deleted!`);
                     } else {
@@ -1296,7 +1390,14 @@
                     }
                 } catch (error) {
                     console.error('Error deleting tools:', error);
-                    alert('Failed to delete tools: ' + error.message);
+                    errorDiv.textContent = 'Failed to delete tools: ' + error.message;
+                    errorDiv.style.display = 'block';
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Delete Selected Tools';
+                    
+                    // Hide loading modal if it's open
+                    const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
+                    if (loadingModal) loadingModal.hide();
                 }
             };
             
@@ -2663,17 +2764,63 @@
             
             // Delete tool
             window.deleteTool = async function(toolId, toolName) {
+                showDeleteToolModal(toolId, toolName);
+            };
+            
+            // Show delete tool modal
+            window.showDeleteToolModal = function(toolId, toolName) {
+                const modal = new bootstrap.Modal(document.getElementById('deleteToolModal'));
+                const errorDiv = document.getElementById('deleteToolError');
+                const confirmBtn = document.getElementById('confirmDeleteToolBtn');
+                
+                // Reset form
+                document.getElementById('permanentDeleteToolCheckbox').checked = false;
+                errorDiv.style.display = 'none';
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = 'Delete Tool';
+                
+                // Set tool name
+                document.getElementById('deleteToolName').textContent = toolName;
+                
+                // Store toolId and toolName for the delete function
+                confirmBtn.dataset.toolId = toolId;
+                confirmBtn.dataset.toolName = toolName;
+                
+                modal.show();
+            };
+            
+            // Confirm delete tool
+            window.confirmDeleteTool = async function() {
+                const confirmBtn = document.getElementById('confirmDeleteToolBtn');
+                const toolId = confirmBtn.dataset.toolId;
+                const toolName = confirmBtn.dataset.toolName;
+                
+                if (!toolId || !toolName) {
+                    alert('Tool information missing.');
+                    return;
+                }
+                
                 const auth = window.auth || firebase.auth();
                 const user = auth.currentUser;
                 const deletedBy = user ? (localStorage.getItem('fullName') || user.email || 'Admin') : 'Admin';
                 
-                if (!confirm(`⚠️ Are you sure you want to delete tool "${toolName}"?\n\nTool will be kept for 7 days and can be restored.`)) {
-                    return;
-                }
-                
-                const permanentDelete = confirm(`⚠️ Do you want to permanently delete immediately?\n\nClick OK for permanent deletion (cannot be undone)\nClick Cancel for soft delete (can be restored within 7 days)`);
+                const permanentDelete = document.getElementById('permanentDeleteToolCheckbox').checked;
+                const errorDiv = document.getElementById('deleteToolError');
                 
                 try {
+                    errorDiv.style.display = 'none';
+                    confirmBtn.disabled = true;
+                    confirmBtn.textContent = 'Deleting...';
+                    
+                    // Close the modal
+                    const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteToolModal'));
+                    if (deleteModal) deleteModal.hide();
+                    
+                    // Show loading modal
+                    const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                    loadingModal.show();
+                    document.getElementById('photoUploadProgress').textContent = 'Deleting tool...';
+                    
                     const doc = await db.collection('tools').doc(toolId).get();
                     if (!doc.exists) {
                         alert('Tool not found');
