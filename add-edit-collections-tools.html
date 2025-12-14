@@ -133,6 +133,28 @@
         .mytools-tool-bg2 {
             background: linear-gradient(135deg, #fff7e6 0%, #ffe8cc 100%);
         }
+        
+        /* OUT tool backgrounds - red */
+        .mytools-tool-out-bg1 {
+            background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+            border-color: #d32f2f;
+        }
+        
+        .mytools-tool-out-bg2 {
+            background: linear-gradient(135deg, #ffcdd2 0%, #ef9a9a 100%);
+            border-color: #c62828;
+        }
+        
+        /* IN tool backgrounds - green */
+        .mytools-tool-in-bg1 {
+            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+            border-color: #388E3C;
+        }
+        
+        .mytools-tool-in-bg2 {
+            background: linear-gradient(135deg, #c8e6c9 0%, #a5d6a7 100%);
+            border-color: #2e7d32;
+        }
 
         .mytools-tool-name {
             font-weight: bold;
@@ -338,6 +360,24 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary btn-3d" onclick="saveCollectionChanges()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tool Checkout Info Modal (same as my-tools.html) -->
+    <div class="modal fade" id="checkoutInfoModal" tabindex="-1" aria-labelledby="checkoutInfoModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="checkoutInfoModalTitle">Tool Checkout Information</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="checkoutInfoModalBody">
+                    <!-- Checkout info will be populated here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>
@@ -729,33 +769,78 @@
                         </div>
                     `;
                     
-                    let toolIndex = 0;
+                    // Sort tools: OUT first, then others
+                    const toolsArray = [];
                     snapshot.forEach(doc => {
                         const tool = doc.data();
-                        console.log('Tool found:', {
+                        toolsArray.push({
                             id: doc.id,
+                            ...tool
+                        });
+                    });
+                    
+                    // Sort: OUT tools first, then IN, then others
+                    toolsArray.sort((a, b) => {
+                        const statusA = (a.status || '').toUpperCase();
+                        const statusB = (b.status || '').toUpperCase();
+                        if (statusA === 'OUT' && statusB !== 'OUT') return -1;
+                        if (statusA !== 'OUT' && statusB === 'OUT') return 1;
+                        if (statusA === 'IN' && statusB !== 'IN' && statusB !== 'OUT') return -1;
+                        if (statusA !== 'IN' && statusB === 'IN' && statusA !== 'OUT') return 1;
+                        return 0;
+                    });
+                    
+                    let outIndex = 0;
+                    let inIndex = 0;
+                    let otherIndex = 0;
+                    let displayNumber = 0;
+                    
+                    toolsArray.forEach(tool => {
+                        console.log('Tool found:', {
+                            id: tool.id,
                             toolId: tool.toolId,
                             toolName: tool.toolName,
                             collectionCode: tool.collectionCode,
                             status: tool.status
                         });
                         
+                        displayNumber++;
                         const photoCount = (tool.photoUrls && tool.photoUrls.length) || 0;
-                        const bgClass = toolIndex % 2 === 0 ? 'mytools-tool-bg1' : 'mytools-tool-bg2';
                         const status = (tool.status || '').toUpperCase();
                         const statusClass = getStatusClassForTool(status);
                         
+                        // Determine background class based on status
+                        let bgClass;
+                        if (status === 'OUT') {
+                            bgClass = outIndex % 2 === 0 ? 'mytools-tool-out-bg1' : 'mytools-tool-out-bg2';
+                            outIndex++;
+                        } else if (status === 'IN') {
+                            bgClass = inIndex % 2 === 0 ? 'mytools-tool-in-bg1' : 'mytools-tool-in-bg2';
+                            inIndex++;
+                        } else {
+                            bgClass = otherIndex % 2 === 0 ? 'mytools-tool-bg1' : 'mytools-tool-bg2';
+                            otherIndex++;
+                        }
+                        
                         const toolCard = document.createElement('div');
                         toolCard.className = `mytools-tool-item ${bgClass}`;
+                        toolCard.style.cursor = 'pointer';
+                        toolCard.onclick = function(e) {
+                            // Don't trigger if clicking checkbox or buttons
+                            if (e.target.closest('.form-check') || e.target.closest('button')) {
+                                return;
+                            }
+                            showToolDetails(tool);
+                        };
                         toolCard.innerHTML = `
-                            <div class="form-check" style="margin-bottom: 8px;">
-                                <input class="form-check-input tool-checkbox" type="checkbox" value="${doc.id}" onchange="updateSelectedTools()" style="margin-top: 0.25rem;">
+                            <div class="form-check" style="margin-bottom: 8px;" onclick="event.stopPropagation();">
+                                <input class="form-check-input tool-checkbox" type="checkbox" value="${tool.id}" onchange="updateSelectedTools()" style="margin-top: 0.25rem;">
                                 <label class="form-check-label" style="margin-left: 0.5rem;">
                                     <strong>Select</strong>
                                 </label>
                             </div>
-                            <div class="mytools-tool-name">${toolIndex + 1}. ${tool.toolName || 'Unknown Tool'}</div>
-                            <div class="mytools-tool-tid">TID: ${tool.toolId || doc.id}</div>
+                            <div class="mytools-tool-name">${displayNumber}. ${tool.toolName || 'Unknown Tool'}</div>
+                            <div class="mytools-tool-tid">TID: ${tool.toolId || tool.id}</div>
                             <span style="display:flex;align-items:center;justify-content:space-between;">
                                 <span style="font-size:1.01rem;color:#444;">Part #: ${tool.partNumber || ''}</span>
                                 <span style="font-size:1.01rem;font-weight:bold;color:#222;">WorkOn: <span style="color:#888;font-weight:bold;">${(typeof tool.WorkOn === 'string' && tool.WorkOn.trim()) ? tool.WorkOn : 'N/A'}</span></span>
@@ -774,16 +859,15 @@
                             ` : ''}
                             <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;align-items:center;">
                                 <span style="font-size:1.01rem;color:#1976d2;font-weight:bold;margin-right:auto;">Photos (${photoCount})</span>
-                                <button class="btn btn-sm btn-primary btn-3d" onclick="event.stopPropagation(); editTool('${doc.id}')">
+                                <button class="btn btn-sm btn-primary btn-3d" onclick="event.stopPropagation(); editTool('${tool.id}')">
                                     <i class="fas fa-edit"></i> Edit
                                 </button>
-                                <button class="btn btn-sm btn-danger-3d" onclick="event.stopPropagation(); deleteTool('${doc.id}', '${(tool.toolId || doc.id).replace(/'/g, "\\'")}')">
+                                <button class="btn btn-sm btn-danger-3d" onclick="event.stopPropagation(); deleteTool('${tool.id}', '${(tool.toolId || tool.id).replace(/'/g, "\\'")}')">
                                     <i class="fas fa-trash-alt"></i> Delete
                                 </button>
                             </div>
                         `;
                         toolsList.appendChild(toolCard);
-                        toolIndex++;
                     });
                     
                     // Helper function to get status class
@@ -808,6 +892,149 @@
                             <br><small>Make sure you have a Firestore index for collectionCode field if needed.</small>
                         </div>
                     `;
+                }
+            }
+            
+            // Show tool details (same as my-tools.html)
+            async function showToolDetails(tool) {
+                const formatTimestamp = (timestamp) => {
+                    if (!timestamp) return 'N/A';
+                    if (timestamp.toDate) {
+                        return timestamp.toDate().toLocaleString('en-GB', {
+                            day: '2-digit', month: '2-digit', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                        });
+                    }
+                    if (timestamp.seconds) {
+                        return new Date(timestamp.seconds * 1000).toLocaleString('en-GB', {
+                            day: '2-digit', month: '2-digit', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                        });
+                    }
+                    return timestamp;
+                };
+
+                const modal = new bootstrap.Modal(document.getElementById('checkoutInfoModal'));
+                const modalTitle = document.getElementById('checkoutInfoModalTitle');
+                const modalBody = document.getElementById('checkoutInfoModalBody');
+
+                modalTitle.textContent = 'Loading...';
+                modalBody.innerHTML = '<div class="text-center">Loading checkout information...</div>';
+                modal.show();
+
+                try {
+                    const status = tool.status || 'N/A';
+                    let title = '';
+                    let field1Label = '';
+                    let field1Value = '';
+                    let field2Label = '';
+                    let field2Value = '';
+                    let workOnValue = 'N/A';
+
+                    // Get WorkOn value from tool data
+                    const toolDoc = await db.collection('tools').doc(tool.id).get();
+                    if (toolDoc.exists) {
+                        const toolData = toolDoc.data();
+                        workOnValue = (typeof toolData.WorkOn === 'string' && toolData.WorkOn.trim()) ? toolData.WorkOn : 'N/A';
+                    } else {
+                        workOnValue = (typeof tool.WorkOn === 'string' && tool.WorkOn.trim()) ? tool.WorkOn : 'N/A';
+                    }
+
+                    if (status === 'OUT') {
+                        title = 'Tool Checkout Information';
+                        field1Label = 'Checked Out By:';
+                        field2Label = 'ChkOut Date:';
+
+                        if (toolDoc.exists) {
+                            const toolData = toolDoc.data();
+                            field1Value = toolData.technician || 'N/A';
+                            field2Value = formatTimestamp(toolData.timestamp);
+                        } else {
+                            field1Value = 'N/A';
+                            field2Value = 'N/A';
+                        }
+                    } else if (status === 'IN') {
+                        title = 'Last Tool Movement Information';
+                        field1Label = 'Technician:';
+                        field2Label = 'Date:';
+                        try {
+                            const logSnapshot = await db.collection('logtoolmovements')
+                                .where('toolId', '==', tool.id)
+                                .orderBy('timestamp', 'desc')
+                                .limit(1)
+                                .get();
+                            if (!logSnapshot.empty) {
+                                const lastLogEntry = logSnapshot.docs[0].data();
+                                field1Value = lastLogEntry.technician || 'N/A';
+                                field2Value = formatTimestamp(lastLogEntry.timestamp);
+                            } else {
+                                field1Value = tool.technician || 'N/A';
+                                field2Value = formatTimestamp(tool.timestamp);
+                            }
+                        } catch (logError) {
+                            console.error('Error querying logtoolmovements:', logError);
+                            field1Value = tool.technician || 'N/A';
+                            field2Value = formatTimestamp(tool.timestamp);
+                        }
+                    } else {
+                        title = 'Tool Information';
+                        field1Label = 'Status:';
+                        field1Value = tool.status || 'N/A';
+                        field2Label = 'Technician:';
+                        field2Value = tool.technician || 'N/A';
+                    }
+
+                    modalTitle.textContent = title;
+                    modalBody.innerHTML = `
+                        <div class="mb-3">
+                            <strong style="color: #222; font-size: 1.1em;">Tool Name:</strong>
+                            <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${tool.toolName || 'N/A'}</div>
+                        </div>
+                        <div class="mb-3">
+                            <strong style="color: #222; font-size: 1.1em;">Tool ID:</strong>
+                            <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${tool.toolId || tool.id || 'N/A'}</div>
+                        </div>
+                        <div class="mb-3">
+                            <strong style="color: #222; font-size: 1.1em;">Part Number:</strong>
+                            <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${tool.partNumber || 'N/A'}</div>
+                        </div>
+                        <div class="mb-3">
+                            <strong style="color: #222; font-size: 1.1em;">WorkOn:</strong>
+                            <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${workOnValue}</div>
+                        </div>
+                        <div class="mb-3">
+                            <strong style="color: #222; font-size: 1.1em;">${field1Label}</strong>
+                            <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${field1Value}</div>
+                        </div>
+                        <div class="mb-3">
+                            <strong style="color: #222; font-size: 1.1em;">${field2Label}</strong>
+                            <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${field2Value}</div>
+                        </div>
+                        <div class="mb-3">
+                            <strong style="color: #222; font-size: 1.1em;">Status:</strong>
+                            <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${tool.status || 'N/A'}</div>
+                        </div>
+                        <div class="mb-3">
+                            <strong style="color: #222; font-size: 1.1em;">Collection Code:</strong>
+                            <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${tool.collectionCode || 'N/A'}</div>
+                        </div>
+                        ${tool.location ? `
+                            <div class="mb-3">
+                                <strong style="color: #222; font-size: 1.1em;">Location:</strong>
+                                <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${tool.location}</div>
+                            </div>
+                        ` : ''}
+                        ${tool.calDueDate && tool.calDueDate.toDate ? `
+                            <div class="mb-3">
+                                <strong style="color: #222; font-size: 1.1em;">Cal Due Date:</strong>
+                                <div style="color: #1976d2; font-size: 1.0em; margin-top: 4px;">${tool.calDueDate.toDate().toLocaleDateString('en-GB')}</div>
+                            </div>
+                        ` : ''}
+                    `;
+                } catch (error) {
+                    console.error('Error loading tool details:', error);
+                    modalTitle.textContent = 'Error';
+                    modalBody.innerHTML = `<div class="text-danger">Failed to load tool details: ${error.message}</div>`;
                 }
             }
             
