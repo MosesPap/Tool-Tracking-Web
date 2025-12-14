@@ -2358,39 +2358,41 @@
                     }
                     
                     // Force close any open section modals to show main dashboard
-                    // Use setTimeout to ensure this happens after any other initialization
-                    setTimeout(() => {
-                        // Close all section modals
-                        const openModals = document.querySelectorAll('.section-modal');
-                        openModals.forEach(modal => {
-                            if (modal.id && window.closeSectionModal) {
-                                // Only close if it's active
-                                if (modal.classList.contains('active')) {
-                                    window.closeSectionModal(modal.id);
+                    // Only do this if we're returning from add-edit page, not on normal page loads
+                    if (returningFromAddEdit) {
+                        setTimeout(() => {
+                            // Close all section modals
+                            const openModals = document.querySelectorAll('.section-modal');
+                            openModals.forEach(modal => {
+                                if (modal.id && window.closeSectionModal) {
+                                    // Only close if it's active
+                                    if (modal.classList.contains('active')) {
+                                        window.closeSectionModal(modal.id);
+                                    }
+                                } else {
+                                    // Fallback: manually close the modal
+                                    modal.classList.remove('active');
+                                    modal.style.display = 'none';
                                 }
-                            } else {
-                                // Fallback: manually close the modal
-                                modal.classList.remove('active');
-                                modal.style.display = 'none';
+                            });
+                            
+                            // Ensure body overflow is reset
+                            document.body.style.overflow = '';
+                            
+                            // Ensure main dashboard is visible
+                            if (adminDashboard) {
+                                adminDashboard.style.display = 'block';
                             }
-                        });
-                        
-                        // Ensure body overflow is reset
-                        document.body.style.overflow = '';
-                        
-                        // Ensure main dashboard is visible
-                        if (adminDashboard) {
-                            adminDashboard.style.display = 'block';
-                        }
-                        
-                        // Hide any section content that might be visible
-                        const sectionContents = document.querySelectorAll('.section-content');
-                        sectionContents.forEach(content => {
-                            if (content.id !== 'adminSectionsContent') {
-                                content.style.display = 'none';
-                            }
-                        });
-                    }, returningFromAddEdit ? 0 : 100);
+                            
+                            // Hide any section content that might be visible
+                            const sectionContents = document.querySelectorAll('.section-content');
+                            sectionContents.forEach(content => {
+                                if (content.id !== 'adminSectionsContent') {
+                                    content.style.display = 'none';
+                                }
+                            });
+                        }, 100);
+                    }
                     
                     // Check if we're returning from another admin page (fast reload)
                     const lastLoadTime = sessionStorage.getItem('adminLastLoadTime');
@@ -2559,10 +2561,13 @@
                 });
                 
                 // Handle page restoration from browser history (e.g., when using history.back())
+                // Only close modals if we're actually returning from add-edit page
                 window.addEventListener('pageshow', function(event) {
-                    if (event.persisted || (window.performance && window.performance.navigation.type === 2)) {
-                        // Page was restored from cache/history
+                    const returningFromAddEdit = sessionStorage.getItem('returningFromAddEdit') === 'true';
+                    if (returningFromAddEdit && (event.persisted || (window.performance && window.performance.navigation.type === 2))) {
+                        // Page was restored from cache/history AND we're returning from add-edit
                         console.log('[ADMIN] Page restored from history - closing any open modals');
+                        sessionStorage.removeItem('returningFromAddEdit');
                         setTimeout(() => {
                             // Close all section modals
                             const openModals = document.querySelectorAll('.section-modal');
