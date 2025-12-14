@@ -3148,25 +3148,25 @@
                     confirmBtn.disabled = true;
                     confirmBtn.textContent = 'Restoring...';
                     
-                    // Get all deleted tools for this collection
-                    const deletedToolsQuery = await db.collection('deletedTools')
-                        .where('collectionCode', '==', collectionCode)
-                        .get();
+                    // Get deleted collection document first
+                    const deletedCollectionDoc = await db.collection('deletedCollections').doc(collection.docId).get();
                     
-                    if (deletedToolsQuery.empty) {
-                        alert('No deleted tools found for this collection.');
+                    if (!deletedCollectionDoc.exists) {
+                        alert('Deleted collection document not found.');
                         confirmBtn.disabled = false;
                         confirmBtn.textContent = 'Restore Collection';
                         return;
                     }
                     
-                    // Get deleted collection document
-                    const deletedCollectionDoc = await db.collection('deletedCollections').doc(collection.docId).get();
+                    // Get all deleted tools for this collection
+                    const deletedToolsQuery = await db.collection('deletedTools')
+                        .where('collectionCode', '==', collectionCode)
+                        .get();
                     
                     const batch = db.batch();
                     let restoredCount = 0;
                     
-                    // Restore each tool
+                    // Restore each tool (if any exist)
                     for (const doc of deletedToolsQuery.docs) {
                         const deletedToolData = doc.data();
                         const originalId = deletedToolData.originalId || doc.id;
@@ -3186,30 +3186,32 @@
                         restoredCount++;
                     }
                     
-                    // Restore collection if it exists
-                    if (deletedCollectionDoc.exists) {
-                        const deletedCollectionData = deletedCollectionDoc.data();
-                        const originalId = deletedCollectionData.originalId || collection.docId;
-                        
-                        // Remove deletion-related fields
-                        const restoredCollectionData = { ...deletedCollectionData };
-                        delete restoredCollectionData.deletedAt;
-                        delete restoredCollectionData.permanentDeleteDate;
-                        delete restoredCollectionData.deletedBy;
-                        delete restoredCollectionData.originalId;
-                        delete restoredCollectionData.toolCount;
-                        
-                        // Restore to collections collection
-                        batch.set(db.collection('collections').doc(originalId), restoredCollectionData);
-                        
-                        // Delete from deletedCollections collection
-                        batch.delete(deletedCollectionDoc.ref);
-                    }
+                    // Restore collection document (regardless of whether there are tools)
+                    const deletedCollectionData = deletedCollectionDoc.data();
+                    const originalId = deletedCollectionData.originalId || collection.docId;
+                    
+                    // Remove deletion-related fields
+                    const restoredCollectionData = { ...deletedCollectionData };
+                    delete restoredCollectionData.deletedAt;
+                    delete restoredCollectionData.permanentDeleteDate;
+                    delete restoredCollectionData.deletedBy;
+                    delete restoredCollectionData.originalId;
+                    delete restoredCollectionData.toolCount;
+                    
+                    // Restore to collections collection
+                    batch.set(db.collection('collections').doc(originalId), restoredCollectionData);
+                    
+                    // Delete from deletedCollections collection
+                    batch.delete(deletedCollectionDoc.ref);
                     
                     // Commit the batch
                     await batch.commit();
                     
-                    alert(`✅ Collection "${collectionCode}" and ${restoredCount} tool(s) restored successfully!`);
+                    if (restoredCount > 0) {
+                        alert(`✅ Collection "${collectionCode}" and ${restoredCount} tool(s) restored successfully!`);
+                    } else {
+                        alert(`✅ Collection "${collectionCode}" restored successfully! (No tools to restore)`);
+                    }
                     
                     // Close the restore modal
                     const restoreModal = bootstrap.Modal.getInstance(document.getElementById('restoreModal'));
