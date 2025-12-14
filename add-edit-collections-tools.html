@@ -2830,6 +2830,375 @@
                 });
             }
             
+            // Show restore modal
+            window.showRestoreModal = async function() {
+                const modal = new bootstrap.Modal(document.getElementById('restoreModal'));
+                await loadDeletedCollections();
+                await loadDeletedToolCollections();
+                modal.show();
+            };
+            
+            // Load deleted collections
+            async function loadDeletedCollections() {
+                try {
+                    const selectElement = document.getElementById('restoreCollectionSelect');
+                    const infoDiv = document.getElementById('restoreCollectionInfo');
+                    const errorDiv = document.getElementById('restoreCollectionError');
+                    const confirmBtn = document.getElementById('confirmRestoreCollectionBtn');
+                    
+                    selectElement.innerHTML = '<option value="">-- Select a Collection --</option>';
+                    infoDiv.style.display = 'none';
+                    errorDiv.style.display = 'none';
+                    confirmBtn.disabled = true;
+                    
+                    // Get all deleted collections
+                    const deletedCollectionsQuery = await db.collection('deletedCollections').get();
+                    
+                    if (deletedCollectionsQuery.empty) {
+                        selectElement.innerHTML = '<option value="">No deleted collections found</option>';
+                        return;
+                    }
+                    
+                    const collectionsMap = new Map();
+                    deletedCollectionsQuery.forEach(doc => {
+                        const data = doc.data();
+                        const collectionCode = data.collectionName || data.collectionCode;
+                        if (collectionCode && !collectionsMap.has(collectionCode)) {
+                            const permanentDeleteDate = data.permanentDeleteDate;
+                            
+                            // Check if still within 7 days
+                            let canRestore = true;
+                            if (permanentDeleteDate) {
+                                const deleteDate = permanentDeleteDate.toDate ? permanentDeleteDate.toDate() : new Date(permanentDeleteDate.seconds * 1000);
+                                if (deleteDate < new Date()) {
+                                    canRestore = false;
+                                }
+                            }
+                            
+                            if (canRestore) {
+                                collectionsMap.set(collectionCode, {
+                                    docId: doc.id,
+                                    collectionCode: collectionCode,
+                                    deletedAt: data.deletedAt,
+                                    permanentDeleteDate: permanentDeleteDate,
+                                    toolCount: data.toolCount || 0
+                                });
+                            }
+                        }
+                    });
+                    
+                    if (collectionsMap.size === 0) {
+                        selectElement.innerHTML = '<option value="">No restorable collections found</option>';
+                        return;
+                    }
+                    
+                    // Populate select
+                    collectionsMap.forEach((collection, code) => {
+                        const option = document.createElement('option');
+                        option.value = code;
+                        option.setAttribute('data-collection', JSON.stringify(collection));
+                        option.textContent = code;
+                        selectElement.appendChild(option);
+                    });
+                    
+                    // Handle selection change
+                    selectElement.onchange = function() {
+                        const selectedOption = this.options[this.selectedIndex];
+                        if (selectedOption && selectedOption.value) {
+                            const collection = JSON.parse(selectedOption.getAttribute('data-collection'));
+                            const deletedDate = collection.deletedAt ? 
+                                (collection.deletedAt.toDate ? collection.deletedAt.toDate() : new Date(collection.deletedAt.seconds * 1000)) : 
+                                new Date();
+                            const permanentDeleteDate = collection.permanentDeleteDate ? 
+                                (collection.permanentDeleteDate.toDate ? collection.permanentDeleteDate.toDate() : new Date(collection.permanentDeleteDate.seconds * 1000)) : 
+                                null;
+                            
+                            document.getElementById('restoreCollectionName').textContent = collection.collectionCode;
+                            document.getElementById('restoreCollectionDeletedDate').textContent = deletedDate.toLocaleString();
+                            document.getElementById('restoreCollectionToolsCount').textContent = collection.toolCount;
+                            document.getElementById('restoreCollectionPermanentDate').textContent = permanentDeleteDate ? permanentDeleteDate.toLocaleString() : 'N/A';
+                            infoDiv.style.display = 'block';
+                            confirmBtn.disabled = false;
+                        } else {
+                            infoDiv.style.display = 'none';
+                            confirmBtn.disabled = true;
+                        }
+                    };
+                } catch (error) {
+                    console.error('Error loading deleted collections:', error);
+                    document.getElementById('restoreCollectionError').textContent = 'Error loading deleted collections: ' + error.message;
+                    document.getElementById('restoreCollectionError').style.display = 'block';
+                }
+            };
+            
+            // Load deleted tool collections
+            async function loadDeletedToolCollections() {
+                try {
+                    const selectElement = document.getElementById('restoreToolCollectionSelect');
+                    selectElement.innerHTML = '<option value="">-- Select a Collection --</option>';
+                    
+                    // Get all unique collection codes from deletedTools
+                    const deletedToolsQuery = await db.collection('deletedTools').get();
+                    const collectionsSet = new Set();
+                    
+                    deletedToolsQuery.forEach(doc => {
+                        const data = doc.data();
+                        const collectionCode = data.collectionCode;
+                        if (collectionCode) {
+                            const permanentDeleteDate = data.permanentDeleteDate;
+                            let canRestore = true;
+                            if (permanentDeleteDate) {
+                                const deleteDate = permanentDeleteDate.toDate ? permanentDeleteDate.toDate() : new Date(permanentDeleteDate.seconds * 1000);
+                                if (deleteDate < new Date()) {
+                                    canRestore = false;
+                                }
+                            }
+                            if (canRestore) {
+                                collectionsSet.add(collectionCode);
+                            }
+                        }
+                    });
+                    
+                    if (collectionsSet.size === 0) {
+                        selectElement.innerHTML = '<option value="">No restorable tools found</option>';
+                        return;
+                    }
+                    
+                    Array.from(collectionsSet).sort().forEach(code => {
+                        const option = document.createElement('option');
+                        option.value = code;
+                        option.textContent = code;
+                        selectElement.appendChild(option);
+                    });
+                } catch (error) {
+                    console.error('Error loading deleted tool collections:', error);
+                }
+            };
+            
+            // Load deleted tools for a collection
+            window.loadDeletedToolsForCollection = async function() {
+                const collectionCode = document.getElementById('restoreToolCollectionSelect').value;
+                const toolsList = document.getElementById('restoreToolsList');
+                const confirmBtn = document.getElementById('confirmRestoreToolsBtn');
+                const errorDiv = document.getElementById('restoreToolError');
+                
+                toolsList.innerHTML = '';
+                confirmBtn.disabled = true;
+                errorDiv.style.display = 'none';
+                
+                if (!collectionCode) {
+                    toolsList.innerHTML = '<p class="text-muted">Select a collection to view deleted tools.</p>';
+                    return;
+                }
+                
+                try {
+                    const deletedToolsQuery = await db.collection('deletedTools')
+                        .where('collectionCode', '==', collectionCode)
+                        .get();
+                    
+                    if (deletedToolsQuery.empty) {
+                        toolsList.innerHTML = '<p class="text-muted">No deleted tools found for this collection.</p>';
+                        return;
+                    }
+                    
+                    let html = '<div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="selectAllDeletedTools" onchange="toggleAllDeletedTools()"><label class="form-check-label" for="selectAllDeletedTools"><strong>Select All</strong></label></div>';
+                    
+                    deletedToolsQuery.forEach(doc => {
+                        const data = doc.data();
+                        const deletedDate = data.deletedAt ? 
+                            (data.deletedAt.toDate ? data.deletedAt.toDate() : new Date(data.deletedAt.seconds * 1000)) : 
+                            new Date();
+                        html += `
+                            <div class="form-check mb-2">
+                                <input class="form-check-input deleted-tool-checkbox" type="checkbox" value="${doc.id}" data-original-id="${data.originalId || doc.id}">
+                                <label class="form-check-label">
+                                    <strong>${data.toolId || data.originalId || doc.id}</strong> - ${data.toolName || 'Unnamed'} (${data.partNumber || 'N/A'})
+                                    <br><small class="text-muted">Deleted: ${deletedDate.toLocaleString()}</small>
+                                </label>
+                            </div>
+                        `;
+                    });
+                    
+                    toolsList.innerHTML = html;
+                    confirmBtn.disabled = false;
+                    confirmBtn.style.display = 'inline-block';
+                } catch (error) {
+                    console.error('Error loading deleted tools:', error);
+                    errorDiv.textContent = 'Error loading deleted tools: ' + error.message;
+                    errorDiv.style.display = 'block';
+                }
+            };
+            
+            // Toggle all deleted tools
+            window.toggleAllDeletedTools = function() {
+                const selectAll = document.getElementById('selectAllDeletedTools').checked;
+                document.querySelectorAll('.deleted-tool-checkbox').forEach(checkbox => {
+                    checkbox.checked = selectAll;
+                });
+            };
+            
+            // Restore collection
+            window.restoreCollection = async function() {
+                const selectElement = document.getElementById('restoreCollectionSelect');
+                const selectedOption = selectElement.options[selectElement.selectedIndex];
+                
+                if (!selectedOption || !selectedOption.value) {
+                    alert('Please select a collection to restore.');
+                    return;
+                }
+                
+                const collection = JSON.parse(selectedOption.getAttribute('data-collection'));
+                const collectionCode = collection.collectionCode;
+                const errorDiv = document.getElementById('restoreCollectionError');
+                const confirmBtn = document.getElementById('confirmRestoreCollectionBtn');
+                
+                try {
+                    errorDiv.style.display = 'none';
+                    confirmBtn.disabled = true;
+                    confirmBtn.textContent = 'Restoring...';
+                    
+                    // Get all deleted tools for this collection
+                    const deletedToolsQuery = await db.collection('deletedTools')
+                        .where('collectionCode', '==', collectionCode)
+                        .get();
+                    
+                    if (deletedToolsQuery.empty) {
+                        alert('No deleted tools found for this collection.');
+                        confirmBtn.disabled = false;
+                        confirmBtn.textContent = 'Restore Collection';
+                        return;
+                    }
+                    
+                    // Get deleted collection document
+                    const deletedCollectionDoc = await db.collection('deletedCollections').doc(collection.docId).get();
+                    
+                    const batch = db.batch();
+                    let restoredCount = 0;
+                    
+                    // Restore each tool
+                    for (const doc of deletedToolsQuery.docs) {
+                        const deletedToolData = doc.data();
+                        const originalId = deletedToolData.originalId || doc.id;
+                        
+                        // Remove deletion-related fields
+                        const restoredToolData = { ...deletedToolData };
+                        delete restoredToolData.deletedAt;
+                        delete restoredToolData.permanentDeleteDate;
+                        delete restoredToolData.deletedBy;
+                        delete restoredToolData.originalId;
+                        
+                        // Restore to tools collection
+                        batch.set(db.collection('tools').doc(originalId), restoredToolData);
+                        
+                        // Delete from deletedTools collection
+                        batch.delete(doc.ref);
+                        restoredCount++;
+                    }
+                    
+                    // Restore collection if it exists
+                    if (deletedCollectionDoc.exists) {
+                        const deletedCollectionData = deletedCollectionDoc.data();
+                        const originalId = deletedCollectionData.originalId || collection.docId;
+                        
+                        // Remove deletion-related fields
+                        const restoredCollectionData = { ...deletedCollectionData };
+                        delete restoredCollectionData.deletedAt;
+                        delete restoredCollectionData.permanentDeleteDate;
+                        delete restoredCollectionData.deletedBy;
+                        delete restoredCollectionData.originalId;
+                        delete restoredCollectionData.toolCount;
+                        
+                        // Restore to collections collection
+                        batch.set(db.collection('collections').doc(originalId), restoredCollectionData);
+                        
+                        // Delete from deletedCollections collection
+                        batch.delete(deletedCollectionDoc.ref);
+                    }
+                    
+                    // Commit the batch
+                    await batch.commit();
+                    
+                    alert(`✅ Collection "${collectionCode}" and ${restoredCount} tool(s) restored successfully!`);
+                    
+                    // Close the restore modal
+                    const restoreModal = bootstrap.Modal.getInstance(document.getElementById('restoreModal'));
+                    if (restoreModal) restoreModal.hide();
+                    
+                    // Refresh collections list
+                    loadCollections();
+                } catch (error) {
+                    console.error('Error restoring collection:', error);
+                    errorDiv.textContent = 'Error restoring collection: ' + error.message;
+                    errorDiv.style.display = 'block';
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Restore Collection';
+                }
+            };
+            
+            // Restore selected tools
+            window.restoreSelectedTools = async function() {
+                const checkedBoxes = document.querySelectorAll('.deleted-tool-checkbox:checked');
+                if (checkedBoxes.length === 0) {
+                    alert('Please select at least one tool to restore.');
+                    return;
+                }
+                
+                const errorDiv = document.getElementById('restoreToolError');
+                const confirmBtn = document.getElementById('confirmRestoreToolsBtn');
+                
+                try {
+                    errorDiv.style.display = 'none';
+                    confirmBtn.disabled = true;
+                    confirmBtn.textContent = 'Restoring...';
+                    
+                    const batch = db.batch();
+                    let restoredCount = 0;
+                    
+                    for (const checkbox of checkedBoxes) {
+                        const docId = checkbox.value;
+                        const originalId = checkbox.getAttribute('data-original-id');
+                        
+                        const deletedToolDoc = await db.collection('deletedTools').doc(docId).get();
+                        if (!deletedToolDoc.exists) continue;
+                        
+                        const deletedToolData = deletedToolDoc.data();
+                        
+                        // Remove deletion-related fields
+                        const restoredToolData = { ...deletedToolData };
+                        delete restoredToolData.deletedAt;
+                        delete restoredToolData.permanentDeleteDate;
+                        delete restoredToolData.deletedBy;
+                        delete restoredToolData.originalId;
+                        
+                        // Restore to tools collection
+                        batch.set(db.collection('tools').doc(originalId), restoredToolData);
+                        
+                        // Delete from deletedTools collection
+                        batch.delete(deletedToolDoc.ref);
+                        restoredCount++;
+                    }
+                    
+                    // Commit the batch
+                    await batch.commit();
+                    
+                    alert(`✅ ${restoredCount} tool(s) restored successfully!`);
+                    
+                    // Reload deleted tools list
+                    await loadDeletedToolsForCollection();
+                    
+                    // Refresh tools list if on collection details screen
+                    if (currentCollection) {
+                        await loadToolsInCollection(currentCollection);
+                    }
+                } catch (error) {
+                    console.error('Error restoring tools:', error);
+                    errorDiv.textContent = 'Error restoring tools: ' + error.message;
+                    errorDiv.style.display = 'block';
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Restore Selected Tools';
+                }
+            };
+            
             waitForFirebase();
         })();
     </script>
