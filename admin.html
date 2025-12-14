@@ -2314,6 +2314,14 @@
                 // Hide login screen by default - use seamless navigation
                 if (loginSection) loginSection.style.display = 'none';
                 if (adminDashboard) adminDashboard.style.display = 'none';
+                
+                // Clear any open modals on page load to ensure clean state
+                const allModals = document.querySelectorAll('.section-modal');
+                allModals.forEach(modal => {
+                    modal.classList.remove('active');
+                    modal.style.display = 'none';
+                });
+                document.body.style.overflow = '';
 
         // Flag to track if dashboard has been successfully loaded
         let dashboardLoaded = false;
@@ -2343,17 +2351,46 @@
                     const adminNameElement = document.getElementById('adminName');
                     if (adminNameElement) adminNameElement.textContent = adminName;
                     
-                    // Close any open section modals to show main dashboard
-                    const openModals = document.querySelectorAll('.section-modal.active');
-                    openModals.forEach(modal => {
-                        if (modal.id && window.closeSectionModal) {
-                            window.closeSectionModal(modal.id);
-                        } else {
-                            // Fallback: manually close the modal
-                            modal.classList.remove('active');
-                            modal.style.display = 'none';
+                    // Check if we're returning from add-edit page
+                    const returningFromAddEdit = sessionStorage.getItem('returningFromAddEdit') === 'true';
+                    if (returningFromAddEdit) {
+                        sessionStorage.removeItem('returningFromAddEdit');
+                    }
+                    
+                    // Force close any open section modals to show main dashboard
+                    // Use setTimeout to ensure this happens after any other initialization
+                    setTimeout(() => {
+                        // Close all section modals
+                        const openModals = document.querySelectorAll('.section-modal');
+                        openModals.forEach(modal => {
+                            if (modal.id && window.closeSectionModal) {
+                                // Only close if it's active
+                                if (modal.classList.contains('active')) {
+                                    window.closeSectionModal(modal.id);
+                                }
+                            } else {
+                                // Fallback: manually close the modal
+                                modal.classList.remove('active');
+                                modal.style.display = 'none';
+                            }
+                        });
+                        
+                        // Ensure body overflow is reset
+                        document.body.style.overflow = '';
+                        
+                        // Ensure main dashboard is visible
+                        if (adminDashboard) {
+                            adminDashboard.style.display = 'block';
                         }
-                    });
+                        
+                        // Hide any section content that might be visible
+                        const sectionContents = document.querySelectorAll('.section-content');
+                        sectionContents.forEach(content => {
+                            if (content.id !== 'adminSectionsContent') {
+                                content.style.display = 'none';
+                            }
+                        });
+                    }, returningFromAddEdit ? 0 : 100);
                     
                     // Check if we're returning from another admin page (fast reload)
                     const lastLoadTime = sessionStorage.getItem('adminLastLoadTime');
@@ -2518,6 +2555,34 @@
                         console.log('[ADMIN] Auth state changed - user logged out, redirecting to main-menu.html');
                         localStorage.removeItem('authVerified');
                         window.location.href = 'main-menu.html';
+                    }
+                });
+                
+                // Handle page restoration from browser history (e.g., when using history.back())
+                window.addEventListener('pageshow', function(event) {
+                    if (event.persisted || (window.performance && window.performance.navigation.type === 2)) {
+                        // Page was restored from cache/history
+                        console.log('[ADMIN] Page restored from history - closing any open modals');
+                        setTimeout(() => {
+                            // Close all section modals
+                            const openModals = document.querySelectorAll('.section-modal');
+                            openModals.forEach(modal => {
+                                if (modal.id && window.closeSectionModal) {
+                                    if (modal.classList.contains('active')) {
+                                        window.closeSectionModal(modal.id);
+                                    }
+                                } else {
+                                    modal.classList.remove('active');
+                                    modal.style.display = 'none';
+                                }
+                            });
+                            document.body.style.overflow = '';
+                            
+                            // Ensure main dashboard is visible
+                            if (adminDashboard && dashboardLoaded) {
+                                adminDashboard.style.display = 'block';
+                            }
+                        }, 50);
                     }
                 });
         }

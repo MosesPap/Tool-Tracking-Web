@@ -825,6 +825,9 @@
             
             // Navigate back to admin page using browser history for faster navigation
             window.goBackToAdmin = function() {
+                // Set a flag to indicate we're returning from add-edit page
+                sessionStorage.setItem('returningFromAddEdit', 'true');
+                
                 // Check if we have history and can go back
                 // Use browser back button - this preserves state and is faster than full reload
                 if (window.history.length > 1) {
