@@ -275,9 +275,14 @@
         <div class="admin-card">
             <div class="d-flex justify-content-between align-items-center">
                 <h4><i class="fas fa-edit"></i> Add/Edit Collections - Tools</h4>
-                <button class="btn btn-secondary btn-3d" onclick="window.location.href='admin.html'">
-                    <i class="fas fa-arrow-left"></i> Back to Admin
-                </button>
+                <div>
+                    <button class="btn btn-warning btn-3d me-2" onclick="showRestoreModal()">
+                        <i class="fas fa-undo"></i> Restore Deleted Items
+                    </button>
+                    <button class="btn btn-secondary btn-3d" onclick="window.location.href='admin.html'">
+                        <i class="fas fa-arrow-left"></i> Back to Admin
+                    </button>
+                </div>
             </div>
         </div>
         
@@ -378,6 +383,72 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Restore Deleted Items Modal -->
+    <div class="modal fade" id="restoreModal" tabindex="-1" aria-labelledby="restoreModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title" id="restoreModalLabel"><i class="fas fa-undo"></i> Restore Deleted Items</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-tabs mb-3" id="restoreTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="restoreCollectionsTab" data-bs-toggle="tab" data-bs-target="#restoreCollectionsPane" type="button" role="tab">
+                                <i class="fas fa-folder"></i> Collections
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="restoreToolsTab" data-bs-toggle="tab" data-bs-target="#restoreToolsPane" type="button" role="tab">
+                                <i class="fas fa-wrench"></i> Tools
+                            </button>
+                        </li>
+                    </ul>
+                    <div class="tab-content" id="restoreTabContent">
+                        <div class="tab-pane fade show active" id="restoreCollectionsPane" role="tabpanel">
+                            <div class="mb-3">
+                                <label for="restoreCollectionSelect" class="form-label"><strong>Select Collection to Restore:</strong></label>
+                                <select id="restoreCollectionSelect" class="form-select">
+                                    <option value="">-- Select a Collection --</option>
+                                </select>
+                            </div>
+                            <div id="restoreCollectionInfo" style="display: none;">
+                                <div class="alert alert-info">
+                                    <strong>Collection:</strong> <span id="restoreCollectionName"></span><br>
+                                    <strong>Deleted Date:</strong> <span id="restoreCollectionDeletedDate"></span><br>
+                                    <strong>Tools Count:</strong> <span id="restoreCollectionToolsCount"></span><br>
+                                    <strong>Permanent Delete Date:</strong> <span id="restoreCollectionPermanentDate"></span>
+                                </div>
+                            </div>
+                            <div id="restoreCollectionError" class="text-danger mb-3" style="display: none;"></div>
+                        </div>
+                        <div class="tab-pane fade" id="restoreToolsPane" role="tabpanel">
+                            <div class="mb-3">
+                                <label for="restoreToolCollectionSelect" class="form-label"><strong>Select Collection:</strong></label>
+                                <select id="restoreToolCollectionSelect" class="form-select" onchange="loadDeletedToolsForCollection()">
+                                    <option value="">-- Select a Collection --</option>
+                                </select>
+                            </div>
+                            <div id="restoreToolsList" class="mb-3" style="max-height: 300px; overflow-y: auto;">
+                                <p class="text-muted">Select a collection to view deleted tools.</p>
+                            </div>
+                            <div id="restoreToolError" class="text-danger mb-3" style="display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-warning" id="confirmRestoreCollectionBtn" onclick="restoreCollection()" disabled>
+                        <i class="fas fa-undo"></i> Restore Collection
+                    </button>
+                    <button type="button" class="btn btn-warning" id="confirmRestoreToolsBtn" onclick="restoreSelectedTools()" disabled style="display: none;">
+                        <i class="fas fa-undo"></i> Restore Selected Tools
+                    </button>
                 </div>
             </div>
         </div>
@@ -1081,17 +1152,73 @@
                     return;
                 }
                 
-                if (!confirm(`Are you sure you want to delete ${selectedToolIds.size} tool(s)? This action cannot be undone.`)) {
+                const auth = window.auth || firebase.auth();
+                const user = auth.currentUser;
+                const deletedBy = user ? (localStorage.getItem('fullName') || user.email || 'Admin') : 'Admin';
+                
+                if (!confirm(`⚠️ Are you sure you want to delete ${selectedToolIds.size} tool(s)?\n\nTools will be kept for 7 days and can be restored.`)) {
                     return;
                 }
                 
+                const permanentDelete = confirm(`⚠️ Do you want to permanently delete immediately?\n\nClick OK for permanent deletion (cannot be undone)\nClick Cancel for soft delete (can be restored within 7 days)`);
+                
                 try {
-                    const deletePromises = Array.from(selectedToolIds).map(toolId => 
-                        db.collection('tools').doc(toolId).delete()
-                    );
+                    const deleteDate = new Date();
+                    const permanentDeleteDate = new Date(deleteDate);
+                    permanentDeleteDate.setDate(permanentDeleteDate.getDate() + 7);
                     
-                    await Promise.all(deletePromises);
-                    alert(`Successfully deleted ${selectedToolIds.size} tool(s)!`);
+                    const batch = db.batch();
+                    let deletedCount = 0;
+                    
+                    for (const toolId of selectedToolIds) {
+                        const doc = await db.collection('tools').doc(toolId).get();
+                        if (!doc.exists) continue;
+                        
+                        const toolData = doc.data();
+                        
+                        if (permanentDelete) {
+                            // Permanent delete - delete photos from storage
+                            const photoUrls = toolData.photoUrls || [];
+                            for (const url of photoUrls) {
+                                try {
+                                    const photoRef = storage.refFromURL(url);
+                                    await photoRef.delete();
+                                } catch (error) {
+                                    console.warn('Could not delete photo from storage:', error);
+                                }
+                            }
+                            // Delete from tools collection
+                            batch.delete(doc.ref);
+                            deletedCount++;
+                        } else {
+                            // Soft delete - move to deletedTools collection
+                            const deletedToolData = {
+                                ...toolData,
+                                originalId: doc.id,
+                                collectionCode: toolData.collectionCode || currentCollection || 'N/A',
+                                deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                permanentDeleteDate: firebase.firestore.Timestamp.fromDate(permanentDeleteDate),
+                                deletedBy: deletedBy
+                            };
+                            
+                            // Add to deletedTools collection
+                            batch.set(db.collection('deletedTools').doc(doc.id), deletedToolData);
+                            
+                            // Delete from tools collection
+                            batch.delete(doc.ref);
+                            deletedCount++;
+                        }
+                    }
+                    
+                    // Commit the batch
+                    await batch.commit();
+                    
+                    if (permanentDelete) {
+                        alert(`✅ ${deletedCount} tool(s) permanently deleted!`);
+                    } else {
+                        alert(`✅ ${deletedCount} tool(s) moved to deleted state. They will be permanently deleted after 7 days.`);
+                    }
+                    
                     selectedToolIds.clear();
                     if (currentCollection) {
                         await loadToolsInCollection(currentCollection);
@@ -2233,12 +2360,15 @@
             
             // Delete collection
             window.deleteCollection = async function(docId, collectionName) {
-                if (!confirm(`⚠️ WARNING: Are you sure you want to delete the collection "${collectionName}"?\n\nThis will delete:\n- The collection itself\n- ALL tools in this collection\n\nThis action cannot be undone!`)) {
+                const auth = window.auth || firebase.auth();
+                const user = auth.currentUser;
+                const deletedBy = user ? (localStorage.getItem('fullName') || user.email || 'Admin') : 'Admin';
+                
+                if (!confirm(`⚠️ WARNING: Are you sure you want to delete the collection "${collectionName}"?\n\nThis will delete:\n- The collection itself\n- ALL tools in this collection\n\nTools will be kept for 7 days and can be restored.`)) {
                     return;
                 }
                 
-                const doubleConfirm = confirm(`⚠️ FINAL CONFIRMATION: Delete collection "${collectionName}" and ALL its tools?\n\nThis is your last chance to cancel.`);
-                if (!doubleConfirm) return;
+                const permanentDelete = confirm(`⚠️ Do you want to permanently delete immediately?\n\nClick OK for permanent deletion (cannot be undone)\nClick Cancel for soft delete (can be restored within 7 days)`);
                 
                 try {
                     // Get all tools in this collection
@@ -2246,32 +2376,85 @@
                         .where('collectionCode', '==', collectionName)
                         .get();
                     
-                    // Delete all tools
-                    const deletePromises = [];
+                    // Get collection document
+                    const collectionDoc = await db.collection('collections').doc(docId).get();
+                    const collectionData = collectionDoc.exists ? collectionDoc.data() : null;
+                    
+                    const deleteDate = new Date();
+                    const permanentDeleteDate = new Date(deleteDate);
+                    permanentDeleteDate.setDate(permanentDeleteDate.getDate() + 7);
+                    
+                    const batch = db.batch();
+                    let deletedCount = 0;
+                    
+                    // Process each tool
                     toolsSnapshot.forEach(doc => {
-                        deletePromises.push(db.collection('tools').doc(doc.id).delete());
+                        const toolData = doc.data();
+                        
+                        if (permanentDelete) {
+                            // Permanent delete - delete from tools collection
+                            batch.delete(doc.ref);
+                            deletedCount++;
+                        } else {
+                            // Soft delete - move to deletedTools collection
+                            const deletedToolData = {
+                                ...toolData,
+                                originalId: doc.id,
+                                collectionCode: toolData.collectionCode || collectionName,
+                                deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                permanentDeleteDate: firebase.firestore.Timestamp.fromDate(permanentDeleteDate),
+                                deletedBy: deletedBy
+                            };
+                            
+                            // Add to deletedTools collection
+                            batch.set(db.collection('deletedTools').doc(doc.id), deletedToolData);
+                            
+                            // Delete from tools collection
+                            batch.delete(doc.ref);
+                            deletedCount++;
+                        }
                     });
                     
-                    await Promise.all(deletePromises);
-                    
-                    // Delete collection photos from storage
-                    const collectionDoc = await db.collection('collections').doc(docId).get();
+                    // Handle collection document
                     if (collectionDoc.exists) {
-                        const photoUrls = collectionDoc.data().photoUrls || [];
-                        for (const url of photoUrls) {
-                            try {
-                                const photoRef = storage.refFromURL(url);
-                                await photoRef.delete();
-                            } catch (error) {
-                                console.warn('Could not delete photo from storage:', error);
+                        if (permanentDelete) {
+                            // Delete collection photos from storage
+                            const photoUrls = collectionData.photoUrls || [];
+                            for (const url of photoUrls) {
+                                try {
+                                    const photoRef = storage.refFromURL(url);
+                                    await photoRef.delete();
+                                } catch (error) {
+                                    console.warn('Could not delete photo from storage:', error);
+                                }
                             }
+                            // Delete collection document
+                            batch.delete(collectionDoc.ref);
+                        } else {
+                            // Soft delete collection - move to deletedCollections
+                            const deletedCollectionData = {
+                                ...collectionData,
+                                originalId: docId,
+                                collectionName: collectionName,
+                                deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                permanentDeleteDate: firebase.firestore.Timestamp.fromDate(permanentDeleteDate),
+                                deletedBy: deletedBy,
+                                toolCount: deletedCount
+                            };
+                            
+                            batch.set(db.collection('deletedCollections').doc(docId), deletedCollectionData);
+                            batch.delete(collectionDoc.ref);
                         }
                     }
                     
-                    // Delete collection document
-                    await db.collection('collections').doc(docId).delete();
+                    // Commit the batch
+                    await batch.commit();
                     
-                    alert(`✅ Collection "${collectionName}" and ${toolsSnapshot.size} tool(s) deleted successfully!`);
+                    if (permanentDelete) {
+                        alert(`✅ Collection "${collectionName}" and ${deletedCount} tool(s) permanently deleted!`);
+                    } else {
+                        alert(`✅ Collection "${collectionName}" and ${deletedCount} tool(s) moved to deleted state. They will be permanently deleted after 7 days.`);
+                    }
                     
                     currentCollection = null;
                     currentCollectionDocId = null;
@@ -2389,15 +2572,31 @@
             
             // Delete tool
             window.deleteTool = async function(toolId, toolName) {
-                if (!confirm(`Are you sure you want to delete tool "${toolName}"? This action cannot be undone.`)) {
+                const auth = window.auth || firebase.auth();
+                const user = auth.currentUser;
+                const deletedBy = user ? (localStorage.getItem('fullName') || user.email || 'Admin') : 'Admin';
+                
+                if (!confirm(`⚠️ Are you sure you want to delete tool "${toolName}"?\n\nTool will be kept for 7 days and can be restored.`)) {
                     return;
                 }
                 
+                const permanentDelete = confirm(`⚠️ Do you want to permanently delete immediately?\n\nClick OK for permanent deletion (cannot be undone)\nClick Cancel for soft delete (can be restored within 7 days)`);
+                
                 try {
-                    // Delete tool photos from storage
                     const doc = await db.collection('tools').doc(toolId).get();
-                    if (doc.exists) {
-                        const photoUrls = doc.data().photoUrls || [];
+                    if (!doc.exists) {
+                        alert('Tool not found');
+                        return;
+                    }
+                    
+                    const toolData = doc.data();
+                    const deleteDate = new Date();
+                    const permanentDeleteDate = new Date(deleteDate);
+                    permanentDeleteDate.setDate(permanentDeleteDate.getDate() + 7);
+                    
+                    if (permanentDelete) {
+                        // Permanent delete - delete photos from storage
+                        const photoUrls = toolData.photoUrls || [];
                         for (const url of photoUrls) {
                             try {
                                 const photoRef = storage.refFromURL(url);
@@ -2406,11 +2605,29 @@
                                 console.warn('Could not delete photo from storage:', error);
                             }
                         }
+                        // Delete from tools collection
+                        await db.collection('tools').doc(toolId).delete();
+                        alert(`✅ Tool "${toolName}" permanently deleted!`);
+                    } else {
+                        // Soft delete - move to deletedTools collection
+                        const deletedToolData = {
+                            ...toolData,
+                            originalId: doc.id,
+                            collectionCode: toolData.collectionCode || currentCollection || 'N/A',
+                            deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            permanentDeleteDate: firebase.firestore.Timestamp.fromDate(permanentDeleteDate),
+                            deletedBy: deletedBy
+                        };
+                        
+                        // Add to deletedTools collection
+                        await db.collection('deletedTools').doc(doc.id).set(deletedToolData);
+                        
+                        // Delete from tools collection
+                        await db.collection('tools').doc(toolId).delete();
+                        
+                        alert(`✅ Tool "${toolName}" moved to deleted state. It will be permanently deleted after 7 days.`);
                     }
                     
-                    await db.collection('tools').doc(toolId).delete();
-                    
-                    alert(`✅ Tool "${toolName}" deleted successfully!`);
                     if (currentCollection) {
                         await loadToolsInCollection(currentCollection);
                     }
