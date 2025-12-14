@@ -2314,17 +2314,6 @@
                 // Hide login screen by default - use seamless navigation
                 if (loginSection) loginSection.style.display = 'none';
                 if (adminDashboard) adminDashboard.style.display = 'none';
-                
-                // Clear any open modals on page load to ensure clean state
-                const allModals = document.querySelectorAll('.section-modal');
-                allModals.forEach(modal => {
-                    modal.classList.remove('active');
-                    modal.style.display = 'none';
-                });
-                document.body.style.overflow = '';
-
-        // Flag to track if dashboard has been successfully loaded
-        let dashboardLoaded = false;
 
         // Check if user is admin
         async function checkAdminStatus(user) {
@@ -2346,69 +2335,27 @@
 
                 // Load Admin Dashboard
                 function loadAdminDashboard(adminName) {
-                    dashboardLoaded = true; // Mark dashboard as loaded
                     if (adminDashboard) adminDashboard.style.display = 'block';
                     const adminNameElement = document.getElementById('adminName');
                     if (adminNameElement) adminNameElement.textContent = adminName;
                     
-                    // Check if we're returning from add-edit page
-                    const returningFromAddEdit = sessionStorage.getItem('returningFromAddEdit') === 'true';
-                    if (returningFromAddEdit) {
-                        sessionStorage.removeItem('returningFromAddEdit');
-                    }
-                    
-                    // Force close any open section modals to show main dashboard
-                    // Only do this if we're returning from add-edit page, not on normal page loads
-                    if (returningFromAddEdit) {
-                        setTimeout(() => {
-                            // Close all section modals
-                            const openModals = document.querySelectorAll('.section-modal');
-                            openModals.forEach(modal => {
-                                if (modal.id && window.closeSectionModal) {
-                                    // Only close if it's active
-                                    if (modal.classList.contains('active')) {
-                                        window.closeSectionModal(modal.id);
-                                    }
-                                } else {
-                                    // Fallback: manually close the modal
-                                    modal.classList.remove('active');
-                                    modal.style.display = 'none';
-                                }
-                            });
-                            
-                            // Ensure body overflow is reset
-                            document.body.style.overflow = '';
-                            
-                            // Ensure main dashboard is visible
-                            if (adminDashboard) {
-                                adminDashboard.style.display = 'block';
-                            }
-                            
-                            // Hide any section content that might be visible
-                            const sectionContents = document.querySelectorAll('.section-content');
-                            sectionContents.forEach(content => {
-                                if (content.id !== 'adminSectionsContent') {
-                                    content.style.display = 'none';
-                                }
-                            });
-                        }, 100);
-                    }
-                    
-                    // Check if we're returning from another admin page (fast reload)
-                    const lastLoadTime = sessionStorage.getItem('adminLastLoadTime');
-                    const now = Date.now();
-                    const isFastReload = lastLoadTime && (now - parseInt(lastLoadTime)) < 5000; // 5 seconds
-                    
-                    // Load all dashboard data (non-blocking - don't await)
-                    // If fast reload, data might still be fresh, but reload anyway to ensure consistency
+                    // Load all dashboard data
                     loadStatistics();
                     loadSettings();
                     loadUsers();
                     loadTools();
                     loadAnalytics();
                     
-                    // Store load time for future fast reload detection
-                    sessionStorage.setItem('adminLastLoadTime', now.toString());
+                    // Check for URL hash to open specific section immediately (skip delay)
+                    const hash = window.location.hash.replace('#', '');
+                    if (hash && typeof window.openSectionModal === 'function') {
+                        // Small delay to ensure everything is loaded, then open section
+                        setTimeout(() => {
+                            window.openSectionModal(hash);
+                            // Clear the hash to prevent reopening on refresh
+                            history.replaceState(null, '', 'admin.html');
+                        }, 100);
+                    }
                 }
                 
                 // Make functions available globally
@@ -2444,67 +2391,70 @@
                 
                 if (authVerified === 'true' && storedFullName) {
                     // User was authenticated in main-menu - proceed IMMEDIATELY (no waiting)
-                    console.log('[ADMIN] ✓ Auth verified flag found - waiting for Firebase session restore');
+                    console.log('[ADMIN] ✓ Auth verified flag found - checking admin status immediately');
                     
-                    // Use onAuthStateChanged to wait for Firebase to restore the session
-                    // This is more reliable than polling auth.currentUser
-                    return new Promise((resolve) => {
-                        let resolved = false;
-                        let timeoutId = null;
-                        
-                        const processUser = async (user) => {
-                            if (resolved) return;
+                    // Wait for user to be available (Firebase may need time to restore session)
+                    let user = auth.currentUser;
+                    if (!user) {
+                        console.log('[ADMIN] auth.currentUser is null, waiting for user...');
+                        // Wait up to 2 seconds for Firebase to restore the session
+                        let waitCount = 0;
+                        while (!user && waitCount < 20) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            user = auth.currentUser;
+                            waitCount++;
+                        }
+                    }
+                    
+                    if (user) {
+                        console.log('[ADMIN] User found, checking admin status...');
+                const { isAdmin, name } = await checkAdminStatus(user);
+                if (isAdmin) {
+                            console.log('[ADMIN] ✓ Admin confirmed, loading dashboard');
+                    loadAdminDashboard(name);
                             
-                            if (user) {
-                                console.log('[ADMIN] ✓ User session restored:', user.email);
-                                resolved = true;
-                                if (timeoutId) clearTimeout(timeoutId);
-                                unsubscribe();
-                                
-                                const { isAdmin, name } = await checkAdminStatus(user);
-                                console.log('[ADMIN] Admin status check result:', { isAdmin, name, uid: user.uid });
-                                if (isAdmin) {
-                                    console.log('[ADMIN] ✓ Admin confirmed, loading dashboard');
-                                    loadAdminDashboard(name);
+                            // Verify auth in background (non-blocking)
+                            setTimeout(() => {
+                                const currentUser = auth.currentUser;
+                                if (currentUser) {
+                                    console.log('[ADMIN] ✓ Auth confirmed via currentUser:', currentUser.email);
                                     localStorage.setItem('authVerified', 'true');
-                                    resolve();
-                                } else {
-                                    console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
-                                    localStorage.removeItem('authVerified');
-                                    window.location.href = 'main-menu.html';
-                                    resolve();
-                                }
-                            }
-                        };
-                        
-                        const unsubscribe = auth.onAuthStateChanged(async function(user) {
-                            if (user) {
-                                // User found - process immediately
-                                await processUser(user);
-                            } else {
-                                // No user yet - set a timeout as fallback
-                                if (!timeoutId && !resolved) {
-                                    console.log('[ADMIN] No user yet, waiting for session restore...');
-                                    timeoutId = setTimeout(() => {
-                                        if (!resolved) {
-                                            const currentUser = auth.currentUser;
-                                            if (currentUser) {
-                                                console.log('[ADMIN] ✓ User found after timeout:', currentUser.email);
-                                                processUser(currentUser);
+                } else {
+                                    // Set up onAuthStateChanged listener
+                                    const unsubscribe = auth.onAuthStateChanged(async function(user) {
+                                        if (user) {
+                                            const { isAdmin } = await checkAdminStatus(user);
+                                            if (isAdmin) {
+                                                console.log('[ADMIN] ✓ Auth confirmed via onAuthStateChanged');
+                                                localStorage.setItem('authVerified', 'true');
                                             } else {
-                                                console.log('[ADMIN] ✗ No user found after waiting, redirecting to main-menu.html');
-                                                resolved = true;
-                                                unsubscribe();
+                                                console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
                                                 localStorage.removeItem('authVerified');
                                                 window.location.href = 'main-menu.html';
-                                                resolve();
                                             }
+                } else {
+                                            console.log('[ADMIN] ✗ No user found, redirecting to main-menu.html');
+                                            localStorage.removeItem('authVerified');
+                                            window.location.href = 'main-menu.html';
                                         }
-                                    }, 3000);
-                                }
-                            }
-                        });
-                    });
+                                        unsubscribe();
+                                    });
+            }
+                            }, 300);
+                            
+                            return; // Exit - page initialized
+                        } else {
+                            console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
+                            localStorage.removeItem('authVerified');
+                            window.location.href = 'main-menu.html';
+                            return;
+                        }
+                    } else {
+                        console.log('[ADMIN] ✗ No user found after waiting, redirecting to main-menu.html');
+                        localStorage.removeItem('authVerified');
+                        window.location.href = 'main-menu.html';
+                        return;
+                    }
                 }
                 
                 // No stored flag - check current user immediately, then wait for Firebase auth if needed
@@ -2532,9 +2482,7 @@
                 
                 // User found - check admin status
                 console.log('[ADMIN] User found, checking admin status...');
-                console.log('[ADMIN] User UID:', user.uid, 'Email:', user.email);
                 const { isAdmin, name } = await checkAdminStatus(user);
-                console.log('[ADMIN] Admin status check result:', { isAdmin, name, uid: user.uid });
                 if (isAdmin) {
                     console.log('[ADMIN] ✓ User authenticated and is admin, loading dashboard');
                     localStorage.setItem('authVerified', 'true');
@@ -2544,50 +2492,17 @@
                     loadAdminDashboard(name);
                 } else {
                     console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
-                    console.log('[ADMIN] User data check - please verify isAdmin field in technicians collection for UID:', user.uid);
                     await auth.signOut();
                     localStorage.removeItem('authVerified');
                     window.location.href = 'main-menu.html';
                 }
                 
                 // Also set up onAuthStateChanged as backup (in case auth state changes)
-                // Only redirect if dashboard was already loaded (user actually logged out)
                 auth.onAuthStateChanged(async function(user) {
-                    if (!user && dashboardLoaded) {
+                    if (!user) {
                         console.log('[ADMIN] Auth state changed - user logged out, redirecting to main-menu.html');
                         localStorage.removeItem('authVerified');
                         window.location.href = 'main-menu.html';
-                    }
-                });
-                
-                // Handle page restoration from browser history (e.g., when using history.back())
-                // Only close modals if we're actually returning from add-edit page
-                window.addEventListener('pageshow', function(event) {
-                    const returningFromAddEdit = sessionStorage.getItem('returningFromAddEdit') === 'true';
-                    if (returningFromAddEdit && (event.persisted || (window.performance && window.performance.navigation.type === 2))) {
-                        // Page was restored from cache/history AND we're returning from add-edit
-                        console.log('[ADMIN] Page restored from history - closing any open modals');
-                        sessionStorage.removeItem('returningFromAddEdit');
-                        setTimeout(() => {
-                            // Close all section modals
-                            const openModals = document.querySelectorAll('.section-modal');
-                            openModals.forEach(modal => {
-                                if (modal.id && window.closeSectionModal) {
-                                    if (modal.classList.contains('active')) {
-                                        window.closeSectionModal(modal.id);
-                                    }
-                                } else {
-                                    modal.classList.remove('active');
-                                    modal.style.display = 'none';
-                                }
-                            });
-                            document.body.style.overflow = '';
-                            
-                            // Ensure main dashboard is visible
-                            if (adminDashboard && dashboardLoaded) {
-                                adminDashboard.style.display = 'block';
-                            }
-                        }, 50);
                     }
                 });
         }
