@@ -2343,6 +2343,18 @@
                     const adminNameElement = document.getElementById('adminName');
                     if (adminNameElement) adminNameElement.textContent = adminName;
                     
+                    // Close any open section modals to show main dashboard
+                    const openModals = document.querySelectorAll('.section-modal.active');
+                    openModals.forEach(modal => {
+                        if (modal.id && window.closeSectionModal) {
+                            window.closeSectionModal(modal.id);
+                        } else {
+                            // Fallback: manually close the modal
+                            modal.classList.remove('active');
+                            modal.style.display = 'none';
+                        }
+                    });
+                    
                     // Check if we're returning from another admin page (fast reload)
                     const lastLoadTime = sessionStorage.getItem('adminLastLoadTime');
                     const now = Date.now();
