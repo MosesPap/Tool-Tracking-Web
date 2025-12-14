@@ -388,6 +388,35 @@
         </div>
     </div>
     
+    <!-- Delete Collection Modal -->
+    <div class="modal fade" id="deleteCollectionModal" tabindex="-1" aria-labelledby="deleteCollectionModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteCollectionModalLabel">Delete Collection</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="deleteCollectionWarning" style="display: none;"><strong>Warning:</strong> This will delete all tools from the collection "<span id="deleteCollectionName"></span>".</p>
+                    <div class="alert alert-warning" id="deleteCollectionAlert" style="display: none;">
+                        <strong>Soft Delete:</strong> Tools will be moved to a deleted state and kept for 7 days before permanent deletion.
+                    </div>
+                    <div class="mb-3" id="deleteCollectionOptions" style="display: none;">
+                        <label class="form-check-label">
+                            <input type="checkbox" class="form-check-input" id="permanentDeleteCheckbox">
+                            <strong>Delete permanently immediately</strong> (cannot be undone)
+                        </label>
+                    </div>
+                    <div id="deleteCollectionError" class="text-danger mb-3" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteCollectionBtn" onclick="confirmDeleteCollection()">Delete Collection</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Restore Deleted Items Modal -->
     <div class="modal fade" id="restoreModal" tabindex="-1" aria-labelledby="restoreModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
@@ -784,8 +813,50 @@
             window.deleteCurrentCollection = function() {
                 const collectionName = document.getElementById('deleteCollectionBtn').dataset.collectionName;
                 if (currentCollectionDocId && collectionName) {
-                    deleteCollection(currentCollectionDocId, collectionName);
+                    showDeleteCollectionModal(currentCollectionDocId, collectionName);
                 }
+            };
+            
+            // Show delete collection modal
+            window.showDeleteCollectionModal = function(docId, collectionName) {
+                const modal = new bootstrap.Modal(document.getElementById('deleteCollectionModal'));
+                const warningDiv = document.getElementById('deleteCollectionWarning');
+                const alertDiv = document.getElementById('deleteCollectionAlert');
+                const optionsDiv = document.getElementById('deleteCollectionOptions');
+                const confirmBtn = document.getElementById('confirmDeleteCollectionBtn');
+                const errorDiv = document.getElementById('deleteCollectionError');
+                
+                // Reset form
+                document.getElementById('permanentDeleteCheckbox').checked = false;
+                errorDiv.style.display = 'none';
+                warningDiv.style.display = 'block';
+                alertDiv.style.display = 'block';
+                optionsDiv.style.display = 'block';
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = 'Delete Collection';
+                
+                // Set collection name
+                document.getElementById('deleteCollectionName').textContent = collectionName;
+                
+                // Store docId and collectionName for the delete function
+                confirmBtn.dataset.docId = docId;
+                confirmBtn.dataset.collectionName = collectionName;
+                
+                modal.show();
+            };
+            
+            // Confirm delete collection
+            window.confirmDeleteCollection = async function() {
+                const confirmBtn = document.getElementById('confirmDeleteCollectionBtn');
+                const docId = confirmBtn.dataset.docId;
+                const collectionName = confirmBtn.dataset.collectionName;
+                
+                if (!docId || !collectionName) {
+                    alert('Collection information missing.');
+                    return;
+                }
+                
+                await deleteCollection(docId, collectionName);
             };
             
             // Load tools in collection
@@ -2364,13 +2435,24 @@
                 const user = auth.currentUser;
                 const deletedBy = user ? (localStorage.getItem('fullName') || user.email || 'Admin') : 'Admin';
                 
-                if (!confirm(`⚠️ WARNING: Are you sure you want to delete the collection "${collectionName}"?\n\nThis will delete:\n- The collection itself\n- ALL tools in this collection\n\nTools will be kept for 7 days and can be restored.`)) {
-                    return;
-                }
-                
-                const permanentDelete = confirm(`⚠️ Do you want to permanently delete immediately?\n\nClick OK for permanent deletion (cannot be undone)\nClick Cancel for soft delete (can be restored within 7 days)`);
+                const permanentDelete = document.getElementById('permanentDeleteCheckbox').checked;
+                const errorDiv = document.getElementById('deleteCollectionError');
+                const confirmBtn = document.getElementById('confirmDeleteCollectionBtn');
                 
                 try {
+                    errorDiv.style.display = 'none';
+                    confirmBtn.disabled = true;
+                    confirmBtn.textContent = 'Deleting...';
+                    
+                    // Close the modal
+                    const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteCollectionModal'));
+                    if (deleteModal) deleteModal.hide();
+                    
+                    // Show loading modal
+                    const loadingModal = new bootstrap.Modal(document.getElementById('photoUploadLoadingModal'));
+                    loadingModal.show();
+                    document.getElementById('photoUploadProgress').textContent = 'Deleting collection and tools...';
+                    
                     // Get all tools in this collection
                     const toolsSnapshot = await db.collection('tools')
                         .where('collectionCode', '==', collectionName)
@@ -2450,6 +2532,8 @@
                     // Commit the batch
                     await batch.commit();
                     
+                    loadingModal.hide();
+                    
                     if (permanentDelete) {
                         alert(`✅ Collection "${collectionName}" and ${deletedCount} tool(s) permanently deleted!`);
                     } else {
@@ -2464,7 +2548,14 @@
                     loadCollections();
                 } catch (error) {
                     console.error('Error deleting collection:', error);
-                    alert('Failed to delete collection: ' + error.message);
+                    errorDiv.textContent = 'Failed to delete collection: ' + error.message;
+                    errorDiv.style.display = 'block';
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Delete Collection';
+                    
+                    // Hide loading modal if it's open
+                    const loadingModal = bootstrap.Modal.getInstance(document.getElementById('photoUploadLoadingModal'));
+                    if (loadingModal) loadingModal.hide();
                 }
             };
             
