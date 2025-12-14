@@ -100,18 +100,97 @@
             opacity: 0.9;
         }
         
-        .tool-card {
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 10px;
+        /* Tool Card Styles (same as my-tools.html) */
+        .mytools-tool-item {
+            padding: 12px 12px 8px 12px;
+            border-radius: 0 0 6px 6px;
+            margin-bottom: 0.5rem;
+            font-size: 1.08rem;
+            border: 2px solid rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.5);
+            transform: perspective(1000px) rotateX(1deg);
             transition: all 0.3s ease;
+            cursor: pointer;
         }
-        
-        .tool-card:hover {
-            background: #e9ecef;
-            border-color: #667eea;
+
+        .mytools-tool-item:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+        }
+
+        .mytools-tool-item:active {
+            transform: perspective(1000px) rotateX(1deg) translateY(0px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.5);
+        }
+
+        .mytools-tool-bg1 {
+            background: linear-gradient(135deg, #fff 0%, #f5f5f5 100%);
+        }
+
+        .mytools-tool-bg2 {
+            background: linear-gradient(135deg, #fff7e6 0%, #ffe8cc 100%);
+        }
+
+        .mytools-tool-name {
+            font-weight: bold;
+            font-size: 1.13rem;
+            display: block !important;
+            margin-bottom: 4px !important;
+            width: 100% !important;
+            clear: both !important;
+        }
+
+        .mytools-tool-tid {
+            font-weight: bold;
+            display: block !important;
+            margin-bottom: 4px !important;
+            width: 100% !important;
+            clear: both !important;
+        }
+
+        .mytools-status-in {
+            color: #388E3C;
+            font-weight: bold;
+            font-size: 1.05rem;
+        }
+
+        .mytools-status-out {
+            color: #d32f2f;
+            font-weight: bold;
+            font-size: 1.05rem;
+        }
+
+        .mytools-status-broken {
+            color: #ff6f00;
+            font-weight: bold;
+            font-size: 1.05rem;
+        }
+
+        .mytools-status-lost {
+            color: #ff8f00;
+            font-weight: bold;
+            font-size: 1.05rem;
+        }
+
+        .mytools-status-calibration {
+            color: #1976d2;
+            font-weight: bold;
+            font-size: 1.05rem;
+        }
+
+        .mytools-tool-extra {
+            font-size: 1.01rem;
+            color: #222;
+            margin-top: 2px;
+        }
+
+        .mytools-tool-cal {
+            color: #388E3C;
+            font-size: 1.01rem;
+            margin-top: 2px;
         }
         
         .btn-3d {
@@ -650,6 +729,7 @@
                         </div>
                     `;
                     
+                    let toolIndex = 0;
                     snapshot.forEach(doc => {
                         const tool = doc.data();
                         console.log('Tool found:', {
@@ -661,29 +741,62 @@
                         });
                         
                         const photoCount = (tool.photoUrls && tool.photoUrls.length) || 0;
+                        const bgClass = toolIndex % 2 === 0 ? 'mytools-tool-bg1' : 'mytools-tool-bg2';
+                        const status = (tool.status || '').toUpperCase();
+                        const statusClass = getStatusClassForTool(status);
+                        
                         const toolCard = document.createElement('div');
-                        toolCard.className = 'tool-card';
+                        toolCard.className = `mytools-tool-item ${bgClass}`;
                         toolCard.innerHTML = `
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div class="form-check">
-                                    <input class="form-check-input tool-checkbox" type="checkbox" value="${doc.id}" onchange="updateSelectedTools()">
-                                    <label class="form-check-label">
-                                        <strong>${tool.toolId || doc.id}</strong> - ${tool.toolName || 'Unnamed'} (${tool.partNumber || 'N/A'})
-                                        <br><small class="text-muted">Status: ${tool.status || 'N/A'} | Collection Code: ${tool.collectionCode || 'N/A'} | Photos (${photoCount})</small>
-                                    </label>
-                                </div>
-                                <div>
-                                    <button class="btn btn-sm btn-primary btn-3d me-2" onclick="editTool('${doc.id}')">
-                                        <i class="fas fa-edit"></i> Edit
-                                    </button>
-                                    <button class="btn btn-sm btn-danger-3d" onclick="deleteTool('${doc.id}', '${(tool.toolId || doc.id).replace(/'/g, "\\'")}')">
-                                        <i class="fas fa-trash-alt"></i> Delete
-                                    </button>
-                                </div>
+                            <div class="form-check" style="margin-bottom: 8px;">
+                                <input class="form-check-input tool-checkbox" type="checkbox" value="${doc.id}" onchange="updateSelectedTools()" style="margin-top: 0.25rem;">
+                                <label class="form-check-label" style="margin-left: 0.5rem;">
+                                    <strong>Select</strong>
+                                </label>
+                            </div>
+                            <div class="mytools-tool-name">${toolIndex + 1}. ${tool.toolName || 'Unknown Tool'}</div>
+                            <div class="mytools-tool-tid">TID: ${tool.toolId || doc.id}</div>
+                            <span style="display:flex;align-items:center;justify-content:space-between;">
+                                <span style="font-size:1.01rem;color:#444;">Part #: ${tool.partNumber || ''}</span>
+                                <span style="font-size:1.01rem;font-weight:bold;color:#222;">WorkOn: <span style="color:#888;font-weight:bold;">${(typeof tool.WorkOn === 'string' && tool.WorkOn.trim()) ? tool.WorkOn : 'N/A'}</span></span>
+                            </span><br>
+                            <span class="mytools-status-${statusClass}">Status: ${tool.status || ''}</span>
+                            ${tool.status === 'OUT' ? `
+                                <div class="mytools-tool-extra">Technician: ${tool.technician || ''}</div>
+                                ${tool.timestamp && tool.timestamp.toDate ? `
+                                    <div class="mytools-tool-extra">Checked out: ${tool.timestamp.toDate().toLocaleString('en-GB', {
+                                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                                    })}</div>
+                                ` : ''}
+                            ` : ''}
+                            ${tool.calDueDate && tool.calDueDate.toDate ? `
+                                <div class="mytools-tool-cal">Cal Due: <span style="font-weight: bold;">${tool.calDueDate.toDate().toLocaleDateString('en-GB')}</span></div>
+                            ` : ''}
+                            <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;align-items:center;">
+                                <span style="font-size:1.01rem;color:#1976d2;font-weight:bold;margin-right:auto;">Photos (${photoCount})</span>
+                                <button class="btn btn-sm btn-primary btn-3d" onclick="event.stopPropagation(); editTool('${doc.id}')">
+                                    <i class="fas fa-edit"></i> Edit
+                                </button>
+                                <button class="btn btn-sm btn-danger-3d" onclick="event.stopPropagation(); deleteTool('${doc.id}', '${(tool.toolId || doc.id).replace(/'/g, "\\'")}')">
+                                    <i class="fas fa-trash-alt"></i> Delete
+                                </button>
                             </div>
                         `;
                         toolsList.appendChild(toolCard);
+                        toolIndex++;
                     });
+                    
+                    // Helper function to get status class
+                    function getStatusClassForTool(status) {
+                        const upperStatus = status ? status.toUpperCase() : 'IN';
+                        switch (upperStatus) {
+                            case 'OUT': return 'out';
+                            case 'BROKEN': return 'broken';
+                            case 'LOST': return 'lost';
+                            case 'CALIBRATION': return 'calibration';
+                            default: return 'in';
+                        }
+                    }
                     
                     console.log(`Successfully displayed ${snapshot.size} tools in the list`);
                 } catch (error) {
