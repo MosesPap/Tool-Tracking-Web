@@ -2315,6 +2315,9 @@
                 if (loginSection) loginSection.style.display = 'none';
                 if (adminDashboard) adminDashboard.style.display = 'none';
 
+        // Flag to track if dashboard has been successfully loaded
+        let dashboardLoaded = false;
+
         // Check if user is admin
         async function checkAdminStatus(user) {
                     const db = window.db || firebase.firestore();
@@ -2335,6 +2338,7 @@
 
                 // Load Admin Dashboard
                 function loadAdminDashboard(adminName) {
+                    dashboardLoaded = true; // Mark dashboard as loaded
                     if (adminDashboard) adminDashboard.style.display = 'block';
                     const adminNameElement = document.getElementById('adminName');
                     if (adminNameElement) adminNameElement.textContent = adminName;
@@ -2398,6 +2402,7 @@
                     if (user) {
                         console.log('[ADMIN] User found, checking admin status...');
                         const { isAdmin, name } = await checkAdminStatus(user);
+                        console.log('[ADMIN] Admin status check result:', { isAdmin, name, uid: user.uid });
                         if (isAdmin) {
                             console.log('[ADMIN] ✓ Admin confirmed, loading dashboard');
                             loadAdminDashboard(name);
@@ -2471,7 +2476,9 @@
                 
                 // User found - check admin status
                 console.log('[ADMIN] User found, checking admin status...');
+                console.log('[ADMIN] User UID:', user.uid, 'Email:', user.email);
                 const { isAdmin, name } = await checkAdminStatus(user);
+                console.log('[ADMIN] Admin status check result:', { isAdmin, name, uid: user.uid });
                 if (isAdmin) {
                     console.log('[ADMIN] ✓ User authenticated and is admin, loading dashboard');
                     localStorage.setItem('authVerified', 'true');
@@ -2481,14 +2488,16 @@
                     loadAdminDashboard(name);
                 } else {
                     console.log('[ADMIN] ✗ User is not admin, redirecting to main-menu.html');
+                    console.log('[ADMIN] User data check - please verify isAdmin field in technicians collection for UID:', user.uid);
                     await auth.signOut();
                     localStorage.removeItem('authVerified');
                     window.location.href = 'main-menu.html';
                 }
                 
                 // Also set up onAuthStateChanged as backup (in case auth state changes)
+                // Only redirect if dashboard was already loaded (user actually logged out)
                 auth.onAuthStateChanged(async function(user) {
-                    if (!user) {
+                    if (!user && dashboardLoaded) {
                         console.log('[ADMIN] Auth state changed - user logged out, redirecting to main-menu.html');
                         localStorage.removeItem('authVerified');
                         window.location.href = 'main-menu.html';
