@@ -2339,12 +2339,15 @@
                     const adminNameElement = document.getElementById('adminName');
                     if (adminNameElement) adminNameElement.textContent = adminName;
                     
-                    // Load all dashboard data
-                    loadStatistics();
-                    loadSettings();
-                    loadUsers();
-                    loadTools();
-                    loadAnalytics();
+                    // Show dashboard immediately, then load data in background (non-blocking)
+                    // This prevents delays when navigating to admin page
+                    setTimeout(() => {
+                        loadStatistics();
+                        loadSettings();
+                        loadUsers();
+                        loadTools();
+                        loadAnalytics();
+                    }, 0);
                 }
                 
                 // Make functions available globally
@@ -2386,9 +2389,9 @@
                     let user = auth.currentUser;
                     if (!user) {
                         console.log('[ADMIN] auth.currentUser is null, waiting for user...');
-                        // Wait up to 2 seconds for Firebase to restore the session
+                        // Wait up to 1 second for Firebase to restore the session (reduced from 2 seconds)
                         let waitCount = 0;
-                        while (!user && waitCount < 20) {
+                        while (!user && waitCount < 10) {
                             await new Promise(resolve => setTimeout(resolve, 100));
                             user = auth.currentUser;
                             waitCount++;
