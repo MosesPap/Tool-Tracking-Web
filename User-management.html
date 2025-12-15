@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - AMS Tool Tracking</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Header Styles */
+        .admin-header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .admin-header h1 {
+            color: #667eea;
+            font-weight: bold;
+            margin: 0;
+            font-size: 2rem;
+        }
+
+        .admin-welcome {
+            color: #666;
+            font-size: 1rem;
+            margin: 0;
+        }
+
+        .back-to-menu-btn {
+            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%);
+            color: white;
+            border: 2px solid #757575;
+            border-radius: 10px;
+            padding: 10px 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transform: perspective(1000px) rotateX(2deg);
+        }
+
+        .back-to-menu-btn:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(158, 158, 158, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+
+        .back-to-menu-btn:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 4px 8px rgba(158, 158, 158, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        /* Admin Card Styles */
+        .admin-card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 3D Grey User Management Title */
+        .admin-card h4.user-management-title {
+            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%) !important;
+            color: white !important;
+            padding: 12px 20px !important;
+            border-radius: 10px !important;
+            border: 2px solid #757575 !important;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+            transform: perspective(1000px) rotateX(2deg);
+            transition: all 0.3s ease;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        
+        .admin-card h4.user-management-title:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(158, 158, 158, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+        }
+
+        /* Loading Spinner */
+        .loading-spinner {
+            text-align: center;
+            padding: 40px;
+            display: none;
+        }
+
+        .loading-spinner p {
+            margin-top: 15px;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        /* User Table Styles */
+        .user-table {
+            margin-top: 20px;
+        }
+
+        .user-table th {
+            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%) !important;
+            color: white !important;
+            border: 2px solid #757575 !important;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transform: perspective(1000px) rotateX(2deg);
+            transition: all 0.3s ease;
+            font-weight: bold;
+            padding: 12px 15px;
+        }
+        
+        .user-table th:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-2px);
+            box-shadow: 0 6px 12px rgba(158, 158, 158, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+
+        .user-name-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .edit-name-icon {
+            cursor: pointer;
+            color: #667eea;
+            opacity: 0.6;
+            transition: opacity 0.3s ease;
+        }
+
+        .edit-name-icon:hover {
+            opacity: 1;
+        }
+
+        /* Role Badges */
+        .badge-admin {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.85rem;
+        }
+
+        .badge-instructor {
+            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.85rem;
+        }
+
+        .badge-avionics {
+            background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.85rem;
+        }
+
+        .badge-user {
+            background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.85rem;
+        }
+
+        .role-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .role-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .role-buttons .btn {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+        }
+
+        /* 3D Numbering Style */
+        .user-number-3d {
+            display: inline-block;
+            width: 35px;
+            height: 35px;
+            line-height: 35px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1rem;
+            color: white;
+            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%);
+            border: 2px solid #757575;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        .user-number-3d:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(158, 158, 158, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+
+        /* 3D Button Styles for Admin Actions */
+        .btn-3d-admin {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            border: 2px solid #1e7e34;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        .btn-3d-admin:hover {
+            background: linear-gradient(135deg, #218838 0%, #1aa179 100%);
+            border-color: #1c7430;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(40, 167, 69, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+        
+        .btn-3d-admin:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+        
+        .btn-3d-instructor {
+            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+            border: 2px solid #117a8b;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        .btn-3d-instructor:hover {
+            background: linear-gradient(135deg, #138496 0%, #117a8b 100%);
+            border-color: #0f6674;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(23, 162, 184, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+        
+        .btn-3d-instructor:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 4px 8px rgba(23, 162, 184, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+        
+        .btn-3d-avionics {
+            background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+            border: 2px solid #e0a800;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        .btn-3d-avionics:hover {
+            background: linear-gradient(135deg, #e0a800 0%, #f57c00 100%);
+            border-color: #d39e00;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(255, 193, 7, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+        
+        .btn-3d-avionics:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 4px 8px rgba(255, 193, 7, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+        
+        .btn-3d-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            border: 2px solid #bd2130;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        .btn-3d-danger:hover {
+            background: linear-gradient(135deg, #c82333 0%, #bd2130 100%);
+            border-color: #a71e2a;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(220, 53, 69, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+        
+        .btn-3d-danger:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+        
+        .btn-3d-delete {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            border: 2px solid #bd2130;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        
+        .btn-3d-delete:hover {
+            background: linear-gradient(135deg, #c82333 0%, #bd2130 100%);
+            border-color: #a71e2a;
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(220, 53, 69, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+        
+        .btn-3d-delete:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        /* Mobile-friendly user cards */
+        .user-card-mobile {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .user-table {
+                display: none;
+            }
+
+            .user-card-mobile {
+                display: block;
+            }
+
+            .user-card-item {
+                background: white;
+                border: 1px solid #dee2e6;
+                border-radius: 8px;
+                padding: 12px;
+                margin-bottom: 10px;
+            }
+
+            .user-card-item h6 {
+                margin: 0 0 5px 0;
+                font-size: 1rem;
+                color: #333;
+            }
+
+            .user-card-item p {
+                margin: 0 0 8px 0;
+                font-size: 0.85rem;
+                color: #666;
+            }
+
+            .user-card-item .btn {
+                font-size: 0.75rem;
+                padding: 5px 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="admin-header">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1><i class="fas fa-users"></i> User Management</h1>
+                    <p class="admin-welcome mb-2">Welcome, <span id="adminName">Admin</span></p>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <button class="back-to-menu-btn" onclick="window.location.href='admin.html'">
+                        <i class="fas fa-arrow-left"></i> Back to Admin
+                    </button>
+                    <button class="btn btn-danger btn-admin-action" id="logoutBtn">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="admin-content">
+        <div class="container">
+            <div class="admin-card">
+                <h4 class="user-management-title"><i class="fas fa-users"></i> User Management</h4>
+                
+                <div class="mb-3">
+                    <input type="text" class="form-control" id="userSearch" placeholder="Search users by name or email...">
+                </div>
+
+                <div class="loading-spinner" id="usersLoading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Loading users...</p>
+                </div>
+
+                <div class="table-responsive user-table">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th style="width: 60px;">#</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Roles</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <!-- Users will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Mobile-friendly card view -->
+                <div class="user-card-mobile" id="userCardsMobile">
+                    <!-- User cards will be populated here for mobile -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-functions-compat.js"></script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Common Firebase configuration and utilities -->
+    <script src="js/common.js"></script>
+
+    <script>
+        // Use global Firebase instances from common.js
+        (function() {
+            let checkCount = 0;
+            const maxChecks = 200;
+            let lastLogTime = 0;
+            const logInterval = 1000;
+            
+            function waitForAuth() {
+                const auth = window.auth;
+                const db = window.db;
+                const storage = window.storage;
+                
+                if (!auth || !db || !storage) {
+                    checkCount++;
+                    
+                    const now = Date.now();
+                    if (now - lastLogTime >= logInterval) {
+                        console.log(`[USER-MGMT] Waiting for common.js to load... (attempt ${checkCount})`);
+                        lastLogTime = now;
+                    }
+                    
+                    if (checkCount >= maxChecks) {
+                        console.error('[USER-MGMT] ✗ Timeout: common.js failed to load');
+                        return;
+                    }
+                    
+                    setTimeout(waitForAuth, 50);
+                    return;
+                }
+                
+                if (checkCount > 0) {
+                    console.log(`[USER-MGMT] ✓ Using global Firebase instances from common.js (loaded after ${checkCount} checks)`);
+                } else {
+                    console.log('[USER-MGMT] ✓ Using global Firebase instances from common.js');
+                }
+                initializeUserManagement(auth, db, storage);
+            }
+            
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', waitForAuth);
+            } else {
+                waitForAuth();
+            }
+        })();
+
+        async function initializeUserManagement(auth, db, storage) {
+            // Check if user is admin
+            async function checkAdminStatus(user) {
+                try {
+                    const doc = await db.collection('technicians').doc(user.uid).get();
+                    if (doc.exists) {
+                        const userData = doc.data();
+                        if (userData.isAdmin === true) {
+                            return { isAdmin: true, name: userData.fullName || user.email };
+                        }
+                    }
+                    return { isAdmin: false, name: null };
+                } catch (error) {
+                    console.error('Error checking admin status:', error);
+                    return { isAdmin: false, name: null };
+                }
+            }
+
+            // Check authentication and admin status
+            const authVerified = localStorage.getItem('authVerified');
+            const storedFullName = localStorage.getItem('fullName');
+            const cachedIsAdmin = localStorage.getItem('isAdmin') === 'true';
+
+            if (authVerified === 'true' && storedFullName && cachedIsAdmin) {
+                let user = auth.currentUser;
+                if (!user) {
+                    user = await new Promise((resolve) => {
+                        let resolved = false;
+                        let pollCount = 0;
+                        const maxPolls = 20;
+                        
+                        const unsubscribe = auth.onAuthStateChanged((u) => {
+                            if (u && !resolved) {
+                                resolved = true;
+                                unsubscribe();
+                                clearInterval(pollInterval);
+                                resolve(u);
+                            }
+                        });
+                        
+                        const pollInterval = setInterval(() => {
+                            pollCount++;
+                            const currentUser = auth.currentUser;
+                            if (currentUser && !resolved) {
+                                resolved = true;
+                                unsubscribe();
+                                clearInterval(pollInterval);
+                                resolve(currentUser);
+                            } else if (pollCount >= maxPolls && !resolved) {
+                                resolved = true;
+                                unsubscribe();
+                                clearInterval(pollInterval);
+                                resolve(auth.currentUser);
+                            }
+                        }, 100);
+                        
+                        setTimeout(() => {
+                            if (!resolved) {
+                                resolved = true;
+                                unsubscribe();
+                                clearInterval(pollInterval);
+                                resolve(auth.currentUser);
+                            }
+                        }, 2000);
+                    });
+                }
+
+                if (user) {
+                    // Verify admin status in background
+                    checkAdminStatus(user).then(({isAdmin}) => {
+                        if (!isAdmin) {
+                            localStorage.removeItem('isAdmin');
+                            localStorage.removeItem('authVerified');
+                            window.location.href = 'admin.html';
+                        } else {
+                            document.getElementById('adminName').textContent = storedFullName;
+                            loadUsers();
+                        }
+                    });
+                } else {
+                    window.location.href = 'admin.html';
+                }
+            } else {
+                window.location.href = 'admin.html';
+            }
+
+            // Logout button handler
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', async () => {
+                    if (confirm('Are you sure you want to logout?')) {
+                        try {
+                            await auth.signOut();
+                            localStorage.removeItem('authVerified');
+                            localStorage.removeItem('fullName');
+                            localStorage.removeItem('isAdmin');
+                            window.location.href = 'main-menu.html';
+                        } catch (error) {
+                            console.error('Logout error:', error);
+                            alert('Logout failed: ' + error.message);
+                        }
+                    }
+                });
+            }
+        }
+
+        // Load Users
+        async function loadUsers() {
+            const db = window.db || firebase.firestore();
+            const tableBody = document.getElementById('usersTableBody');
+            const mobileCards = document.getElementById('userCardsMobile');
+            const loading = document.getElementById('usersLoading');
+            
+            try {
+                loading.style.display = 'block';
+                const snapshot = await db.collection('technicians').get();
+                tableBody.innerHTML = '';
+                mobileCards.innerHTML = '';
+
+                // Collect all users and sort alphabetically by fullName
+                const users = [];
+                snapshot.forEach(doc => {
+                    users.push({
+                        id: doc.id,
+                        data: doc.data()
+                    });
+                });
+                
+                // Sort alphabetically by fullName
+                users.sort((a, b) => {
+                    const nameA = (a.data.fullName || '').toLowerCase();
+                    const nameB = (b.data.fullName || '').toLowerCase();
+                    return nameA.localeCompare(nameB);
+                });
+
+                // Render sorted users with numbering
+                users.forEach((user, index) => {
+                    const userData = user.data;
+                    const userId = user.id;
+                    const userNumber = index + 1;
+                    
+                    // Desktop table row
+                    const isAdmin = userData.isAdmin || false;
+                    const isInstructor = userData.isInstructor || false;
+                    const isAvionics = userData.isAvionics || false;
+                    
+                    const badges = [];
+                    if (isAdmin) badges.push('<span class="badge-admin"><i class="fas fa-shield-alt"></i> Admin</span>');
+                    if (isInstructor) badges.push('<span class="badge-instructor"><i class="fas fa-chalkboard-teacher"></i> Instructor</span>');
+                    if (isAvionics) badges.push('<span class="badge-avionics"><i class="fas fa-cog"></i> Avionics</span>');
+                    if (badges.length === 0) badges.push('<span class="badge-user">User</span>');
+                    
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>
+                            <span class="user-number-3d">${userNumber}</span>
+                        </td>
+                        <td>
+                            <div class="user-name-container">
+                                <span>${userData.fullName || 'N/A'}</span>
+                                <span class="edit-name-icon" onclick="editUserName('${userId}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}')" title="Edit user name">
+                                    <i class="fas fa-pencil-alt"></i>
+                                </span>
+                            </div>
+                        </td>
+                        <td>${userData.email || 'N/A'}</td>
+                        <td>
+                            <div class="role-badges">${badges.join('')}</div>
+                        </td>
+                        <td>
+                            <div class="role-buttons">
+                                <button class="btn btn-sm ${isAdmin ? 'btn-3d-danger' : 'btn-3d-admin'}" onclick="toggleAdmin('${userId}', ${!isAdmin})">
+                                    ${isAdmin ? '<i class="fas fa-shield-alt"></i> Remove Admin' : '<i class="fas fa-shield-alt"></i> Make Admin'}
+                                </button>
+                                <button class="btn btn-sm ${isInstructor ? 'btn-3d-danger' : 'btn-3d-instructor'}" onclick="toggleInstructor('${userId}', ${!isInstructor})">
+                                    ${isInstructor ? '<i class="fas fa-chalkboard-teacher"></i> Remove Instructor' : '<i class="fas fa-chalkboard-teacher"></i> Make Instructor'}
+                                </button>
+                                <button class="btn btn-sm ${isAvionics ? 'btn-3d-danger' : 'btn-3d-avionics'}" onclick="toggleAvionics('${userId}', ${!isAvionics})">
+                                    ${isAvionics ? '<i class="fas fa-cog"></i> Remove Avionics' : '<i class="fas fa-cog"></i> Make Avionics'}
+                                </button>
+                                <button class="btn btn-sm btn-3d-delete" onclick="deleteUser('${userId}', '${(userData.email || '').replace(/'/g, "\\'")}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}')">
+                                    <i class="fas fa-trash-alt"></i> Delete
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+
+                    // Mobile card
+                    const card = document.createElement('div');
+                    card.className = 'user-card-item';
+                    const mobileBadges = [];
+                    if (isAdmin) mobileBadges.push('<span class="badge-admin"><i class="fas fa-shield-alt"></i> Admin</span>');
+                    if (isInstructor) mobileBadges.push('<span class="badge-instructor"><i class="fas fa-chalkboard-teacher"></i> Instructor</span>');
+                    if (isAvionics) mobileBadges.push('<span class="badge-avionics"><i class="fas fa-cog"></i> Avionics</span>');
+                    if (mobileBadges.length === 0) mobileBadges.push('<span class="badge-user">User</span>');
+                    
+                    card.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                            <span class="user-number-3d">${userNumber}</span>
+                            <h6 style="margin: 0; display: flex; align-items: center; gap: 8px;">
+                                <i class="fas fa-user"></i> 
+                                <span>${userData.fullName || 'N/A'}</span>
+                                <span class="edit-name-icon" onclick="editUserName('${userId}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}')" title="Edit user name">
+                                    <i class="fas fa-pencil-alt"></i>
+                                </span>
+                            </h6>
+                        </div>
+                        <p><i class="fas fa-envelope"></i> ${userData.email || 'N/A'}</p>
+                        <p>
+                            <div class="role-badges">${mobileBadges.join('')}</div>
+                        </p>
+                        <div class="role-buttons" style="flex-direction: column; gap: 8px;">
+                            <button class="btn btn-sm ${isAdmin ? 'btn-3d-danger' : 'btn-3d-admin'}" onclick="toggleAdmin('${userId}', ${!isAdmin})">
+                                ${isAdmin ? '<i class="fas fa-shield-alt"></i> Remove Admin' : '<i class="fas fa-shield-alt"></i> Make Admin'}
+                            </button>
+                            <button class="btn btn-sm ${isInstructor ? 'btn-3d-danger' : 'btn-3d-instructor'}" onclick="toggleInstructor('${userId}', ${!isInstructor})">
+                                ${isInstructor ? '<i class="fas fa-chalkboard-teacher"></i> Remove Instructor' : '<i class="fas fa-chalkboard-teacher"></i> Make Instructor'}
+                            </button>
+                            <button class="btn btn-sm ${isAvionics ? 'btn-3d-danger' : 'btn-3d-avionics'}" onclick="toggleAvionics('${userId}', ${!isAvionics})">
+                                ${isAvionics ? '<i class="fas fa-cog"></i> Remove Avionics' : '<i class="fas fa-cog"></i> Make Avionics'}
+                            </button>
+                            <button class="btn btn-sm btn-3d-delete" onclick="deleteUser('${userId}', '${(userData.email || '').replace(/'/g, "\\'")}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}')">
+                                <i class="fas fa-trash-alt"></i> Delete
+                            </button>
+                        </div>
+                    `;
+                    mobileCards.appendChild(card);
+                });
+
+                loading.style.display = 'none';
+            } catch (error) {
+                console.error('Error loading users:', error);
+                loading.innerHTML = '<p class="text-danger">Error loading users. Please refresh the page.</p>';
+            }
+        }
+
+        // Toggle Admin Status
+        window.toggleAdmin = async function(userId, makeAdmin) {
+            const db = window.db || firebase.firestore();
+            const confirmMsg = makeAdmin 
+                ? 'Are you sure you want to grant admin privileges to this user?' 
+                : 'Are you sure you want to remove admin privileges from this user?';
+            
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                await db.collection('technicians').doc(userId).update({
+                    isAdmin: makeAdmin
+                });
+                alert(`✅ User ${makeAdmin ? 'promoted to' : 'removed from'} admin successfully!`);
+                loadUsers(); // Reload users list
+            } catch (error) {
+                console.error('Error updating user:', error);
+                alert('Failed to update user: ' + error.message);
+            }
+        };
+
+        // Toggle Instructor Status
+        window.toggleInstructor = async function(userId, makeInstructor) {
+            const db = window.db || firebase.firestore();
+            const confirmMsg = makeInstructor 
+                ? 'Are you sure you want to grant instructor privileges to this user?' 
+                : 'Are you sure you want to remove instructor privileges from this user?';
+            
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                await db.collection('technicians').doc(userId).update({
+                    isInstructor: makeInstructor
+                });
+                alert(`✅ User ${makeInstructor ? 'promoted to' : 'removed from'} instructor successfully!`);
+                loadUsers(); // Reload users list
+            } catch (error) {
+                console.error('Error updating user:', error);
+                alert('Failed to update user: ' + error.message);
+            }
+        };
+
+        // Toggle Avionics Status
+        window.toggleAvionics = async function(userId, makeAvionics) {
+            const db = window.db || firebase.firestore();
+            const confirmMsg = makeAvionics 
+                ? 'Are you sure you want to grant avionics privileges to this user?' 
+                : 'Are you sure you want to remove avionics privileges from this user?';
+            
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                await db.collection('technicians').doc(userId).update({
+                    isAvionics: makeAvionics
+                });
+                alert(`✅ User ${makeAvionics ? 'promoted to' : 'removed from'} avionics successfully!`);
+                loadUsers(); // Reload users list
+            } catch (error) {
+                console.error('Error updating user:', error);
+                alert('Failed to update user: ' + error.message);
+            }
+        };
+        
+        // Edit User Name
+        window.editUserName = async function(userId, currentName) {
+            const db = window.db || firebase.firestore();
+            const newName = prompt(`Edit user name:\n\nCurrent name: ${currentName}\n\nEnter new name:`, currentName);
+            
+            if (!newName) {
+                return; // User cancelled
+            }
+            
+            const trimmedName = newName.trim();
+            if (!trimmedName) {
+                alert('Name cannot be empty!');
+                return;
+            }
+            
+            if (trimmedName === currentName) {
+                return; // No change
+            }
+            
+            if (!confirm(`Are you sure you want to change the name from "${currentName}" to "${trimmedName}"?`)) {
+                return;
+            }
+            
+            try {
+                await db.collection('technicians').doc(userId).update({
+                    fullName: trimmedName
+                });
+                alert(`✅ User name updated successfully from "${currentName}" to "${trimmedName}"!`);
+                loadUsers(); // Reload users list
+            } catch (error) {
+                console.error('Error updating user name:', error);
+                alert('Failed to update user name: ' + error.message);
+            }
+        };
+        
+        // Delete User
+        window.deleteUser = async function(userId, userEmail, userName) {
+            const db = window.db || firebase.firestore();
+            const auth = window.auth || firebase.auth();
+            
+            // Check if user is authenticated
+            const currentUser = auth.currentUser;
+            if (!currentUser) {
+                alert('❌ You must be logged in to delete users. Please refresh the page and log in again.');
+                return;
+            }
+            
+            const confirmMsg = `Are you sure you want to delete user "${userName}" (${userEmail})?\n\nThis will:\n- Delete the user from the technicians collection\n- Delete the user from Firebase Authentication\n\n⚠️ If Firebase Authentication deletion fails, the user will NOT be deleted from either location.\n\nThis action cannot be undone!`;
+            
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                // Ensure we're still authenticated before calling the function
+                const userBeforeCall = auth.currentUser;
+                if (!userBeforeCall) {
+                    alert('❌ Session expired. Please refresh the page and log in again.');
+                    return;
+                }
+                
+                // Use the functions instance from window.functions (initialized in common.js)
+                const functions = window.functions;
+                if (!functions) {
+                    alert('❌ Firebase Functions not initialized. Please refresh the page.');
+                    return;
+                }
+                
+                // Get a fresh token right before the call
+                const freshToken = await userBeforeCall.getIdToken(true);
+                console.log('Calling deleteUser Cloud Function...');
+                console.log('Auth current user UID:', userBeforeCall.uid);
+                console.log('Auth current user email:', userBeforeCall.email);
+                
+                // Create the callable function reference
+                const deleteUserFunction = functions.httpsCallable('deleteUser');
+                
+                // Call the function - httpsCallable automatically includes the auth token
+                console.log('Making callable function request...');
+                const result = await deleteUserFunction({
+                    userId: userId,
+                    userEmail: userEmail
+                });
+
+                if (result.data.success) {
+                    alert(`✅ ${result.data.message}`);
+                } else {
+                    alert(`⚠️ User deletion completed with warnings: ${result.data.message || 'Unknown error'}`);
+                }
+
+                // Reload users list
+                loadUsers();
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                
+                let errorMessage = 'Failed to delete user: ';
+                
+                if (error.code === 'functions/unavailable' || error.code === 'functions/not-found') {
+                    errorMessage = 'Cloud Function is not available. User was not deleted. Please try again later or contact support.';
+                } else if (error.code === 'functions/permission-denied') {
+                    errorMessage = 'Permission denied. You do not have permission to delete users.';
+                } else if (error.code === 'functions/internal') {
+                    errorMessage = error.message || 'Failed to delete user. The user was not deleted from either Firestore or Firebase Authentication.';
+                } else if (error.code === 'functions/unauthenticated') {
+                    errorMessage = 'Authentication error. Please refresh the page and log in again.';
+                } else {
+                    errorMessage += (error.message || error);
+                }
+                
+                alert(`❌ ${errorMessage}`);
+            }
+        };
+
+        // User Search
+        const userSearchElement = document.getElementById('userSearch');
+        if (userSearchElement) {
+            userSearchElement.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase();
+                
+                // Search in table rows
+                const rows = document.querySelectorAll('#usersTableBody tr');
+                rows.forEach(row => {
+                    const text = row.textContent.toLowerCase();
+                    row.style.display = text.includes(searchTerm) ? '' : 'none';
+                });
+
+                // Search in mobile cards
+                const cards = document.querySelectorAll('.user-card-item');
+                cards.forEach(card => {
+                    const text = card.textContent.toLowerCase();
+                    card.style.display = text.includes(searchTerm) ? '' : 'none';
+                });
+            });
+        }
+    </script>
+</body>
+</html>
+
