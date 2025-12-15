@@ -523,6 +523,49 @@
         #editUserModal .form-check-input {
             margin-right: 10px;
             cursor: pointer;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #757575;
+            border-radius: 4px;
+            background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+            transform: perspective(1000px) rotateX(2deg);
+            transition: all 0.3s ease;
+            position: relative;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+        }
+
+        #editUserModal .form-check-input:hover {
+            border-color: #616161;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+            transform: perspective(1000px) rotateX(0deg) translateY(-1px);
+        }
+
+        #editUserModal .form-check-input:checked {
+            background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
+            border-color: #2e7d32;
+            box-shadow: 0 3px 8px rgba(76, 175, 80, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transform: perspective(1000px) rotateX(0deg);
+        }
+
+        #editUserModal .form-check-input:checked::after {
+            content: '✓';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        #editUserModal .form-check-input:focus {
+            outline: none;
+            border-color: #424242;
+            box-shadow: 0 0 0 3px rgba(117, 117, 117, 0.25), 0 3px 8px rgba(0, 0, 0, 0.2);
         }
     </style>
 </head>
