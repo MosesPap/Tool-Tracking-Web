@@ -195,6 +195,57 @@
                         inset 0 -1px 0 rgba(0, 0, 0, 0.1);
         }
 
+        /* Owner List Styles */
+        .owners-list-container {
+            margin-top: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 10px;
+            background: #f8f9fa;
+        }
+
+        .owners-group {
+            margin-bottom: 15px;
+        }
+
+        .owners-group-header {
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: #FF9800;
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 2px solid #FF9800;
+        }
+
+        .owners-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .owner-list-item {
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid #e0e0e0;
+        }
+
+        .owner-list-item:hover {
+            background: #FF9800;
+            color: white;
+            transform: translateX(5px);
+            box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+        }
+
+        .owner-list-item:active {
+            transform: translateX(2px);
+        }
+
         /* 3D Orange Interactive Button for Primary Actions */
         .btn-primary {
             position: relative;
@@ -611,6 +662,11 @@
             <button id="loadToolsByOwnerBtn" class="btn btn-primary btn-lg w-100" disabled>
               <i class="fas fa-search"></i> Load Tools
             </button>
+            
+            <!-- Owners List (Grouped Alphabetically) -->
+            <div id="ownersListContainer" class="owners-list-container" style="display: none;">
+              <!-- Will be populated by loadOwners() -->
+            </div>
           </div>
         </div>
 
@@ -1167,16 +1223,104 @@
                 // Keep first two options (empty and ALL)
                 select.innerHTML = '<option value="">-- Select an Owner --</option><option value="ALL">All Owners</option>';
                 
-                // Add all unique owners alphabetically
-                Array.from(owners).sort().forEach(owner => {
+                // Sort owners alphabetically
+                const sortedOwners = Array.from(owners).sort();
+                
+                // Add all unique owners alphabetically to dropdown
+                sortedOwners.forEach(owner => {
                     const option = document.createElement('option');
                     option.value = owner;
                     option.textContent = owner;
                     select.appendChild(option);
                 });
+                
+                // Group owners alphabetically and display in list
+                const groupedOwners = groupOwnersAlphabetically(sortedOwners);
+                displayOwnersList(groupedOwners);
             } catch (error) {
                 console.error('Error loading owners:', error);
                 alert('Error loading owners. Please try again.');
+            }
+        }
+
+        // Group owners alphabetically by first letter
+        function groupOwnersAlphabetically(owners) {
+            const groups = {};
+            
+            owners.forEach(owner => {
+                const firstLetter = owner.charAt(0).toUpperCase();
+                // Handle non-alphabetic characters
+                const groupKey = /[A-Z]/.test(firstLetter) ? firstLetter : '#';
+                
+                if (!groups[groupKey]) {
+                    groups[groupKey] = [];
+                }
+                groups[groupKey].push(owner);
+            });
+            
+            // Sort group keys
+            const sortedGroups = {};
+            Object.keys(groups).sort().forEach(key => {
+                sortedGroups[key] = groups[key];
+            });
+            
+            return sortedGroups;
+        }
+
+        // Display owners list grouped alphabetically
+        function displayOwnersList(groupedOwners) {
+            const container = document.getElementById('ownersListContainer');
+            if (!container) return;
+            
+            if (Object.keys(groupedOwners).length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            let html = '';
+            
+            Object.keys(groupedOwners).forEach(letter => {
+                const owners = groupedOwners[letter];
+                html += `
+                    <div class="owners-group">
+                        <div class="owners-group-header">${letter}</div>
+                        <ul class="owners-list">
+                `;
+                
+                owners.forEach(owner => {
+                    html += `
+                        <li class="owner-list-item" data-owner="${owner.replace(/"/g, "&quot;")}">
+                            ${owner}
+                        </li>
+                    `;
+                });
+                
+                html += `
+                        </ul>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+            container.style.display = 'block';
+            
+            // Add click event listeners to owner list items
+            const ownerItems = container.querySelectorAll('.owner-list-item');
+            ownerItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    const ownerName = this.getAttribute('data-owner');
+                    selectOwnerFromList(ownerName);
+                });
+            });
+        }
+
+        // Select owner from list
+        function selectOwnerFromList(ownerName) {
+            const select = document.getElementById('ownerSelect');
+            if (select) {
+                select.value = ownerName;
+                // Trigger change event to enable load button
+                select.dispatchEvent(new Event('change'));
             }
         }
 
