@@ -256,60 +256,135 @@
             box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
         }
 
-        /* 3D Interactive Button Styles */
+        /* 3D Interactive Button Styles - Keep original colors */
         .tool-mgmt-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: 2px solid #5a6fd8;
-            border-radius: 15px;
-            padding: 20px;
+            border-radius: 12px;
+            padding: 12px 15px;
             font-weight: bold;
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3),
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2),
                         inset 0 1px 0 rgba(255, 255, 255, 0.3),
                         inset 0 -1px 0 rgba(0, 0, 0, 0.2);
             transform: perspective(1000px) rotateX(2deg);
             width: 100%;
-            margin-bottom: 15px;
+            margin-bottom: 8px;
+            border: 2px solid;
         }
 
-        .tool-mgmt-btn:hover {
-            transform: perspective(1000px) rotateX(0deg) translateY(-5px) scale(1.02);
-            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4),
+        /* Primary (Blue) */
+        .tool-mgmt-btn.btn-primary {
+            background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+            color: white;
+            border-color: #0a58ca;
+        }
+
+        .tool-mgmt-btn.btn-primary:hover {
+            background: linear-gradient(135deg, #0b5ed7 0%, #084298 100%);
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px) scale(1.01);
+            box-shadow: 0 6px 18px rgba(13, 110, 253, 0.4),
                         inset 0 1px 0 rgba(255, 255, 255, 0.4),
                         inset 0 -1px 0 rgba(0, 0, 0, 0.25);
-            border-color: #4a5fc7;
+        }
+
+        /* Success (Green) */
+        .tool-mgmt-btn.btn-success {
+            background: linear-gradient(135deg, #198754 0%, #146c43 100%);
+            color: white;
+            border-color: #146c43;
+        }
+
+        .tool-mgmt-btn.btn-success:hover {
+            background: linear-gradient(135deg, #157347 0%, #0f5132 100%);
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px) scale(1.01);
+            box-shadow: 0 6px 18px rgba(25, 135, 84, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+        }
+
+        /* Info (Light Blue) */
+        .tool-mgmt-btn.btn-info {
+            background: linear-gradient(135deg, #0dcaf0 0%, #0aa2c0 100%);
+            color: white;
+            border-color: #0aa2c0;
+        }
+
+        .tool-mgmt-btn.btn-info:hover {
+            background: linear-gradient(135deg, #0bacd0 0%, #087990 100%);
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px) scale(1.01);
+            box-shadow: 0 6px 18px rgba(13, 202, 240, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+        }
+
+        /* Warning (Orange/Yellow) */
+        .tool-mgmt-btn.btn-warning {
+            background: linear-gradient(135deg, #ffc107 0%, #cc9a06 100%);
+            color: #000;
+            border-color: #cc9a06;
+        }
+
+        .tool-mgmt-btn.btn-warning:hover {
+            background: linear-gradient(135deg, #ffcd39 0%, #b8860a 100%);
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px) scale(1.01);
+            box-shadow: 0 6px 18px rgba(255, 193, 7, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+        }
+
+        /* Secondary (Grey) */
+        .tool-mgmt-btn.btn-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #565e64 100%);
+            color: white;
+            border-color: #565e64;
+        }
+
+        .tool-mgmt-btn.btn-secondary:hover {
+            background: linear-gradient(135deg, #5c636a 0%, #484f54 100%);
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px) scale(1.01);
+            box-shadow: 0 6px 18px rgba(108, 117, 125, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.25);
         }
 
         .tool-mgmt-btn:active {
-            transform: perspective(1000px) rotateX(2deg) translateY(-2px) scale(0.98);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3),
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px) scale(0.99);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2),
                         inset 0 1px 0 rgba(255, 255, 255, 0.2);
         }
 
         .tool-mgmt-btn i {
             display: block;
-            font-size: 2.5rem;
-            margin-bottom: 10px;
+            font-size: 1.8rem;
+            margin-bottom: 6px;
         }
 
         .tool-mgmt-btn strong {
             display: block;
-            font-size: 1.2rem;
-            margin-bottom: 5px;
+            font-size: 1rem;
+            margin-bottom: 3px;
         }
 
         .tool-mgmt-btn small {
             display: block;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             opacity: 0.9;
         }
 
         /* Full width container for buttons */
         .tools-main-menu-container {
-            padding: 20px 15px;
+            padding: 15px 15px;
             max-width: 100%;
+        }
+
+        /* Decrease spacing between buttons */
+        #toolsMainMenu .row {
+            margin-bottom: 0;
+        }
+
+        #toolsMainMenu .col-12 {
+            padding-left: 8px;
+            padding-right: 8px;
         }
     </style>
 </head>
@@ -335,37 +410,37 @@
         <div class="tools-main-menu-container">
             <!-- Tools Main Menu -->
             <div id="toolsMainMenu">
-                <div class="row g-3">
+                <div class="row">
                     <div class="col-12">
-                        <button class="tool-mgmt-btn" onclick="showToolsByUser()">
+                        <button class="tool-mgmt-btn btn-primary" onclick="showToolsByUser()">
                             <i class="fas fa-user-tag"></i>
                             <strong>Tools By User</strong>
                             <small>View tool history by technician</small>
                         </button>
                     </div>
                     <div class="col-12">
-                        <button class="tool-mgmt-btn" onclick="window.location.href='tools-by-owner.html'">
+                        <button class="tool-mgmt-btn btn-success" onclick="window.location.href='tools-by-owner.html'">
                             <i class="fas fa-users-cog"></i>
                             <strong>Tools By Owner</strong>
                             <small>View tools grouped by collection owner</small>
                         </button>
                     </div>
                     <div class="col-12">
-                        <button class="tool-mgmt-btn" onclick="window.location.href='add-edit-collections-tools.html'">
+                        <button class="tool-mgmt-btn btn-info" onclick="window.location.href='add-edit-collections-tools.html'">
                             <i class="fas fa-edit"></i>
                             <strong>Add/Edit Collections - Tools</strong>
                             <small>Manage collections and tools</small>
                         </button>
                     </div>
                     <div class="col-12">
-                        <button class="tool-mgmt-btn" onclick="showImportExcel()">
+                        <button class="tool-mgmt-btn btn-warning" onclick="showImportExcel()">
                             <i class="fas fa-file-excel"></i>
                             <strong>Import from Excel</strong>
                             <small>Bulk import tools</small>
                         </button>
                     </div>
                     <div class="col-12">
-                        <button class="tool-mgmt-btn" onclick="showExportTools()">
+                        <button class="tool-mgmt-btn btn-secondary" onclick="showExportTools()">
                             <i class="fas fa-download"></i>
                             <strong>Export Tools</strong>
                             <small>Download tools data</small>
