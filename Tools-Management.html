@@ -13,7 +13,7 @@
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: white;
             min-height: 100vh;
             margin: 0;
             padding: 0;
@@ -42,6 +42,13 @@
             margin: 0;
             font-size: 2.5rem;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Responsive title for phone screens */
+        @media (max-width: 576px) {
+            .admin-header h1 {
+                font-size: 1.5rem;
+            }
         }
 
         .back-to-menu-btn {
@@ -248,6 +255,62 @@
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
         }
+
+        /* 3D Interactive Button Styles */
+        .tool-mgmt-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: 2px solid #5a6fd8;
+            border-radius: 15px;
+            padding: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+            transform: perspective(1000px) rotateX(2deg);
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .tool-mgmt-btn:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-5px) scale(1.02);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+            border-color: #4a5fc7;
+        }
+
+        .tool-mgmt-btn:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-2px) scale(0.98);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .tool-mgmt-btn i {
+            display: block;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .tool-mgmt-btn strong {
+            display: block;
+            font-size: 1.2rem;
+            margin-bottom: 5px;
+        }
+
+        .tool-mgmt-btn small {
+            display: block;
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        /* Full width container for buttons */
+        .tools-main-menu-container {
+            padding: 20px 15px;
+            max-width: 100%;
+        }
     </style>
 </head>
 <body>
@@ -269,46 +332,43 @@
 
     <!-- Content -->
     <div class="admin-content">
-        <div class="container">
+        <div class="tools-main-menu-container">
             <!-- Tools Main Menu -->
-            <div id="toolsMainMenu" class="admin-card">
-                <h4><i class="fas fa-toolbox"></i> Tool Management</h4>
-                <p style="color: #666; margin-bottom: 20px;">Select an option to manage tools</p>
-                
+            <div id="toolsMainMenu">
                 <div class="row g-3">
-                    <div class="col-md-6">
-                        <button class="btn btn-primary w-100 py-3" onclick="showToolsByUser()">
-                            <i class="fas fa-user-tag fa-2x d-block mb-2"></i>
+                    <div class="col-12">
+                        <button class="tool-mgmt-btn" onclick="showToolsByUser()">
+                            <i class="fas fa-user-tag"></i>
                             <strong>Tools By User</strong>
-                            <small class="d-block">View tool history by technician</small>
+                            <small>View tool history by technician</small>
                         </button>
                     </div>
-                    <div class="col-md-6">
-                        <button class="btn btn-success w-100 py-3" onclick="window.location.href='tools-by-owner.html'">
-                            <i class="fas fa-users-cog fa-2x d-block mb-2"></i>
+                    <div class="col-12">
+                        <button class="tool-mgmt-btn" onclick="window.location.href='tools-by-owner.html'">
+                            <i class="fas fa-users-cog"></i>
                             <strong>Tools By Owner</strong>
-                            <small class="d-block">View tools grouped by collection owner</small>
+                            <small>View tools grouped by collection owner</small>
                         </button>
                     </div>
-                    <div class="col-md-4">
-                        <button class="btn btn-info w-100 py-3" onclick="window.location.href='add-edit-collections-tools.html'">
-                            <i class="fas fa-edit fa-2x d-block mb-2"></i>
+                    <div class="col-12">
+                        <button class="tool-mgmt-btn" onclick="window.location.href='add-edit-collections-tools.html'">
+                            <i class="fas fa-edit"></i>
                             <strong>Add/Edit Collections - Tools</strong>
-                            <small class="d-block">Manage collections and tools</small>
+                            <small>Manage collections and tools</small>
                         </button>
                     </div>
-                    <div class="col-md-4">
-                        <button class="btn btn-warning w-100 py-3" onclick="showImportExcel()">
-                            <i class="fas fa-file-excel fa-2x d-block mb-2"></i>
+                    <div class="col-12">
+                        <button class="tool-mgmt-btn" onclick="showImportExcel()">
+                            <i class="fas fa-file-excel"></i>
                             <strong>Import from Excel</strong>
-                            <small class="d-block">Bulk import tools</small>
+                            <small>Bulk import tools</small>
                         </button>
                     </div>
-                    <div class="col-md-4">
-                        <button class="btn btn-secondary w-100 py-3" onclick="showExportTools()">
-                            <i class="fas fa-download fa-2x d-block mb-2"></i>
+                    <div class="col-12">
+                        <button class="tool-mgmt-btn" onclick="showExportTools()">
+                            <i class="fas fa-download"></i>
                             <strong>Export Tools</strong>
-                            <small class="d-block">Download tools data</small>
+                            <small>Download tools data</small>
                         </button>
                     </div>
                 </div>
