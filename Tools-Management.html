@@ -380,15 +380,30 @@
         /* Decrease spacing between buttons */
         #toolsMainMenu .row {
             margin-bottom: 0;
+            justify-content: center;
         }
 
         #toolsMainMenu .col-12 {
             padding-left: 8px;
             padding-right: 8px;
+            display: flex;
+            justify-content: center;
         }
 
         /* Responsive button width - narrower on tablets and computers */
         @media (min-width: 768px) {
+            .tools-main-menu-container {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                flex-direction: column;
+            }
+
+            #toolsMainMenu {
+                width: 100%;
+                max-width: 520px;
+            }
+
             .tool-mgmt-btn {
                 max-width: 500px;
                 margin-left: auto;
@@ -397,6 +412,10 @@
         }
 
         @media (min-width: 992px) {
+            #toolsMainMenu {
+                max-width: 470px;
+            }
+
             .tool-mgmt-btn {
                 max-width: 450px;
             }
