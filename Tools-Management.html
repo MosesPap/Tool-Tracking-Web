@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tool Management - AMS Tool Tracking</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Header Styles */
+        .admin-header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .admin-header h1 {
+            color: #667eea;
+            font-weight: bold;
+            margin: 0;
+            font-size: 2rem;
+        }
+
+        .admin-welcome {
+            color: #666;
+            font-size: 1rem;
+            margin: 0;
+        }
+
+        .back-to-menu-btn {
+            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%);
+            color: white;
+            border: 2px solid #757575;
+            border-radius: 10px;
+            padding: 10px 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transform: perspective(1000px) rotateX(2deg);
+        }
+
+        .back-to-menu-btn:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-3px);
+            box-shadow: 0 6px 12px rgba(158, 158, 158, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+
+        .back-to-menu-btn:active {
+            transform: perspective(1000px) rotateX(2deg) translateY(-1px);
+            box-shadow: 0 4px 8px rgba(158, 158, 158, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        /* Admin Card Styles */
+        .admin-card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Loading Spinner */
+        .loading-spinner {
+            text-align: center;
+            padding: 40px;
+            display: none;
+        }
+
+        .loading-spinner p {
+            margin-top: 15px;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        /* Tool Cards */
+        .register-tool-card {
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .register-tool-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .register-tool-card.in {
+            background: #C8E6C9;
+            border-color: #4CAF50;
+        }
+
+        .register-tool-card.out {
+            background: #FFCDD2;
+            border-color: #F44336;
+        }
+
+        .register-tool-card.broken {
+            background: #FFE082;
+            border-color: #FFC107;
+        }
+
+        .register-tool-card.lost {
+            background: #B0BEC5;
+            border-color: #607D8B;
+        }
+
+        .register-tool-card.calibration {
+            background: #BBDEFB;
+            border-color: #2196F3;
+        }
+
+        .filter-time-btn {
+            margin: 2px;
+        }
+
+        /* High specificity rules to override Bootstrap */
+        button.btn-primary.filter-time-btn.active,
+        .btn-primary.filter-time-btn.active,
+        button.filter-time-btn.active,
+        .filter-time-btn.active {
+            background: #ff9800 !important;
+            background-color: #ff9800 !important;
+            border-color: #ff9800 !important;
+            color: white !important;
+            font-weight: bold !important;
+        }
+
+        .nav-buttons-container .filter-time-btn.active,
+        .admin-card .filter-time-btn.active {
+            background: #ff9800 !important;
+            background-color: #ff9800 !important;
+            border-color: #ff9800 !important;
+            color: white !important;
+            font-weight: bold !important;
+        }
+
+        .user-tool-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border: 1px solid #e9ecef;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08),
+                        0 1px 3px rgba(0,0,0,0.1);
+            position: relative;
+            text-align: center;
+            transform: perspective(1000px) rotateX(0deg);
+        }
+
+        .user-tool-card:hover {
+            transform: perspective(1000px) rotateX(-2deg) translateY(-8px) scale(1.02);
+            box-shadow: 0 12px 40px rgba(102, 126, 234, 0.25),
+                        0 6px 20px rgba(0,0,0,0.15),
+                        inset 0 1px 0 rgba(255,255,255,0.9);
+            border-color: #667eea;
+        }
+
+        .user-tool-card:active {
+            transform: perspective(1000px) rotateX(0deg) translateY(-2px) scale(0.98);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.2),
+                        0 3px 10px rgba(0,0,0,0.1);
+        }
+
+        .user-tool-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 15px 15px 0 0;
+        }
+
+        .user-tool-card .d-flex {
+            flex-direction: column !important;
+            align-items: center !important;
+        }
+
+        .user-tool-card h6 {
+            margin-bottom: 8px !important;
+            font-size: 1rem !important;
+            color: #333 !important;
+        }
+
+        .user-tool-card small {
+            margin-bottom: 15px !important;
+            color: #666 !important;
+        }
+
+        .user-tool-card .out-badge,
+        .user-tool-card span[style*="color: #28a745"] {
+            margin-top: 10px !important;
+            align-self: center !important;
+            font-weight: bold !important;
+        }
+
+        .user-tool-card .out-badge {
+            background: linear-gradient(135deg, #dc3545, #c82333) !important;
+            box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3) !important;
+            border-radius: 20px !important;
+            padding: 6px 15px !important;
+            font-size: 0.9rem !important;
+            color: white !important;
+        }
+
+        .user-tool-card span[style*="color: #28a745"] {
+            background: linear-gradient(135deg, #28a745, #20c997) !important;
+            color: white !important;
+            padding: 6px 15px !important;
+            border-radius: 20px !important;
+            box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3) !important;
+            font-size: 0.9rem !important;
+        }
+
+        /* Orange button hover effects */
+        button[style*="background-color: #FF9800"] {
+            transition: all 0.3s ease;
+        }
+
+        button[style*="background-color: #FF9800"]:hover {
+            background-color: #F57C00 !important;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="admin-header">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1><i class="fas fa-toolbox"></i> Tool Management</h1>
+                    <p class="admin-welcome mb-2">Welcome, <span id="adminName">Admin</span></p>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <button class="back-to-menu-btn" onclick="window.location.href='admin.html'">
+                        <i class="fas fa-arrow-left"></i> Back to Admin
+                    </button>
+                    <button class="btn btn-danger btn-admin-action" id="logoutBtn">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="admin-content">
+        <div class="container">
+            <!-- Tools Main Menu -->
+            <div id="toolsMainMenu" class="admin-card">
+                <h4><i class="fas fa-toolbox"></i> Tool Management</h4>
+                <p style="color: #666; margin-bottom: 20px;">Select an option to manage tools</p>
+                
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <button class="btn btn-primary w-100 py-3" onclick="showToolsByUser()">
+                            <i class="fas fa-user-tag fa-2x d-block mb-2"></i>
+                            <strong>Tools By User</strong>
+                            <small class="d-block">View tool history by technician</small>
+                        </button>
+                    </div>
+                    <div class="col-md-6">
+                        <button class="btn btn-success w-100 py-3" onclick="window.location.href='tools-by-owner.html'">
+                            <i class="fas fa-users-cog fa-2x d-block mb-2"></i>
+                            <strong>Tools By Owner</strong>
+                            <small class="d-block">View tools grouped by collection owner</small>
+                        </button>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-info w-100 py-3" onclick="window.location.href='add-edit-collections-tools.html'">
+                            <i class="fas fa-edit fa-2x d-block mb-2"></i>
+                            <strong>Add/Edit Collections - Tools</strong>
+                            <small class="d-block">Manage collections and tools</small>
+                        </button>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-warning w-100 py-3" onclick="showImportExcel()">
+                            <i class="fas fa-file-excel fa-2x d-block mb-2"></i>
+                            <strong>Import from Excel</strong>
+                            <small class="d-block">Bulk import tools</small>
+                        </button>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-secondary w-100 py-3" onclick="showExportTools()">
+                            <i class="fas fa-download fa-2x d-block mb-2"></i>
+                            <strong>Export Tools</strong>
+                            <small class="d-block">Download tools data</small>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tools By User Section -->
+            <div id="toolsByUserSection" style="display: none;">
+                <!-- User Selection -->
+                <div id="toolsUserSelection" class="admin-card">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4><i class="fas fa-user-tag"></i> Select Technician</h4>
+                        <button class="btn btn-secondary btn-sm" onclick="backToToolsMenu()">
+                            <i class="fas fa-arrow-left"></i> Back
+                        </button>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <input type="text" class="form-control" id="toolsUserSearch" placeholder="Search technicians...">
+                    </div>
+
+                    <div class="loading-spinner" id="toolsUsersLoading">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p>Loading technicians...</p>
+                    </div>
+
+                    <div id="toolsUsersList" class="row g-3">
+                        <!-- User cards will be populated here -->
+                    </div>
+                </div>
+
+                <!-- Tool History Section -->
+                <div id="toolHistorySection" style="display: none;" class="admin-card">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h4><i class="fas fa-history"></i> Tool History</h4>
+                            <button class="btn btn-sm" style="background-color: #FF9800; color: white; border: none;" onclick="backToToolsUserSelection()">
+                                <i class="fas fa-arrow-left"></i> Back to Users
+                            </button>
+                        </div>
+                        <p class="text-muted mb-0" style="color: #667eea; font-weight: bold;">
+                            <i class="fas fa-user"></i> <span id="selectedUserNameTools"></span>
+                        </p>
+                    </div>
+
+                    <!-- Time Filters -->
+                    <div class="mb-3 d-flex gap-2 flex-wrap">
+                        <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('today', this)">
+                            <i class="fas fa-calendar-day"></i> Today
+                        </button>
+                        <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('week', this)">
+                            <i class="fas fa-calendar-week"></i> Last Week
+                        </button>
+                        <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('month', this)">
+                            <i class="fas fa-calendar-alt"></i> Last Month
+                        </button>
+                        <button class="btn btn-sm btn-primary filter-time-btn" onclick="filterToolHistory('year', this)">
+                            <i class="fas fa-calendar"></i> Last Year
+                        </button>
+                        <button class="btn btn-sm btn-primary filter-time-btn active" onclick="filterToolHistory('all', this)">
+                            <i class="fas fa-infinity"></i> All Time
+                        </button>
+                    </div>
+
+                    <!-- Search Tool -->
+                    <div class="mb-3">
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="toolHistorySearch" placeholder="Scan or enter tool code...">
+                            <button class="btn btn-primary" onclick="searchToolHistory()">
+                                <i class="fas fa-search"></i> Search
+                            </button>
+                            <button class="btn" id="scanToolHistoryBtn" style="background-color: #FF9800; color: white; border: none;">
+                                <i class="fas fa-qrcode"></i> Scan
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Toggle for OUT tools only -->
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="showOutToolsOnly" onchange="toggleOutToolsOnly()">
+                            <label class="form-check-label" for="showOutToolsOnly">
+                                <strong>Show only currently OUT tools registered to this user</strong>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Bulk Check-in Controls (hidden by default) -->
+                    <div id="bulkCheckinControls" class="mb-3" style="display: none;">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="selectAllTools" onchange="toggleSelectAllTools()">
+                                <label class="form-check-label" for="selectAllTools">
+                                    <strong>Select All OUT Tools</strong>
+                                </label>
+                            </div>
+                            <button class="btn btn-success" onclick="checkInSelectedTools()">
+                                <i class="fas fa-check-circle"></i> Check In Selected Tools
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Tool History Cards -->
+                    <div id="toolHistoryCards">
+                        <p class="text-muted">Select a time period or search for a specific tool</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Other sections placeholders -->
+            <div id="toolsByOwnerSection" style="display: none;" class="admin-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4><i class="fas fa-users-cog"></i> Tools By Owner</h4>
+                    <button class="btn btn-secondary btn-sm" onclick="backToToolsMenu()">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                </div>
+                <p class="text-muted">Coming soon...</p>
+            </div>
+
+            <div id="addEditToolSection" style="display: none;" class="admin-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4><i class="fas fa-edit"></i> Add/Edit Tool</h4>
+                    <button class="btn btn-secondary btn-sm" onclick="backToToolsMenu()">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                </div>
+                <p class="text-muted">Coming soon...</p>
+            </div>
+
+            <div id="importExcelSection" style="display: none;" class="admin-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4><i class="fas fa-file-excel"></i> Import from Excel</h4>
+                    <button class="btn btn-secondary btn-sm" onclick="backToToolsMenu()">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                </div>
+                <p class="text-muted">Coming soon...</p>
+            </div>
+
+            <div id="exportToolsSection" style="display: none;" class="admin-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4><i class="fas fa-download"></i> Export Tools</h4>
+                    <button class="btn btn-secondary btn-sm" onclick="backToToolsMenu()">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                </div>
+                <p class="text-muted">Coming soon...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+    <!-- Common Firebase configuration and utilities -->
+    <script src="js/common.js"></script>
+
+    <script>
+        // Use global Firebase instances from common.js
+        (function() {
+            let checkCount = 0;
+            const maxChecks = 200;
+            let lastLogTime = 0;
+            const logInterval = 1000;
+            
+            function waitForAuth() {
+                const auth = window.auth;
+                const db = window.db;
+                const storage = window.storage;
+                
+                if (!auth || !db || !storage) {
+                    checkCount++;
+                    
+                    const now = Date.now();
+                    if (now - lastLogTime >= logInterval) {
+                        console.log(`[TOOLS-MGMT] Waiting for common.js to load... (attempt ${checkCount})`);
+                        lastLogTime = now;
+                    }
+                    
+                    if (checkCount >= maxChecks) {
+                        console.error('[TOOLS-MGMT] ✗ Timeout: common.js failed to load');
+                        return;
+                    }
+                    
+                    setTimeout(waitForAuth, 50);
+                    return;
+                }
+                
+                if (checkCount > 0) {
+                    console.log(`[TOOLS-MGMT] ✓ Using global Firebase instances from common.js (loaded after ${checkCount} checks)`);
+                } else {
+                    console.log('[TOOLS-MGMT] ✓ Using global Firebase instances from common.js');
+                }
+                initializeToolManagement(auth, db, storage);
+            }
+            
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', waitForAuth);
+            } else {
+                waitForAuth();
+            }
+        })();
+
+        async function initializeToolManagement(auth, db, storage) {
+            // Check if user is admin
+            async function checkAdminStatus(user) {
+                try {
+                    const doc = await db.collection('technicians').doc(user.uid).get();
+                    if (doc.exists) {
+                        const userData = doc.data();
+                        if (userData.isAdmin === true) {
+                            return { isAdmin: true, name: userData.fullName || user.email };
+                        }
+                    }
+                    return { isAdmin: false, name: null };
+                } catch (error) {
+                    console.error('Error checking admin status:', error);
+                    return { isAdmin: false, name: null };
+                }
+            }
+
+            // Check authentication and admin status
+            const authVerified = localStorage.getItem('authVerified');
+            const storedFullName = localStorage.getItem('fullName');
+            const cachedIsAdmin = localStorage.getItem('isAdmin') === 'true';
+
+            if (authVerified === 'true' && storedFullName && cachedIsAdmin) {
+                let user = auth.currentUser;
+                if (!user) {
+                    user = await new Promise((resolve) => {
+                        let resolved = false;
+                        let pollCount = 0;
+                        const maxPolls = 20;
+                        
+                        const unsubscribe = auth.onAuthStateChanged((u) => {
+                            if (u && !resolved) {
+                                resolved = true;
+                                unsubscribe();
+                                clearInterval(pollInterval);
+                                resolve(u);
+                            }
+                        });
+                        
+                        const pollInterval = setInterval(() => {
+                            pollCount++;
+                            const currentUser = auth.currentUser;
+                            if (currentUser && !resolved) {
+                                resolved = true;
+                                unsubscribe();
+                                clearInterval(pollInterval);
+                                resolve(currentUser);
+                            } else if (pollCount >= maxPolls && !resolved) {
+                                resolved = true;
+                                unsubscribe();
+                                clearInterval(pollInterval);
+                                resolve(auth.currentUser);
+                            }
+                        }, 100);
+                        
+                        setTimeout(() => {
+                            if (!resolved) {
+                                resolved = true;
+                                unsubscribe();
+                                clearInterval(pollInterval);
+                                resolve(auth.currentUser);
+                            }
+                        }, 2000);
+                    });
+                }
+
+                if (user) {
+                    // Verify admin status in background
+                    checkAdminStatus(user).then(({isAdmin}) => {
+                        if (!isAdmin) {
+                            localStorage.removeItem('isAdmin');
+                            localStorage.removeItem('authVerified');
+                            window.location.href = 'admin.html';
+                        } else {
+                            document.getElementById('adminName').textContent = storedFullName;
+                        }
+                    });
+                } else {
+                    window.location.href = 'admin.html';
+                }
+            } else {
+                window.location.href = 'admin.html';
+            }
+
+            // Logout button handler
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', async () => {
+                    if (confirm('Are you sure you want to logout?')) {
+                        try {
+                            await auth.signOut();
+                            localStorage.removeItem('authVerified');
+                            localStorage.removeItem('fullName');
+                            localStorage.removeItem('isAdmin');
+                            window.location.href = 'main-menu.html';
+                        } catch (error) {
+                            console.error('Logout error:', error);
+                            alert('Logout failed: ' + error.message);
+                        }
+                    }
+                });
+            }
+        }
+
+        // ========================================
+        // TOOLS MANAGEMENT FUNCTIONS
+        // ========================================
+
+        let currentToolsUser = null;
+        let currentToolsFilter = 'all';
+        let allToolHistory = [];
+
+        // Show Tools By User
+        window.showToolsByUser = function() {
+            document.getElementById('toolsMainMenu').style.display = 'none';
+            document.getElementById('toolsByUserSection').style.display = 'block';
+            document.getElementById('toolsUserSelection').style.display = 'block';
+            document.getElementById('toolHistorySection').style.display = 'none';
+            loadToolsUsers();
+        };
+
+        // Show other sections (placeholders)
+        window.showToolsByOwner = function() {
+            hideAllToolsSections();
+            document.getElementById('toolsByOwnerSection').style.display = 'block';
+        };
+
+        window.showAddEditTool = function() {
+            hideAllToolsSections();
+            document.getElementById('addEditToolSection').style.display = 'block';
+        };
+
+        window.showImportExcel = function() {
+            hideAllToolsSections();
+            document.getElementById('importExcelSection').style.display = 'block';
+        };
+
+        window.showExportTools = function() {
+            hideAllToolsSections();
+            document.getElementById('exportToolsSection').style.display = 'block';
+        };
+
+        function hideAllToolsSections() {
+            document.getElementById('toolsMainMenu').style.display = 'none';
+            document.getElementById('toolsByUserSection').style.display = 'none';
+            document.getElementById('toolsByOwnerSection').style.display = 'none';
+            document.getElementById('addEditToolSection').style.display = 'none';
+            document.getElementById('importExcelSection').style.display = 'none';
+            document.getElementById('exportToolsSection').style.display = 'none';
+        }
+
+        window.backToToolsMenu = function() {
+            hideAllToolsSections();
+            document.getElementById('toolsMainMenu').style.display = 'block';
+        };
+
+        window.backToToolsUserSelection = function() {
+            document.getElementById('toolsUserSelection').style.display = 'block';
+            document.getElementById('toolHistorySection').style.display = 'none';
+        };
+
+        // Load users for Tools By User section
+        async function loadToolsUsers() {
+            const db = window.db || firebase.firestore();
+            const loading = document.getElementById('toolsUsersLoading');
+            const usersList = document.getElementById('toolsUsersList');
+            
+            try {
+                loading.style.display = 'block';
+                const snapshot = await db.collection('technicians').get();
+                usersList.innerHTML = '';
+
+                // Get OUT tool counts for each user
+                const toolsSnapshot = await db.collection('tools').where('status', '==', 'OUT').get();
+                const outCounts = {};
+                
+                toolsSnapshot.forEach(doc => {
+                    const owner = doc.data().technician || 'Unknown';
+                    outCounts[owner] = (outCounts[owner] || 0) + 1;
+                });
+
+                // Collect all users and sort alphabetically
+                const users = [];
+                snapshot.forEach(doc => {
+                    const userData = doc.data();
+                    const userName = userData.fullName || 'Unknown';
+                    const outCount = outCounts[userName] || 0;
+                    users.push({
+                        id: doc.id,
+                        name: userName,
+                        email: userData.email || 'N/A',
+                        outCount: outCount
+                    });
+                });
+
+                // Separate users into two groups
+                const outUsers = users.filter(u => u.outCount > 0).sort((a, b) => a.name.localeCompare(b.name));
+                const allInUsers = users.filter(u => u.outCount === 0).sort((a, b) => a.name.localeCompare(b.name));
+
+                // Display users with OUT tools first
+                if (outUsers.length > 0) {
+                    const headerDiv = document.createElement('div');
+                    headerDiv.className = 'col-12';
+                    headerDiv.innerHTML = `
+                        <h5 class="mb-3 mt-3" style="color: #dc3545; font-weight: bold;">
+                            <i class="fas fa-exclamation-triangle"></i> Users with Checked-OUT Tools (${outUsers.length})
+                        </h5>
+                    `;
+                    usersList.appendChild(headerDiv);
+
+                    outUsers.forEach((user, index) => {
+                        const card = document.createElement('div');
+                        card.className = 'col-md-4 col-sm-6';
+                        card.innerHTML = `
+                            <div class="user-tool-card" onclick="selectToolsUser('${user.id}', '${user.name}')">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1"><i class="fas fa-user"></i> ${index + 1}. ${user.name}</h6>
+                                        <small class="text-muted">${user.email}</small>
+                                    </div>
+                                    <span class="out-badge">OUT: ${user.outCount}</span>
+                                </div>
+                            </div>
+                        `;
+                        usersList.appendChild(card);
+                    });
+                }
+
+                // Display users with all IN tools
+                if (allInUsers.length > 0) {
+                    const headerDiv = document.createElement('div');
+                    headerDiv.className = 'col-12';
+                    headerDiv.innerHTML = `
+                        <h5 class="mb-3 mt-3" style="color: #28a745; font-weight: bold;">
+                            <i class="fas fa-check-circle"></i> Users With All Tools Checked-IN (${allInUsers.length})
+                        </h5>
+                    `;
+                    usersList.appendChild(headerDiv);
+
+                    allInUsers.forEach((user, index) => {
+                        const card = document.createElement('div');
+                        card.className = 'col-md-4 col-sm-6';
+                        card.innerHTML = `
+                            <div class="user-tool-card" onclick="selectToolsUser('${user.id}', '${user.name}')">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1"><i class="fas fa-user"></i> ${index + 1}. ${user.name}</h6>
+                                        <small class="text-muted">${user.email}</small>
+                                    </div>
+                                    <span style="color: #28a745; font-size: 0.85rem; white-space: nowrap;"><i class="fas fa-check-circle"></i> All IN</span>
+                                </div>
+                            </div>
+                        `;
+                        usersList.appendChild(card);
+                    });
+                }
+
+                loading.style.display = 'none';
+            } catch (error) {
+                console.error('Error loading users:', error);
+                usersList.innerHTML = '<p class="text-danger">Error loading users</p>';
+                loading.style.display = 'none';
+            }
+        }
+
+        // Search users in tools section
+        const toolsUserSearchElement = document.getElementById('toolsUserSearch');
+        if (toolsUserSearchElement) {
+            toolsUserSearchElement.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase();
+                const cards = document.querySelectorAll('#toolsUsersList .user-tool-card');
+                cards.forEach(card => {
+                    const text = card.textContent.toLowerCase();
+                    card.parentElement.style.display = text.includes(searchTerm) ? '' : 'none';
+                });
+            });
+        }
+
+        // Select a user to view their tool history
+        window.selectToolsUser = async function(userId, userName) {
+            currentToolsUser = { id: userId, name: userName };
+            document.getElementById('selectedUserNameTools').textContent = userName;
+            document.getElementById('toolsUserSelection').style.display = 'none';
+            document.getElementById('toolHistorySection').style.display = 'block';
+            
+            // Load all tool history for this user
+            await loadUserToolHistory(userName);
+            
+            // Apply default filter (all time)
+            setTimeout(() => {
+                const allTimeBtn = document.querySelector('#toolHistorySection button[onclick*="all"]');
+                if (allTimeBtn) {
+                    allTimeBtn.classList.add('active');
+                } else {
+                    const buttons = document.querySelectorAll('#toolHistorySection .filter-time-btn');
+                    buttons.forEach(btn => {
+                        if (btn.textContent.includes('All Time')) {
+                            btn.classList.add('active');
+                        }
+                    });
+                }
+                filterToolHistory('all');
+            }, 100);
+        };
+
+        // Load all tool history for a user from logtoolmovements collection
+        async function loadUserToolHistory(userName) {
+            const db = window.db || firebase.firestore();
+            try {
+                const snapshot = await db.collection('logtoolmovements')
+                    .where('technician', '==', userName)
+                    .orderBy('timestamp', 'desc')
+                    .limit(500)
+                    .get();
+
+                allToolHistory = [];
+                snapshot.forEach(doc => {
+                    allToolHistory.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+
+                console.log(`Loaded ${allToolHistory.length} history entries for ${userName} from logtoolmovements collection`);
+            } catch (error) {
+                console.error('Error loading tool history from logtoolmovements:', error);
+                allToolHistory = [];
+            }
+        }
+
+        // Filter tool history by time period
+        window.filterToolHistory = function(period, clickedButton = null) {
+            currentToolsFilter = period;
+            
+            // Update button states
+            document.querySelectorAll('.filter-time-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            if (clickedButton) {
+                clickedButton.classList.add('active');
+            } else {
+                let targetButton = document.querySelector(`#toolHistorySection button[onclick*="${period}"]`);
+                
+                if (!targetButton) {
+                    const buttons = document.querySelectorAll('#toolHistorySection .filter-time-btn');
+                    const periodTexts = {
+                        'today': 'Today',
+                        'week': 'Last Week', 
+                        'month': 'Last Month',
+                        'year': 'Last Year',
+                        'all': 'All Time'
+                    };
+                    
+                    targetButton = Array.from(buttons).find(btn => 
+                        btn.textContent.includes(periodTexts[period])
+                    );
+                }
+                
+                if (targetButton) {
+                    targetButton.classList.add('active');
+                }
+            }
+            
+            const now = new Date();
+            let startDate;
+            
+            switch(period) {
+                case 'today':
+                    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    break;
+                case 'week':
+                    startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    break;
+                case 'month':
+                    startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    break;
+                case 'year':
+                    startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+                    break;
+                case 'all':
+                    startDate = new Date(0);
+                    break;
+            }
+            
+            const filtered = allToolHistory.filter(entry => {
+                const entryDate = entry.timestamp?.toDate ? entry.timestamp.toDate() : new Date(entry.timestamp);
+                return entryDate >= startDate;
+            });
+            
+            displayToolHistory(filtered);
+        };
+
+        // Toggle OUT tools only
+        window.toggleOutToolsOnly = async function() {
+            const db = window.db || firebase.firestore();
+            const showOutOnly = document.getElementById('showOutToolsOnly').checked;
+            const bulkControls = document.getElementById('bulkCheckinControls');
+            
+            if (showOutOnly) {
+                bulkControls.style.display = 'block';
+                
+                const snapshot = await db.collection('tools')
+                    .where('technician', '==', currentToolsUser.name)
+                    .where('status', '==', 'OUT')
+                    .get();
+                
+                const outTools = [];
+                snapshot.forEach(doc => {
+                    outTools.push({
+                        id: doc.id,
+                        toolId: doc.id,
+                        toolName: doc.data().toolName,
+                        status: 'OUT',
+                        timestamp: doc.data().timestamp,
+                        WorkOn: doc.data().WorkOn,
+                        workLocation: doc.data().WorkOn,
+                        serialNumber: doc.data().serialNumber,
+                        partNumber: doc.data().partNumber,
+                        calDueDate: doc.data().calDueDate,
+                        technician: doc.data().technician,
+                        ...doc.data()
+                    });
+                });
+                
+                displayToolHistory(outTools, true);
+            } else {
+                bulkControls.style.display = 'none';
+                filterToolHistory(currentToolsFilter);
+            }
+        };
+
+        // Toggle select all tools checkbox
+        window.toggleSelectAllTools = function() {
+            const selectAllCheckbox = document.getElementById('selectAllTools');
+            const toolCheckboxes = document.querySelectorAll('.tool-checkbox');
+            
+            toolCheckboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+        };
+
+        // Check in selected tools
+        window.checkInSelectedTools = async function() {
+            const db = window.db || firebase.firestore();
+            const selectedCheckboxes = document.querySelectorAll('.tool-checkbox:checked');
+            
+            if (selectedCheckboxes.length === 0) {
+                alert('Please select at least one tool to check in.');
+                return;
+            }
+            
+            const confirmMessage = `Are you sure you want to check in ${selectedCheckboxes.length} tool(s)?`;
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+            
+            try {
+                const batch = db.batch();
+                const toolIds = [];
+                
+                // First, fetch all tool data for logging
+                const toolPromises = [];
+                selectedCheckboxes.forEach(checkbox => {
+                    const toolId = checkbox.getAttribute('data-tool-id');
+                    toolIds.push(toolId);
+                    toolPromises.push(db.collection('tools').doc(toolId).get());
+                });
+                
+                const toolDocs = await Promise.all(toolPromises);
+                
+                selectedCheckboxes.forEach((checkbox, index) => {
+                    const toolId = toolIds[index];
+                    const toolDoc = toolDocs[index];
+                    const toolData = toolDoc.data();
+                    
+                    // Update tool status to IN
+                    const toolRef = db.collection('tools').doc(toolId);
+                    batch.update(toolRef, {
+                        status: 'IN',
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                        technician: currentToolsUser.name
+                    });
+                });
+                
+                // Commit the batch update
+                await batch.commit();
+                
+                // Log the check-in action with full tool data
+                const logPromises = toolIds.map(async (toolId, index) => {
+                    const toolDoc = toolDocs[index];
+                    const toolData = toolDoc.data();
+                    
+                    // Build logData with ordered fields, excluding photoUrls
+                    const logData = { ...toolData };
+                    delete logData.photoUrls;
+                    
+                    // Reorder and set fields explicitly
+                    const orderedLogData = {
+                        toolId: toolId,
+                        toolName: toolData.toolName || 'N/A',
+                        partNumber: toolData.partNumber || 'N/A',
+                        serialNumber: toolData.serialNumber || 'N/A',
+                        calDueDate: toolData.calDueDate || null,
+                        collectionCode: toolData.collectionCode || 'N/A',
+                        location: toolData.location || 'N/A',
+                        owner: toolData.owner || 'N/A',
+                        WorkOn: toolData.WorkOn || 'Admin Check-in',
+                        status: 'IN',
+                        technician: currentToolsUser.name,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                        action: 'CHECK-IN'
+                    };
+                    
+                    const logId = `${Date.now()}-${toolId}`;
+                    return db.collection('logtoolmovements').doc(logId).set(orderedLogData);
+                });
+                
+                await Promise.all(logPromises);
+                
+                alert(`Successfully checked in ${toolIds.length} tool(s)!`);
+                
+                // Refresh the OUT tools list
+                await toggleOutToolsOnly();
+                
+            } catch (error) {
+                console.error('Error checking in tools:', error);
+                alert('Error checking in tools. Please try again.');
+            }
+        };
+
+        // Search tool in history
+        window.searchToolHistory = async function() {
+            const searchTerm = document.getElementById('toolHistorySearch').value.trim().toUpperCase();
+            
+            if (!searchTerm) {
+                alert('Please enter a tool code');
+                return;
+            }
+            
+            const filtered = allToolHistory.filter(entry => {
+                return entry.toolId?.toUpperCase().includes(searchTerm) || 
+                       entry.toolName?.toUpperCase().includes(searchTerm);
+            });
+            
+            if (filtered.length === 0) {
+                document.getElementById('toolHistoryCards').innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="fas fa-info-circle"></i> No history found for tool code: ${searchTerm}
+                    </div>
+                `;
+            } else {
+                displayToolHistory(filtered);
+            }
+        };
+
+        // Display tool history as cards
+        function displayToolHistory(historyEntries, isCurrentOut = false) {
+            const container = document.getElementById('toolHistoryCards');
+            
+            if (historyEntries.length === 0) {
+                container.innerHTML = '<p class="text-muted">No tools found for the selected period.</p>';
+                return;
+            }
+            
+            container.innerHTML = '';
+            
+            // Group by tool ID for better organization
+            const groupedByTool = {};
+            historyEntries.forEach(entry => {
+                const toolId = entry.toolId || entry.id;
+                if (!groupedByTool[toolId]) {
+                    groupedByTool[toolId] = [];
+                }
+                groupedByTool[toolId].push(entry);
+            });
+            
+            // Sort tools by newest entry first
+            const sortedTools = Object.keys(groupedByTool).sort((a, b) => {
+                const aLatest = groupedByTool[a][0];
+                const bLatest = groupedByTool[b][0];
+                const aTime = aLatest.timestamp?.toDate ? aLatest.timestamp.toDate() : new Date(aLatest.timestamp || 0);
+                const bTime = bLatest.timestamp?.toDate ? bLatest.timestamp.toDate() : new Date(bLatest.timestamp || 0);
+                return bTime - aTime;
+            });
+            
+            // Display each tool's history with numbering
+            sortedTools.forEach((toolId, index) => {
+                const toolEntries = groupedByTool[toolId];
+                const latestEntry = toolEntries[0];
+                
+                const status = (latestEntry.status || latestEntry.action || '').toUpperCase();
+                let statusClass = 'in';
+                if (status === 'OUT' || status === 'CHECK-OUT') statusClass = 'out';
+                else if (status === 'BROKEN') statusClass = 'broken';
+                else if (status === 'LOST') statusClass = 'lost';
+                else if (status === 'CALIBRATION') statusClass = 'calibration';
+                
+                const workOnValue = latestEntry.WorkOn || latestEntry.workLocation || 'N/A';
+                const serialNumber = latestEntry.serialNumber || latestEntry.partNumber || 'N/A';
+                const calDueDate = latestEntry.calDueDate ? 
+                    (latestEntry.calDueDate.toDate ? latestEntry.calDueDate.toDate().toLocaleDateString('en-GB') : latestEntry.calDueDate) : 
+                    'N/A';
+                
+                const time = latestEntry.timestamp ? 
+                    (latestEntry.timestamp.toDate ? 
+                        latestEntry.timestamp.toDate().toLocaleString('en-GB', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                            hour12: false
+                        }) : 
+                        new Date(latestEntry.timestamp).toLocaleString('en-GB')) : 
+                    'N/A';
+                
+                const card = document.createElement('div');
+                card.className = `register-tool-card ${statusClass}`;
+                
+                if (isCurrentOut) {
+                    card.style.position = 'relative';
+                    card.innerHTML = `
+                        <div style="position: absolute; top: 10px; right: 10px;">
+                            <input type="checkbox" class="form-check-input tool-checkbox" data-tool-id="${toolId}" style="transform: scale(1.2);">
+                        </div>
+                        <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000; text-align: left; padding-right: 30px;">
+                            ${index + 1}. ${latestEntry.toolName || 'Unknown Tool'}
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div style="color: #666; font-size: 0.9rem;">
+                                ${time}
+                            </div>
+                            <div>
+                                <span style="color: black; font-weight: bold;">WorkOn:</span> 
+                                <span style="color: #666; font-weight: bold;">${workOnValue}</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <div style="text-align: left;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">TID</span>
+                            </div>
+                            <div style="text-align: center;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">P/N</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">STS</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <div style="text-align: left;">
+                                <span style="color: #666; font-weight: bold;">${toolId}</span>
+                            </div>
+                            <div style="text-align: center;">
+                                <span style="color: #666; font-weight: bold;">${serialNumber}</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <span class="badge bg-danger" style="font-weight: bold; border-radius: 15px; padding: 4px 8px;">OUT</span>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 12px; text-align: left;">
+                            <span style="color: black; font-weight: bold;">Cal Due Date:</span> 
+                            <span style="color: blue; font-weight: bold;">${calDueDate}</span>
+                        </div>
+                    `;
+                } else {
+                    card.onclick = function() {
+                        showToolHistoryDetails(toolId, toolEntries);
+                    };
+                    
+                    card.innerHTML = `
+                        <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #000; text-align: left;">
+                            ${index + 1}. ${latestEntry.toolName || 'Unknown Tool'}
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div style="color: #666; font-size: 0.9rem;">
+                                ${time}
+                            </div>
+                            <div>
+                                <span style="color: black; font-weight: bold;">WorkOn:</span> 
+                                <span style="color: #666; font-weight: bold;">${workOnValue}</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <div style="text-align: left;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">TID</span>
+                            </div>
+                            <div style="text-align: center;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">P/N</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <span style="color: black; font-weight: bold; text-decoration: underline;">STS</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <div style="text-align: left;">
+                                <span style="color: #666; font-weight: bold;">${toolId}</span>
+                            </div>
+                            <div style="text-align: center;">
+                                <span style="color: #666; font-weight: bold;">${serialNumber}</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <span class="badge bg-${status === 'IN' || status === 'CHECK-IN' ? 'success' : 'danger'}" style="font-weight: bold; border-radius: 15px; padding: 4px 8px;">${status}</span>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 12px; text-align: left;">
+                            <span style="color: black; font-weight: bold;">Cal Due Date:</span> 
+                            <span style="color: blue; font-weight: bold;">${calDueDate}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="color: blue; font-weight: normal; cursor: pointer; font-size: 1.5rem;">
+                                Click To Filter
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                container.appendChild(card);
+            });
+        }
+
+        // Show detailed history for a specific tool
+        function showToolHistoryDetails(toolId, entries) {
+            let historyHtml = '<div class="list-group">';
+            
+            entries.forEach((entry, index) => {
+                const time = entry.timestamp ? 
+                    (entry.timestamp.toDate ? 
+                        entry.timestamp.toDate().toLocaleString('en-GB') : 
+                        new Date(entry.timestamp).toLocaleString('en-GB')) : 
+                    'N/A';
+                
+                const action = entry.action || entry.status || 'Unknown';
+                const location = entry.WorkOn || entry.workLocation || 'N/A';
+                const actionColor = action.toUpperCase().includes('OUT') ? 'text-danger' : 'text-success';
+                
+                historyHtml += `
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <h6 class="mb-1">${index + 1}. <span class="${actionColor}">${action}</span></h6>
+                            <small>${time}</small>
+                        </div>
+                        <p class="mb-1"><strong>Location:</strong> ${location}</p>
+                        ${entry.notes ? `<p class="mb-0"><strong>Notes:</strong> ${entry.notes}</p>` : ''}
+                    </div>
+                `;
+            });
+            
+            historyHtml += '</div>';
+            
+            const modalHtml = `
+                <div class="modal fade" id="toolHistoryModal" tabindex="-1" style="z-index: 99999 !important;">
+                    <div class="modal-dialog modal-fullscreen">
+                        <div class="modal-content" style="height: 100vh; border-radius: 0; border: none;">
+                            <div class="modal-header" style="background: #667eea; color: white; border-bottom: 2px solid #5a6fd8;">
+                                <h5 class="modal-title">
+                                    <i class="fas fa-history"></i> Complete History - ${toolId}
+                                </h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body" style="overflow-y: auto; max-height: calc(100vh - 120px);">
+                                ${historyHtml}
+                            </div>
+                            <div class="modal-footer" style="background: #f5f7fa; border-top: 2px solid #dee2e6;">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            const existingModal = document.getElementById('toolHistoryModal');
+            if (existingModal) existingModal.remove();
+            
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modal = new bootstrap.Modal(document.getElementById('toolHistoryModal'));
+            modal.show();
+            
+            document.getElementById('toolHistoryModal').addEventListener('hidden.bs.modal', function() {
+                this.remove();
+            });
+        }
+    </script>
+</body>
+</html>
+
