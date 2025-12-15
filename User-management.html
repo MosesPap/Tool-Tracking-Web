@@ -579,7 +579,7 @@
             background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
             color: white;
             border-bottom: 3px solid #a71e2a;
-            padding: 20px 25px;
+            padding: 15px 20px;
         }
 
         .delete-user-modal-header .modal-title {
@@ -591,14 +591,14 @@
         }
 
         .delete-user-modal-body {
-            padding: 30px 25px;
+            padding: 25px 20px;
             text-align: center;
         }
 
         .delete-warning-icon {
-            font-size: 4rem;
+            font-size: 3rem;
             color: #dc3545;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             animation: pulse 2s infinite;
         }
 
@@ -608,24 +608,24 @@
         }
 
         .delete-user-name {
-            font-size: 1.4rem;
+            font-size: 1.2rem;
             font-weight: bold;
             color: #333;
             margin-bottom: 5px;
         }
 
         .delete-user-email {
-            font-size: 1rem;
+            font-size: 0.95rem;
             color: #666;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
         }
 
         .delete-info-box {
             background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
             border: 2px solid #ffc107;
             border-radius: 10px;
-            padding: 15px 20px;
-            margin-bottom: 20px;
+            padding: 12px 15px;
+            margin-bottom: 15px;
             text-align: left;
             box-shadow: 0 2px 8px rgba(255, 193, 7, 0.2);
         }
@@ -645,8 +645,8 @@
             background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
             border: 2px solid #d0d0d0;
             border-radius: 10px;
-            padding: 15px 20px;
-            margin-bottom: 20px;
+            padding: 12px 15px;
+            margin-bottom: 15px;
             text-align: left;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5);
         }
@@ -683,7 +683,7 @@
 
         .delete-user-modal-footer {
             border-top: 2px solid #e0e0e0;
-            padding: 20px 25px;
+            padding: 15px 20px;
             background: #f8f9fa;
         }
 
@@ -779,13 +779,13 @@
                     <form id="editUserForm">
                         <input type="hidden" id="editUserId">
                         <input type="hidden" id="editUserEmail">
-                        <input type="hidden" id="editUserName">
+                        <input type="hidden" id="editUserNameHidden">
                         
                         <div class="mb-3">
-                            <label for="editUserName" class="form-label">
+                            <label for="editUserNameInput" class="form-label">
                                 <i class="fas fa-user"></i> Full Name
                             </label>
-                            <input type="text" class="form-control" id="editUserName" required>
+                            <input type="text" class="form-control" id="editUserNameInput" required>
                         </div>
 
                         <div class="mb-3">
@@ -828,7 +828,7 @@
 
     <!-- Delete User Confirmation Modal -->
     <div class="modal fade" id="deleteUserModal" tabindex="-1" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 500px;">
             <div class="modal-content delete-user-modal-content">
                 <div class="modal-header delete-user-modal-header">
                     <h5 class="modal-title" id="deleteUserModalLabel">
@@ -1158,7 +1158,8 @@
         // Open Edit User Modal
         window.openEditUserModal = function(userId, currentName, isAdmin, isInstructor, isAvionics, userEmail) {
             document.getElementById('editUserId').value = userId;
-            document.getElementById('editUserName').value = currentName;
+            document.getElementById('editUserNameHidden').value = currentName;
+            document.getElementById('editUserNameInput').value = currentName;
             document.getElementById('editUserEmail').value = userEmail || '';
             document.getElementById('editUserAdmin').checked = isAdmin;
             document.getElementById('editUserInstructor').checked = isInstructor;
@@ -1172,7 +1173,7 @@
         window.deleteUserFromModal = function() {
             const userId = document.getElementById('editUserId').value;
             const userEmail = document.getElementById('editUserEmail').value;
-            const userName = document.getElementById('editUserName').value;
+            const userName = document.getElementById('editUserNameHidden').value;
             
             if (!userId || !userEmail || !userName) {
                 alert('❌ User information is missing. Please close and reopen the modal.');
@@ -1239,7 +1240,7 @@
         window.saveUserChanges = async function() {
             const db = window.db || firebase.firestore();
             const userId = document.getElementById('editUserId').value;
-            const newName = document.getElementById('editUserName').value.trim();
+            const newName = document.getElementById('editUserNameInput').value.trim();
             const isAdmin = document.getElementById('editUserAdmin').checked;
             const isInstructor = document.getElementById('editUserInstructor').checked;
             const isAvionics = document.getElementById('editUserAvionics').checked;
