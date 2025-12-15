@@ -386,6 +386,21 @@
             padding-left: 8px;
             padding-right: 8px;
         }
+
+        /* Responsive button width - narrower on tablets and computers */
+        @media (min-width: 768px) {
+            .tool-mgmt-btn {
+                max-width: 500px;
+                margin-left: auto;
+                margin-right: auto;
+            }
+        }
+
+        @media (min-width: 992px) {
+            .tool-mgmt-btn {
+                max-width: 450px;
+            }
+        }
     </style>
 </head>
 <body>
