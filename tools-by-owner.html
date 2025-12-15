@@ -723,17 +723,15 @@
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <h2 style="color: white; font-weight: bold; font-size: 1.3rem; margin: 0 0 0 20px; letter-spacing: 1px; padding-right: 160px; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);">Select Collection</h2>
                     <button id="collectionSelectModalCloseBtn" style="background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%); color: white; border: 2px solid #757575; border-radius: 10px; padding: 8px 16px; font-weight: bold; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3); transform: perspective(1000px) rotateX(2deg);">
-                        <i class="fas fa-times"></i> Close
+                        <i class="fas fa-arrow-left"></i> Back to Owner Selection
                     </button>
                 </div>
             </div>
         </div>
         
         <div class="container py-4">
-            <div class="card mb-4">
-                <div class="card-body" id="collectionSelectBody">
-                    <!-- Collections will be loaded here -->
-                </div>
+            <div id="collectionSelectBody">
+                <!-- Collections will be loaded here -->
             </div>
         </div>
     </div>
@@ -1734,63 +1732,111 @@
                 });
                 
                 if (collections.length === 0) {
-                    body.innerHTML = '<div class="text-center text-danger mb-3">No collections found for this owner.</div>';
+                    body.innerHTML = '<div class="text-center text-danger mb-3" style="padding: 40px; font-size: 1.2rem;">No collections found for this owner.</div>';
                 } else {
-                    let html = '<div class="list-group mb-3">';
+                    let html = '<div class="row g-3">';
                     collections.forEach(data => {
                         const isCurrentCollection = data.collectionName === lastViewedCollectionName;
-                        html += `<button class="list-group-item list-group-item-action collection-select-btn ${isCurrentCollection ? 'active' : ''}" style="font-weight:bold;color:${isCurrentCollection ? 'white' : '#1976d2'};" data-collection="${data.collectionName}">
-                            <span style="font-size:1.1em;">${data.collectionName}</span><br>
-                            <span style="font-size:0.9em;color:${isCurrentCollection ? 'rgba(255,255,255,0.8)' : '#888'};">
-                                ${isCurrentCollection ? 'Current Collection' : 'Code: ' + data.collectionName}
-                            </span>
-                        </button>`;
+                        html += `
+                            <div class="col-12 col-md-6 col-lg-4">
+                                <div class="collection-card-item" data-collection="${data.collectionName}" style="
+                                    background: ${isCurrentCollection ? 'linear-gradient(135deg, #2196F3 0%, #1976D2 100%)' : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)'};
+                                    color: ${isCurrentCollection ? 'white' : '#333'};
+                                    border: 2px solid ${isCurrentCollection ? '#1565C0' : '#e0e0e0'};
+                                    border-radius: 15px;
+                                    padding: 20px;
+                                    margin-bottom: 15px;
+                                    cursor: pointer;
+                                    transition: all 0.3s ease;
+                                    box-shadow: 0 4px 12px rgba(0,0,0,0.15),
+                                                inset 0 1px 0 rgba(255, 255, 255, 0.6),
+                                                inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+                                    transform: perspective(1000px) rotateX(2deg);
+                                ">
+                                    <div style="font-weight: bold; font-size: 1.3rem; margin-bottom: 8px;">
+                                        <i class="fas fa-folder${isCurrentCollection ? '-open' : ''}"></i> ${data.collectionName}
+                                    </div>
+                                    <div style="font-size: 0.9rem; opacity: 0.8;">
+                                        ${isCurrentCollection ? 'Current Collection' : 'Click to view tools'}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
                     });
                     html += '</div>';
                     body.innerHTML = html;
                     
-                    // Add click handlers
-                    body.querySelectorAll('button[data-collection]').forEach(btn => {
-                        btn.onclick = function() {
+                    // Add click handlers and hover effects
+                    body.querySelectorAll('.collection-card-item').forEach(card => {
+                        card.addEventListener('click', function() {
+                            const collectionName = this.getAttribute('data-collection');
                             document.getElementById('collectionSelectScreen').style.display = 'none';
-                            showMyToolsByCollection(this.getAttribute('data-collection'));
-                        };
+                            showMyToolsByCollection(collectionName);
+                        });
+                        
+                        card.addEventListener('mouseenter', function() {
+                            this.style.transform = 'perspective(1000px) rotateX(0deg) translateY(-5px) scale(1.02)';
+                            this.style.boxShadow = '0 8px 20px rgba(33, 150, 243, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(0, 0, 0, 0.15)';
+                        });
+                        
+                        card.addEventListener('mouseleave', function() {
+                            this.style.transform = 'perspective(1000px) rotateX(2deg)';
+                            this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -1px 0 rgba(0, 0, 0, 0.1)';
+                        });
                     });
                 }
                 
-                // Add "Add New Collection" button with 3D interactive grey style
-                const addButton = document.createElement('button');
-                addButton.className = 'add-collection-btn-3d';
-                addButton.innerHTML = '<i class="fas fa-plus me-2"></i>Add New Collection';
-                addButton.onclick = function(e) {
-                    e.stopPropagation();
-                    document.getElementById('collectionSelectScreen').style.display = 'none';
-                    showAddCollectionModal();
-                };
-                body.appendChild(addButton);
+                // Add action buttons row
+                const buttonsRow = document.createElement('div');
+                buttonsRow.className = 'row g-3 mt-4';
+                buttonsRow.innerHTML = `
+                    <div class="col-12 col-md-4">
+                        <button class="add-collection-btn-3d w-100" style="margin-bottom: 0;">
+                            <i class="fas fa-plus me-2"></i>Add New Collection
+                        </button>
+                    </div>
+                    ${collections.length > 0 ? `
+                    <div class="col-12 col-md-4">
+                        <button class="delete-collection-btn-3d w-100" style="margin-bottom: 0;">
+                            <i class="fas fa-trash me-2"></i>Delete Collection
+                        </button>
+                    </div>
+                    ` : ''}
+                    <div class="col-12 ${collections.length > 0 ? 'col-md-4' : 'col-md-8'}">
+                        <button class="btn btn-success w-100" style="padding: 12px 24px; font-size: 1rem; font-weight: bold; border-radius: 16px; margin-bottom: 0;">
+                            <i class="fas fa-undo me-2"></i>Restore Deleted Collection
+                        </button>
+                    </div>
+                `;
+                body.appendChild(buttonsRow);
                 
-                // Add "Delete Collection" button with 3D interactive red style (only if collections exist)
-                if (collections.length > 0) {
-                    const deleteButton = document.createElement('button');
-                    deleteButton.className = 'delete-collection-btn-3d';
-                    deleteButton.innerHTML = '<i class="fas fa-trash me-2"></i>Delete Collection';
-                    deleteButton.onclick = function(e) {
+                // Add click handlers for action buttons
+                const addButton = buttonsRow.querySelector('.add-collection-btn-3d');
+                if (addButton) {
+                    addButton.onclick = function(e) {
                         e.stopPropagation();
-                        showDeleteCollectionModal(collections);
+                        document.getElementById('collectionSelectScreen').style.display = 'none';
+                        showAddCollectionModal();
                     };
-                    body.appendChild(deleteButton);
                 }
                 
-                // Add "Restore Deleted Collection" button with 3D interactive green style
-                const restoreButton = document.createElement('button');
-                restoreButton.className = 'btn btn-success w-100 mt-2';
-                restoreButton.style.cssText = 'padding: 12px 24px; font-size: 1rem; font-weight: bold; border-radius: 16px;';
-                restoreButton.innerHTML = '<i class="fas fa-undo me-2"></i>Restore Deleted Collection';
-                restoreButton.onclick = function(e) {
-                    e.stopPropagation();
-                    showRestoreCollectionModal();
-                };
-                body.appendChild(restoreButton);
+                if (collections.length > 0) {
+                    const deleteButton = buttonsRow.querySelector('.delete-collection-btn-3d');
+                    if (deleteButton) {
+                        deleteButton.onclick = function(e) {
+                            e.stopPropagation();
+                            showDeleteCollectionModal(collections);
+                        };
+                    }
+                }
+                
+                const restoreButton = buttonsRow.querySelector('.btn-success');
+                if (restoreButton) {
+                    restoreButton.onclick = function(e) {
+                        e.stopPropagation();
+                        showRestoreCollectionModal();
+                    };
+                }
             } catch (error) {
                 console.error('Error loading collections:', error);
                 body.innerHTML = '<div class="text-center text-danger">Error loading collections. Please try again.</div>';
