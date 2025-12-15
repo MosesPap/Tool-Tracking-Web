@@ -567,6 +567,159 @@
             border-color: #424242;
             box-shadow: 0 0 0 3px rgba(117, 117, 117, 0.25), 0 3px 8px rgba(0, 0, 0, 0.2);
         }
+
+        /* Delete User Modal Styling */
+        .delete-user-modal-content {
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .delete-user-modal-header {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: white;
+            border-bottom: 3px solid #a71e2a;
+            padding: 20px 25px;
+        }
+
+        .delete-user-modal-header .modal-title {
+            font-weight: bold;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .delete-user-modal-body {
+            padding: 30px 25px;
+            text-align: center;
+        }
+
+        .delete-warning-icon {
+            font-size: 4rem;
+            color: #dc3545;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .delete-user-name {
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .delete-user-email {
+            font-size: 1rem;
+            color: #666;
+            margin-bottom: 25px;
+        }
+
+        .delete-info-box {
+            background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+            border: 2px solid #ffc107;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            text-align: left;
+            box-shadow: 0 2px 8px rgba(255, 193, 7, 0.2);
+        }
+
+        .delete-info-box p {
+            margin: 0;
+            color: #856404;
+            font-size: 0.95rem;
+        }
+
+        .delete-info-box i {
+            color: #ff9800;
+            margin-right: 8px;
+        }
+
+        .delete-steps {
+            background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+            border: 2px solid #d0d0d0;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            text-align: left;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+        }
+
+        .delete-steps p {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-weight: bold;
+        }
+
+        .delete-steps ol {
+            margin: 0;
+            padding-left: 20px;
+            color: #555;
+        }
+
+        .delete-steps li {
+            margin-bottom: 8px;
+        }
+
+        .delete-warning-text {
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+            border: 2px solid #dc3545;
+            border-radius: 8px;
+            padding: 12px 20px;
+            color: #721c24;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            box-shadow: 0 2px 6px rgba(220, 53, 69, 0.2);
+        }
+
+        .delete-user-modal-footer {
+            border-top: 2px solid #e0e0e0;
+            padding: 20px 25px;
+            background: #f8f9fa;
+        }
+
+        .delete-cancel-btn {
+            background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+            border: 2px solid #495057;
+            color: white;
+            padding: 10px 25px;
+            font-weight: bold;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+        }
+
+        .delete-cancel-btn:hover {
+            background: linear-gradient(135deg, #5a6268 0%, #495057 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .delete-confirm-btn {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            border: 2px solid #bd2130;
+            color: white;
+            padding: 10px 25px;
+            font-weight: bold;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .delete-confirm-btn:hover {
+            background: linear-gradient(135deg, #c82333 0%, #bd2130 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(220, 53, 69, 0.4);
+        }
     </style>
 </head>
 <body>
@@ -667,6 +820,53 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary" onclick="saveUserChanges()">
                         <i class="fas fa-save"></i> Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete User Confirmation Modal -->
+    <div class="modal fade" id="deleteUserModal" tabindex="-1" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content delete-user-modal-content">
+                <div class="modal-header delete-user-modal-header">
+                    <h5 class="modal-title" id="deleteUserModalLabel">
+                        <i class="fas fa-exclamation-triangle"></i> Delete User
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body delete-user-modal-body">
+                    <div class="delete-warning-icon">
+                        <i class="fas fa-trash-alt"></i>
+                    </div>
+                    <h6 class="delete-user-name" id="deleteUserNameDisplay"></h6>
+                    <p class="delete-user-email" id="deleteUserEmailDisplay"></p>
+                    
+                    <div class="delete-info-box">
+                        <p class="mb-2"><strong>This will delete the user from the technicians collection only.</strong></p>
+                        <p class="mb-0"><i class="fas fa-info-circle"></i> <strong>Important:</strong> You must manually delete the user's email from Firebase Authentication console.</p>
+                    </div>
+                    
+                    <div class="delete-steps">
+                        <p class="mb-2"><strong>To complete the deletion:</strong></p>
+                        <ol class="mb-0">
+                            <li>Go to Firebase Console → Authentication</li>
+                            <li>Find and select the user's email</li>
+                            <li>Click "Delete user"</li>
+                        </ol>
+                    </div>
+                    
+                    <div class="delete-warning-text">
+                        <i class="fas fa-exclamation-circle"></i> This action cannot be undone!
+                    </div>
+                </div>
+                <div class="modal-footer delete-user-modal-footer">
+                    <button type="button" class="btn btn-secondary delete-cancel-btn" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="button" class="btn btn-danger delete-confirm-btn" onclick="confirmDeleteUser()">
+                        <i class="fas fa-trash-alt"></i> Delete from Technicians Collection
                     </button>
                 </div>
             </div>
@@ -969,7 +1169,7 @@
         };
 
         // Delete User from Modal
-        window.deleteUserFromModal = async function() {
+        window.deleteUserFromModal = function() {
             const userId = document.getElementById('editUserId').value;
             const userEmail = document.getElementById('editUserEmail').value;
             const userName = document.getElementById('editUserName').value;
@@ -979,14 +1179,60 @@
                 return;
             }
             
-            // Close the modal first
-            const modal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
-            if (modal) {
-                modal.hide();
+            // Store user info for deletion
+            window.pendingDeleteUser = {
+                id: userId,
+                email: userEmail,
+                name: userName
+            };
+            
+            // Update modal display
+            document.getElementById('deleteUserNameDisplay').textContent = userName;
+            document.getElementById('deleteUserEmailDisplay').textContent = userEmail;
+            
+            // Close edit modal
+            const editModal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
+            if (editModal) {
+                editModal.hide();
             }
             
-            // Call the existing deleteUser function
-            await window.deleteUser(userId, userEmail, userName);
+            // Show delete confirmation modal
+            const deleteModal = new bootstrap.Modal(document.getElementById('deleteUserModal'));
+            deleteModal.show();
+        };
+
+        // Confirm Delete User
+        window.confirmDeleteUser = async function() {
+            if (!window.pendingDeleteUser) {
+                alert('❌ User information is missing.');
+                return;
+            }
+            
+            const { id: userId, email: userEmail, name: userName } = window.pendingDeleteUser;
+            
+            try {
+                const db = window.db || firebase.firestore();
+                
+                // Delete only from technicians collection
+                await db.collection('technicians').doc(userId).delete();
+                
+                // Close the modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('deleteUserModal'));
+                if (modal) {
+                    modal.hide();
+                }
+                
+                // Clear pending delete
+                window.pendingDeleteUser = null;
+                
+                alert(`✅ User "${userName}" has been deleted from the technicians collection.\n\n⚠️ Remember to manually delete the user from Firebase Authentication console.`);
+                
+                // Reload users list
+                loadUsers();
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                alert('❌ Failed to delete user: ' + error.message);
+            }
         };
 
         // Save User Changes
@@ -1022,80 +1268,22 @@
             }
         };
         
-        // Delete User
+        // Delete User (kept for backward compatibility, but now only deletes from technicians collection)
         window.deleteUser = async function(userId, userEmail, userName) {
-            const db = window.db || firebase.firestore();
-            const auth = window.auth || firebase.auth();
+            // Store user info for deletion
+            window.pendingDeleteUser = {
+                id: userId,
+                email: userEmail,
+                name: userName
+            };
             
-            // Check if user is authenticated
-            const currentUser = auth.currentUser;
-            if (!currentUser) {
-                alert('❌ You must be logged in to delete users. Please refresh the page and log in again.');
-                return;
-            }
+            // Update modal display
+            document.getElementById('deleteUserNameDisplay').textContent = userName;
+            document.getElementById('deleteUserEmailDisplay').textContent = userEmail;
             
-            const confirmMsg = `Are you sure you want to delete user "${userName}" (${userEmail})?\n\nThis will:\n- Delete the user from the technicians collection\n- Delete the user from Firebase Authentication\n\n⚠️ If Firebase Authentication deletion fails, the user will NOT be deleted from either location.\n\nThis action cannot be undone!`;
-            
-            if (!confirm(confirmMsg)) return;
-
-            try {
-                // Ensure we're still authenticated before calling the function
-                const userBeforeCall = auth.currentUser;
-                if (!userBeforeCall) {
-                    alert('❌ Session expired. Please refresh the page and log in again.');
-                    return;
-                }
-                
-                // Use the functions instance from window.functions (initialized in common.js)
-                const functions = window.functions;
-                if (!functions) {
-                    alert('❌ Firebase Functions not initialized. Please refresh the page.');
-                    return;
-                }
-                
-                // Get a fresh token right before the call
-                const freshToken = await userBeforeCall.getIdToken(true);
-                console.log('Calling deleteUser Cloud Function...');
-                console.log('Auth current user UID:', userBeforeCall.uid);
-                console.log('Auth current user email:', userBeforeCall.email);
-                
-                // Create the callable function reference
-                const deleteUserFunction = functions.httpsCallable('deleteUser');
-                
-                // Call the function - httpsCallable automatically includes the auth token
-                console.log('Making callable function request...');
-                const result = await deleteUserFunction({
-                    userId: userId,
-                    userEmail: userEmail
-                });
-
-                if (result.data.success) {
-                    alert(`✅ ${result.data.message}`);
-                } else {
-                    alert(`⚠️ User deletion completed with warnings: ${result.data.message || 'Unknown error'}`);
-                }
-
-                // Reload users list
-                loadUsers();
-            } catch (error) {
-                console.error('Error deleting user:', error);
-                
-                let errorMessage = 'Failed to delete user: ';
-                
-                if (error.code === 'functions/unavailable' || error.code === 'functions/not-found') {
-                    errorMessage = 'Cloud Function is not available. User was not deleted. Please try again later or contact support.';
-                } else if (error.code === 'functions/permission-denied') {
-                    errorMessage = 'Permission denied. You do not have permission to delete users.';
-                } else if (error.code === 'functions/internal') {
-                    errorMessage = error.message || 'Failed to delete user. The user was not deleted from either Firestore or Firebase Authentication.';
-                } else if (error.code === 'functions/unauthenticated') {
-                    errorMessage = 'Authentication error. Please refresh the page and log in again.';
-                } else {
-                    errorMessage += (error.message || error);
-                }
-                
-                alert(`❌ ${errorMessage}`);
-            }
+            // Show delete confirmation modal
+            const deleteModal = new bootstrap.Modal(document.getElementById('deleteUserModal'));
+            deleteModal.show();
         };
 
         // User Search
