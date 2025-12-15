@@ -2402,28 +2402,56 @@
                     // User was authenticated in main-menu and is admin - proceed IMMEDIATELY
                     console.log('[ADMIN] ✓ Auth verified flag and admin cache found - loading dashboard immediately');
                     
-                    // Use onAuthStateChanged instead of polling (much faster)
+                    // Wait for auth state to be restored (Firebase LOCAL persistence needs time)
                     let user = auth.currentUser;
                     if (!user) {
-                        console.log('[ADMIN] auth.currentUser is null, waiting for auth state...');
-                        // Wait for auth state with timeout (max 500ms instead of 2 seconds)
+                        console.log('[ADMIN] auth.currentUser is null, waiting for auth state to restore...');
+                        // Use hybrid approach: onAuthStateChanged + polling fallback
                         user = await new Promise((resolve) => {
                             let resolved = false;
+                            let pollCount = 0;
+                            const maxPolls = 20; // 20 * 100ms = 2 seconds max
+                            
+                            // Listen for auth state changes
                             const unsubscribe = auth.onAuthStateChanged((u) => {
                                 if (u && !resolved) {
+                                    console.log('[ADMIN] ✓ Auth state restored via onAuthStateChanged');
                                     resolved = true;
                                     unsubscribe();
+                                    clearInterval(pollInterval);
                                     resolve(u);
                                 }
                             });
-                            // Timeout after 500ms
-                            setTimeout(() => {
-                                if (!resolved) {
+                            
+                            // Fallback: poll auth.currentUser periodically
+                            const pollInterval = setInterval(() => {
+                                pollCount++;
+                                const currentUser = auth.currentUser;
+                                if (currentUser && !resolved) {
+                                    console.log('[ADMIN] ✓ Auth state restored via polling (attempt ' + pollCount + ')');
                                     resolved = true;
                                     unsubscribe();
+                                    clearInterval(pollInterval);
+                                    resolve(currentUser);
+                                } else if (pollCount >= maxPolls && !resolved) {
+                                    console.log('[ADMIN] Timeout waiting for auth state restore');
+                                    resolved = true;
+                                    unsubscribe();
+                                    clearInterval(pollInterval);
                                     resolve(auth.currentUser); // May still be null
                                 }
-                            }, 500);
+                            }, 100);
+                            
+                            // Timeout after 2 seconds
+                            setTimeout(() => {
+                                if (!resolved) {
+                                    console.log('[ADMIN] Final timeout - checking auth.currentUser');
+                                    resolved = true;
+                                    unsubscribe();
+                                    clearInterval(pollInterval);
+                                    resolve(auth.currentUser); // May still be null
+                                }
+                            }, 2000);
                         });
                     }
                     
@@ -2481,25 +2509,47 @@
                     // Auth verified but no admin cache - need to check admin status
                     console.log('[ADMIN] ✓ Auth verified flag found but no admin cache - checking admin status');
                     
-                    // Use onAuthStateChanged instead of polling
+                    // Wait for auth state to be restored
                     let user = auth.currentUser;
                     if (!user) {
                         user = await new Promise((resolve) => {
                             let resolved = false;
+                            let pollCount = 0;
+                            const maxPolls = 20; // 20 * 100ms = 2 seconds max
+                            
                             const unsubscribe = auth.onAuthStateChanged((u) => {
                                 if (u && !resolved) {
                                     resolved = true;
                                     unsubscribe();
+                                    clearInterval(pollInterval);
                                     resolve(u);
                                 }
                             });
+                            
+                            const pollInterval = setInterval(() => {
+                                pollCount++;
+                                const currentUser = auth.currentUser;
+                                if (currentUser && !resolved) {
+                                    resolved = true;
+                                    unsubscribe();
+                                    clearInterval(pollInterval);
+                                    resolve(currentUser);
+                                } else if (pollCount >= maxPolls && !resolved) {
+                                    resolved = true;
+                                    unsubscribe();
+                                    clearInterval(pollInterval);
+                                    resolve(auth.currentUser);
+                                }
+                            }, 100);
+                            
                             setTimeout(() => {
                                 if (!resolved) {
                                     resolved = true;
                                     unsubscribe();
+                                    clearInterval(pollInterval);
                                     resolve(auth.currentUser);
                                 }
-                            }, 500);
+                            }, 2000);
                         });
                     }
                     
@@ -2542,26 +2592,47 @@
                 console.log('[ADMIN] ✗ No auth flag found - checking current user');
                 let user = auth.currentUser;
                 
-                // Use onAuthStateChanged instead of polling (faster)
+                // Wait for auth state to be restored
                 if (!user) {
                     console.log('[ADMIN] No current user, waiting for auth state...');
                     user = await new Promise((resolve) => {
                         let resolved = false;
+                        let pollCount = 0;
+                        const maxPolls = 10; // 10 * 100ms = 1 second max
+                        
                         const unsubscribe = auth.onAuthStateChanged((u) => {
                             if (u && !resolved) {
                                 resolved = true;
                                 unsubscribe();
+                                clearInterval(pollInterval);
                                 resolve(u);
                             }
                         });
-                        // Timeout after 500ms instead of 1 second
+                        
+                        const pollInterval = setInterval(() => {
+                            pollCount++;
+                            const currentUser = auth.currentUser;
+                            if (currentUser && !resolved) {
+                                resolved = true;
+                                unsubscribe();
+                                clearInterval(pollInterval);
+                                resolve(currentUser);
+                            } else if (pollCount >= maxPolls && !resolved) {
+                                resolved = true;
+                                unsubscribe();
+                                clearInterval(pollInterval);
+                                resolve(auth.currentUser);
+                            }
+                        }, 100);
+                        
                         setTimeout(() => {
                             if (!resolved) {
                                 resolved = true;
                                 unsubscribe();
+                                clearInterval(pollInterval);
                                 resolve(auth.currentUser);
                             }
-                        }, 500);
+                        }, 1000);
                     });
                 }
                 
