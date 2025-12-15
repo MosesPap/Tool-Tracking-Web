@@ -195,55 +195,92 @@
                         inset 0 -1px 0 rgba(0, 0, 0, 0.1);
         }
 
-        /* Owner List Styles */
+        /* Owner Selection Full Screen Styles */
+        #ownerSelectionDiv {
+            width: 100%;
+            padding: 20px;
+            background: white;
+        }
+
+        #ownerSelectionDiv h4 {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        /* Owner List Styles - Full Screen */
         .owners-list-container {
             margin-top: 15px;
-            max-height: 400px;
+            min-height: 300px;
+            max-height: calc(100vh - 400px);
             overflow-y: auto;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
             background: #f8f9fa;
+            width: 100%;
         }
 
         .owners-group {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
 
         .owners-group-header {
             font-weight: bold;
-            font-size: 1.1rem;
+            font-size: 1.3rem;
             color: #FF9800;
-            margin-bottom: 8px;
-            padding-bottom: 5px;
-            border-bottom: 2px solid #FF9800;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 3px solid #FF9800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .owners-list {
             list-style: none;
             padding: 0;
             margin: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        @media (max-width: 576px) {
+            .owners-list {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (min-width: 768px) {
+            .owners-list {
+                grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            }
         }
 
         .owner-list-item {
-            padding: 8px 12px;
-            margin-bottom: 5px;
+            padding: 12px 16px;
             background: white;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
-            transition: all 0.2s ease;
-            border: 1px solid #e0e0e0;
+            transition: all 0.3s ease;
+            border: 2px solid #e0e0e0;
+            font-size: 1rem;
+            font-weight: 500;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .owner-list-item:hover {
             background: #FF9800;
             color: white;
-            transform: translateX(5px);
-            box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
+            border-color: #FF9800;
         }
 
         .owner-list-item:active {
-            transform: translateX(2px);
+            transform: translateY(-1px) scale(0.98);
         }
 
         /* 3D Orange Interactive Button for Primary Actions */
@@ -650,26 +687,31 @@
         </div>
       </div>
       
-      <div class="container py-4">
-        <!-- Owner Selection -->
-        <div id="ownerSelectionDiv" class="card mb-4">
-          <div class="card-body">
-            <h4 class="mb-3"><i class="fas fa-user"></i> Select Owner</h4>
-            <select id="ownerSelect" class="form-select form-select-lg mb-3">
-              <option value="">-- Select an Owner --</option>
-              <option value="ALL">All Owners</option>
-            </select>
-            <button id="loadToolsByOwnerBtn" class="btn btn-primary btn-lg w-100" disabled>
-              <i class="fas fa-search"></i> Load Tools
-            </button>
-            
-            <!-- Owners List (Grouped Alphabetically) -->
-            <div id="ownersListContainer" class="owners-list-container" style="display: none;">
-              <!-- Will be populated by loadOwners() -->
+      <!-- Owner Selection - Full Screen -->
+      <div class="container-fluid py-4 px-3">
+        <div id="ownerSelectionDiv" class="mb-4">
+          <div class="row">
+            <div class="col-12">
+              <h4 class="mb-3"><i class="fas fa-user"></i> Select Owner</h4>
+              <select id="ownerSelect" class="form-select form-select-lg mb-3">
+                <option value="">-- Select an Owner --</option>
+                <option value="ALL">All Owners</option>
+              </select>
+              <button id="loadToolsByOwnerBtn" class="btn btn-primary btn-lg w-100 mb-3" disabled>
+                <i class="fas fa-search"></i> Load Tools
+              </button>
+            </div>
+          </div>
+          
+          <!-- Owners List (Grouped Alphabetically) - Full Screen -->
+          <div class="row">
+            <div class="col-12">
+              <div id="ownersListContainer" class="owners-list-container">
+                <!-- Will be populated by loadOwners() -->
+              </div>
             </div>
           </div>
         </div>
-
       </div>
     </div>
 
@@ -693,13 +735,11 @@
         </div>
         
         <div class="container py-4">
+            <button id="backToCollectionSelectBtn" class="mytools-back mb-3" onclick="handleBackNavigation()">
+                <i class="fas fa-arrow-left"></i> Back to Admin
+            </button>
             <div class="row mb-3">
-                <div class="col-6">
-                    <button id="backToCollectionSelectBtn" class="w-100 mytools-back">
-                        <i class="fas fa-arrow-left"></i> Back to Collections
-                    </button>
-                </div>
-                <div class="col-6">
+                <div class="col-12">
                     <button id="selectDifferentCollectionBtn" class="w-100">
                         <i class="fas fa-exchange-alt"></i> Select Collection
                     </button>
@@ -715,23 +755,17 @@
         </div>
     </div>
 
-    <!-- Collection Selection Screen -->
-    <div id="collectionSelectScreen" style="display:none;">
-        <!-- Blue Title Bar -->
-        <div class="full-width-title-bar" style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 10px 0 8px 0; position: relative; box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.2); margin-bottom: 0.5rem; overflow: visible; transform: perspective(1000px) rotateX(1deg); border-bottom: 2px solid #1565C0;">
-            <div class="container">
-                <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <h2 style="color: white; font-weight: bold; font-size: 1.3rem; margin: 0 0 0 20px; letter-spacing: 1px; padding-right: 160px; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);">Select Collection</h2>
-                    <button id="collectionSelectModalCloseBtn" style="background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%); color: white; border: 2px solid #757575; border-radius: 10px; padding: 8px 16px; font-weight: bold; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3); transform: perspective(1000px) rotateX(2deg);">
-                        <i class="fas fa-arrow-left"></i> Back to Owner Selection
-                    </button>
+    <!-- Collection Selection Modal -->
+    <div class="modal fade" id="collectionSelectModal" tabindex="-1" aria-labelledby="collectionSelectModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="collectionSelectModalLabel">Select Collection</h5>
+                    <button type="button" class="btn-close" id="collectionSelectModalCloseBtn" aria-label="Close"></button>
                 </div>
-            </div>
-        </div>
-        
-        <div class="container py-4">
-            <div id="collectionSelectBody">
-                <!-- Collections will be loaded here -->
+                <div class="modal-body" id="collectionSelectBody">
+                    <!-- Collections will be loaded here -->
+                </div>
             </div>
         </div>
     </div>
@@ -1083,20 +1117,10 @@
                     };
                 }
 
-                // Back to collection selection button
-                const backToCollectionBtn = document.getElementById('backToCollectionSelectBtn');
-                if (backToCollectionBtn) {
-                    backToCollectionBtn.onclick = function() {
-                        document.getElementById('myToolsByCollectionScreen').style.display = 'none';
-                        showCollectionSelectionDialog();
-                    };
-                }
-
                 // Select different collection button
                 const selectCollectionBtn = document.getElementById('selectDifferentCollectionBtn');
                 if (selectCollectionBtn) {
                     selectCollectionBtn.onclick = function() {
-                        document.getElementById('myToolsByCollectionScreen').style.display = 'none';
                         showCollectionSelectionDialog();
                     };
                 }
@@ -1320,7 +1344,10 @@
             });
             
             container.innerHTML = html;
-            container.style.display = 'block';
+            // Always show the container (remove display: none)
+            if (container.style.display === 'none') {
+                container.style.display = 'block';
+            }
             
             // Add click event listeners to owner list items
             const ownerItems = container.querySelectorAll('.owner-list-item');
@@ -1674,20 +1701,15 @@
                 return;
             }
             
-            // Hide owner selection screen, show collection selection screen
-            document.getElementById('toolsByOwnerScreen').style.display = 'none';
-            document.getElementById('collectionSelectScreen').style.display = 'block';
-            document.getElementById('myToolsByCollectionScreen').style.display = 'none';
-            
+            const modal = new bootstrap.Modal(document.getElementById('collectionSelectModal'));
             const body = document.getElementById('collectionSelectBody');
             body.innerHTML = '<div class="text-center">Loading...</div>';
             
-            // Add event listener for close button
+            // Add event listener for modal close button
             const closeBtn = document.getElementById('collectionSelectModalCloseBtn');
             if (closeBtn) {
                 closeBtn.onclick = function() {
-                    document.getElementById('collectionSelectScreen').style.display = 'none';
-                    document.getElementById('toolsByOwnerScreen').style.display = 'block';
+                    modal.hide();
                     handleBackNavigation();
                 };
             }
@@ -1732,111 +1754,65 @@
                 });
                 
                 if (collections.length === 0) {
-                    body.innerHTML = '<div class="text-center text-danger mb-3" style="padding: 40px; font-size: 1.2rem;">No collections found for this owner.</div>';
+                    body.innerHTML = '<div class="text-center text-danger mb-3">No collections found for this owner.</div>';
                 } else {
-                    let html = '<div class="row g-3">';
+                    let html = '<div class="list-group mb-3">';
                     collections.forEach(data => {
                         const isCurrentCollection = data.collectionName === lastViewedCollectionName;
-                        html += `
-                            <div class="col-12 col-md-6 col-lg-4">
-                                <div class="collection-card-item" data-collection="${data.collectionName}" style="
-                                    background: ${isCurrentCollection ? 'linear-gradient(135deg, #2196F3 0%, #1976D2 100%)' : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)'};
-                                    color: ${isCurrentCollection ? 'white' : '#333'};
-                                    border: 2px solid ${isCurrentCollection ? '#1565C0' : '#e0e0e0'};
-                                    border-radius: 15px;
-                                    padding: 20px;
-                                    margin-bottom: 15px;
-                                    cursor: pointer;
-                                    transition: all 0.3s ease;
-                                    box-shadow: 0 4px 12px rgba(0,0,0,0.15),
-                                                inset 0 1px 0 rgba(255, 255, 255, 0.6),
-                                                inset 0 -1px 0 rgba(0, 0, 0, 0.1);
-                                    transform: perspective(1000px) rotateX(2deg);
-                                ">
-                                    <div style="font-weight: bold; font-size: 1.3rem; margin-bottom: 8px;">
-                                        <i class="fas fa-folder${isCurrentCollection ? '-open' : ''}"></i> ${data.collectionName}
-                                    </div>
-                                    <div style="font-size: 0.9rem; opacity: 0.8;">
-                                        ${isCurrentCollection ? 'Current Collection' : 'Click to view tools'}
-                                    </div>
-                                </div>
-                            </div>
-                        `;
+                        html += `<button class="list-group-item list-group-item-action collection-select-btn ${isCurrentCollection ? 'active' : ''}" style="font-weight:bold;color:${isCurrentCollection ? 'white' : '#1976d2'};" data-collection="${data.collectionName}">
+                            <span style="font-size:1.1em;">${data.collectionName}</span><br>
+                            <span style="font-size:0.9em;color:${isCurrentCollection ? 'rgba(255,255,255,0.8)' : '#888'};">
+                                ${isCurrentCollection ? 'Current Collection' : 'Code: ' + data.collectionName}
+                            </span>
+                        </button>`;
                     });
                     html += '</div>';
                     body.innerHTML = html;
                     
-                    // Add click handlers and hover effects
-                    body.querySelectorAll('.collection-card-item').forEach(card => {
-                        card.addEventListener('click', function() {
-                            const collectionName = this.getAttribute('data-collection');
-                            document.getElementById('collectionSelectScreen').style.display = 'none';
-                            showMyToolsByCollection(collectionName);
-                        });
-                        
-                        card.addEventListener('mouseenter', function() {
-                            this.style.transform = 'perspective(1000px) rotateX(0deg) translateY(-5px) scale(1.02)';
-                            this.style.boxShadow = '0 8px 20px rgba(33, 150, 243, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(0, 0, 0, 0.15)';
-                        });
-                        
-                        card.addEventListener('mouseleave', function() {
-                            this.style.transform = 'perspective(1000px) rotateX(2deg)';
-                            this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -1px 0 rgba(0, 0, 0, 0.1)';
-                        });
+                    // Add click handlers
+                    body.querySelectorAll('button[data-collection]').forEach(btn => {
+                        btn.onclick = function() {
+                            modal.hide();
+                            showMyToolsByCollection(this.getAttribute('data-collection'));
+                        };
                     });
                 }
                 
-                // Add action buttons row
-                const buttonsRow = document.createElement('div');
-                buttonsRow.className = 'row g-3 mt-4';
-                buttonsRow.innerHTML = `
-                    <div class="col-12 col-md-4">
-                        <button class="add-collection-btn-3d w-100" style="margin-bottom: 0;">
-                            <i class="fas fa-plus me-2"></i>Add New Collection
-                        </button>
-                    </div>
-                    ${collections.length > 0 ? `
-                    <div class="col-12 col-md-4">
-                        <button class="delete-collection-btn-3d w-100" style="margin-bottom: 0;">
-                            <i class="fas fa-trash me-2"></i>Delete Collection
-                        </button>
-                    </div>
-                    ` : ''}
-                    <div class="col-12 ${collections.length > 0 ? 'col-md-4' : 'col-md-8'}">
-                        <button class="btn btn-success w-100" style="padding: 12px 24px; font-size: 1rem; font-weight: bold; border-radius: 16px; margin-bottom: 0;">
-                            <i class="fas fa-undo me-2"></i>Restore Deleted Collection
-                        </button>
-                    </div>
-                `;
-                body.appendChild(buttonsRow);
+                // Add "Add New Collection" button with 3D interactive grey style
+                const addButton = document.createElement('button');
+                addButton.className = 'add-collection-btn-3d';
+                addButton.innerHTML = '<i class="fas fa-plus me-2"></i>Add New Collection';
+                addButton.onclick = function(e) {
+                    e.stopPropagation();
+                    modal.hide();
+                    showAddCollectionModal();
+                };
+                body.appendChild(addButton);
                 
-                // Add click handlers for action buttons
-                const addButton = buttonsRow.querySelector('.add-collection-btn-3d');
-                if (addButton) {
-                    addButton.onclick = function(e) {
-                        e.stopPropagation();
-                        document.getElementById('collectionSelectScreen').style.display = 'none';
-                        showAddCollectionModal();
-                    };
-                }
-                
+                // Add "Delete Collection" button with 3D interactive red style (only if collections exist)
                 if (collections.length > 0) {
-                    const deleteButton = buttonsRow.querySelector('.delete-collection-btn-3d');
-                    if (deleteButton) {
-                        deleteButton.onclick = function(e) {
-                            e.stopPropagation();
-                            showDeleteCollectionModal(collections);
-                        };
-                    }
+                    const deleteButton = document.createElement('button');
+                    deleteButton.className = 'delete-collection-btn-3d';
+                    deleteButton.innerHTML = '<i class="fas fa-trash me-2"></i>Delete Collection';
+                    deleteButton.onclick = function(e) {
+                        e.stopPropagation();
+                        showDeleteCollectionModal(collections);
+                    };
+                    body.appendChild(deleteButton);
                 }
                 
-                const restoreButton = buttonsRow.querySelector('.btn-success');
-                if (restoreButton) {
-                    restoreButton.onclick = function(e) {
-                        e.stopPropagation();
-                        showRestoreCollectionModal();
-                    };
-                }
+                // Add "Restore Deleted Collection" button with 3D interactive green style
+                const restoreButton = document.createElement('button');
+                restoreButton.className = 'btn btn-success w-100 mt-2';
+                restoreButton.style.cssText = 'padding: 12px 24px; font-size: 1rem; font-weight: bold; border-radius: 16px;';
+                restoreButton.innerHTML = '<i class="fas fa-undo me-2"></i>Restore Deleted Collection';
+                restoreButton.onclick = function(e) {
+                    e.stopPropagation();
+                    showRestoreCollectionModal();
+                };
+                body.appendChild(restoreButton);
+                
+                modal.show();
             } catch (error) {
                 console.error('Error loading collections:', error);
                 body.innerHTML = '<div class="text-center text-danger">Error loading collections. Please try again.</div>';
@@ -2188,8 +2164,9 @@
                 const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteCollectionModal'));
                 if (deleteModal) deleteModal.hide();
                 
-                // Hide collection selection screen if open
-                document.getElementById('collectionSelectScreen').style.display = 'none';
+                // Close collection selection modal if open
+                const collectionModal = bootstrap.Modal.getInstance(document.getElementById('collectionSelectModal'));
+                if (collectionModal) collectionModal.hide();
                 
                 // Return to owner selection
                 document.getElementById('toolsByOwnerScreen').style.display = 'block';
@@ -2436,9 +2413,8 @@
             const db = window.db || firebase.firestore();
             lastViewedCollectionName = collectionName;
             
-            // Hide owner selection and collection selection screens, show My Tools by Collection screen
+            // Hide owner selection screen, show My Tools by Collection screen
             document.getElementById('toolsByOwnerScreen').style.display = 'none';
-            document.getElementById('collectionSelectScreen').style.display = 'none';
             document.getElementById('myToolsByCollectionScreen').style.display = 'block';
             
             // Push history state for back button support
