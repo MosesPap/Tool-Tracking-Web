@@ -693,11 +693,13 @@
         </div>
         
         <div class="container py-4">
-            <button id="backToCollectionSelectBtn" class="mytools-back mb-3" onclick="handleBackNavigation()">
-                <i class="fas fa-arrow-left"></i> Back to Admin
-            </button>
             <div class="row mb-3">
-                <div class="col-12">
+                <div class="col-6">
+                    <button id="backToCollectionSelectBtn" class="w-100 mytools-back">
+                        <i class="fas fa-arrow-left"></i> Back to Collections
+                    </button>
+                </div>
+                <div class="col-6">
                     <button id="selectDifferentCollectionBtn" class="w-100">
                         <i class="fas fa-exchange-alt"></i> Select Collection
                     </button>
@@ -713,15 +715,23 @@
         </div>
     </div>
 
-    <!-- Collection Selection Modal -->
-    <div class="modal fade" id="collectionSelectModal" tabindex="-1" aria-labelledby="collectionSelectModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="collectionSelectModalLabel">Select Collection</h5>
-                    <button type="button" class="btn-close" id="collectionSelectModalCloseBtn" aria-label="Close"></button>
+    <!-- Collection Selection Screen -->
+    <div id="collectionSelectScreen" style="display:none;">
+        <!-- Blue Title Bar -->
+        <div class="full-width-title-bar" style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 10px 0 8px 0; position: relative; box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.2); margin-bottom: 0.5rem; overflow: visible; transform: perspective(1000px) rotateX(1deg); border-bottom: 2px solid #1565C0;">
+            <div class="container">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <h2 style="color: white; font-weight: bold; font-size: 1.3rem; margin: 0 0 0 20px; letter-spacing: 1px; padding-right: 160px; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);">Select Collection</h2>
+                    <button id="collectionSelectModalCloseBtn" style="background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 100%); color: white; border: 2px solid #757575; border-radius: 10px; padding: 8px 16px; font-weight: bold; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3); transform: perspective(1000px) rotateX(2deg);">
+                        <i class="fas fa-times"></i> Close
+                    </button>
                 </div>
-                <div class="modal-body" id="collectionSelectBody">
+            </div>
+        </div>
+        
+        <div class="container py-4">
+            <div class="card mb-4">
+                <div class="card-body" id="collectionSelectBody">
                     <!-- Collections will be loaded here -->
                 </div>
             </div>
@@ -1075,10 +1085,20 @@
                     };
                 }
 
+                // Back to collection selection button
+                const backToCollectionBtn = document.getElementById('backToCollectionSelectBtn');
+                if (backToCollectionBtn) {
+                    backToCollectionBtn.onclick = function() {
+                        document.getElementById('myToolsByCollectionScreen').style.display = 'none';
+                        showCollectionSelectionDialog();
+                    };
+                }
+
                 // Select different collection button
                 const selectCollectionBtn = document.getElementById('selectDifferentCollectionBtn');
                 if (selectCollectionBtn) {
                     selectCollectionBtn.onclick = function() {
+                        document.getElementById('myToolsByCollectionScreen').style.display = 'none';
                         showCollectionSelectionDialog();
                     };
                 }
@@ -1656,15 +1676,20 @@
                 return;
             }
             
-            const modal = new bootstrap.Modal(document.getElementById('collectionSelectModal'));
+            // Hide owner selection screen, show collection selection screen
+            document.getElementById('toolsByOwnerScreen').style.display = 'none';
+            document.getElementById('collectionSelectScreen').style.display = 'block';
+            document.getElementById('myToolsByCollectionScreen').style.display = 'none';
+            
             const body = document.getElementById('collectionSelectBody');
             body.innerHTML = '<div class="text-center">Loading...</div>';
             
-            // Add event listener for modal close button
+            // Add event listener for close button
             const closeBtn = document.getElementById('collectionSelectModalCloseBtn');
             if (closeBtn) {
                 closeBtn.onclick = function() {
-                    modal.hide();
+                    document.getElementById('collectionSelectScreen').style.display = 'none';
+                    document.getElementById('toolsByOwnerScreen').style.display = 'block';
                     handleBackNavigation();
                 };
             }
@@ -1727,7 +1752,7 @@
                     // Add click handlers
                     body.querySelectorAll('button[data-collection]').forEach(btn => {
                         btn.onclick = function() {
-                            modal.hide();
+                            document.getElementById('collectionSelectScreen').style.display = 'none';
                             showMyToolsByCollection(this.getAttribute('data-collection'));
                         };
                     });
@@ -1739,7 +1764,7 @@
                 addButton.innerHTML = '<i class="fas fa-plus me-2"></i>Add New Collection';
                 addButton.onclick = function(e) {
                     e.stopPropagation();
-                    modal.hide();
+                    document.getElementById('collectionSelectScreen').style.display = 'none';
                     showAddCollectionModal();
                 };
                 body.appendChild(addButton);
@@ -1766,8 +1791,6 @@
                     showRestoreCollectionModal();
                 };
                 body.appendChild(restoreButton);
-                
-                modal.show();
             } catch (error) {
                 console.error('Error loading collections:', error);
                 body.innerHTML = '<div class="text-center text-danger">Error loading collections. Please try again.</div>';
@@ -2119,9 +2142,8 @@
                 const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteCollectionModal'));
                 if (deleteModal) deleteModal.hide();
                 
-                // Close collection selection modal if open
-                const collectionModal = bootstrap.Modal.getInstance(document.getElementById('collectionSelectModal'));
-                if (collectionModal) collectionModal.hide();
+                // Hide collection selection screen if open
+                document.getElementById('collectionSelectScreen').style.display = 'none';
                 
                 // Return to owner selection
                 document.getElementById('toolsByOwnerScreen').style.display = 'block';
@@ -2368,8 +2390,9 @@
             const db = window.db || firebase.firestore();
             lastViewedCollectionName = collectionName;
             
-            // Hide owner selection screen, show My Tools by Collection screen
+            // Hide owner selection and collection selection screens, show My Tools by Collection screen
             document.getElementById('toolsByOwnerScreen').style.display = 'none';
+            document.getElementById('collectionSelectScreen').style.display = 'none';
             document.getElementById('myToolsByCollectionScreen').style.display = 'block';
             
             // Push history state for back button support
