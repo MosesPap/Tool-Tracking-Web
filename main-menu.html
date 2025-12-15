@@ -292,10 +292,13 @@
                             
                             // Check if user is admin
                             if (technicianData.isAdmin) {
+                                localStorage.setItem('isAdmin', 'true'); // Cache admin status for faster admin page load
                                 const menuAdminBtn = document.getElementById('menuAdminBtn');
                                 if (menuAdminBtn) {
                                     menuAdminBtn.style.display = 'block';
                                 }
+                            } else {
+                                localStorage.removeItem('isAdmin'); // Clear cache if not admin
                             }
                             
                             // Check if user is instructor
@@ -519,6 +522,7 @@
                         localStorage.removeItem('fullName');
                         localStorage.removeItem('techniciansId');
                         localStorage.removeItem('authVerified');
+                        localStorage.removeItem('isAdmin'); // Clear admin cache
                         window.location.href = 'index.html';
                     }).catch(error => {
                         console.error('Error signing out:', error);

@@ -1073,7 +1073,7 @@
                             } else {
                                 console.log('[TOOLS-BY-OWNER] ✗ User is not admin, redirecting to admin.html');
                                 localStorage.removeItem('authVerified');
-                                window.location.href = 'admin.html#tools';
+                                window.location.href = 'admin.html';
                             }
                         } else {
                             // Set up onAuthStateChanged listener
@@ -1086,12 +1086,12 @@
                                     } else {
                                         console.log('[TOOLS-BY-OWNER] ✗ User is not admin, redirecting to admin.html');
                                         localStorage.removeItem('authVerified');
-                                        window.location.href = 'admin.html#tools';
+                                        window.location.href = 'admin.html';
                                     }
                                 } else {
                                     console.log('[TOOLS-BY-OWNER] ✗ No user found, redirecting to admin.html');
                                     localStorage.removeItem('authVerified');
-                                    window.location.href = 'admin.html#tools';
+                                    window.location.href = 'admin.html';
                                 }
                                 unsubscribe();
                             });
@@ -1144,7 +1144,7 @@
 
         // Function to handle back navigation (used by both button and phone back button)
         window.handleBackNavigation = function handleBackNavigation() {
-            window.location.href = 'admin.html#tools';
+            window.location.href = 'admin.html';
         }
 
         // Load available owners from tools
