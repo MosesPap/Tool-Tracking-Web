@@ -625,6 +625,8 @@
                 <div class="modal-body">
                     <form id="editUserForm">
                         <input type="hidden" id="editUserId">
+                        <input type="hidden" id="editUserEmail">
+                        <input type="hidden" id="editUserName">
                         
                         <div class="mb-3">
                             <label for="editUserName" class="form-label">
@@ -659,6 +661,9 @@
                     </form>
                 </div>
                 <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" onclick="deleteUserFromModal()" style="margin-right: auto;">
+                        <i class="fas fa-trash-alt"></i> Delete User
+                    </button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary" onclick="saveUserChanges()">
                         <i class="fas fa-save"></i> Save Changes
@@ -873,7 +878,7 @@
                         <div class="user-card-roles">
                             ${badges.join('')}
                         </div>
-                        <button class="user-card-edit-btn" onclick="openEditUserModal('${userId}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}', ${isAdmin}, ${isInstructor}, ${isAvionics})">
+                        <button class="user-card-edit-btn" onclick="openEditUserModal('${userId}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}', ${isAdmin}, ${isInstructor}, ${isAvionics}, '${(userData.email || '').replace(/'/g, "\\'")}')">
                             <i class="fas fa-edit"></i> Edit
                         </button>
                     `;
@@ -951,15 +956,37 @@
         };
         
         // Open Edit User Modal
-        window.openEditUserModal = function(userId, currentName, isAdmin, isInstructor, isAvionics) {
+        window.openEditUserModal = function(userId, currentName, isAdmin, isInstructor, isAvionics, userEmail) {
             document.getElementById('editUserId').value = userId;
             document.getElementById('editUserName').value = currentName;
+            document.getElementById('editUserEmail').value = userEmail || '';
             document.getElementById('editUserAdmin').checked = isAdmin;
             document.getElementById('editUserInstructor').checked = isInstructor;
             document.getElementById('editUserAvionics').checked = isAvionics;
             
             const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
             modal.show();
+        };
+
+        // Delete User from Modal
+        window.deleteUserFromModal = async function() {
+            const userId = document.getElementById('editUserId').value;
+            const userEmail = document.getElementById('editUserEmail').value;
+            const userName = document.getElementById('editUserName').value;
+            
+            if (!userId || !userEmail || !userName) {
+                alert('❌ User information is missing. Please close and reopen the modal.');
+                return;
+            }
+            
+            // Close the modal first
+            const modal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
+            if (modal) {
+                modal.hide();
+            }
+            
+            // Call the existing deleteUser function
+            await window.deleteUser(userId, userEmail, userName);
         };
 
         // Save User Changes
