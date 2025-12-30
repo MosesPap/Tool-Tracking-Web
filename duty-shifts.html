@@ -68,6 +68,48 @@
             font-size: 1rem;
         }
 
+        .person-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .transfer-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .transfer-dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            background-color: white;
+            min-width: 150px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 1000;
+            border-radius: 8px;
+            padding: 0.5rem 0;
+            margin-top: 0.25rem;
+        }
+
+        .transfer-dropdown-content.show {
+            display: block;
+        }
+
+        .transfer-dropdown-content button {
+            width: 100%;
+            text-align: left;
+            padding: 0.5rem 1rem;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .transfer-dropdown-content button:hover {
+            background-color: #f1f1f1;
+        }
+
         .btn-add-person {
             width: 100%;
             margin-top: 0.5rem;
@@ -404,6 +446,9 @@
                     <button class="btn btn-sm btn-outline-secondary" onclick="nextMonth()">
                         <i class="fas fa-chevron-right"></i>
                     </button>
+                    <button class="btn btn-sm btn-success ms-2" onclick="openAssignDutyModalForDate()">
+                        <i class="fas fa-user-plus me-1"></i>Χειροκίνητη Ανάθεση
+                    </button>
                     <button class="btn btn-sm btn-primary ms-2" onclick="calculateDuties()">
                         <i class="fas fa-calculator me-1"></i>Υπολογισμός Υπηρεσιών
                     </button>
@@ -471,7 +516,54 @@
                 </div>
                 <div class="modal-body modal-day-details" id="dayDetailsContent"></div>
                 <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" id="assignDutyBtn" style="display: none;" onclick="openAssignDutyModal()">
+                        <i class="fas fa-user-plus me-1"></i>Ανάθεση Υπηρεσίας
+                    </button>
+                    <button type="button" class="btn btn-warning" id="editDutyBtn" style="display: none;" onclick="openAssignDutyModal()">
+                        <i class="fas fa-edit me-1"></i>Επεξεργασία Υπηρεσίας
+                    </button>
+                    <button type="button" class="btn btn-danger" id="removeDutyBtn" style="display: none;" onclick="removeDutyAssignment()">
+                        <i class="fas fa-trash me-1"></i>Αφαίρεση Υπηρεσίας
+                    </button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assign Duty Modal -->
+    <div class="modal fade" id="assignDutyModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Ανάθεση Υπηρεσίας</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="assignDutyDate" class="form-label">Ημερομηνία</label>
+                        <input type="date" class="form-control" id="assignDutyDate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="assignDutyGroup" class="form-label">Ομάδα</label>
+                        <select class="form-control" id="assignDutyGroup" required>
+                            <option value="">Επιλέξτε Ομάδα</option>
+                            <option value="1">Ομάδα 1</option>
+                            <option value="2">Ομάδα 2</option>
+                            <option value="3">Ομάδα 3</option>
+                            <option value="4">Ομάδα 4</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="assignDutyPerson" class="form-label">Άτομο</label>
+                        <select class="form-control" id="assignDutyPerson" required>
+                            <option value="">Επιλέξτε Άτομο</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-primary" onclick="saveManualDuty()">Αποθήκευση</button>
                 </div>
             </div>
         </div>
@@ -499,6 +591,7 @@
         let dutyAssignments = {};
         let currentDate = new Date();
         let currentGroup = null;
+        let selectedDateForDuty = null;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', async function() {
@@ -670,9 +763,23 @@
                         personDiv.className = 'person-item';
                         personDiv.innerHTML = `
                             <span class="person-name">${person}</span>
-                            <button class="btn btn-sm btn-outline-danger" onclick="removePerson(${i}, ${index})">
-                                <i class="fas fa-trash"></i>
-                            </button>
+                            <div class="person-actions">
+                                <div class="transfer-dropdown">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="toggleTransferDropdown(${i}, ${index}, event)">
+                                        <i class="fas fa-exchange-alt"></i>
+                                    </button>
+                                    <div class="transfer-dropdown-content" id="transferDropdown_${i}_${index}">
+                                        ${[1, 2, 3, 4].filter(g => g !== i).map(targetGroup => `
+                                            <button onclick="transferPerson(${i}, ${index}, ${targetGroup})">
+                                                <i class="fas fa-arrow-right me-2"></i>Μεταφορά στην Ομάδα ${targetGroup}
+                                            </button>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                                <button class="btn btn-sm btn-outline-danger" onclick="removePerson(${i}, ${index})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
                         `;
                         container.appendChild(personDiv);
                     });
@@ -724,6 +831,54 @@
                 updateStatistics();
             }
         }
+
+        // Toggle transfer dropdown
+        function toggleTransferDropdown(groupNumber, index, event) {
+            event.stopPropagation();
+            
+            // Close all other dropdowns
+            document.querySelectorAll('.transfer-dropdown-content').forEach(dropdown => {
+                dropdown.classList.remove('show');
+            });
+            
+            // Toggle current dropdown
+            const dropdown = document.getElementById(`transferDropdown_${groupNumber}_${index}`);
+            dropdown.classList.toggle('show');
+        }
+
+        // Transfer person to another group
+        function transferPerson(fromGroup, index, toGroup) {
+            const person = groups[fromGroup][index];
+            
+            if (!person) return;
+            
+            // Remove from current group
+            groups[fromGroup].splice(index, 1);
+            
+            // Add to target group
+            if (!groups[toGroup]) {
+                groups[toGroup] = [];
+            }
+            groups[toGroup].push(person);
+            
+            // Close dropdown
+            document.querySelectorAll('.transfer-dropdown-content').forEach(dropdown => {
+                dropdown.classList.remove('show');
+            });
+            
+            saveData();
+            renderGroups();
+            updateStatistics();
+        }
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function(event) {
+            if (!event.target.closest('.transfer-dropdown')) {
+                document.querySelectorAll('.transfer-dropdown-content').forEach(dropdown => {
+                    dropdown.classList.remove('show');
+                });
+            }
+        });
 
         // Add holiday
         function addHoliday() {
@@ -1315,6 +1470,13 @@
                     const rotationDays = groupPeople.length;
                     
                     days.forEach((dayKey, dayIndex) => {
+                        // Check if this day already has a manual assignment for this group
+                        const existingAssignment = dutyAssignments[dayKey];
+                        if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
+                            // Skip - this day already has a manual assignment for this group
+                            return;
+                        }
+                        
                         // Find the person who should be on duty based on rotation
                         // Each person should be on duty every N days of this type
                         const idealPersonIndex = dayIndex % rotationDays;
@@ -1425,6 +1587,9 @@
             const assignment = dutyAssignments[key];
             const dayType = getDayType(date);
             
+            // Store selected date for manual assignment
+            selectedDateForDuty = date;
+            
             const modal = new bootstrap.Modal(document.getElementById('dayDetailsModal'));
             document.getElementById('dayDetailsTitle').textContent = formatDate(date);
             
@@ -1496,7 +1661,151 @@
             }
             
             document.getElementById('dayDetailsContent').innerHTML = content;
+            
+            // Show/hide buttons based on whether assignment exists
+            const assignBtn = document.getElementById('assignDutyBtn');
+            const editBtn = document.getElementById('editDutyBtn');
+            const removeBtn = document.getElementById('removeDutyBtn');
+            
+            if (assignment) {
+                assignBtn.style.display = 'none';
+                editBtn.style.display = 'inline-block';
+                removeBtn.style.display = 'inline-block';
+            } else {
+                assignBtn.style.display = 'inline-block';
+                editBtn.style.display = 'none';
+                removeBtn.style.display = 'none';
+            }
+            
             modal.show();
+        }
+
+        // Open assign duty modal from day details
+        function openAssignDutyModal() {
+            // Close day details modal
+            const dayDetailsModal = bootstrap.Modal.getInstance(document.getElementById('dayDetailsModal'));
+            if (dayDetailsModal) {
+                dayDetailsModal.hide();
+            }
+            
+            openAssignDutyModalForDate(selectedDateForDuty);
+        }
+
+        // Open assign duty modal for a specific date (or current date if not specified)
+        function openAssignDutyModalForDate(date = null) {
+            // Clear previous event listeners
+            const groupSelect = document.getElementById('assignDutyGroup');
+            const newGroupSelect = groupSelect.cloneNode(true);
+            groupSelect.parentNode.replaceChild(newGroupSelect, groupSelect);
+            
+            // Set date in assign modal
+            const dateInput = document.getElementById('assignDutyDate');
+            if (date) {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                dateInput.value = `${year}-${month}-${day}`;
+                selectedDateForDuty = date;
+            } else {
+                // Use today's date
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                const day = String(today.getDate()).padStart(2, '0');
+                dateInput.value = `${year}-${month}-${day}`;
+                selectedDateForDuty = today;
+            }
+            
+            // Reset form
+            document.getElementById('assignDutyGroup').value = '';
+            document.getElementById('assignDutyPerson').innerHTML = '<option value="">Επιλέξτε Άτομο</option>';
+            
+            // Update person dropdown when group changes
+            document.getElementById('assignDutyGroup').addEventListener('change', function() {
+                updatePersonDropdown();
+            });
+            
+            // Open modal
+            const modal = new bootstrap.Modal(document.getElementById('assignDutyModal'));
+            modal.show();
+        }
+
+        // Update person dropdown based on selected group
+        function updatePersonDropdown() {
+            const groupSelect = document.getElementById('assignDutyGroup');
+            const personSelect = document.getElementById('assignDutyPerson');
+            const selectedGroup = parseInt(groupSelect.value);
+            
+            personSelect.innerHTML = '<option value="">Επιλέξτε Άτομο</option>';
+            
+            if (selectedGroup && groups[selectedGroup] && groups[selectedGroup].length > 0) {
+                groups[selectedGroup].forEach(person => {
+                    const option = document.createElement('option');
+                    option.value = person;
+                    option.textContent = person;
+                    personSelect.appendChild(option);
+                });
+            }
+        }
+
+        // Save manual duty assignment
+        function saveManualDuty() {
+            const date = document.getElementById('assignDutyDate').value;
+            const groupNum = parseInt(document.getElementById('assignDutyGroup').value);
+            const person = document.getElementById('assignDutyPerson').value.trim();
+            
+            if (!date) {
+                alert('Παρακαλώ επιλέξτε ημερομηνία');
+                return;
+            }
+            
+            if (!groupNum || !person) {
+                alert('Παρακαλώ επιλέξτε ομάδα και άτομο');
+                return;
+            }
+            
+            const dateKey = formatDateKey(new Date(date + 'T00:00:00'));
+            
+            // Check if assignment already exists
+            if (dutyAssignments[dateKey]) {
+                // Update existing assignment
+                const existing = dutyAssignments[dateKey];
+                // Remove old assignment for this group if exists
+                const updated = existing.split(', ').filter(a => !a.includes(`Ομάδα ${groupNum}`));
+                updated.push(`${person} (Ομάδα ${groupNum})`);
+                dutyAssignments[dateKey] = updated.join(', ');
+            } else {
+                // Create new assignment
+                dutyAssignments[dateKey] = `${person} (Ομάδα ${groupNum})`;
+            }
+            
+            saveData();
+            renderCalendar();
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('assignDutyModal'));
+            modal.hide();
+            
+            alert('Η ανάθεση υπηρεσίας αποθηκεύτηκε επιτυχώς!');
+        }
+
+        // Remove duty assignment
+        function removeDutyAssignment() {
+            if (!selectedDateForDuty) return;
+            
+            if (!confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε την ανάθεση υπηρεσίας για αυτή την ημέρα;')) {
+                return;
+            }
+            
+            const key = formatDateKey(selectedDateForDuty);
+            delete dutyAssignments[key];
+            
+            saveData();
+            renderCalendar();
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('dayDetailsModal'));
+            modal.hide();
+            
+            alert('Η ανάθεση υπηρεσίας αφαιρέθηκε επιτυχώς!');
         }
 
         // Update statistics
