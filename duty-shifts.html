@@ -826,28 +826,83 @@
             return easterDate;
         }
 
-        // Check if date is a special holiday
+        // Calculate all Orthodox holidays based on Easter
+        function calculateOrthodoxHolidays(year) {
+            const easterSunday = calculateOrthodoxEaster(year);
+            const holidays = {};
+            
+            // Clean Monday (48 days before Easter)
+            const cleanMonday = new Date(easterSunday);
+            cleanMonday.setDate(cleanMonday.getDate() - 48);
+            holidays['cleanMonday'] = cleanMonday;
+            
+            // Palm Sunday (7 days before Easter)
+            const palmSunday = new Date(easterSunday);
+            palmSunday.setDate(palmSunday.getDate() - 7);
+            holidays['palmSunday'] = palmSunday;
+            
+            // Good Friday (2 days before Easter)
+            const goodFriday = new Date(easterSunday);
+            goodFriday.setDate(goodFriday.getDate() - 2);
+            holidays['goodFriday'] = goodFriday;
+            
+            // Great Saturday (1 day before Easter)
+            const greatSaturday = new Date(easterSunday);
+            greatSaturday.setDate(greatSaturday.getDate() - 1);
+            holidays['greatSaturday'] = greatSaturday;
+            
+            // Easter Sunday (Great Sunday)
+            holidays['easterSunday'] = easterSunday;
+            
+            // Easter Monday (1 day after Easter)
+            const easterMonday = new Date(easterSunday);
+            easterMonday.setDate(easterMonday.getDate() + 1);
+            holidays['easterMonday'] = easterMonday;
+            
+            // Ascension Day (39 days after Easter)
+            const ascensionDay = new Date(easterSunday);
+            ascensionDay.setDate(ascensionDay.getDate() + 39);
+            holidays['ascensionDay'] = ascensionDay;
+            
+            // Pentecost (49 days after Easter)
+            const pentecost = new Date(easterSunday);
+            pentecost.setDate(pentecost.getDate() + 49);
+            holidays['pentecost'] = pentecost;
+            
+            // Whit Monday (50 days after Easter)
+            const whitMonday = new Date(easterSunday);
+            whitMonday.setDate(whitMonday.getDate() + 50);
+            holidays['whitMonday'] = whitMonday;
+            
+            return holidays;
+        }
+
+        // Check if date is a special holiday (Orthodox or Cyprus Greek holidays)
         function isSpecialHoliday(date) {
             const month = date.getMonth() + 1; // 1-12
             const day = date.getDate();
             const year = date.getFullYear();
-            
-            // Fixed dates
-            if (month === 12 && day === 25) return true; // December 25
-            if (month === 12 && day === 26) return true; // December 26
-            if (month === 12 && day === 31) return true; // December 31
-            if (month === 1 && day === 1) return true;  // January 1
-            if (month === 8 && day === 15) return true; // August 15
-            
-            // Orthodox Easter (Great Saturday and Great Sunday)
-            const easterSunday = calculateOrthodoxEaster(year);
-            const greatSaturday = new Date(easterSunday);
-            greatSaturday.setDate(greatSaturday.getDate() - 1);
-            const greatSunday = new Date(easterSunday);
-            
             const dateKey = formatDateKey(date);
-            if (dateKey === formatDateKey(greatSaturday) || dateKey === formatDateKey(greatSunday)) {
-                return true;
+            
+            // Fixed Orthodox holidays
+            if (month === 1 && day === 1) return true;  // New Year's Day
+            if (month === 1 && day === 6) return true;  // Epiphany/Theophany
+            if (month === 3 && day === 25) return true; // Annunciation / Greek Independence Day
+            if (month === 8 && day === 15) return true; // Dormition of the Theotokos
+            if (month === 9 && day === 8) return true;  // Nativity of the Theotokos
+            if (month === 9 && day === 14) return true; // Exaltation of the Cross
+            if (month === 10 && day === 1) return true; // Cyprus Independence Day
+            if (month === 10 && day === 28) return true; // Ochi Day
+            if (month === 12 && day === 25) return true; // Christmas (Nativity of Christ)
+            if (month === 12 && day === 26) return true; // Synaxis of the Theotokos
+            if (month === 12 && day === 31) return true; // New Year's Eve
+            
+            // Orthodox holidays based on Easter
+            const orthodoxHolidays = calculateOrthodoxHolidays(year);
+            for (const key in orthodoxHolidays) {
+                if (dateKey === formatDateKey(orthodoxHolidays[key])) {
+                    return true;
+                }
             }
             
             return false;
@@ -966,24 +1021,34 @@
             
             const month = date.getMonth() + 1;
             const day = date.getDate();
+            const year = date.getFullYear();
+            const dateKey = formatDateKey(date);
             
-            if (month === 12 && day === 25) return 'Christmas';
-            if (month === 12 && day === 26) return 'Dec 26';
-            if (month === 12 && day === 31) return 'New Year\'s Eve';
+            // Fixed Orthodox holidays
             if (month === 1 && day === 1) return 'New Year';
-            if (month === 8 && day === 15) return 'Aug 15';
+            if (month === 1 && day === 6) return 'Epiphany';
+            if (month === 3 && day === 25) return 'Annunciation';
+            if (month === 8 && day === 15) return 'Dormition';
+            if (month === 9 && day === 8) return 'Nativity Theotokos';
+            if (month === 9 && day === 14) return 'Exaltation Cross';
+            if (month === 10 && day === 1) return 'Cyprus Independence';
+            if (month === 10 && day === 28) return 'Ochi Day';
+            if (month === 12 && day === 25) return 'Christmas';
+            if (month === 12 && day === 26) return 'Synaxis';
+            if (month === 12 && day === 31) return 'New Year\'s Eve';
             
-            // Check for Orthodox Easter
-            const easterSunday = calculateOrthodoxEaster(date.getFullYear());
-            const greatSaturday = new Date(easterSunday);
-            greatSaturday.setDate(greatSaturday.getDate() - 1);
+            // Orthodox holidays based on Easter
+            const orthodoxHolidays = calculateOrthodoxHolidays(year);
             
-            if (formatDateKey(date) === formatDateKey(greatSaturday)) {
-                return 'Great Saturday';
-            }
-            if (formatDateKey(date) === formatDateKey(easterSunday)) {
-                return 'Great Sunday';
-            }
+            if (dateKey === formatDateKey(orthodoxHolidays.cleanMonday)) return 'Clean Monday';
+            if (dateKey === formatDateKey(orthodoxHolidays.palmSunday)) return 'Palm Sunday';
+            if (dateKey === formatDateKey(orthodoxHolidays.goodFriday)) return 'Good Friday';
+            if (dateKey === formatDateKey(orthodoxHolidays.greatSaturday)) return 'Great Saturday';
+            if (dateKey === formatDateKey(orthodoxHolidays.easterSunday)) return 'Easter';
+            if (dateKey === formatDateKey(orthodoxHolidays.easterMonday)) return 'Easter Monday';
+            if (dateKey === formatDateKey(orthodoxHolidays.ascensionDay)) return 'Ascension';
+            if (dateKey === formatDateKey(orthodoxHolidays.pentecost)) return 'Pentecost';
+            if (dateKey === formatDateKey(orthodoxHolidays.whitMonday)) return 'Whit Monday';
             
             return null;
         }
@@ -1366,30 +1431,36 @@
             `;
             
             if (isSpecialHoliday(date)) {
-                const month = date.getMonth() + 1;
-                const day = date.getDate();
-                let specialHolidayName = '';
+                const holidayName = getOrthodoxHolidayName(date);
+                const fullHolidayNames = {
+                    'New Year': 'New Year\'s Day',
+                    'Epiphany': 'Epiphany / Theophany',
+                    'Annunciation': 'Annunciation / Greek Independence Day',
+                    'Dormition': 'Dormition of the Theotokos',
+                    'Nativity Theotokos': 'Nativity of the Theotokos',
+                    'Exaltation Cross': 'Exaltation of the Holy Cross',
+                    'Cyprus Independence': 'Cyprus Independence Day',
+                    'Ochi Day': 'Ochi Day (Greek National Day)',
+                    'Christmas': 'Christmas (Nativity of Christ)',
+                    'Synaxis': 'Synaxis of the Theotokos',
+                    'New Year\'s Eve': 'New Year\'s Eve',
+                    'Clean Monday': 'Clean Monday (First Day of Lent)',
+                    'Palm Sunday': 'Palm Sunday',
+                    'Good Friday': 'Good Friday',
+                    'Great Saturday': 'Great Saturday (Orthodox Easter)',
+                    'Easter': 'Easter Sunday (Orthodox Easter)',
+                    'Easter Monday': 'Easter Monday',
+                    'Ascension': 'Ascension Day',
+                    'Pentecost': 'Pentecost (Holy Trinity)',
+                    'Whit Monday': 'Whit Monday'
+                };
                 
-                if (month === 12 && day === 25) specialHolidayName = 'December 25 (Christmas)';
-                else if (month === 12 && day === 26) specialHolidayName = 'December 26';
-                else if (month === 12 && day === 31) specialHolidayName = 'December 31 (New Year\'s Eve)';
-                else if (month === 1 && day === 1) specialHolidayName = 'January 1 (New Year\'s Day)';
-                else if (month === 8 && day === 15) specialHolidayName = 'August 15';
-                else {
-                    const easterSunday = calculateOrthodoxEaster(date.getFullYear());
-                    const greatSaturday = new Date(easterSunday);
-                    greatSaturday.setDate(greatSaturday.getDate() - 1);
-                    if (formatDateKey(date) === formatDateKey(greatSaturday)) {
-                        specialHolidayName = 'Great Saturday (Orthodox Easter)';
-                    } else {
-                        specialHolidayName = 'Great Sunday (Orthodox Easter)';
-                    }
-                }
+                const fullName = fullHolidayNames[holidayName] || holidayName;
                 
                 content += `
                     <div class="alert alert-warning" style="background: #E1BEE7; border-color: #9C27B0;">
                         <i class="fas fa-star me-2"></i>
-                        <strong>Special Holiday:</strong> ${specialHolidayName}
+                        <strong>Orthodox/Cyprus Holiday:</strong> ${fullName}
                     </div>
                 `;
             }
