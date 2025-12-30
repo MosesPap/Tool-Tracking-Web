@@ -1,0 +1,1446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <title>Duty Shifts - Tool Tracking</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/common.css">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+        }
+
+        .full-width-title-bar {
+            width: 100vw !important;
+            margin-left: calc(50% - 50vw) !important;
+            margin-right: calc(50% - 50vw) !important;
+            margin-top: 0 !important;
+        }
+
+        .container-fluid {
+            padding: 1rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .group-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .group-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .group-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .person-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .person-name {
+            flex: 1;
+            font-size: 1rem;
+        }
+
+        .btn-add-person {
+            width: 100%;
+            margin-top: 0.5rem;
+        }
+
+        .calendar-section {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .calendar-nav {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0.5rem;
+        }
+
+        .calendar-day-header {
+            text-align: center;
+            font-weight: bold;
+            padding: 0.5rem;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .calendar-day {
+            aspect-ratio: 1;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .calendar-day:hover {
+            border-color: #FF9800;
+            transform: scale(1.05);
+        }
+
+        .calendar-day.today {
+            border-color: #FF9800;
+            background: #FFF3E0;
+            font-weight: bold;
+        }
+
+        .calendar-day.normal-day {
+            background: #E8F5E9;
+        }
+
+        .calendar-day.semi-normal-day {
+            background: #FFF9C4;
+        }
+
+        .calendar-day.weekend-holiday {
+            background: #FFE0B2;
+        }
+
+        .calendar-day.special-holiday {
+            background: #E1BEE7;
+            border-color: #9C27B0;
+            font-weight: bold;
+        }
+
+        .calendar-day.holiday {
+            background: #FFCDD2;
+        }
+
+        .day-number {
+            font-size: 1rem;
+            font-weight: bold;
+        }
+
+        .day-type {
+            font-size: 0.7rem;
+            margin-top: 0.25rem;
+            text-align: center;
+        }
+
+        .orthodox-holiday-name {
+            font-size: 0.7rem;
+            margin-top: 0.2rem;
+            color: #7B1FA2;
+            font-weight: bold;
+            text-align: center;
+            word-break: break-word;
+            line-height: 1.1;
+        }
+
+        .duty-person {
+            font-size: 0.75rem;
+            margin-top: 0.25rem;
+            color: #FF9800;
+            font-weight: bold;
+            text-align: center;
+            word-break: break-word;
+        }
+
+        .holiday-list {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .holiday-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .stats-card {
+            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .modal-day-details {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .duty-assignment {
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #FF9800;
+        }
+
+        .group-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+
+        .group-1 { background: #E3F2FD; color: #1976D2; }
+        .group-2 { background: #F3E5F5; color: #7B1FA2; }
+        .group-3 { background: #E8F5E9; color: #388E3C; }
+        .group-4 { background: #FFF3E0; color: #F57C00; }
+
+        @media (max-width: 768px) {
+            .calendar-grid {
+                gap: 0.25rem;
+            }
+            
+            .calendar-day {
+                padding: 0.25rem;
+                font-size: 0.85rem;
+            }
+            
+            .day-number {
+                font-size: 0.9rem;
+            }
+            
+            .day-type, .duty-person, .orthodox-holiday-name {
+                font-size: 0.65rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Title Bar -->
+    <div class="full-width-title-bar">
+        <div class="d-flex justify-content-between align-items-center p-3" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%); color: white;">
+            <div class="d-flex align-items-center">
+                <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
+                    <i class="fas fa-arrow-left fa-lg"></i>
+                </a>
+                <h4 class="mb-0">Duty Shifts Management</h4>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <!-- Statistics Card -->
+        <div class="stats-card">
+            <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Rotation Statistics</h5>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value" id="totalPeople">0</div>
+                    <div class="stat-label">Total Personnel</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="avgRotation">0</div>
+                    <div class="stat-label">Avg. Rotation Days</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Groups Section -->
+        <div class="row">
+            <div class="col-12 col-md-6 col-lg-3 mb-3" id="group1Container">
+                <div class="group-card">
+                    <div class="group-header">
+                        <div class="group-title">
+                            <span class="group-badge group-1">Group 1</span>
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary" onclick="addPerson(1)">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <div id="group1People"></div>
+                    <div class="mt-2">
+                        <small class="text-muted">Rotation: <span id="group1Rotation">-</span> days</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-md-6 col-lg-3 mb-3" id="group2Container">
+                <div class="group-card">
+                    <div class="group-header">
+                        <div class="group-title">
+                            <span class="group-badge group-2">Group 2</span>
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary" onclick="addPerson(2)">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <div id="group2People"></div>
+                    <div class="mt-2">
+                        <small class="text-muted">Rotation: <span id="group2Rotation">-</span> days</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-md-6 col-lg-3 mb-3" id="group3Container">
+                <div class="group-card">
+                    <div class="group-header">
+                        <div class="group-title">
+                            <span class="group-badge group-3">Group 3</span>
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary" onclick="addPerson(3)">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <div id="group3People"></div>
+                    <div class="mt-2">
+                        <small class="text-muted">Rotation: <span id="group3Rotation">-</span> days</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-md-6 col-lg-3 mb-3" id="group4Container">
+                <div class="group-card">
+                    <div class="group-header">
+                        <div class="group-title">
+                            <span class="group-badge group-4">Group 4</span>
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary" onclick="addPerson(4)">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <div id="group4People"></div>
+                    <div class="mt-2">
+                        <small class="text-muted">Rotation: <span id="group4Rotation">-</span> days</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Holidays Section -->
+        <div class="holiday-list">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5><i class="fas fa-calendar-times me-2"></i>Holidays</h5>
+                <button class="btn btn-primary btn-sm" onclick="addHoliday()">
+                    <i class="fas fa-plus me-1"></i>Add Holiday
+                </button>
+            </div>
+            <div id="holidaysList"></div>
+        </div>
+
+        <!-- Calendar Section -->
+        <div class="calendar-section">
+            <div class="calendar-header">
+                <h5><i class="fas fa-calendar-alt me-2"></i>Duty Calendar</h5>
+                <div class="calendar-nav">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="previousMonth()">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <h5 class="mb-0 mx-3" id="currentMonthYear"></h5>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="nextMonth()">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                    <button class="btn btn-sm btn-primary ms-2" onclick="calculateDuties()">
+                        <i class="fas fa-calculator me-1"></i>Calculate Duties
+                    </button>
+                </div>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+        </div>
+    </div>
+
+    <!-- Add Person Modal -->
+    <div class="modal fade" id="addPersonModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Person to Group <span id="modalGroupNumber"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="personName" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="personName" placeholder="Enter person's name">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="savePerson()">Add Person</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Holiday Modal -->
+    <div class="modal fade" id="addHolidayModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Holiday</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="holidayDate" class="form-label">Date</label>
+                        <input type="date" class="form-control" id="holidayDate">
+                    </div>
+                    <div class="mb-3">
+                        <label for="holidayName" class="form-label">Holiday Name (Optional)</label>
+                        <input type="text" class="form-control" id="holidayName" placeholder="e.g., Christmas, New Year">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveHoliday()">Add Holiday</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Day Details Modal -->
+    <div class="modal fade" id="dayDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="dayDetailsTitle"></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body modal-day-details" id="dayDetailsContent"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK - must load before common.js -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+    
+    <!-- Common Firebase configuration and utilities -->
+    <script src="js/common.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Data storage
+        let groups = {
+            1: [],
+            2: [],
+            3: [],
+            4: []
+        };
+        let holidays = [];
+        let dutyAssignments = {};
+        let currentDate = new Date();
+        let currentGroup = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Wait for Firebase to be ready
+            if (window.auth && window.db) {
+                // Check authentication
+                window.auth.onAuthStateChanged(async function(user) {
+                    if (user && user.emailVerified) {
+                        await loadData();
+                        renderGroups();
+                        renderHolidays();
+                        renderCalendar();
+                        updateStatistics();
+                    } else {
+                        // Not authenticated, use localStorage
+                        loadDataFromLocalStorage();
+                        renderGroups();
+                        renderHolidays();
+                        renderCalendar();
+                        updateStatistics();
+                    }
+                });
+            } else {
+                // Firebase not loaded yet, wait a bit and try again
+                setTimeout(() => {
+                    document.dispatchEvent(new Event('DOMContentLoaded'));
+                }, 500);
+            }
+        });
+
+        // Load data from Firebase Firestore
+        async function loadData() {
+            try {
+                // Wait for Firebase to be ready
+                if (!window.db) {
+                    console.log('Waiting for Firebase to initialize...');
+                    setTimeout(loadData, 100);
+                    return;
+                }
+                
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                
+                if (!user) {
+                    console.log('User not authenticated, using localStorage as fallback');
+                    loadDataFromLocalStorage();
+                    return;
+                }
+                
+                // Load groups
+                const groupsDoc = await db.collection('dutyShifts').doc('groups').get();
+                if (groupsDoc.exists) {
+                    const data = groupsDoc.data();
+                    // Remove metadata fields
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    groups = data || { 1: [], 2: [], 3: [], 4: [] };
+                }
+                
+                // Load holidays
+                const holidaysDoc = await db.collection('dutyShifts').doc('holidays').get();
+                if (holidaysDoc.exists) {
+                    const data = holidaysDoc.data();
+                    holidays = data.list || [];
+                }
+                
+                // Load assignments
+                const assignmentsDoc = await db.collection('dutyShifts').doc('assignments').get();
+                if (assignmentsDoc.exists) {
+                    const data = assignmentsDoc.data();
+                    // Remove metadata fields
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    dutyAssignments = data || {};
+                }
+                
+                console.log('Data loaded from Firebase');
+            } catch (error) {
+                console.error('Error loading data from Firebase:', error);
+                // Fallback to localStorage
+                loadDataFromLocalStorage();
+            }
+        }
+
+        // Fallback: Load data from localStorage
+        function loadDataFromLocalStorage() {
+            const savedGroups = localStorage.getItem('dutyShiftsGroups');
+            const savedHolidays = localStorage.getItem('dutyShiftsHolidays');
+            const savedAssignments = localStorage.getItem('dutyShiftsAssignments');
+            
+            if (savedGroups) {
+                groups = JSON.parse(savedGroups);
+            }
+            if (savedHolidays) {
+                holidays = JSON.parse(savedHolidays);
+            }
+            if (savedAssignments) {
+                dutyAssignments = JSON.parse(savedAssignments);
+            }
+        }
+
+        // Save data to Firebase Firestore
+        async function saveData() {
+            try {
+                // Wait for Firebase to be ready
+                if (!window.db) {
+                    console.log('Firebase not ready, saving to localStorage');
+                    saveDataToLocalStorage();
+                    return;
+                }
+                
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                
+                if (!user) {
+                    console.log('User not authenticated, saving to localStorage');
+                    saveDataToLocalStorage();
+                    return;
+                }
+                
+                // Save groups
+                await db.collection('dutyShifts').doc('groups').set({
+                    ...groups,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
+                
+                // Save holidays
+                await db.collection('dutyShifts').doc('holidays').set({
+                    list: holidays,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
+                
+                // Save assignments
+                await db.collection('dutyShifts').doc('assignments').set({
+                    ...dutyAssignments,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
+                
+                console.log('Data saved to Firebase');
+                
+                // Also save to localStorage as backup
+                saveDataToLocalStorage();
+            } catch (error) {
+                console.error('Error saving data to Firebase:', error);
+                // Fallback to localStorage
+                saveDataToLocalStorage();
+            }
+        }
+
+        // Fallback: Save data to localStorage
+        function saveDataToLocalStorage() {
+            localStorage.setItem('dutyShiftsGroups', JSON.stringify(groups));
+            localStorage.setItem('dutyShiftsHolidays', JSON.stringify(holidays));
+            localStorage.setItem('dutyShiftsAssignments', JSON.stringify(dutyAssignments));
+        }
+
+        // Render groups
+        function renderGroups() {
+            for (let i = 1; i <= 4; i++) {
+                const container = document.getElementById(`group${i}People`);
+                container.innerHTML = '';
+                
+                if (groups[i] && groups[i].length > 0) {
+                    groups[i].forEach((person, index) => {
+                        const personDiv = document.createElement('div');
+                        personDiv.className = 'person-item';
+                        personDiv.innerHTML = `
+                            <span class="person-name">${person}</span>
+                            <button class="btn btn-sm btn-outline-danger" onclick="removePerson(${i}, ${index})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        `;
+                        container.appendChild(personDiv);
+                    });
+                } else {
+                    container.innerHTML = '<p class="text-muted text-center">No people added yet</p>';
+                }
+                
+                const rotationSpan = document.getElementById(`group${i}Rotation`);
+                rotationSpan.textContent = groups[i] ? groups[i].length : '-';
+            }
+        }
+
+        // Add person
+        function addPerson(groupNumber) {
+            currentGroup = groupNumber;
+            document.getElementById('modalGroupNumber').textContent = groupNumber;
+            document.getElementById('personName').value = '';
+            const modal = new bootstrap.Modal(document.getElementById('addPersonModal'));
+            modal.show();
+        }
+
+        // Save person
+        function savePerson() {
+            const name = document.getElementById('personName').value.trim();
+            if (!name) {
+                alert('Please enter a name');
+                return;
+            }
+            
+            if (!groups[currentGroup]) {
+                groups[currentGroup] = [];
+            }
+            
+            groups[currentGroup].push(name);
+            saveData();
+            renderGroups();
+            updateStatistics();
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addPersonModal'));
+            modal.hide();
+        }
+
+        // Remove person
+        function removePerson(groupNumber, index) {
+            if (confirm('Are you sure you want to remove this person?')) {
+                groups[groupNumber].splice(index, 1);
+                saveData();
+                renderGroups();
+                updateStatistics();
+            }
+        }
+
+        // Add holiday
+        function addHoliday() {
+            document.getElementById('holidayDate').value = '';
+            document.getElementById('holidayName').value = '';
+            const modal = new bootstrap.Modal(document.getElementById('addHolidayModal'));
+            modal.show();
+        }
+
+        // Save holiday
+        function saveHoliday() {
+            const date = document.getElementById('holidayDate').value;
+            const name = document.getElementById('holidayName').value.trim();
+            
+            if (!date) {
+                alert('Please select a date');
+                return;
+            }
+            
+            const holidayDate = new Date(date + 'T00:00:00');
+            const holidayKey = formatDateKey(holidayDate);
+            
+            // Check if already exists
+            if (holidays.find(h => h.date === holidayKey)) {
+                alert('This date is already marked as a holiday');
+                return;
+            }
+            
+            holidays.push({
+                date: holidayKey,
+                name: name || 'Holiday'
+            });
+            
+            saveData();
+            renderHolidays();
+            renderCalendar();
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addHolidayModal'));
+            modal.hide();
+        }
+
+        // Remove holiday
+        function removeHoliday(index) {
+            if (confirm('Are you sure you want to remove this holiday?')) {
+                holidays.splice(index, 1);
+                saveData();
+                renderHolidays();
+                renderCalendar();
+            }
+        }
+
+        // Render holidays
+        function renderHolidays() {
+            const container = document.getElementById('holidaysList');
+            container.innerHTML = '';
+            
+            if (holidays.length === 0) {
+                container.innerHTML = '<p class="text-muted text-center">No holidays added yet</p>';
+                return;
+            }
+            
+            holidays.sort((a, b) => a.date.localeCompare(b.date));
+            
+            holidays.forEach((holiday, index) => {
+                const holidayDiv = document.createElement('div');
+                holidayDiv.className = 'holiday-item';
+                const date = new Date(holiday.date + 'T00:00:00');
+                holidayDiv.innerHTML = `
+                    <div>
+                        <strong>${formatDate(date)}</strong>
+                        ${holiday.name ? `<span class="text-muted ms-2">- ${holiday.name}</span>` : ''}
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeHoliday(${index})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                `;
+                container.appendChild(holidayDiv);
+            });
+        }
+
+        // Calculate Orthodox Easter (returns the date of Easter Sunday)
+        // Orthodox Easter is calculated using the Julian calendar
+        function calculateOrthodoxEaster(year) {
+            // Algorithm for calculating Orthodox Easter (Julian calendar)
+            const a = year % 19;
+            const b = year % 7;
+            const c = year % 4;
+            
+            const d = (19 * a + 15) % 30;
+            const e = (2 * c + 4 * b - d + 34) % 7;
+            const f = d + e + 114;
+            
+            const month = Math.floor(f / 31);
+            const day = (f % 31) + 1;
+            
+            // Convert to Gregorian calendar (add 13 days for 20th-21st century)
+            const easterDate = new Date(year, month - 1, day);
+            easterDate.setDate(easterDate.getDate() + 13);
+            
+            return easterDate;
+        }
+
+        // Check if date is a special holiday
+        function isSpecialHoliday(date) {
+            const month = date.getMonth() + 1; // 1-12
+            const day = date.getDate();
+            const year = date.getFullYear();
+            
+            // Fixed dates
+            if (month === 12 && day === 25) return true; // December 25
+            if (month === 12 && day === 26) return true; // December 26
+            if (month === 12 && day === 31) return true; // December 31
+            if (month === 1 && day === 1) return true;  // January 1
+            if (month === 8 && day === 15) return true; // August 15
+            
+            // Orthodox Easter (Great Saturday and Great Sunday)
+            const easterSunday = calculateOrthodoxEaster(year);
+            const greatSaturday = new Date(easterSunday);
+            greatSaturday.setDate(greatSaturday.getDate() - 1);
+            const greatSunday = new Date(easterSunday);
+            
+            const dateKey = formatDateKey(date);
+            if (dateKey === formatDateKey(greatSaturday) || dateKey === formatDateKey(greatSunday)) {
+                return true;
+            }
+            
+            return false;
+        }
+
+        // Check if date is holiday
+        function isHoliday(date) {
+            const key = formatDateKey(date);
+            return holidays.some(h => h.date === key);
+        }
+
+        // Check if date is weekend
+        function isWeekend(date) {
+            const day = date.getDay();
+            return day === 0 || day === 6; // Sunday or Saturday
+        }
+
+        // Get day type
+        function getDayType(date) {
+            // Special holidays have highest priority
+            if (isSpecialHoliday(date)) {
+                return 'special-holiday';
+            }
+            
+            if (isHoliday(date)) {
+                return 'weekend-holiday';
+            }
+            
+            if (isWeekend(date)) {
+                return 'weekend-holiday';
+            }
+            
+            // Check if next day is weekend, holiday, or special holiday
+            const nextDay = new Date(date);
+            nextDay.setDate(nextDay.getDate() + 1);
+            
+            if (isWeekend(nextDay) || isHoliday(nextDay) || isSpecialHoliday(nextDay)) {
+                return 'semi-normal-day';
+            }
+            
+            // Check if it's Friday
+            if (date.getDay() === 5) {
+                return 'semi-normal-day';
+            }
+            
+            return 'normal-day';
+        }
+
+        // Format date key
+        function formatDateKey(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        // Format date for display
+        function formatDate(date) {
+            return date.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                weekday: 'long'
+            });
+        }
+
+        // Generate a consistent color for a person based on their name
+        function getPersonColor(personName) {
+            // Create a hash from the person's name
+            let hash = 0;
+            for (let i = 0; i < personName.length; i++) {
+                hash = personName.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            
+            // Generate a color from the hash (bright, distinct colors)
+            const hue = Math.abs(hash) % 360;
+            // Use high saturation and medium lightness for vibrant colors
+            return `hsl(${hue}, 70%, 60%)`;
+        }
+
+        // Extract all person names from assignment string
+        function extractAllPersonNames(assignment) {
+            if (!assignment) return [];
+            
+            // Match all patterns like "Name (Group X)"
+            const matches = assignment.matchAll(/([^(]+)\s*\(Group\s*(\d+)\)/g);
+            const persons = [];
+            
+            for (const match of matches) {
+                if (match[1]) {
+                    persons.push({
+                        name: match[1].trim(),
+                        group: parseInt(match[2])
+                    });
+                }
+            }
+            
+            return persons;
+        }
+
+        // Get person colors for a day
+        function getDayPersonColors(assignment) {
+            if (!assignment) return [];
+            
+            const persons = extractAllPersonNames(assignment);
+            return persons.map(p => ({
+                color: getPersonColor(p.name),
+                name: p.name,
+                group: p.group
+            }));
+        }
+
+        // Get Orthodox holiday name for a date
+        function getOrthodoxHolidayName(date) {
+            if (!isSpecialHoliday(date)) return null;
+            
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+            
+            if (month === 12 && day === 25) return 'Christmas';
+            if (month === 12 && day === 26) return 'Dec 26';
+            if (month === 12 && day === 31) return 'New Year\'s Eve';
+            if (month === 1 && day === 1) return 'New Year';
+            if (month === 8 && day === 15) return 'Aug 15';
+            
+            // Check for Orthodox Easter
+            const easterSunday = calculateOrthodoxEaster(date.getFullYear());
+            const greatSaturday = new Date(easterSunday);
+            greatSaturday.setDate(greatSaturday.getDate() - 1);
+            
+            if (formatDateKey(date) === formatDateKey(greatSaturday)) {
+                return 'Great Saturday';
+            }
+            if (formatDateKey(date) === formatDateKey(easterSunday)) {
+                return 'Great Sunday';
+            }
+            
+            return null;
+        }
+
+        // Render calendar
+        function renderCalendar() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            
+            document.getElementById('currentMonthYear').textContent = 
+                currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const daysInMonth = lastDay.getDate();
+            // Convert Sunday (0) to 6, Monday (1) to 0, etc. for Monday-first calendar
+            let startingDayOfWeek = firstDay.getDay();
+            startingDayOfWeek = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1;
+            
+            const grid = document.getElementById('calendarGrid');
+            grid.innerHTML = '';
+            
+            // Day headers - Monday first
+            const dayHeaders = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            dayHeaders.forEach(header => {
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'calendar-day-header';
+                headerDiv.textContent = header;
+                grid.appendChild(headerDiv);
+            });
+            
+            // Empty cells for days before month starts
+            for (let i = 0; i < startingDayOfWeek; i++) {
+                const emptyDiv = document.createElement('div');
+                grid.appendChild(emptyDiv);
+            }
+            
+            // Days of the month
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(year, month, day);
+                const dayType = getDayType(date);
+                const isToday = date.getTime() === today.getTime();
+                const key = formatDateKey(date);
+                const assignment = dutyAssignments[key];
+                
+                const dayDiv = document.createElement('div');
+                dayDiv.className = `calendar-day ${dayType} ${isToday ? 'today' : ''}`;
+                if (isHoliday(date)) {
+                    dayDiv.classList.add('holiday');
+                }
+                if (isSpecialHoliday(date)) {
+                    dayDiv.classList.add('special-holiday');
+                }
+                
+                // Apply person-specific colors
+                const personColorData = getDayPersonColors(assignment);
+                
+                if (personColorData.length > 0) {
+                    // Use the first person's color as left border
+                    const mainColor = personColorData[0].color;
+                    dayDiv.style.borderLeft = `4px solid ${mainColor}`;
+                    
+                    // If multiple people, add top border with second color
+                    if (personColorData.length > 1) {
+                        dayDiv.style.borderTop = `3px solid ${personColorData[1].color}`;
+                    }
+                    
+                    // Add a subtle box shadow with the person's color
+                    dayDiv.style.boxShadow = `0 0 8px ${mainColor}40, inset 0 0 0 1px ${mainColor}30`;
+                }
+                
+                dayDiv.onclick = () => showDayDetails(date);
+                
+                // Get Orthodox holiday name if applicable
+                const orthodoxHolidayName = getOrthodoxHolidayName(date);
+                
+                dayDiv.innerHTML = `
+                    <div class="day-number">${day}</div>
+                    <div class="day-type">${getDayTypeLabel(dayType)}</div>
+                    ${orthodoxHolidayName ? `<div class="orthodox-holiday-name">${orthodoxHolidayName}</div>` : ''}
+                    ${assignment ? `<div class="duty-person">${assignment}</div>` : ''}
+                `;
+                
+                grid.appendChild(dayDiv);
+            }
+        }
+
+        // Get day type label
+        function getDayTypeLabel(dayType) {
+            switch(dayType) {
+                case 'special-holiday': return 'Special';
+                case 'normal-day': return 'Normal';
+                case 'semi-normal-day': return 'Semi';
+                case 'weekend-holiday': return 'Weekend/Holiday';
+                default: return '';
+            }
+        }
+
+        // Previous month
+        function previousMonth() {
+            currentDate.setMonth(currentDate.getMonth() - 1);
+            renderCalendar();
+        }
+
+        // Next month
+        function nextMonth() {
+            currentDate.setMonth(currentDate.getMonth() + 1);
+            renderCalendar();
+        }
+
+        // Check if a person has duty on a specific day
+        function hasDutyOnDay(dayKey, person, groupNum) {
+            const assignment = dutyAssignments[dayKey];
+            if (!assignment) return false;
+            
+            const personGroupStr = `${person} (Group ${groupNum})`;
+            return assignment.includes(personGroupStr);
+        }
+
+        // Check if a person has duty on consecutive days (day before or day after)
+        function hasConsecutiveDuty(dayKey, person, groupNum) {
+            const date = new Date(dayKey + 'T00:00:00');
+            
+            // Check day before
+            const dayBefore = new Date(date);
+            dayBefore.setDate(dayBefore.getDate() - 1);
+            const dayBeforeKey = formatDateKey(dayBefore);
+            if (hasDutyOnDay(dayBeforeKey, person, groupNum)) {
+                return true;
+            }
+            
+            // Check day after
+            const dayAfter = new Date(date);
+            dayAfter.setDate(dayAfter.getDate() + 1);
+            const dayAfterKey = formatDateKey(dayAfter);
+            if (hasDutyOnDay(dayAfterKey, person, groupNum)) {
+                return true;
+            }
+            
+            return false;
+        }
+
+        // Check if person has duty on Friday and Sunday (should skip Saturday)
+        // Also check if person has Saturday and Sunday (should skip Friday)
+        function hasFridaySundayDuty(dayKey, person, groupNum) {
+            const date = new Date(dayKey + 'T00:00:00');
+            const dayOfWeek = date.getDay(); // 0=Sunday, 5=Friday, 6=Saturday
+            
+            // If checking Saturday, see if person has Friday and Sunday
+            if (dayOfWeek === 6) { // Saturday
+                const friday = new Date(date);
+                friday.setDate(friday.getDate() - 1);
+                const fridayKey = formatDateKey(friday);
+                
+                const sunday = new Date(date);
+                sunday.setDate(sunday.getDate() + 1);
+                const sundayKey = formatDateKey(sunday);
+                
+                if (hasDutyOnDay(fridayKey, person, groupNum) && hasDutyOnDay(sundayKey, person, groupNum)) {
+                    return true;
+                }
+            }
+            
+            // If checking Friday, see if person has Saturday and Sunday
+            if (dayOfWeek === 5) { // Friday
+                const saturday = new Date(date);
+                saturday.setDate(saturday.getDate() + 1);
+                const saturdayKey = formatDateKey(saturday);
+                
+                const sunday = new Date(date);
+                sunday.setDate(sunday.getDate() + 2);
+                const sundayKey = formatDateKey(sunday);
+                
+                if (hasDutyOnDay(saturdayKey, person, groupNum) && hasDutyOnDay(sundayKey, person, groupNum)) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        // Count days of a specific type since last duty for a person
+        function countDaysSinceLastDuty(dayKey, person, groupNum, dayTypeCategory, allDaysByType) {
+            const daysOfType = allDaysByType[dayTypeCategory];
+            const currentIndex = daysOfType.indexOf(dayKey);
+            
+            if (currentIndex === -1) {
+                return Infinity; // Current day not in this type
+            }
+            
+            // Find last duty day for this person in this day type (before current day)
+            let lastDutyIndex = -1;
+            for (let i = currentIndex - 1; i >= 0; i--) {
+                if (hasDutyOnDay(daysOfType[i], person, groupNum)) {
+                    lastDutyIndex = i;
+                    break;
+                }
+            }
+            
+            if (lastDutyIndex === -1) {
+                return Infinity; // Never had duty of this type
+            }
+            
+            // Count how many days of this type between last duty and current day
+            return currentIndex - lastDutyIndex;
+        }
+
+        // Calculate duties
+        function calculateDuties() {
+            if (!confirm('This will recalculate all duty assignments. Continue?')) {
+                return;
+            }
+            
+            dutyAssignments = {};
+            
+            // Get date range (current month and next 2 months)
+            const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+            const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 3, 0);
+            
+            // Process each group
+            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                const groupPeople = groups[groupNum] || [];
+                if (groupPeople.length === 0) continue;
+                
+                // Separate days by type with priority: special > weekend > semi > normal
+                const dayTypeLists = {
+                    special: [],  // Highest priority - special holidays
+                    weekend: [],  // Second priority
+                    semi: [],     // Third priority
+                    normal: []   // Lowest priority
+                };
+                
+                // Build lists of days by type
+                const dateIterator = new Date(startDate);
+                while (dateIterator <= endDate) {
+                    const dayType = getDayType(dateIterator);
+                    const key = formatDateKey(dateIterator);
+                    let typeCategory = 'normal';
+                    
+                    if (dayType === 'special-holiday') {
+                        typeCategory = 'special';
+                    } else if (dayType === 'semi-normal-day') {
+                        typeCategory = 'semi';
+                    } else if (dayType === 'weekend-holiday') {
+                        typeCategory = 'weekend';
+                    }
+                    
+                    dayTypeLists[typeCategory].push(key);
+                    dateIterator.setDate(dateIterator.getDate() + 1);
+                }
+                
+                // Helper function to assign duty for a day type with proper rotation
+                function assignDutiesForDayType(dayTypeCategory, priorityLevel) {
+                    const days = dayTypeLists[dayTypeCategory];
+                    if (days.length === 0) return;
+                    
+                    const rotationDays = groupPeople.length;
+                    
+                    days.forEach((dayKey, dayIndex) => {
+                        // Find the person who should be on duty based on rotation
+                        // Each person should be on duty every N days of this type
+                        const idealPersonIndex = dayIndex % rotationDays;
+                        const idealPerson = groupPeople[idealPersonIndex];
+                        
+                        // Count days since last duty of this type for ideal person
+                        const daysSinceLastDuty = countDaysSinceLastDuty(dayKey, idealPerson, groupNum, dayTypeCategory, dayTypeLists);
+                        
+                        // Check if ideal person is eligible (has waited enough days)
+                        const isEligible = daysSinceLastDuty >= rotationDays || daysSinceLastDuty === Infinity;
+                        
+                        // Check for conflicts
+                        const hasConflict = hasConsecutiveDuty(dayKey, idealPerson, groupNum) || 
+                                         hasFridaySundayDuty(dayKey, idealPerson, groupNum);
+                        
+                        let assignedPerson = null;
+                        
+                        // For special holidays and weekends (priority 1-2), assign even with conflicts if eligible
+                        if (priorityLevel <= 2 && isEligible) {
+                            assignedPerson = idealPerson;
+                        } else if (isEligible && !hasConflict) {
+                            // Ideal person is eligible and has no conflicts
+                            assignedPerson = idealPerson;
+                        } else {
+                            // Need to find alternative person
+                            // Try all people in rotation order, starting from ideal person
+                            for (let offset = 0; offset < groupPeople.length; offset++) {
+                                const personIndex = (idealPersonIndex + offset) % groupPeople.length;
+                                const candidatePerson = groupPeople[personIndex];
+                                
+                                const candidateDaysSince = countDaysSinceLastDuty(dayKey, candidatePerson, groupNum, dayTypeCategory, dayTypeLists);
+                                const candidateEligible = candidateDaysSince >= rotationDays || candidateDaysSince === Infinity;
+                                const candidateConflict = hasConsecutiveDuty(dayKey, candidatePerson, groupNum) || 
+                                                         hasFridaySundayDuty(dayKey, candidatePerson, groupNum);
+                                
+                                // For special holidays and weekends, assign if eligible (even with conflicts)
+                                if (priorityLevel <= 2 && candidateEligible) {
+                                    assignedPerson = candidatePerson;
+                                    break;
+                                }
+                                
+                                // For semi and normal, only assign if eligible and no conflicts
+                                if (candidateEligible && !candidateConflict) {
+                                    assignedPerson = candidatePerson;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Assign duty if we found a person
+                        if (assignedPerson) {
+                            if (dutyAssignments[dayKey]) {
+                                dutyAssignments[dayKey] += `, ${assignedPerson} (Group ${groupNum})`;
+                            } else {
+                                dutyAssignments[dayKey] = `${assignedPerson} (Group ${groupNum})`;
+                            }
+                        }
+                    });
+                }
+                
+                // Assign duties in priority order: special > weekend > semi > normal
+                // Priority 1: Special Holidays (highest priority)
+                assignDutiesForDayType('special', 1);
+                
+                // Priority 2: Weekend/Holiday days
+                assignDutiesForDayType('weekend', 2);
+                
+                // Priority 3: Semi-normal days
+                assignDutiesForDayType('semi', 3);
+                
+                // Priority 4: Normal days
+                assignDutiesForDayType('normal', 4);
+                
+                // Old loop - replaced with priority-based assignments above
+                /*for (const typeCategory in dayTypeLists) {
+                    const days = dayTypeLists[typeCategory];
+                    if (days.length === 0) continue;
+                    
+                    const rotationDays = groupPeople.length;
+                    let personIndex = 0;
+                    
+                    // Simple rotation: assign person 0 to day 0, person 1 to day 1, etc.
+                    // After rotationDays days, cycle back to person 0
+                    days.forEach((dayKey, dayIndex) => {
+                        // Calculate which person should be on duty
+                        // Every rotationDays days, we cycle through all people
+                        const rotationPosition = dayIndex % rotationDays;
+                        const person = groupPeople[rotationPosition];
+                        
+                        // Allow multiple groups to assign on the same day
+                        if (dutyAssignments[dayKey]) {
+                            dutyAssignments[dayKey] += `, ${person} (Group ${groupNum})`;
+                        } else {
+                            dutyAssignments[dayKey] = `${person} (Group ${groupNum})`;
+                        }
+                    });
+                }*/
+            }
+            
+            saveData();
+            renderCalendar();
+            alert('Duty assignments calculated successfully!');
+        }
+
+        // Show day details
+        function showDayDetails(date) {
+            const key = formatDateKey(date);
+            const assignment = dutyAssignments[key];
+            const dayType = getDayType(date);
+            
+            const modal = new bootstrap.Modal(document.getElementById('dayDetailsModal'));
+            document.getElementById('dayDetailsTitle').textContent = formatDate(date);
+            
+            let content = `
+                <div class="mb-3">
+                    <strong>Day Type:</strong> ${getDayTypeLabel(dayType)}
+                </div>
+            `;
+            
+            if (isSpecialHoliday(date)) {
+                const month = date.getMonth() + 1;
+                const day = date.getDate();
+                let specialHolidayName = '';
+                
+                if (month === 12 && day === 25) specialHolidayName = 'December 25 (Christmas)';
+                else if (month === 12 && day === 26) specialHolidayName = 'December 26';
+                else if (month === 12 && day === 31) specialHolidayName = 'December 31 (New Year\'s Eve)';
+                else if (month === 1 && day === 1) specialHolidayName = 'January 1 (New Year\'s Day)';
+                else if (month === 8 && day === 15) specialHolidayName = 'August 15';
+                else {
+                    const easterSunday = calculateOrthodoxEaster(date.getFullYear());
+                    const greatSaturday = new Date(easterSunday);
+                    greatSaturday.setDate(greatSaturday.getDate() - 1);
+                    if (formatDateKey(date) === formatDateKey(greatSaturday)) {
+                        specialHolidayName = 'Great Saturday (Orthodox Easter)';
+                    } else {
+                        specialHolidayName = 'Great Sunday (Orthodox Easter)';
+                    }
+                }
+                
+                content += `
+                    <div class="alert alert-warning" style="background: #E1BEE7; border-color: #9C27B0;">
+                        <i class="fas fa-star me-2"></i>
+                        <strong>Special Holiday:</strong> ${specialHolidayName}
+                    </div>
+                `;
+            }
+            
+            if (isHoliday(date)) {
+                const holiday = holidays.find(h => h.date === key);
+                content += `
+                    <div class="alert alert-info">
+                        <i class="fas fa-calendar-times me-2"></i>
+                        <strong>Holiday:</strong> ${holiday ? holiday.name : 'Holiday'}
+                    </div>
+                `;
+            }
+            
+            if (assignment) {
+                content += `
+                    <div class="duty-assignment">
+                        <strong><i class="fas fa-user-shield me-2"></i>On Duty:</strong> ${assignment}
+                    </div>
+                `;
+            } else {
+                content += `
+                    <div class="alert alert-secondary">
+                        <i class="fas fa-info-circle me-2"></i>No duty assignment for this day
+                    </div>
+                `;
+            }
+            
+            document.getElementById('dayDetailsContent').innerHTML = content;
+            modal.show();
+        }
+
+        // Update statistics
+        function updateStatistics() {
+            let totalPeople = 0;
+            let totalRotation = 0;
+            let groupCount = 0;
+            
+            for (let i = 1; i <= 4; i++) {
+                if (groups[i] && groups[i].length > 0) {
+                    totalPeople += groups[i].length;
+                    totalRotation += groups[i].length;
+                    groupCount++;
+                }
+            }
+            
+            document.getElementById('totalPeople').textContent = totalPeople;
+            document.getElementById('avgRotation').textContent = 
+                groupCount > 0 ? Math.round(totalRotation / groupCount) : 0;
+        }
+    </script>
+</body>
+</html>
+
