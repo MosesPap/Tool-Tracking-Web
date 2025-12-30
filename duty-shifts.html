@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="el">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Duty Shifts - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -289,7 +289,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Duty Shifts Management</h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών</h4>
             </div>
         </div>
     </div>
@@ -297,15 +297,15 @@
     <div class="container-fluid">
         <!-- Statistics Card -->
         <div class="stats-card">
-            <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Rotation Statistics</h5>
+            <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Στατιστικά Περιστροφής</h5>
             <div class="stats-grid">
                 <div class="stat-item">
                     <div class="stat-value" id="totalPeople">0</div>
-                    <div class="stat-label">Total Personnel</div>
+                    <div class="stat-label">Συνολικό Προσωπικό</div>
                 </div>
                 <div class="stat-item">
                     <div class="stat-value" id="avgRotation">0</div>
-                    <div class="stat-label">Avg. Rotation Days</div>
+                    <div class="stat-label">Μέσες Ημέρες Περιστροφής</div>
                 </div>
             </div>
         </div>
@@ -316,7 +316,7 @@
                 <div class="group-card">
                     <div class="group-header">
                         <div class="group-title">
-                            <span class="group-badge group-1">Group 1</span>
+                            <span class="group-badge group-1">Ομάδα 1</span>
                         </div>
                         <button class="btn btn-sm btn-outline-primary" onclick="addPerson(1)">
                             <i class="fas fa-plus"></i>
@@ -324,7 +324,7 @@
                     </div>
                     <div id="group1People"></div>
                     <div class="mt-2">
-                        <small class="text-muted">Rotation: <span id="group1Rotation">-</span> days</small>
+                        <small class="text-muted">Περιστροφή: <span id="group1Rotation">-</span> ημέρες</small>
                     </div>
                 </div>
             </div>
@@ -333,7 +333,7 @@
                 <div class="group-card">
                     <div class="group-header">
                         <div class="group-title">
-                            <span class="group-badge group-2">Group 2</span>
+                            <span class="group-badge group-2">Ομάδα 2</span>
                         </div>
                         <button class="btn btn-sm btn-outline-primary" onclick="addPerson(2)">
                             <i class="fas fa-plus"></i>
@@ -341,7 +341,7 @@
                     </div>
                     <div id="group2People"></div>
                     <div class="mt-2">
-                        <small class="text-muted">Rotation: <span id="group2Rotation">-</span> days</small>
+                        <small class="text-muted">Περιστροφή: <span id="group2Rotation">-</span> ημέρες</small>
                     </div>
                 </div>
             </div>
@@ -350,7 +350,7 @@
                 <div class="group-card">
                     <div class="group-header">
                         <div class="group-title">
-                            <span class="group-badge group-3">Group 3</span>
+                            <span class="group-badge group-3">Ομάδα 3</span>
                         </div>
                         <button class="btn btn-sm btn-outline-primary" onclick="addPerson(3)">
                             <i class="fas fa-plus"></i>
@@ -358,7 +358,7 @@
                     </div>
                     <div id="group3People"></div>
                     <div class="mt-2">
-                        <small class="text-muted">Rotation: <span id="group3Rotation">-</span> days</small>
+                        <small class="text-muted">Περιστροφή: <span id="group3Rotation">-</span> ημέρες</small>
                     </div>
                 </div>
             </div>
@@ -367,7 +367,7 @@
                 <div class="group-card">
                     <div class="group-header">
                         <div class="group-title">
-                            <span class="group-badge group-4">Group 4</span>
+                            <span class="group-badge group-4">Ομάδα 4</span>
                         </div>
                         <button class="btn btn-sm btn-outline-primary" onclick="addPerson(4)">
                             <i class="fas fa-plus"></i>
@@ -375,7 +375,7 @@
                     </div>
                     <div id="group4People"></div>
                     <div class="mt-2">
-                        <small class="text-muted">Rotation: <span id="group4Rotation">-</span> days</small>
+                        <small class="text-muted">Περιστροφή: <span id="group4Rotation">-</span> ημέρες</small>
                     </div>
                 </div>
             </div>
@@ -384,9 +384,9 @@
         <!-- Holidays Section -->
         <div class="holiday-list">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5><i class="fas fa-calendar-times me-2"></i>Holidays</h5>
+                <h5><i class="fas fa-calendar-times me-2"></i>Αργίες</h5>
                 <button class="btn btn-primary btn-sm" onclick="addHoliday()">
-                    <i class="fas fa-plus me-1"></i>Add Holiday
+                    <i class="fas fa-plus me-1"></i>Προσθήκη Αργίας
                 </button>
             </div>
             <div id="holidaysList"></div>
@@ -395,7 +395,7 @@
         <!-- Calendar Section -->
         <div class="calendar-section">
             <div class="calendar-header">
-                <h5><i class="fas fa-calendar-alt me-2"></i>Duty Calendar</h5>
+                <h5><i class="fas fa-calendar-alt me-2"></i>Ημερολόγιο Υπηρεσιών</h5>
                 <div class="calendar-nav">
                     <button class="btn btn-sm btn-outline-secondary" onclick="previousMonth()">
                         <i class="fas fa-chevron-left"></i>
@@ -405,7 +405,7 @@
                         <i class="fas fa-chevron-right"></i>
                     </button>
                     <button class="btn btn-sm btn-primary ms-2" onclick="calculateDuties()">
-                        <i class="fas fa-calculator me-1"></i>Calculate Duties
+                        <i class="fas fa-calculator me-1"></i>Υπολογισμός Υπηρεσιών
                     </button>
                 </div>
             </div>
@@ -418,18 +418,18 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Add Person to Group <span id="modalGroupNumber"></span></h5>
+                    <h5 class="modal-title">Προσθήκη Ατόμου στην Ομάδα <span id="modalGroupNumber"></span></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="personName" class="form-label">Name</label>
-                        <input type="text" class="form-control" id="personName" placeholder="Enter person's name">
+                        <label for="personName" class="form-label">Όνομα</label>
+                        <input type="text" class="form-control" id="personName" placeholder="Εισάγετε το όνομά του ατόμου">
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" onclick="savePerson()">Add Person</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-primary" onclick="savePerson()">Προσθήκη Ατόμου</button>
                 </div>
             </div>
         </div>
@@ -440,22 +440,22 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Add Holiday</h5>
+                    <h5 class="modal-title">Προσθήκη Αργίας</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="holidayDate" class="form-label">Date</label>
+                        <label for="holidayDate" class="form-label">Ημερομηνία</label>
                         <input type="date" class="form-control" id="holidayDate">
                     </div>
                     <div class="mb-3">
-                        <label for="holidayName" class="form-label">Holiday Name (Optional)</label>
-                        <input type="text" class="form-control" id="holidayName" placeholder="e.g., Christmas, New Year">
+                        <label for="holidayName" class="form-label">Όνομα Αργίας (Προαιρετικό)</label>
+                        <input type="text" class="form-control" id="holidayName" placeholder="π.χ., Χριστούγεννα, Πρωτοχρονιά">
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" onclick="saveHoliday()">Add Holiday</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-primary" onclick="saveHoliday()">Προσθήκη Αργίας</button>
                 </div>
             </div>
         </div>
@@ -471,7 +471,7 @@
                 </div>
                 <div class="modal-body modal-day-details" id="dayDetailsContent"></div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
                 </div>
             </div>
         </div>
@@ -677,7 +677,7 @@
                         container.appendChild(personDiv);
                     });
                 } else {
-                    container.innerHTML = '<p class="text-muted text-center">No people added yet</p>';
+                    container.innerHTML = '<p class="text-muted text-center">Δεν έχουν προστεθεί άτομα ακόμα</p>';
                 }
                 
                 const rotationSpan = document.getElementById(`group${i}Rotation`);
@@ -698,7 +698,7 @@
         function savePerson() {
             const name = document.getElementById('personName').value.trim();
             if (!name) {
-                alert('Please enter a name');
+                alert('Παρακαλώ εισάγετε όνομα');
                 return;
             }
             
@@ -717,7 +717,7 @@
 
         // Remove person
         function removePerson(groupNumber, index) {
-            if (confirm('Are you sure you want to remove this person?')) {
+            if (confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτό το άτομο;')) {
                 groups[groupNumber].splice(index, 1);
                 saveData();
                 renderGroups();
@@ -739,7 +739,7 @@
             const name = document.getElementById('holidayName').value.trim();
             
             if (!date) {
-                alert('Please select a date');
+                alert('Παρακαλώ επιλέξτε ημερομηνία');
                 return;
             }
             
@@ -748,7 +748,7 @@
             
             // Check if already exists
             if (holidays.find(h => h.date === holidayKey)) {
-                alert('This date is already marked as a holiday');
+                alert('Αυτή η ημερομηνία είναι ήδη σημειωμένη ως αργία');
                 return;
             }
             
@@ -767,7 +767,7 @@
 
         // Remove holiday
         function removeHoliday(index) {
-            if (confirm('Are you sure you want to remove this holiday?')) {
+            if (confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την αργία;')) {
                 holidays.splice(index, 1);
                 saveData();
                 renderHolidays();
@@ -781,7 +781,7 @@
             container.innerHTML = '';
             
             if (holidays.length === 0) {
-                container.innerHTML = '<p class="text-muted text-center">No holidays added yet</p>';
+                container.innerHTML = '<p class="text-muted text-center">Δεν έχουν προστεθεί αργίες ακόμα</p>';
                 return;
             }
             
@@ -888,6 +888,8 @@
             if (month === 1 && day === 1) return true;  // New Year's Day
             if (month === 1 && day === 6) return true;  // Epiphany/Theophany
             if (month === 3 && day === 25) return true; // Annunciation / Greek Independence Day
+            if (month === 4 && day === 1) return true;  // EOKA Liberation Struggle Day
+            if (month === 5 && day === 1) return true;  // Labor Day
             if (month === 8 && day === 15) return true; // Dormition of the Theotokos
             if (month === 9 && day === 8) return true;  // Nativity of the Theotokos
             if (month === 9 && day === 14) return true; // Exaltation of the Cross
@@ -961,7 +963,7 @@
 
         // Format date for display
         function formatDate(date) {
-            return date.toLocaleDateString('en-US', { 
+            return date.toLocaleDateString('el-GR', { 
                 year: 'numeric', 
                 month: 'long', 
                 day: 'numeric',
@@ -987,8 +989,8 @@
         function extractAllPersonNames(assignment) {
             if (!assignment) return [];
             
-            // Match all patterns like "Name (Group X)"
-            const matches = assignment.matchAll(/([^(]+)\s*\(Group\s*(\d+)\)/g);
+            // Match all patterns like "Name (Ομάδα X)"
+            const matches = assignment.matchAll(/([^(]+)\s*\(Ομάδα\s*(\d+)\)/g);
             const persons = [];
             
             for (const match of matches) {
@@ -1025,30 +1027,32 @@
             const dateKey = formatDateKey(date);
             
             // Fixed Orthodox holidays
-            if (month === 1 && day === 1) return 'New Year';
-            if (month === 1 && day === 6) return 'Epiphany';
-            if (month === 3 && day === 25) return 'Annunciation';
-            if (month === 8 && day === 15) return 'Dormition';
-            if (month === 9 && day === 8) return 'Nativity Theotokos';
-            if (month === 9 && day === 14) return 'Exaltation Cross';
-            if (month === 10 && day === 1) return 'Cyprus Independence';
-            if (month === 10 && day === 28) return 'Ochi Day';
-            if (month === 12 && day === 25) return 'Christmas';
-            if (month === 12 && day === 26) return 'Synaxis';
-            if (month === 12 && day === 31) return 'New Year\'s Eve';
+            if (month === 1 && day === 1) return 'Πρωτοχρονιά';
+            if (month === 1 && day === 6) return 'Θεοφάνια';
+            if (month === 3 && day === 25) return 'Ευαγγελισμός';
+            if (month === 4 && day === 1) return 'ΕΟΚΑ';
+            if (month === 5 && day === 1) return 'Πρωτομαγιά';
+            if (month === 8 && day === 15) return 'Κοίμηση';
+            if (month === 9 && day === 8) return 'Γέννηση Θεοτόκου';
+            if (month === 9 && day === 14) return 'Σταύρωση';
+            if (month === 10 && day === 1) return 'Ανεξαρτησία';
+            if (month === 10 && day === 28) return 'Όχι';
+            if (month === 12 && day === 25) return 'Χριστούγεννα';
+            if (month === 12 && day === 26) return 'Σύναξης';
+            if (month === 12 && day === 31) return 'Παραμονή';
             
             // Orthodox holidays based on Easter
             const orthodoxHolidays = calculateOrthodoxHolidays(year);
             
-            if (dateKey === formatDateKey(orthodoxHolidays.cleanMonday)) return 'Clean Monday';
-            if (dateKey === formatDateKey(orthodoxHolidays.palmSunday)) return 'Palm Sunday';
-            if (dateKey === formatDateKey(orthodoxHolidays.goodFriday)) return 'Good Friday';
-            if (dateKey === formatDateKey(orthodoxHolidays.greatSaturday)) return 'Great Saturday';
-            if (dateKey === formatDateKey(orthodoxHolidays.easterSunday)) return 'Easter';
-            if (dateKey === formatDateKey(orthodoxHolidays.easterMonday)) return 'Easter Monday';
-            if (dateKey === formatDateKey(orthodoxHolidays.ascensionDay)) return 'Ascension';
-            if (dateKey === formatDateKey(orthodoxHolidays.pentecost)) return 'Pentecost';
-            if (dateKey === formatDateKey(orthodoxHolidays.whitMonday)) return 'Whit Monday';
+            if (dateKey === formatDateKey(orthodoxHolidays.cleanMonday)) return 'Καθαρά Δευτέρα';
+            if (dateKey === formatDateKey(orthodoxHolidays.palmSunday)) return 'Κυριακή Βαΐων';
+            if (dateKey === formatDateKey(orthodoxHolidays.goodFriday)) return 'Μ. Παρασκευή';
+            if (dateKey === formatDateKey(orthodoxHolidays.greatSaturday)) return 'Μ. Σάββατο';
+            if (dateKey === formatDateKey(orthodoxHolidays.easterSunday)) return 'Πάσχα';
+            if (dateKey === formatDateKey(orthodoxHolidays.easterMonday)) return 'Δευτέρα Πάσχα';
+            if (dateKey === formatDateKey(orthodoxHolidays.ascensionDay)) return 'Ανάληψη';
+            if (dateKey === formatDateKey(orthodoxHolidays.pentecost)) return 'Πεντηκοστή';
+            if (dateKey === formatDateKey(orthodoxHolidays.whitMonday)) return 'Αγίου Πνεύματος';
             
             return null;
         }
@@ -1059,7 +1063,7 @@
             const month = currentDate.getMonth();
             
             document.getElementById('currentMonthYear').textContent = 
-                currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                currentDate.toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
             
             const firstDay = new Date(year, month, 1);
             const lastDay = new Date(year, month + 1, 0);
@@ -1072,7 +1076,7 @@
             grid.innerHTML = '';
             
             // Day headers - Monday first
-            const dayHeaders = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            const dayHeaders = ['Δευ', 'Τρι', 'Τετ', 'Πεμ', 'Παρ', 'Σαβ', 'Κυρ'];
             dayHeaders.forEach(header => {
                 const headerDiv = document.createElement('div');
                 headerDiv.className = 'calendar-day-header';
@@ -1142,10 +1146,10 @@
         // Get day type label
         function getDayTypeLabel(dayType) {
             switch(dayType) {
-                case 'special-holiday': return 'Special';
-                case 'normal-day': return 'Normal';
-                case 'semi-normal-day': return 'Semi';
-                case 'weekend-holiday': return 'Weekend/Holiday';
+                case 'special-holiday': return 'Ειδική';
+                case 'normal-day': return 'Κανονική';
+                case 'semi-normal-day': return 'Ημι-Κανονική';
+                case 'weekend-holiday': return 'Σαββατοκύριακο/Αργία';
                 default: return '';
             }
         }
@@ -1167,7 +1171,7 @@
             const assignment = dutyAssignments[dayKey];
             if (!assignment) return false;
             
-            const personGroupStr = `${person} (Group ${groupNum})`;
+            const personGroupStr = `${person} (Ομάδα ${groupNum})`;
             return assignment.includes(personGroupStr);
         }
 
@@ -1261,7 +1265,7 @@
 
         // Calculate duties
         function calculateDuties() {
-            if (!confirm('This will recalculate all duty assignments. Continue?')) {
+            if (!confirm('Αυτό θα υπολογίσει εκ νέου όλες τις αναθέσεις υπηρεσιών. Συνέχεια;')) {
                 return;
             }
             
@@ -1363,9 +1367,9 @@
                         // Assign duty if we found a person
                         if (assignedPerson) {
                             if (dutyAssignments[dayKey]) {
-                                dutyAssignments[dayKey] += `, ${assignedPerson} (Group ${groupNum})`;
+                                dutyAssignments[dayKey] += `, ${assignedPerson} (Ομάδα ${groupNum})`;
                             } else {
-                                dutyAssignments[dayKey] = `${assignedPerson} (Group ${groupNum})`;
+                                dutyAssignments[dayKey] = `${assignedPerson} (Ομάδα ${groupNum})`;
                             }
                         }
                     });
@@ -1402,9 +1406,9 @@
                         
                         // Allow multiple groups to assign on the same day
                         if (dutyAssignments[dayKey]) {
-                            dutyAssignments[dayKey] += `, ${person} (Group ${groupNum})`;
+                            dutyAssignments[dayKey] += `, ${person} (Ομάδα ${groupNum})`;
                         } else {
-                            dutyAssignments[dayKey] = `${person} (Group ${groupNum})`;
+                            dutyAssignments[dayKey] = `${person} (Ομάδα ${groupNum})`;
                         }
                     });
                 }*/
@@ -1412,7 +1416,7 @@
             
             saveData();
             renderCalendar();
-            alert('Duty assignments calculated successfully!');
+            alert('Οι αναθέσεις υπηρεσιών υπολογίστηκαν επιτυχώς!');
         }
 
         // Show day details
@@ -1426,33 +1430,35 @@
             
             let content = `
                 <div class="mb-3">
-                    <strong>Day Type:</strong> ${getDayTypeLabel(dayType)}
+                    <strong>Τύπος Ημέρας:</strong> ${getDayTypeLabel(dayType)}
                 </div>
             `;
             
             if (isSpecialHoliday(date)) {
                 const holidayName = getOrthodoxHolidayName(date);
                 const fullHolidayNames = {
-                    'New Year': 'New Year\'s Day',
-                    'Epiphany': 'Epiphany / Theophany',
-                    'Annunciation': 'Annunciation / Greek Independence Day',
-                    'Dormition': 'Dormition of the Theotokos',
-                    'Nativity Theotokos': 'Nativity of the Theotokos',
-                    'Exaltation Cross': 'Exaltation of the Holy Cross',
-                    'Cyprus Independence': 'Cyprus Independence Day',
-                    'Ochi Day': 'Ochi Day (Greek National Day)',
-                    'Christmas': 'Christmas (Nativity of Christ)',
-                    'Synaxis': 'Synaxis of the Theotokos',
-                    'New Year\'s Eve': 'New Year\'s Eve',
-                    'Clean Monday': 'Clean Monday (First Day of Lent)',
-                    'Palm Sunday': 'Palm Sunday',
-                    'Good Friday': 'Good Friday',
-                    'Great Saturday': 'Great Saturday (Orthodox Easter)',
-                    'Easter': 'Easter Sunday (Orthodox Easter)',
-                    'Easter Monday': 'Easter Monday',
-                    'Ascension': 'Ascension Day',
-                    'Pentecost': 'Pentecost (Holy Trinity)',
-                    'Whit Monday': 'Whit Monday'
+                    'Πρωτοχρονιά': 'Πρωτοχρονιά',
+                    'Θεοφάνια': 'Θεοφάνια',
+                    'Ευαγγελισμός': 'Ευαγγελισμός της Θεοτόκου / Ελληνική Εθνική Επέτειος',
+                    'ΕΟΚΑ': 'Απελευθερωτικός Αγώνας της ΕΟΚΑ',
+                    'Πρωτομαγιά': 'Εργατική Πρωτομαγιά',
+                    'Κοίμηση': 'Κοίμηση της Θεοτόκου',
+                    'Γέννηση Θεοτόκου': 'Γέννηση της Θεοτόκου',
+                    'Σταύρωση': 'Υψώσιμος του Τιμίου Σταυρού',
+                    'Ανεξαρτησία': 'Ημέρα Ανεξαρτησίας της Κύπρου',
+                    'Όχι': 'Επέτειος του «Όχι»',
+                    'Χριστούγεννα': 'Χριστούγεννα (Γέννηση του Χριστού)',
+                    'Σύναξης': 'Σύναξης της Θεοτόκου',
+                    'Παραμονή': 'Παραμονή Πρωτοχρονιάς',
+                    'Καθαρά Δευτέρα': 'Καθαρά Δευτέρα (Πρώτη Ημέρα της Σαρακοστής)',
+                    'Κυριακή Βαΐων': 'Κυριακή των Βαΐων',
+                    'Μ. Παρασκευή': 'Μεγάλη Παρασκευή',
+                    'Μ. Σάββατο': 'Μεγάλο Σάββατο',
+                    'Πάσχα': 'Κυριακή του Πάσχα',
+                    'Δευτέρα Πάσχα': 'Δευτέρα του Πάσχα',
+                    'Ανάληψη': 'Ανάληψη του Κυρίου',
+                    'Πεντηκοστή': 'Πεντηκοστή (Αγίας Τριάδος)',
+                    'Αγίου Πνεύματος': 'Αγίου Πνεύματος (Δευτέρα)'
                 };
                 
                 const fullName = fullHolidayNames[holidayName] || holidayName;
@@ -1460,7 +1466,7 @@
                 content += `
                     <div class="alert alert-warning" style="background: #E1BEE7; border-color: #9C27B0;">
                         <i class="fas fa-star me-2"></i>
-                        <strong>Orthodox/Cyprus Holiday:</strong> ${fullName}
+                        <strong>Ορθόδοξη/Κυπριακή Αργία:</strong> ${fullName}
                     </div>
                 `;
             }
@@ -1470,7 +1476,7 @@
                 content += `
                     <div class="alert alert-info">
                         <i class="fas fa-calendar-times me-2"></i>
-                        <strong>Holiday:</strong> ${holiday ? holiday.name : 'Holiday'}
+                        <strong>Αργία:</strong> ${holiday ? holiday.name : 'Αργία'}
                     </div>
                 `;
             }
@@ -1478,13 +1484,13 @@
             if (assignment) {
                 content += `
                     <div class="duty-assignment">
-                        <strong><i class="fas fa-user-shield me-2"></i>On Duty:</strong> ${assignment}
+                        <strong><i class="fas fa-user-shield me-2"></i>Σε Υπηρεσία:</strong> ${assignment}
                     </div>
                 `;
             } else {
                 content += `
                     <div class="alert alert-secondary">
-                        <i class="fas fa-info-circle me-2"></i>No duty assignment for this day
+                        <i class="fas fa-info-circle me-2"></i>Δεν υπάρχει ανάθεση υπηρεσίας για αυτή την ημέρα
                     </div>
                 `;
             }
