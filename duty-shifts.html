@@ -61,6 +61,16 @@
             background: #f8f9fa;
             border-radius: 8px;
             border: 1px solid #e0e0e0;
+            cursor: move;
+            transition: background-color 0.2s;
+        }
+
+        .person-item:hover {
+            background: #e9ecef;
+        }
+
+        .person-item.dragging {
+            opacity: 0.5;
         }
 
         .person-name {
@@ -580,12 +590,12 @@
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Data storage
+        // Data storage - each group has two order lists: regular and special
         let groups = {
-            1: [],
-            2: [],
-            3: [],
-            4: []
+            1: { regular: [], special: [] },
+            2: { regular: [], special: [] },
+            3: { regular: [], special: [] },
+            4: { regular: [], special: [] }
         };
         let holidays = [];
         let dutyAssignments = {};
@@ -648,7 +658,8 @@
                     // Remove metadata fields
                     delete data.lastUpdated;
                     delete data.updatedBy;
-                    groups = data || { 1: [], 2: [], 3: [], 4: [] };
+                    // Migrate old format to new format if needed
+                    groups = migrateGroupsFormat(data) || { 1: { regular: [], special: [] }, 2: { regular: [], special: [] }, 3: { regular: [], special: [] }, 4: { regular: [], special: [] } };
                 }
                 
                 // Load holidays
@@ -683,7 +694,8 @@
             const savedAssignments = localStorage.getItem('dutyShiftsAssignments');
             
             if (savedGroups) {
-                groups = JSON.parse(savedGroups);
+                const parsed = JSON.parse(savedGroups);
+                groups = migrateGroupsFormat(parsed) || { 1: { regular: [], special: [] }, 2: { regular: [], special: [] }, 3: { regular: [], special: [] }, 4: { regular: [], special: [] } };
             }
             if (savedHolidays) {
                 holidays = JSON.parse(savedHolidays);
@@ -751,45 +763,188 @@
             localStorage.setItem('dutyShiftsAssignments', JSON.stringify(dutyAssignments));
         }
 
+        // Migrate old groups format to new format
+        function migrateGroupsFormat(data) {
+            if (!data) return null;
+            
+            const migrated = {
+                1: { regular: [], special: [] },
+                2: { regular: [], special: [] },
+                3: { regular: [], special: [] },
+                4: { regular: [], special: [] }
+            };
+            
+            for (let i = 1; i <= 4; i++) {
+                if (Array.isArray(data[i])) {
+                    // Old format - array of names
+                    migrated[i].regular = [...data[i]];
+                    migrated[i].special = [...data[i]];
+                } else if (data[i] && typeof data[i] === 'object') {
+                    // New format or partial migration
+                    migrated[i].regular = data[i].regular || data[i].people || [];
+                    migrated[i].special = data[i].special || data[i].people || [];
+                }
+            }
+            
+            return migrated;
+        }
+
         // Render groups
         function renderGroups() {
             for (let i = 1; i <= 4; i++) {
                 const container = document.getElementById(`group${i}People`);
                 container.innerHTML = '';
                 
-                if (groups[i] && groups[i].length > 0) {
-                    groups[i].forEach((person, index) => {
-                        const personDiv = document.createElement('div');
-                        personDiv.className = 'person-item';
-                        personDiv.innerHTML = `
-                            <span class="person-name">${person}</span>
-                            <div class="person-actions">
-                                <div class="transfer-dropdown">
-                                    <button class="btn btn-sm btn-outline-primary" onclick="toggleTransferDropdown(${i}, ${index}, event)">
-                                        <i class="fas fa-exchange-alt"></i>
-                                    </button>
-                                    <div class="transfer-dropdown-content" id="transferDropdown_${i}_${index}">
-                                        ${[1, 2, 3, 4].filter(g => g !== i).map(targetGroup => `
-                                            <button onclick="transferPerson(${i}, ${index}, ${targetGroup})">
-                                                <i class="fas fa-arrow-right me-2"></i>Μεταφορά στην Ομάδα ${targetGroup}
-                                            </button>
-                                        `).join('')}
-                                    </div>
-                                </div>
-                                <button class="btn btn-sm btn-outline-danger" onclick="removePerson(${i}, ${index})">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        `;
-                        container.appendChild(personDiv);
-                    });
-                } else {
+                const groupData = groups[i] || { regular: [], special: [] };
+                const regularList = groupData.regular || [];
+                const specialList = groupData.special || [];
+                
+                if (regularList.length === 0 && specialList.length === 0) {
                     container.innerHTML = '<p class="text-muted text-center">Δεν έχουν προστεθεί άτομα ακόμα</p>';
+                } else {
+                    // Regular duties order
+                    const regularDiv = document.createElement('div');
+                    regularDiv.className = 'mb-3';
+                    regularDiv.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <strong class="text-primary"><i class="fas fa-calendar-day me-1"></i>Σειρά Κανονικών Υπηρεσιών:</strong>
+                        </div>
+                        <div id="regularList_${i}"></div>
+                    `;
+                    container.appendChild(regularDiv);
+                    
+                    // Special holidays order
+                    const specialDiv = document.createElement('div');
+                    specialDiv.className = 'mb-3';
+                    specialDiv.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <strong class="text-warning"><i class="fas fa-star me-1"></i>Σειρά Ειδικών Αργιών:</strong>
+                        </div>
+                        <div id="specialList_${i}"></div>
+                    `;
+                    container.appendChild(specialDiv);
+                    
+                    // Render regular list
+                    const regularContainer = document.getElementById(`regularList_${i}`);
+                    if (regularList.length === 0) {
+                        regularContainer.innerHTML = '<p class="text-muted text-center small">Δεν υπάρχουν άτομα</p>';
+                    } else {
+                        regularList.forEach((person, index) => {
+                            const personDiv = createPersonItem(i, person, index, 'regular', regularList);
+                            regularContainer.appendChild(personDiv);
+                        });
+                    }
+                    
+                    // Render special list
+                    const specialContainer = document.getElementById(`specialList_${i}`);
+                    if (specialList.length === 0) {
+                        specialContainer.innerHTML = '<p class="text-muted text-center small">Δεν υπάρχουν άτομα</p>';
+                    } else {
+                        specialList.forEach((person, index) => {
+                            const personDiv = createPersonItem(i, person, index, 'special', specialList);
+                            specialContainer.appendChild(personDiv);
+                        });
+                    }
                 }
                 
                 const rotationSpan = document.getElementById(`group${i}Rotation`);
-                rotationSpan.textContent = groups[i] ? groups[i].length : '-';
+                const totalPeople = new Set([...(groupData.regular || []), ...(groupData.special || [])]).size;
+                rotationSpan.textContent = totalPeople > 0 ? totalPeople : '-';
             }
+        }
+
+        // Create person item with reorder controls
+        function createPersonItem(groupNum, person, index, listType, listArray) {
+            const personDiv = document.createElement('div');
+            personDiv.className = 'person-item';
+            personDiv.draggable = true;
+            personDiv.dataset.groupNum = groupNum;
+            personDiv.dataset.index = index;
+            personDiv.dataset.listType = listType;
+            
+            personDiv.innerHTML = `
+                <span class="person-name">
+                    <i class="fas fa-grip-vertical text-muted me-2" style="cursor: move;"></i>${person}
+                </span>
+                <div class="person-actions">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-outline-secondary" onclick="movePersonInList(${groupNum}, ${index}, '${listType}', 'up')" ${index === 0 ? 'disabled' : ''} title="Μετακίνηση προς τα πάνω">
+                            <i class="fas fa-arrow-up"></i>
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="movePersonInList(${groupNum}, ${index}, '${listType}', 'down')" ${index === listArray.length - 1 ? 'disabled' : ''} title="Μετακίνηση προς τα κάτω">
+                            <i class="fas fa-arrow-down"></i>
+                        </button>
+                    </div>
+                    <div class="transfer-dropdown">
+                        <button class="btn btn-sm btn-outline-primary" onclick="toggleTransferDropdown(${groupNum}, ${index}, '${listType}', event)">
+                            <i class="fas fa-exchange-alt"></i>
+                        </button>
+                        <div class="transfer-dropdown-content" id="transferDropdown_${groupNum}_${index}_${listType}">
+                            ${[1, 2, 3, 4].filter(g => g !== groupNum).map(targetGroup => `
+                                <button onclick="transferPerson(${groupNum}, ${index}, ${targetGroup}, '${listType}')">
+                                    <i class="fas fa-arrow-right me-2"></i>Μεταφορά στην Ομάδα ${targetGroup}
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removePerson(${groupNum}, ${index}, '${listType}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+            
+            // Add drag and drop handlers
+            personDiv.addEventListener('dragstart', handleDragStart);
+            personDiv.addEventListener('dragover', handleDragOver);
+            personDiv.addEventListener('drop', handleDrop);
+            personDiv.addEventListener('dragend', handleDragEnd);
+            
+            return personDiv;
+        }
+
+        // Drag and drop handlers
+        let draggedElement = null;
+        
+        function handleDragStart(e) {
+            draggedElement = this;
+            this.style.opacity = '0.5';
+            e.dataTransfer.effectAllowed = 'move';
+        }
+        
+        function handleDragOver(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            e.dataTransfer.dropEffect = 'move';
+            return false;
+        }
+        
+        function handleDrop(e) {
+            if (e.stopPropagation) {
+                e.stopPropagation();
+            }
+            
+            if (draggedElement !== this) {
+                const groupNum = parseInt(this.dataset.groupNum);
+                const listType = this.dataset.listType;
+                const fromIndex = parseInt(draggedElement.dataset.index);
+                const toIndex = parseInt(this.dataset.index);
+                
+                const list = groups[groupNum][listType];
+                const person = list[fromIndex];
+                list.splice(fromIndex, 1);
+                list.splice(toIndex, 0, person);
+                
+                saveData();
+                renderGroups();
+            }
+            
+            return false;
+        }
+        
+        function handleDragEnd(e) {
+            this.style.opacity = '1';
+            draggedElement = null;
         }
 
         // Add person
@@ -801,7 +956,7 @@
             modal.show();
         }
 
-        // Save person
+        // Save person - adds to both regular and special lists
         function savePerson() {
             const name = document.getElementById('personName').value.trim();
             if (!name) {
@@ -810,10 +965,16 @@
             }
             
             if (!groups[currentGroup]) {
-                groups[currentGroup] = [];
+                groups[currentGroup] = { regular: [], special: [] };
             }
             
-            groups[currentGroup].push(name);
+            // Add to both lists
+            if (!groups[currentGroup].regular) groups[currentGroup].regular = [];
+            if (!groups[currentGroup].special) groups[currentGroup].special = [];
+            
+            groups[currentGroup].regular.push(name);
+            groups[currentGroup].special.push(name);
+            
             saveData();
             renderGroups();
             updateStatistics();
@@ -822,18 +983,42 @@
             modal.hide();
         }
 
-        // Remove person
-        function removePerson(groupNumber, index) {
-            if (confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτό το άτομο;')) {
-                groups[groupNumber].splice(index, 1);
+        // Remove person from specific list
+        function removePerson(groupNumber, index, listType) {
+            if (confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτό το άτομο από αυτή τη λίστα;')) {
+                const list = groups[groupNumber][listType];
+                const person = list[index];
+                list.splice(index, 1);
+                
+                // Also remove from the other list if it exists there
+                const otherListType = listType === 'regular' ? 'special' : 'regular';
+                const otherList = groups[groupNumber][otherListType];
+                const otherIndex = otherList.indexOf(person);
+                if (otherIndex !== -1) {
+                    otherList.splice(otherIndex, 1);
+                }
+                
                 saveData();
                 renderGroups();
                 updateStatistics();
             }
         }
 
+        // Move person up or down in list
+        function movePersonInList(groupNumber, index, listType, direction) {
+            const list = groups[groupNumber][listType];
+            if (direction === 'up' && index > 0) {
+                [list[index - 1], list[index]] = [list[index], list[index - 1]];
+            } else if (direction === 'down' && index < list.length - 1) {
+                [list[index], list[index + 1]] = [list[index + 1], list[index]];
+            }
+            
+            saveData();
+            renderGroups();
+        }
+
         // Toggle transfer dropdown
-        function toggleTransferDropdown(groupNumber, index, event) {
+        function toggleTransferDropdown(groupNumber, index, listType, event) {
             event.stopPropagation();
             
             // Close all other dropdowns
@@ -842,24 +1027,37 @@
             });
             
             // Toggle current dropdown
-            const dropdown = document.getElementById(`transferDropdown_${groupNumber}_${index}`);
+            const dropdown = document.getElementById(`transferDropdown_${groupNumber}_${index}_${listType}`);
             dropdown.classList.toggle('show');
         }
 
         // Transfer person to another group
-        function transferPerson(fromGroup, index, toGroup) {
-            const person = groups[fromGroup][index];
+        function transferPerson(fromGroup, index, toGroup, listType) {
+            const list = groups[fromGroup][listType];
+            const person = list[index];
             
             if (!person) return;
             
-            // Remove from current group
-            groups[fromGroup].splice(index, 1);
+            // Remove from current group's list
+            list.splice(index, 1);
             
-            // Add to target group
-            if (!groups[toGroup]) {
-                groups[toGroup] = [];
+            // Also remove from other list in same group
+            const otherListType = listType === 'regular' ? 'special' : 'regular';
+            const otherList = groups[fromGroup][otherListType];
+            const otherIndex = otherList.indexOf(person);
+            if (otherIndex !== -1) {
+                otherList.splice(otherIndex, 1);
             }
-            groups[toGroup].push(person);
+            
+            // Add to target group (both lists)
+            if (!groups[toGroup]) {
+                groups[toGroup] = { regular: [], special: [] };
+            }
+            if (!groups[toGroup].regular) groups[toGroup].regular = [];
+            if (!groups[toGroup].special) groups[toGroup].special = [];
+            
+            groups[toGroup].regular.push(person);
+            groups[toGroup].special.push(person);
             
             // Close dropdown
             document.querySelectorAll('.transfer-dropdown-content').forEach(dropdown => {
@@ -1432,8 +1630,11 @@
             
             // Process each group
             for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                const groupPeople = groups[groupNum] || [];
-                if (groupPeople.length === 0) continue;
+                const groupData = groups[groupNum] || { regular: [], special: [] };
+                const regularPeople = groupData.regular || [];
+                const specialPeople = groupData.special || [];
+                
+                if (regularPeople.length === 0 && specialPeople.length === 0) continue;
                 
                 // Separate days by type with priority: special > weekend > semi > normal
                 const dayTypeLists = {
@@ -1466,6 +1667,12 @@
                 function assignDutiesForDayType(dayTypeCategory, priorityLevel) {
                     const days = dayTypeLists[dayTypeCategory];
                     if (days.length === 0) return;
+                    
+                    // Use special order for special holidays, regular order for others
+                    const isSpecialHolidayType = dayTypeCategory === 'special';
+                    const groupPeople = isSpecialHolidayType ? specialPeople : regularPeople;
+                    
+                    if (groupPeople.length === 0) return;
                     
                     const rotationDays = groupPeople.length;
                     
@@ -1738,13 +1945,21 @@
             
             personSelect.innerHTML = '<option value="">Επιλέξτε Άτομο</option>';
             
-            if (selectedGroup && groups[selectedGroup] && groups[selectedGroup].length > 0) {
-                groups[selectedGroup].forEach(person => {
-                    const option = document.createElement('option');
-                    option.value = person;
-                    option.textContent = person;
-                    personSelect.appendChild(option);
-                });
+            if (selectedGroup && groups[selectedGroup]) {
+                const groupData = groups[selectedGroup];
+                const regularList = groupData.regular || [];
+                const specialList = groupData.special || [];
+                // Combine both lists, removing duplicates
+                const allPeople = [...new Set([...regularList, ...specialList])];
+                
+                if (allPeople.length > 0) {
+                    allPeople.forEach(person => {
+                        const option = document.createElement('option');
+                        option.value = person;
+                        option.textContent = person;
+                        personSelect.appendChild(option);
+                    });
+                }
             }
         }
 
@@ -1815,9 +2030,16 @@
             let groupCount = 0;
             
             for (let i = 1; i <= 4; i++) {
-                if (groups[i] && groups[i].length > 0) {
-                    totalPeople += groups[i].length;
-                    totalRotation += groups[i].length;
+                const groupData = groups[i] || { regular: [], special: [] };
+                const regularList = groupData.regular || [];
+                const specialList = groupData.special || [];
+                // Count unique people across both lists
+                const uniquePeople = new Set([...regularList, ...specialList]);
+                const peopleCount = uniquePeople.size;
+                
+                if (peopleCount > 0) {
+                    totalPeople += peopleCount;
+                    totalRotation += peopleCount;
                     groupCount++;
                 }
             }
