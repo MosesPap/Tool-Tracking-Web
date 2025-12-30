@@ -190,6 +190,7 @@
                 <button class="btn btn-danger" id="menuOutBtn"><i class="fas fa-sign-out-alt"></i> View OUT Tools</button>
                 <button class="btn btn-warning" id="menuMyToolsBtn"><i class="fas fa-toolbox"></i> My Tools</button>
                 <button class="btn" id="menuWorkLocationBtn"><i class="fas fa-map-marker-alt"></i> Tools by Work Location</button>
+                <button class="btn btn-primary" id="menuDutyShiftsBtn"><i class="fas fa-calendar-alt"></i> Duty Shifts</button>
                 <button class="btn btn-info" id="menuAdminBtn" style="display: none;"><i class="fas fa-user-shield"></i> Tool Administrator</button>
                 <button class="btn btn-primary" id="menuTrainingQuestionsBtn" style="display: none;"><i class="fas fa-question-circle"></i> Create Training Questions</button>
                 <button class="btn btn-secondary" id="menuLogoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
@@ -483,6 +484,20 @@
                 };
             } else {
                 console.error('menuWorkLocationBtn not found!');
+            }
+
+            // Duty Shifts button
+            const menuDutyShiftsBtn = document.getElementById('menuDutyShiftsBtn');
+            if (menuDutyShiftsBtn) {
+                console.log('Found menuDutyShiftsBtn');
+                menuDutyShiftsBtn.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Duty Shifts button clicked');
+                    window.location.href = 'duty-shifts.html';
+                };
+            } else {
+                console.error('menuDutyShiftsBtn not found!');
             }
 
             // Tool Administrator button
