@@ -1366,17 +1366,92 @@
             const lastSemiDuty = document.getElementById('lastSemiDuty').value;
             const lastNormalDuty = document.getElementById('lastNormalDuty').value;
             
-            // Store last duties
-            groups[currentGroup].lastDuties[name] = {
+            // Store last duties - use editingPersonName if in edit mode, otherwise use name
+            const personKey = isEditingPerson ? editingPersonName : name;
+            groups[currentGroup].lastDuties[personKey] = {
                 special: lastSpecialDuty || null,
                 weekend: lastWeekendDuty || null,
                 semi: lastSemiDuty || null,
                 normal: lastNormalDuty || null
             };
             
+            // Add last duty dates as critical assignments in the calendar (protected from recalculation)
+            const lastDutyDates = [
+                { date: lastSpecialDuty, type: 'special' },
+                { date: lastWeekendDuty, type: 'weekend' },
+                { date: lastSemiDuty, type: 'semi' },
+                { date: lastNormalDuty, type: 'normal' }
+            ];
+            
+            lastDutyDates.forEach(({ date, type }) => {
+                if (date) {
+                    const dateKey = formatDateKey(new Date(date + 'T00:00:00'));
+                    const dayType = getDayType(new Date(date + 'T00:00:00'));
+                    
+                    // Verify the date matches the expected day type
+                    let matchesType = false;
+                    if (type === 'special' && dayType === 'special-holiday') {
+                        matchesType = true;
+                    } else if (type === 'weekend' && dayType === 'weekend-holiday') {
+                        matchesType = true;
+                    } else if (type === 'semi' && dayType === 'semi-normal-day') {
+                        matchesType = true;
+                    } else if (type === 'normal' && dayType === 'normal-day') {
+                        matchesType = true;
+                    }
+                    
+                    // Add as critical assignment if it matches the type, or if it's a valid date
+                    if (matchesType || date) {
+                        // personKey is already defined above, use it here
+                        // Check if assignment already exists for this group
+                        const existingAssignment = dutyAssignments[dateKey];
+                        if (existingAssignment && existingAssignment.includes(`(Ομάδα ${currentGroup})`)) {
+                            // Update existing assignment - replace this person's assignment
+                            const assignments = existingAssignment.split(', ').filter(a => !a.includes(`${personKey} (Ομάδα ${currentGroup})`));
+                            assignments.push(`${personKey} (Ομάδα ${currentGroup})`);
+                            dutyAssignments[dateKey] = assignments.join(', ');
+                        } else {
+                            // Add new assignment or append to existing
+                            if (dutyAssignments[dateKey]) {
+                                dutyAssignments[dateKey] += `, ${personKey} (Ομάδα ${currentGroup})`;
+                            } else {
+                                dutyAssignments[dateKey] = `${personKey} (Ομάδα ${currentGroup})`;
+                            }
+                        }
+                    }
+                }
+            });
+            
             if (isEditingPerson) {
-                // Editing mode - just update last duties, don't add to lists or change order
-                // The person is already in the lists, we're just updating their last duty dates
+                // Editing mode - update last duties and also update calendar assignments if dates changed
+                const oldLastDuties = groups[currentGroup].lastDuties[editingPersonName] || {};
+                
+                // Remove old assignments if dates changed
+                const oldDates = [
+                    { date: oldLastDuties.special, type: 'special' },
+                    { date: oldLastDuties.weekend, type: 'weekend' },
+                    { date: oldLastDuties.semi, type: 'semi' },
+                    { date: oldLastDuties.normal, type: 'normal' }
+                ];
+                
+                oldDates.forEach(({ date, type }) => {
+                    if (date) {
+                        const dateKey = formatDateKey(new Date(date + 'T00:00:00'));
+                        const existingAssignment = dutyAssignments[dateKey];
+                        if (existingAssignment && existingAssignment.includes(`${editingPersonName} (Ομάδα ${currentGroup})`)) {
+                            // Remove this person's assignment from this date
+                            const assignments = existingAssignment.split(', ').filter(a => !a.includes(`${editingPersonName} (Ομάδα ${currentGroup})`));
+                            if (assignments.length > 0) {
+                                dutyAssignments[dateKey] = assignments.join(', ');
+                            } else {
+                                delete dutyAssignments[dateKey];
+                            }
+                        }
+                    }
+                });
+                
+                // Add new assignments (same logic as adding new person)
+                // The code above already handles adding the new dates, so we're good
             } else {
                 // Adding new person - add to all lists if not already present
                 const listTypes = ['special', 'weekend', 'semi', 'normal'];
@@ -1415,6 +1490,7 @@
             
             saveData();
             renderGroups();
+            renderCalendar(); // Refresh calendar to show the new critical assignments
             updateStatistics();
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('addPersonModal'));
@@ -3007,9 +3083,10 @@
                     
                     days.forEach((dayKey, dayIndex) => {
                         // Check if this day already has a manual assignment for this group
+                        // ALWAYS skip days with existing assignments (they are critical baseline dates from last duties)
                         const existingAssignment = dutyAssignments[dayKey];
-                        if (preserveExisting && existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
-                            // Skip - this day already has a manual assignment for this group
+                        if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
+                            // Skip - this day already has an assignment for this group (critical baseline date)
                             return;
                         }
                         
