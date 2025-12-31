@@ -52,6 +52,23 @@
             color: #333;
         }
 
+        .list-header {
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s;
+            padding: 0.5rem;
+            border-radius: 4px;
+        }
+        
+        .list-header:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .list-header i.fa-chevron-down,
+        .list-header i.fa-chevron-up {
+            transition: transform 0.3s;
+        }
+        
         .person-item {
             display: flex;
             justify-content: space-between;
@@ -1281,45 +1298,49 @@
                 } else {
                     // Special holidays order
                     const specialDiv = document.createElement('div');
-                    specialDiv.className = 'mb-3';
+                    specialDiv.className = 'mb-3 border rounded p-2';
                     specialDiv.innerHTML = `
-                        <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('specialList_${i}', 'specialChevron_${i}')">
                             <strong class="text-warning"><i class="fas fa-star me-1"></i>Σειρά Ειδικών Αργιών:</strong>
+                            <i id="specialChevron_${i}" class="fas fa-chevron-down"></i>
                         </div>
-                        <div id="specialList_${i}"></div>
+                        <div id="specialList_${i}" class="collapse"></div>
                     `;
                     container.appendChild(specialDiv);
                     
                     // Weekend/Holiday order
                     const weekendDiv = document.createElement('div');
-                    weekendDiv.className = 'mb-3';
+                    weekendDiv.className = 'mb-3 border rounded p-2';
                     weekendDiv.innerHTML = `
-                        <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('weekendList_${i}', 'weekendChevron_${i}')">
                             <strong class="text-info"><i class="fas fa-calendar-week me-1"></i>Σειρά Σαββατοκύριακων/Αργιών:</strong>
+                            <i id="weekendChevron_${i}" class="fas fa-chevron-down"></i>
                         </div>
-                        <div id="weekendList_${i}"></div>
+                        <div id="weekendList_${i}" class="collapse"></div>
                     `;
                     container.appendChild(weekendDiv);
                     
                     // Ημιαργία order
                     const semiDiv = document.createElement('div');
-                    semiDiv.className = 'mb-3';
+                    semiDiv.className = 'mb-3 border rounded p-2';
                     semiDiv.innerHTML = `
-                        <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('semiList_${i}', 'semiChevron_${i}')">
                             <strong class="text-warning"><i class="fas fa-calendar-alt me-1"></i>Σειρά Ημιαργιών:</strong>
+                            <i id="semiChevron_${i}" class="fas fa-chevron-down"></i>
                         </div>
-                        <div id="semiList_${i}"></div>
+                        <div id="semiList_${i}" class="collapse"></div>
                     `;
                     container.appendChild(semiDiv);
                     
                     // Καθημερινή order
                     const normalDiv = document.createElement('div');
-                    normalDiv.className = 'mb-3';
+                    normalDiv.className = 'mb-3 border rounded p-2';
                     normalDiv.innerHTML = `
-                        <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('normalList_${i}', 'normalChevron_${i}')">
                             <strong class="text-primary"><i class="fas fa-calendar-day me-1"></i>Σειρά Καθημερινών:</strong>
+                            <i id="normalChevron_${i}" class="fas fa-chevron-down"></i>
                         </div>
-                        <div id="normalList_${i}"></div>
+                        <div id="normalList_${i}" class="collapse"></div>
                     `;
                     container.appendChild(normalDiv);
                     
@@ -3985,6 +4006,38 @@
             saveData();
             renderMissingPeriodsList();
             renderGroups();
+        }
+
+        // Toggle list collapse/expand
+        function toggleListCollapse(listId, chevronId) {
+            const listElement = document.getElementById(listId);
+            const chevronElement = document.getElementById(chevronId);
+            
+            if (listElement && chevronElement) {
+                // Check current state BEFORE toggling
+                const isCurrentlyShown = listElement.classList.contains('show');
+                
+                // Toggle Bootstrap collapse
+                const bsCollapse = new bootstrap.Collapse(listElement, {
+                    toggle: true
+                });
+                
+                // Update chevron icon based on what the state WILL BE (opposite of current)
+                if (isCurrentlyShown) {
+                    // Currently shown, will be hidden - show down arrow
+                    chevronElement.classList.remove('fa-chevron-up');
+                    chevronElement.classList.add('fa-chevron-down');
+                } else {
+                    // Currently hidden, will be shown - show up arrow
+                    chevronElement.classList.remove('fa-chevron-down');
+                    chevronElement.classList.add('fa-chevron-up');
+                }
+            }
+        }
+        
+        // Expose to window for onclick handlers
+        if (typeof window !== 'undefined') {
+            window.toggleListCollapse = toggleListCollapse;
         }
 
         // Update statistics
