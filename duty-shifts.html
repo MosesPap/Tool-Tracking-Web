@@ -1454,7 +1454,9 @@
             lastDutyDates.forEach(({ date, type }) => {
                 if (date && date.trim()) {
                     try {
-                        const dateObj = new Date(date + 'T00:00:00');
+                        // Parse date string (YYYY-MM-DD) and create date in local timezone
+                        const [year, month, day] = date.split('-').map(Number);
+                        const dateObj = new Date(year, month - 1, day);
                         if (isNaN(dateObj.getTime())) {
                             console.error(`Invalid date: ${date}`);
                             return;
@@ -1489,6 +1491,14 @@
                             // Create new assignment
                             dutyAssignments[dateKey] = personGroupStr;
                         }
+                        
+                        // Verify it was added correctly
+                        if (!dutyAssignments[dateKey] || !dutyAssignments[dateKey].includes(personGroupStr)) {
+                            console.error(`ERROR: Failed to add assignment for ${dateKey}! Expected: ${personGroupStr}, Got: ${dutyAssignments[dateKey]}`);
+                        } else {
+                            console.log(`✓ Verified assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
+                        }
+                        
                         addedAssignments.push(dateKey);
                     } catch (error) {
                         console.error(`Error processing date ${date}:`, error);
@@ -1514,7 +1524,10 @@
                 
                 oldDates.forEach(({ date, type }) => {
                     if (date) {
-                        const dateKey = formatDateKey(new Date(date + 'T00:00:00'));
+                        // Parse date string (YYYY-MM-DD) and create date in local timezone
+                        const [year, month, day] = date.split('-').map(Number);
+                        const dateObj = new Date(year, month - 1, day);
+                        const dateKey = formatDateKey(dateObj);
                         const personGroupStr = `${editingPersonName} (Ομάδα ${currentGroup})`;
                         const existingAssignment = dutyAssignments[dateKey];
                         
@@ -1576,8 +1589,19 @@
             isEditingPerson = false;
             editingPersonName = null;
             
+            // Verify assignments are in the object before saving/rendering
+            console.log('Before save - dutyAssignments for added dates:', 
+                addedAssignments.map(key => ({ key, assignment: dutyAssignments[key] }))
+            );
+            
             saveData();
             renderGroups();
+            
+            // Double-check assignments are still there after saveData (should be, but verify)
+            console.log('After saveData - dutyAssignments for added dates:', 
+                addedAssignments.map(key => ({ key, assignment: dutyAssignments[key] }))
+            );
+            
             renderCalendar(); // Refresh calendar to show the new critical assignments
             updateStatistics();
             
@@ -2681,6 +2705,13 @@
                 const isToday = date.getTime() === today.getTime();
                 const key = formatDateKey(date);
                 const assignment = dutyAssignments[key];
+                
+                // Debug: Check for specific date that should have assignment
+                if (key === '2026-01-07') {
+                    console.log(`DEBUG 2026-01-07: assignment =`, assignment);
+                    console.log(`DEBUG 2026-01-07: dutyAssignments['2026-01-07'] =`, dutyAssignments['2026-01-07']);
+                    console.log(`DEBUG 2026-01-07: criticalAssignments['2026-01-07'] =`, criticalAssignments['2026-01-07']);
+                }
                 
                 const dayDiv = document.createElement('div');
                 dayDiv.className = `calendar-day ${dayType} ${isToday ? 'today' : ''}`;
