@@ -433,32 +433,17 @@
             </div>
         </div>
 
-        <!-- Special Holidays Section -->
+        <!-- Special Holidays Configuration -->
         <div class="holiday-list">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5><i class="fas fa-star me-2"></i>Ειδικές Αργίες</h5>
-                <button class="btn btn-warning btn-sm" onclick="addSpecialHoliday()">
+                <button class="btn btn-warning btn-sm" onclick="addRecurringHoliday()">
                     <i class="fas fa-plus me-1"></i>Προσθήκη Ειδικής Αργίας
                 </button>
             </div>
             <div class="alert alert-info">
                 <i class="fas fa-info-circle me-2"></i>
-                <small>Οι ειδικές αργίες έχουν την υψηλότερη προτεραιότητα και χρησιμοποιούν τη σειρά ειδικών αργιών κάθε ομάδας.</small>
-            </div>
-            <div id="specialHolidaysList"></div>
-        </div>
-
-        <!-- Recurring Special Holidays Configuration -->
-        <div class="holiday-list">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5><i class="fas fa-cog me-2"></i>Ρυθμίσεις Επαναλαμβανόμενων Ειδικών Αργιών</h5>
-                <button class="btn btn-info btn-sm" onclick="addRecurringHoliday()">
-                    <i class="fas fa-plus me-1"></i>Προσθήκη Επαναλαμβανόμενης
-                </button>
-            </div>
-            <div class="alert alert-info">
-                <i class="fas fa-info-circle me-2"></i>
-                <small>Ορίστε αργίες που επαναλαμβάνονται κάθε χρόνο (π.χ., 25 Δεκεμβρίου, 1 Ιανουαρίου) ή σχετίζονται με το Πάσχα (π.χ., Μεγάλο Σάββατο).</small>
+                <small>Ορίστε αργίες που επαναλαμβάνονται κάθε χρόνο (π.χ., 25 Δεκεμβρίου, 1 Ιανουαρίου) ή σχετίζονται με το Πάσχα (π.χ., Μεγάλο Σάββατο). Οι ειδικές αργίες έχουν την υψηλότερη προτεραιότητα και χρησιμοποιούν τη σειρά ειδικών αργιών κάθε ομάδας.</small>
             </div>
             <div id="recurringHolidaysList"></div>
         </div>
@@ -741,7 +726,6 @@
                         await loadData();
                         renderGroups();
                         renderHolidays();
-                        renderSpecialHolidays();
                         renderRecurringHolidays();
                         renderCalendar();
                         updateStatistics();
@@ -750,7 +734,6 @@
                         loadDataFromLocalStorage();
                         renderGroups();
                         renderHolidays();
-                        renderSpecialHolidays();
                         renderRecurringHolidays();
                         renderCalendar();
                         updateStatistics();
@@ -1277,7 +1260,6 @@
             
             saveData();
             renderHolidays();
-            renderSpecialHolidays();
             renderCalendar();
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('addHolidayModal'));
@@ -1290,7 +1272,6 @@
                 holidays.splice(index, 1);
                 saveData();
                 renderHolidays();
-                renderSpecialHolidays();
                 renderCalendar();
             }
         }
@@ -1326,10 +1307,13 @@
             });
         }
 
+        // Configuration: How many years ahead to calculate recurring special holidays
+        const SPECIAL_HOLIDAYS_YEARS_AHEAD = 30; // Calculate for next 30 years
+
         // Initialize default special holidays based on recurring configuration
         function initializeDefaultSpecialHolidays() {
             const currentYear = new Date().getFullYear();
-            const yearsToCalculate = 10; // Calculate for next 10 years
+            const yearsToCalculate = SPECIAL_HOLIDAYS_YEARS_AHEAD;
             const defaultHolidays = [];
             
             // Process each recurring holiday definition
@@ -1509,19 +1493,17 @@
             specialHolidays.sort((a, b) => a.date.localeCompare(b.date));
             
             saveData();
-            renderSpecialHolidays();
             renderCalendar();
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('addSpecialHolidayModal'));
             modal.hide();
         }
 
-        // Remove special holiday
+        // Remove special holiday (kept for backward compatibility, but not used in UI)
         function removeSpecialHoliday(index) {
             if (confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την ειδική αργία;')) {
                 specialHolidays.splice(index, 1);
                 saveData();
-                renderSpecialHolidays();
                 renderCalendar();
             }
         }
@@ -1632,7 +1614,6 @@
             
             // Regenerate special holidays for all years
             initializeDefaultSpecialHolidays();
-            renderSpecialHolidays();
             renderCalendar();
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('addRecurringHolidayModal'));
@@ -1648,7 +1629,6 @@
                 
                 // Regenerate special holidays
                 initializeDefaultSpecialHolidays();
-                renderSpecialHolidays();
                 renderCalendar();
             }
         }
