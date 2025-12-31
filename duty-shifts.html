@@ -913,6 +913,20 @@
                     delete data.updatedBy;
                     // Migrate old format to new format if needed
                     groups = migrateGroupsFormat(data) || { 1: { regular: [], special: [] }, 2: { regular: [], special: [] }, 3: { regular: [], special: [] }, 4: { regular: [], special: [] } };
+                    
+                    // Debug: Log lastDuties to verify they're loaded
+                    console.log('Loaded groups from Firestore');
+                    for (let g = 1; g <= 4; g++) {
+                        if (groups[g] && groups[g].lastDuties) {
+                            const lastDutiesCount = Object.keys(groups[g].lastDuties).length;
+                            if (lastDutiesCount > 0) {
+                                console.log(`Group ${g} has ${lastDutiesCount} people with lastDuties:`, Object.keys(groups[g].lastDuties));
+                                // Log sample lastDuties
+                                const samplePerson = Object.keys(groups[g].lastDuties)[0];
+                                console.log(`Sample lastDuties for ${samplePerson}:`, groups[g].lastDuties[samplePerson]);
+                            }
+                        }
+                    }
                 }
                 
                 // Load holidays
@@ -954,25 +968,40 @@
                     delete data.updatedBy;
                     criticalAssignments = data || {};
                     
+                    console.log('Loaded criticalAssignments from Firestore:', Object.keys(criticalAssignments).length, 'dates');
+                    console.log('Sample criticalAssignments:', Object.entries(criticalAssignments).slice(0, 3));
+                    
                     // Restore critical assignments to dutyAssignments if they're missing
                     Object.keys(criticalAssignments).forEach(dateKey => {
                         const criticalPeople = criticalAssignments[dateKey];
-                        if (Array.isArray(criticalPeople) && criticalPeople.length > 0) {
+                        // Handle both array format and string format (for backward compatibility)
+                        let peopleArray = [];
+                        if (Array.isArray(criticalPeople)) {
+                            peopleArray = criticalPeople;
+                        } else if (typeof criticalPeople === 'string') {
+                            peopleArray = [criticalPeople];
+                        }
+                        
+                        if (peopleArray.length > 0) {
                             // Ensure critical assignments are in dutyAssignments
                             if (!dutyAssignments[dateKey]) {
-                                dutyAssignments[dateKey] = criticalPeople.join(', ');
+                                dutyAssignments[dateKey] = peopleArray.join(', ');
+                                console.log(`Restored critical assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
                             } else {
                                 // Merge critical assignments with existing ones
                                 const existing = dutyAssignments[dateKey].split(', ');
-                                criticalPeople.forEach(person => {
+                                peopleArray.forEach(person => {
                                     if (!existing.includes(person)) {
                                         existing.push(person);
                                     }
                                 });
                                 dutyAssignments[dateKey] = existing.join(', ');
+                                console.log(`Merged critical assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
                             }
                         }
                     });
+                } else {
+                    console.log('No criticalAssignments document found in Firestore');
                 }
                 
                 console.log('Data loaded from Firebase');
@@ -1087,6 +1116,10 @@
                 });
                 
                 // Save critical assignments separately
+                console.log('Saving criticalAssignments to Firestore:', Object.keys(criticalAssignments).length, 'dates');
+                if (Object.keys(criticalAssignments).length > 0) {
+                    console.log('Sample criticalAssignments being saved:', Object.entries(criticalAssignments).slice(0, 3));
+                }
                 await db.collection('dutyShifts').doc('criticalAssignments').set({
                     ...criticalAssignments,
                     lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
@@ -1132,7 +1165,14 @@
                     migrated[i].weekend = [...people];
                     migrated[i].semi = [...people];
                     migrated[i].normal = [...people];
+                    // Preserve lastDuties and missingPeriods if they exist (shouldn't in old format, but just in case)
+                    if (data[i].lastDuties) migrated[i].lastDuties = data[i].lastDuties;
+                    if (data[i].missingPeriods) migrated[i].missingPeriods = data[i].missingPeriods;
                 } else if (data[i] && typeof data[i] === 'object') {
+                    // ALWAYS preserve lastDuties and missingPeriods if they exist
+                    if (data[i].lastDuties) migrated[i].lastDuties = data[i].lastDuties;
+                    if (data[i].missingPeriods) migrated[i].missingPeriods = data[i].missingPeriods;
+                    
                     // Check if old format (regular/special) or new format
                     if (data[i].regular || data[i].special) {
                         // Old format with regular/special
@@ -1147,8 +1187,6 @@
                         migrated[i].weekend = data[i].weekend || [];
                         migrated[i].semi = data[i].semi || [];
                         migrated[i].normal = data[i].normal || [];
-                        migrated[i].lastDuties = data[i].lastDuties || {};
-                        migrated[i].missingPeriods = data[i].missingPeriods || {};
                     } else {
                         // Fallback
                         const people = data[i].people || [];
@@ -1156,7 +1194,6 @@
                         migrated[i].weekend = [...people];
                         migrated[i].semi = [...people];
                         migrated[i].normal = [...people];
-                        migrated[i].missingPeriods = {};
                     }
                 }
             }
@@ -1395,6 +1432,12 @@
             const groupData = groups[groupNumber] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
             const lastDuties = groupData.lastDuties?.[personName] || {};
             
+            // Debug: Log what we're loading
+            console.log(`Edit person: ${personName} in group ${groupNumber}`);
+            console.log(`Group data lastDuties:`, groupData.lastDuties);
+            console.log(`Person lastDuties:`, lastDuties);
+            console.log(`Special: ${lastDuties.special}, Weekend: ${lastDuties.weekend}, Semi: ${lastDuties.semi}, Normal: ${lastDuties.normal}`);
+            
             document.getElementById('modalTitle').innerHTML = `Επεξεργασία Στοιχείων: ${personName}`;
             document.getElementById('personName').value = personName;
             document.getElementById('personName').readOnly = true;
@@ -1403,6 +1446,9 @@
             document.getElementById('lastSemiDuty').value = lastDuties.semi || '';
             document.getElementById('lastNormalDuty').value = lastDuties.normal || '';
             document.getElementById('savePersonButton').textContent = 'Αποθήκευση Αλλαγών';
+            
+            // Debug: Verify values were set
+            console.log(`Form values set - Special: ${document.getElementById('lastSpecialDuty').value}, Weekend: ${document.getElementById('lastWeekendDuty').value}, Semi: ${document.getElementById('lastSemiDuty').value}, Normal: ${document.getElementById('lastNormalDuty').value}`);
             
             const modal = new bootstrap.Modal(document.getElementById('addPersonModal'));
             modal.show();
