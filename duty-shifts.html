@@ -433,10 +433,25 @@
             </div>
         </div>
 
-        <!-- Holidays Section -->
+        <!-- Special Holidays Section -->
         <div class="holiday-list">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5><i class="fas fa-calendar-times me-2"></i>Αργίες</h5>
+                <h5><i class="fas fa-star me-2"></i>Ειδικές Αργίες</h5>
+                <button class="btn btn-warning btn-sm" onclick="addSpecialHoliday()">
+                    <i class="fas fa-plus me-1"></i>Προσθήκη Ειδικής Αργίας
+                </button>
+            </div>
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                <small>Οι ειδικές αργίες έχουν την υψηλότερη προτεραιότητα και χρησιμοποιούν τη σειρά ειδικών αργιών κάθε ομάδας.</small>
+            </div>
+            <div id="specialHolidaysList"></div>
+        </div>
+
+        <!-- Regular Holidays Section -->
+        <div class="holiday-list">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5><i class="fas fa-calendar-times me-2"></i>Κανονικές Αργίες</h5>
                 <button class="btn btn-primary btn-sm" onclick="addHoliday()">
                     <i class="fas fa-plus me-1"></i>Προσθήκη Αργίας
                 </button>
@@ -485,6 +500,36 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
                     <button type="button" class="btn btn-primary" onclick="savePerson()">Προσθήκη Ατόμου</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Special Holiday Modal -->
+    <div class="modal fade" id="addSpecialHolidayModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title"><i class="fas fa-star me-2"></i>Προσθήκη Ειδικής Αργίας</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <small>Οι ειδικές αργίες έχουν την υψηλότερη προτεραιότητα και χρησιμοποιούν τη σειρά ειδικών αργιών κάθε ομάδας.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="specialHolidayDate" class="form-label">Ημερομηνία</label>
+                        <input type="date" class="form-control" id="specialHolidayDate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="specialHolidayName" class="form-label">Όνομα Ειδικής Αργίας (Προαιρετικό)</label>
+                        <input type="text" class="form-control" id="specialHolidayName" placeholder="π.χ., Χριστούγεννα, Πάσχα, Πρωτοχρονιά">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-warning" onclick="saveSpecialHoliday()">Προσθήκη Ειδικής Αργίας</button>
                 </div>
             </div>
         </div>
@@ -598,6 +643,7 @@
             4: { regular: [], special: [] }
         };
         let holidays = [];
+        let specialHolidays = []; // User-defined special holidays
         let dutyAssignments = {};
         let currentDate = new Date();
         let currentGroup = null;
@@ -613,6 +659,7 @@
                         await loadData();
                         renderGroups();
                         renderHolidays();
+                        renderSpecialHolidays();
                         renderCalendar();
                         updateStatistics();
                     } else {
@@ -620,6 +667,7 @@
                         loadDataFromLocalStorage();
                         renderGroups();
                         renderHolidays();
+                        renderSpecialHolidays();
                         renderCalendar();
                         updateStatistics();
                     }
@@ -669,6 +717,13 @@
                     holidays = data.list || [];
                 }
                 
+                // Load special holidays
+                const specialHolidaysDoc = await db.collection('dutyShifts').doc('specialHolidays').get();
+                if (specialHolidaysDoc.exists) {
+                    const data = specialHolidaysDoc.data();
+                    specialHolidays = data.list || [];
+                }
+                
                 // Load assignments
                 const assignmentsDoc = await db.collection('dutyShifts').doc('assignments').get();
                 if (assignmentsDoc.exists) {
@@ -700,6 +755,12 @@
             if (savedHolidays) {
                 holidays = JSON.parse(savedHolidays);
             }
+            
+            const savedSpecialHolidays = localStorage.getItem('dutyShiftsSpecialHolidays');
+            if (savedSpecialHolidays) {
+                specialHolidays = JSON.parse(savedSpecialHolidays);
+            }
+            
             if (savedAssignments) {
                 dutyAssignments = JSON.parse(savedAssignments);
             }
@@ -738,6 +799,13 @@
                     updatedBy: user.uid
                 });
                 
+                // Save special holidays
+                await db.collection('dutyShifts').doc('specialHolidays').set({
+                    list: specialHolidays,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
+                
                 // Save assignments
                 await db.collection('dutyShifts').doc('assignments').set({
                     ...dutyAssignments,
@@ -760,6 +828,7 @@
         function saveDataToLocalStorage() {
             localStorage.setItem('dutyShiftsGroups', JSON.stringify(groups));
             localStorage.setItem('dutyShiftsHolidays', JSON.stringify(holidays));
+            localStorage.setItem('dutyShiftsSpecialHolidays', JSON.stringify(specialHolidays));
             localStorage.setItem('dutyShiftsAssignments', JSON.stringify(dutyAssignments));
         }
 
@@ -1112,6 +1181,7 @@
             
             saveData();
             renderHolidays();
+            renderSpecialHolidays();
             renderCalendar();
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('addHolidayModal'));
@@ -1124,6 +1194,7 @@
                 holidays.splice(index, 1);
                 saveData();
                 renderHolidays();
+                renderSpecialHolidays();
                 renderCalendar();
             }
         }
@@ -1230,14 +1301,31 @@
             return holidays;
         }
 
-        // Check if date is a special holiday (Orthodox or Cyprus Greek holidays)
+        // Check if date is a special holiday (only user-defined special holidays)
         function isSpecialHoliday(date) {
+            const key = formatDateKey(date);
+            return specialHolidays.some(h => h.date === key);
+        }
+
+        // Check if date is holiday (including automatically detected Orthodox/Cyprus holidays)
+        function isHoliday(date) {
+            const key = formatDateKey(date);
+            // Check user-defined holidays
+            if (holidays.some(h => h.date === key)) {
+                return true;
+            }
+            // Check automatically detected Orthodox/Cyprus holidays
+            return isOrthodoxOrCyprusHoliday(date);
+        }
+
+        // Check if date is an Orthodox or Cyprus Greek holiday (automatic detection)
+        function isOrthodoxOrCyprusHoliday(date) {
             const month = date.getMonth() + 1; // 1-12
             const day = date.getDate();
             const year = date.getFullYear();
             const dateKey = formatDateKey(date);
             
-            // Fixed Orthodox holidays
+            // Fixed Orthodox/Cyprus holidays
             if (month === 1 && day === 1) return true;  // New Year's Day
             if (month === 1 && day === 6) return true;  // Epiphany/Theophany
             if (month === 3 && day === 25) return true; // Annunciation / Greek Independence Day
@@ -1263,10 +1351,44 @@
             return false;
         }
 
-        // Check if date is holiday
-        function isHoliday(date) {
-            const key = formatDateKey(date);
-            return holidays.some(h => h.date === key);
+        // Get Orthodox/Cyprus holiday name for a date (automatic detection)
+        function getOrthodoxHolidayNameAuto(date) {
+            if (!isOrthodoxOrCyprusHoliday(date)) return null;
+            
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+            const year = date.getFullYear();
+            const dateKey = formatDateKey(date);
+            
+            // Fixed Orthodox holidays
+            if (month === 1 && day === 1) return 'Πρωτοχρονιά';
+            if (month === 1 && day === 6) return 'Θεοφάνια';
+            if (month === 3 && day === 25) return 'Ευαγγελισμός';
+            if (month === 4 && day === 1) return 'ΕΟΚΑ';
+            if (month === 5 && day === 1) return 'Πρωτομαγιά';
+            if (month === 8 && day === 15) return 'Κοίμηση';
+            if (month === 9 && day === 8) return 'Γέννηση Θεοτόκου';
+            if (month === 9 && day === 14) return 'Σταύρωση';
+            if (month === 10 && day === 1) return 'Ανεξαρτησία';
+            if (month === 10 && day === 28) return 'Όχι';
+            if (month === 12 && day === 25) return 'Χριστούγεννα';
+            if (month === 12 && day === 26) return 'Σύναξης';
+            if (month === 12 && day === 31) return 'Παραμονή';
+            
+            // Orthodox holidays based on Easter
+            const orthodoxHolidays = calculateOrthodoxHolidays(year);
+            
+            if (dateKey === formatDateKey(orthodoxHolidays.cleanMonday)) return 'Καθαρά Δευτέρα';
+            if (dateKey === formatDateKey(orthodoxHolidays.palmSunday)) return 'Κυριακή Βαΐων';
+            if (dateKey === formatDateKey(orthodoxHolidays.goodFriday)) return 'Μ. Παρασκευή';
+            if (dateKey === formatDateKey(orthodoxHolidays.greatSaturday)) return 'Μ. Σάββατο';
+            if (dateKey === formatDateKey(orthodoxHolidays.easterSunday)) return 'Πάσχα';
+            if (dateKey === formatDateKey(orthodoxHolidays.easterMonday)) return 'Δευτέρα Πάσχα';
+            if (dateKey === formatDateKey(orthodoxHolidays.ascensionDay)) return 'Ανάληψη';
+            if (dateKey === formatDateKey(orthodoxHolidays.pentecost)) return 'Πεντηκοστή';
+            if (dateKey === formatDateKey(orthodoxHolidays.whitMonday)) return 'Αγίου Πνεύματος';
+            
+            return null;
         }
 
         // Check if date is weekend
@@ -1370,44 +1492,17 @@
             }));
         }
 
-        // Get Orthodox holiday name for a date
+        // Get holiday name for a date (checks special holidays first, then auto-detected Orthodox holidays)
         function getOrthodoxHolidayName(date) {
-            if (!isSpecialHoliday(date)) return null;
+            // First check special holidays (user-defined)
+            if (isSpecialHoliday(date)) {
+                const key = formatDateKey(date);
+                const holiday = specialHolidays.find(h => h.date === key);
+                return holiday ? holiday.name : null;
+            }
             
-            const month = date.getMonth() + 1;
-            const day = date.getDate();
-            const year = date.getFullYear();
-            const dateKey = formatDateKey(date);
-            
-            // Fixed Orthodox holidays
-            if (month === 1 && day === 1) return 'Πρωτοχρονιά';
-            if (month === 1 && day === 6) return 'Θεοφάνια';
-            if (month === 3 && day === 25) return 'Ευαγγελισμός';
-            if (month === 4 && day === 1) return 'ΕΟΚΑ';
-            if (month === 5 && day === 1) return 'Πρωτομαγιά';
-            if (month === 8 && day === 15) return 'Κοίμηση';
-            if (month === 9 && day === 8) return 'Γέννηση Θεοτόκου';
-            if (month === 9 && day === 14) return 'Σταύρωση';
-            if (month === 10 && day === 1) return 'Ανεξαρτησία';
-            if (month === 10 && day === 28) return 'Όχι';
-            if (month === 12 && day === 25) return 'Χριστούγεννα';
-            if (month === 12 && day === 26) return 'Σύναξης';
-            if (month === 12 && day === 31) return 'Παραμονή';
-            
-            // Orthodox holidays based on Easter
-            const orthodoxHolidays = calculateOrthodoxHolidays(year);
-            
-            if (dateKey === formatDateKey(orthodoxHolidays.cleanMonday)) return 'Καθαρά Δευτέρα';
-            if (dateKey === formatDateKey(orthodoxHolidays.palmSunday)) return 'Κυριακή Βαΐων';
-            if (dateKey === formatDateKey(orthodoxHolidays.goodFriday)) return 'Μ. Παρασκευή';
-            if (dateKey === formatDateKey(orthodoxHolidays.greatSaturday)) return 'Μ. Σάββατο';
-            if (dateKey === formatDateKey(orthodoxHolidays.easterSunday)) return 'Πάσχα';
-            if (dateKey === formatDateKey(orthodoxHolidays.easterMonday)) return 'Δευτέρα Πάσχα';
-            if (dateKey === formatDateKey(orthodoxHolidays.ascensionDay)) return 'Ανάληψη';
-            if (dateKey === formatDateKey(orthodoxHolidays.pentecost)) return 'Πεντηκοστή';
-            if (dateKey === formatDateKey(orthodoxHolidays.whitMonday)) return 'Αγίου Πνεύματος';
-            
-            return null;
+            // Then check auto-detected Orthodox/Cyprus holidays
+            return getOrthodoxHolidayNameAuto(date);
         }
 
         // Render calendar
@@ -1456,7 +1551,7 @@
                 
                 const dayDiv = document.createElement('div');
                 dayDiv.className = `calendar-day ${dayType} ${isToday ? 'today' : ''}`;
-                if (isHoliday(date)) {
+                if (isHoliday(date) || isOrthodoxOrCyprusHoliday(date)) {
                     dayDiv.classList.add('holiday');
                 }
                 if (isSpecialHoliday(date)) {
@@ -1482,13 +1577,13 @@
                 
                 dayDiv.onclick = () => showDayDetails(date);
                 
-                // Get Orthodox holiday name if applicable
-                const orthodoxHolidayName = getOrthodoxHolidayName(date);
+                // Get holiday name (special holiday first, then Orthodox/Cyprus holiday)
+                const holidayName = getOrthodoxHolidayName(date);
                 
                 dayDiv.innerHTML = `
                     <div class="day-number">${day}</div>
                     <div class="day-type">${getDayTypeLabel(dayType)}</div>
-                    ${orthodoxHolidayName ? `<div class="orthodox-holiday-name">${orthodoxHolidayName}</div>` : ''}
+                    ${holidayName ? `<div class="orthodox-holiday-name">${holidayName}</div>` : ''}
                     ${assignment ? `<div class="duty-person">${assignment}</div>` : ''}
                 `;
                 
@@ -1808,42 +1903,23 @@
             
             if (isSpecialHoliday(date)) {
                 const holidayName = getOrthodoxHolidayName(date);
-                const fullHolidayNames = {
-                    'Πρωτοχρονιά': 'Πρωτοχρονιά',
-                    'Θεοφάνια': 'Θεοφάνια',
-                    'Ευαγγελισμός': 'Ευαγγελισμός της Θεοτόκου / Ελληνική Εθνική Επέτειος',
-                    'ΕΟΚΑ': 'Απελευθερωτικός Αγώνας της ΕΟΚΑ',
-                    'Πρωτομαγιά': 'Εργατική Πρωτομαγιά',
-                    'Κοίμηση': 'Κοίμηση της Θεοτόκου',
-                    'Γέννηση Θεοτόκου': 'Γέννηση της Θεοτόκου',
-                    'Σταύρωση': 'Υψώσιμος του Τιμίου Σταυρού',
-                    'Ανεξαρτησία': 'Ημέρα Ανεξαρτησίας της Κύπρου',
-                    'Όχι': 'Επέτειος του «Όχι»',
-                    'Χριστούγεννα': 'Χριστούγεννα (Γέννηση του Χριστού)',
-                    'Σύναξης': 'Σύναξης της Θεοτόκου',
-                    'Παραμονή': 'Παραμονή Πρωτοχρονιάς',
-                    'Καθαρά Δευτέρα': 'Καθαρά Δευτέρα (Πρώτη Ημέρα της Σαρακοστής)',
-                    'Κυριακή Βαΐων': 'Κυριακή των Βαΐων',
-                    'Μ. Παρασκευή': 'Μεγάλη Παρασκευή',
-                    'Μ. Σάββατο': 'Μεγάλο Σάββατο',
-                    'Πάσχα': 'Κυριακή του Πάσχα',
-                    'Δευτέρα Πάσχα': 'Δευτέρα του Πάσχα',
-                    'Ανάληψη': 'Ανάληψη του Κυρίου',
-                    'Πεντηκοστή': 'Πεντηκοστή (Αγίας Τριάδος)',
-                    'Αγίου Πνεύματος': 'Αγίου Πνεύματος (Δευτέρα)'
-                };
-                
-                const fullName = fullHolidayNames[holidayName] || holidayName;
+                const displayName = holidayName || 'Ειδική Αργία';
                 
                 content += `
-                    <div class="alert alert-warning" style="background: #E1BEE7; border-color: #9C27B0;">
+                    <div class="alert alert-warning" style="background: #FFE082; border-color: #FFC107;">
                         <i class="fas fa-star me-2"></i>
-                        <strong>Ορθόδοξη/Κυπριακή Αργία:</strong> ${fullName}
+                        <strong>Ειδική Αργία:</strong> ${displayName}
                     </div>
                 `;
-            }
-            
-            if (isHoliday(date)) {
+            } else if (isOrthodoxOrCyprusHoliday(date)) {
+                const holidayName = getOrthodoxHolidayNameAuto(date);
+                content += `
+                    <div class="alert alert-info">
+                        <i class="fas fa-church me-2"></i>
+                        <strong>Ορθόδοξη/Κυπριακή Αργία:</strong> ${holidayName || 'Αργία'}
+                    </div>
+                `;
+            } else if (isHoliday(date)) {
                 const holiday = holidays.find(h => h.date === key);
                 content += `
                     <div class="alert alert-info">
