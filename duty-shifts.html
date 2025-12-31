@@ -2098,44 +2098,6 @@
             return false;
         }
 
-        // Check if person has duty on Friday and Sunday (should skip Saturday)
-        // Also check if person has Saturday and Sunday (should skip Friday)
-        function hasFridaySundayDuty(dayKey, person, groupNum) {
-            const date = new Date(dayKey + 'T00:00:00');
-            const dayOfWeek = date.getDay(); // 0=Sunday, 5=Friday, 6=Saturday
-            
-            // If checking Saturday, see if person has Friday and Sunday
-            if (dayOfWeek === 6) { // Saturday
-                const friday = new Date(date);
-                friday.setDate(friday.getDate() - 1);
-                const fridayKey = formatDateKey(friday);
-                
-                const sunday = new Date(date);
-                sunday.setDate(sunday.getDate() + 1);
-                const sundayKey = formatDateKey(sunday);
-                
-                if (hasDutyOnDay(fridayKey, person, groupNum) && hasDutyOnDay(sundayKey, person, groupNum)) {
-                    return true;
-                }
-            }
-            
-            // If checking Friday, see if person has Saturday and Sunday
-            if (dayOfWeek === 5) { // Friday
-                const saturday = new Date(date);
-                saturday.setDate(saturday.getDate() + 1);
-                const saturdayKey = formatDateKey(saturday);
-                
-                const sunday = new Date(date);
-                sunday.setDate(sunday.getDate() + 2);
-                const sundayKey = formatDateKey(sunday);
-                
-                if (hasDutyOnDay(saturdayKey, person, groupNum) && hasDutyOnDay(sundayKey, person, groupNum)) {
-                    return true;
-                }
-            }
-            
-            return false;
-        }
 
         // Check if person had duty on a special holiday before this date
         // If so, and current day is a weekend (Saturday/Sunday) or holiday, skip this person
@@ -2443,16 +2405,41 @@
                         }
                         
                         // Find the person who should be on duty based on rotation
-                        // Each person should be on duty every N days of this type
-                        const idealPersonIndex = dayIndex % rotationDays;
-                        const idealPerson = groupPeople[idealPersonIndex];
+                        // Logic: Each person should be on duty every N days of this specific type
+                        // We need to find who has waited the longest (or is most eligible) for this day type
                         
-                        // Count days since last duty of this type for ideal person
-                        // Need to check all existing assignments, not just current range
-                        const daysSinceLastDuty = countDaysSinceLastDuty(dayKey, idealPerson, groupNum, dayTypeCategory, dayTypeLists, startDate);
+                        // First, calculate days since last duty for all people
+                        const personEligibility = [];
+                        for (let i = 0; i < groupPeople.length; i++) {
+                            const person = groupPeople[i];
+                            const daysSinceLastDuty = countDaysSinceLastDuty(dayKey, person, groupNum, dayTypeCategory, dayTypeLists, startDate);
+                            const isEligible = daysSinceLastDuty >= rotationDays || daysSinceLastDuty === Infinity;
+                            
+                            personEligibility.push({
+                                person: person,
+                                index: i,
+                                daysSinceLastDuty: daysSinceLastDuty,
+                                isEligible: isEligible
+                            });
+                        }
                         
-                        // Check if ideal person is eligible (has waited enough days)
-                        const isEligible = daysSinceLastDuty >= rotationDays || daysSinceLastDuty === Infinity;
+                        // Sort by eligibility (eligible first), then by days since last duty (longest wait first)
+                        // If tied, use rotation order (index)
+                        personEligibility.sort((a, b) => {
+                            if (a.isEligible !== b.isEligible) {
+                                return b.isEligible - a.isEligible; // Eligible first
+                            }
+                            if (a.daysSinceLastDuty !== b.daysSinceLastDuty) {
+                                return b.daysSinceLastDuty - a.daysSinceLastDuty; // Longest wait first
+                            }
+                            return a.index - b.index; // Rotation order
+                        });
+                        
+                        // The ideal person is the first eligible person, or if none are eligible, the one who has waited longest
+                        const idealPerson = personEligibility[0].person;
+                        const idealPersonIndex = personEligibility[0].index;
+                        const daysSinceLastDuty = personEligibility[0].daysSinceLastDuty;
+                        const isEligible = personEligibility[0].isEligible;
                         
                         // Check for conflicts
                         const hasConflict = hasConsecutiveDuty(dayKey, idealPerson, groupNum) || 
@@ -2486,18 +2473,18 @@
                                 skippedPerson = idealPerson;
                             }
                             
-                            // Try all people in rotation order, starting from ideal person
-                            for (let offset = 0; offset < groupPeople.length; offset++) {
-                                const personIndex = (idealPersonIndex + offset) % groupPeople.length;
-                                const candidatePerson = groupPeople[personIndex];
+                            // Try all people in eligibility order (already sorted by eligibility and wait time)
+                            for (let i = 0; i < personEligibility.length; i++) {
+                                const candidateData = personEligibility[i];
+                                const candidatePerson = candidateData.person;
                                 
                                 // Skip the ideal person if they have conflict
                                 if (candidatePerson === idealPerson && hasConflict) {
                                     continue;
                                 }
                                 
-                                const candidateDaysSince = countDaysSinceLastDuty(dayKey, candidatePerson, groupNum, dayTypeCategory, dayTypeLists, startDate);
-                                const candidateEligible = candidateDaysSince >= rotationDays || candidateDaysSince === Infinity;
+                                const candidateDaysSince = candidateData.daysSinceLastDuty;
+                                const candidateEligible = candidateData.isEligible;
                                 const candidateConflict = hasConsecutiveDuty(dayKey, candidatePerson, groupNum) || 
                                                          hasFridaySundayDuty(dayKey, candidatePerson, groupNum) ||
                                                          hadSpecialHolidayDutyBefore(dayKey, candidatePerson, groupNum) ||
