@@ -724,6 +724,9 @@
                     specialHolidays = data.list || [];
                 }
                 
+                // Initialize default special holidays if they don't exist
+                initializeDefaultSpecialHolidays();
+                
                 // Load assignments
                 const assignmentsDoc = await db.collection('dutyShifts').doc('assignments').get();
                 if (assignmentsDoc.exists) {
@@ -760,6 +763,9 @@
             if (savedSpecialHolidays) {
                 specialHolidays = JSON.parse(savedSpecialHolidays);
             }
+            
+            // Initialize default special holidays if they don't exist
+            initializeDefaultSpecialHolidays();
             
             if (savedAssignments) {
                 dutyAssignments = JSON.parse(savedAssignments);
@@ -1228,6 +1234,89 @@
                 `;
                 container.appendChild(holidayDiv);
             });
+        }
+
+        // Initialize default special holidays
+        function initializeDefaultSpecialHolidays() {
+            const currentYear = new Date().getFullYear();
+            const nextYear = currentYear + 1;
+            const defaultHolidays = [];
+            
+            // December 24, 25, 31 - current year
+            defaultHolidays.push({
+                date: formatDateKey(new Date(currentYear, 11, 24)), // December 24
+                name: 'Παραμονή Χριστουγέννων'
+            });
+            defaultHolidays.push({
+                date: formatDateKey(new Date(currentYear, 11, 25)), // December 25
+                name: 'Χριστούγεννα'
+            });
+            defaultHolidays.push({
+                date: formatDateKey(new Date(currentYear, 11, 31)), // December 31
+                name: 'Παραμονή Πρωτοχρονιάς'
+            });
+            
+            // January 1 - next year (since December 31 is current year)
+            defaultHolidays.push({
+                date: formatDateKey(new Date(nextYear, 0, 1)), // January 1
+                name: 'Πρωτοχρονιά'
+            });
+            
+            // Also add for next year's December dates
+            defaultHolidays.push({
+                date: formatDateKey(new Date(nextYear, 11, 24)), // December 24
+                name: 'Παραμονή Χριστουγέννων'
+            });
+            defaultHolidays.push({
+                date: formatDateKey(new Date(nextYear, 11, 25)), // December 25
+                name: 'Χριστούγεννα'
+            });
+            defaultHolidays.push({
+                date: formatDateKey(new Date(nextYear, 11, 31)), // December 31
+                name: 'Παραμονή Πρωτοχρονιάς'
+            });
+            
+            // January 1 - year after next
+            defaultHolidays.push({
+                date: formatDateKey(new Date(nextYear + 1, 0, 1)), // January 1
+                name: 'Πρωτοχρονιά'
+            });
+            
+            // Calculate Orthodox Easter for current year and next year
+            for (let year = currentYear; year <= nextYear; year++) {
+                const orthodoxHolidays = calculateOrthodoxHolidays(year);
+                
+                // Great Saturday (1 day before Easter)
+                const greatSaturday = new Date(orthodoxHolidays.easterSunday);
+                greatSaturday.setDate(greatSaturday.getDate() - 1);
+                defaultHolidays.push({
+                    date: formatDateKey(greatSaturday),
+                    name: 'Μεγάλο Σάββατο'
+                });
+                
+                // Easter Sunday
+                defaultHolidays.push({
+                    date: formatDateKey(orthodoxHolidays.easterSunday),
+                    name: 'Πάσχα'
+                });
+            }
+            
+            // Add default holidays if they don't already exist
+            let hasChanges = false;
+            defaultHolidays.forEach(defaultHoliday => {
+                const exists = specialHolidays.some(h => h.date === defaultHoliday.date);
+                if (!exists) {
+                    specialHolidays.push(defaultHoliday);
+                    hasChanges = true;
+                }
+            });
+            
+            // Sort by date
+            if (hasChanges) {
+                specialHolidays.sort((a, b) => a.date.localeCompare(b.date));
+                // Save to Firebase and localStorage
+                saveData();
+            }
         }
 
         // Render special holidays
