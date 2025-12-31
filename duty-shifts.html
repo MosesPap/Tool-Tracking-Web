@@ -448,6 +448,21 @@
             <div id="specialHolidaysList"></div>
         </div>
 
+        <!-- Recurring Special Holidays Configuration -->
+        <div class="holiday-list">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5><i class="fas fa-cog me-2"></i>Ρυθμίσεις Επαναλαμβανόμενων Ειδικών Αργιών</h5>
+                <button class="btn btn-info btn-sm" onclick="addRecurringHoliday()">
+                    <i class="fas fa-plus me-1"></i>Προσθήκη Επαναλαμβανόμενης
+                </button>
+            </div>
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                <small>Ορίστε αργίες που επαναλαμβάνονται κάθε χρόνο (π.χ., 25 Δεκεμβρίου, 1 Ιανουαρίου) ή σχετίζονται με το Πάσχα (π.χ., Μεγάλο Σάββατο).</small>
+            </div>
+            <div id="recurringHolidaysList"></div>
+        </div>
+
         <!-- Regular Holidays Section -->
         <div class="holiday-list">
             <div class="d-flex justify-content-between align-items-center mb-3">
@@ -530,6 +545,62 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
                     <button type="button" class="btn btn-warning" onclick="saveSpecialHoliday()">Προσθήκη Ειδικής Αργίας</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Recurring Holiday Modal -->
+    <div class="modal fade" id="addRecurringHolidayModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-info">
+                    <h5 class="modal-title"><i class="fas fa-repeat me-2"></i>Προσθήκη Επαναλαμβανόμενης Αργίας</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="recurringHolidayType" class="form-label">Τύπος</label>
+                        <select class="form-control" id="recurringHolidayType" onchange="toggleRecurringHolidayFields()">
+                            <option value="fixed">Σταθερή Ημερομηνία (π.χ., 25 Δεκεμβρίου)</option>
+                            <option value="easter-relative">Σχετική με Πάσχα (π.χ., Μεγάλο Σάββατο)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="fixedDateFields">
+                        <label for="recurringHolidayMonth" class="form-label">Μήνας</label>
+                        <select class="form-control" id="recurringHolidayMonth">
+                            <option value="">Επιλέξτε...</option>
+                            <option value="1">Ιανουάριος</option>
+                            <option value="2">Φεβρουάριος</option>
+                            <option value="3">Μάρτιος</option>
+                            <option value="4">Απρίλιος</option>
+                            <option value="5">Μάιος</option>
+                            <option value="6">Ιούνιος</option>
+                            <option value="7">Ιούλιος</option>
+                            <option value="8">Αύγουστος</option>
+                            <option value="9">Σεπτέμβριος</option>
+                            <option value="10">Οκτώβριος</option>
+                            <option value="11">Νοέμβριος</option>
+                            <option value="12">Δεκέμβριος</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="fixedDayFields">
+                        <label for="recurringHolidayDay" class="form-label">Ημέρα</label>
+                        <input type="number" class="form-control" id="recurringHolidayDay" min="1" max="31">
+                    </div>
+                    <div class="mb-3" id="easterOffsetFields" style="display: none;">
+                        <label for="recurringHolidayEasterOffset" class="form-label">Ημέρες από το Πάσχα</label>
+                        <input type="number" class="form-control" id="recurringHolidayEasterOffset" value="0">
+                        <small class="text-muted">0 = Πάσχα, -1 = 1 ημέρα πριν, 1 = 1 ημέρα μετά, κτλ.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="recurringHolidayName" class="form-label">Όνομα Αργίας</label>
+                        <input type="text" class="form-control" id="recurringHolidayName" placeholder="π.χ., Χριστούγεννα, Μεγάλο Σάββατο">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-info" onclick="saveRecurringHoliday()">Αποθήκευση</button>
                 </div>
             </div>
         </div>
@@ -648,6 +719,17 @@
         let currentDate = new Date();
         let currentGroup = null;
         let selectedDateForDuty = null;
+        
+        // Configuration for recurring special holidays
+        // Format: { month: 1-12, day: 1-31, name: string, type: 'fixed' | 'easter-relative', offset?: number }
+        let recurringSpecialHolidays = [
+            { month: 12, day: 24, name: 'Παραμονή Χριστουγέννων', type: 'fixed' },
+            { month: 12, day: 25, name: 'Χριστούγεννα', type: 'fixed' },
+            { month: 12, day: 31, name: 'Παραμονή Πρωτοχρονιάς', type: 'fixed' },
+            { month: 1, day: 1, name: 'Πρωτοχρονιά', type: 'fixed' },
+            { name: 'Μεγάλο Σάββατο', type: 'easter-relative', offset: -1 }, // 1 day before Easter
+            { name: 'Πάσχα', type: 'easter-relative', offset: 0 } // Easter Sunday
+        ];
 
         // Initialize
         document.addEventListener('DOMContentLoaded', async function() {
@@ -660,6 +742,7 @@
                         renderGroups();
                         renderHolidays();
                         renderSpecialHolidays();
+                        renderRecurringHolidays();
                         renderCalendar();
                         updateStatistics();
                     } else {
@@ -668,6 +751,7 @@
                         renderGroups();
                         renderHolidays();
                         renderSpecialHolidays();
+                        renderRecurringHolidays();
                         renderCalendar();
                         updateStatistics();
                     }
@@ -724,6 +808,9 @@
                     specialHolidays = data.list || [];
                 }
                 
+                // Load recurring holidays configuration
+                await loadRecurringHolidaysConfig();
+                
                 // Initialize default special holidays if they don't exist
                 initializeDefaultSpecialHolidays();
                 
@@ -763,6 +850,9 @@
             if (savedSpecialHolidays) {
                 specialHolidays = JSON.parse(savedSpecialHolidays);
             }
+            
+            // Load recurring holidays configuration
+            loadRecurringHolidaysConfig();
             
             // Initialize default special holidays if they don't exist
             initializeDefaultSpecialHolidays();
@@ -1236,86 +1326,119 @@
             });
         }
 
-        // Initialize default special holidays
+        // Initialize default special holidays based on recurring configuration
         function initializeDefaultSpecialHolidays() {
             const currentYear = new Date().getFullYear();
-            const nextYear = currentYear + 1;
+            const yearsToCalculate = 10; // Calculate for next 10 years
             const defaultHolidays = [];
             
-            // December 24, 25, 31 - current year
-            defaultHolidays.push({
-                date: formatDateKey(new Date(currentYear, 11, 24)), // December 24
-                name: 'Παραμονή Χριστουγέννων'
-            });
-            defaultHolidays.push({
-                date: formatDateKey(new Date(currentYear, 11, 25)), // December 25
-                name: 'Χριστούγεννα'
-            });
-            defaultHolidays.push({
-                date: formatDateKey(new Date(currentYear, 11, 31)), // December 31
-                name: 'Παραμονή Πρωτοχρονιάς'
-            });
-            
-            // January 1 - next year (since December 31 is current year)
-            defaultHolidays.push({
-                date: formatDateKey(new Date(nextYear, 0, 1)), // January 1
-                name: 'Πρωτοχρονιά'
-            });
-            
-            // Also add for next year's December dates
-            defaultHolidays.push({
-                date: formatDateKey(new Date(nextYear, 11, 24)), // December 24
-                name: 'Παραμονή Χριστουγέννων'
-            });
-            defaultHolidays.push({
-                date: formatDateKey(new Date(nextYear, 11, 25)), // December 25
-                name: 'Χριστούγεννα'
-            });
-            defaultHolidays.push({
-                date: formatDateKey(new Date(nextYear, 11, 31)), // December 31
-                name: 'Παραμονή Πρωτοχρονιάς'
-            });
-            
-            // January 1 - year after next
-            defaultHolidays.push({
-                date: formatDateKey(new Date(nextYear + 1, 0, 1)), // January 1
-                name: 'Πρωτοχρονιά'
-            });
-            
-            // Calculate Orthodox Easter for current year and next year
-            for (let year = currentYear; year <= nextYear; year++) {
-                const orthodoxHolidays = calculateOrthodoxHolidays(year);
-                
-                // Great Saturday (1 day before Easter)
-                const greatSaturday = new Date(orthodoxHolidays.easterSunday);
-                greatSaturday.setDate(greatSaturday.getDate() - 1);
-                defaultHolidays.push({
-                    date: formatDateKey(greatSaturday),
-                    name: 'Μεγάλο Σάββατο'
-                });
-                
-                // Easter Sunday
-                defaultHolidays.push({
-                    date: formatDateKey(orthodoxHolidays.easterSunday),
-                    name: 'Πάσχα'
-                });
-            }
-            
-            // Add default holidays if they don't already exist
-            let hasChanges = false;
-            defaultHolidays.forEach(defaultHoliday => {
-                const exists = specialHolidays.some(h => h.date === defaultHoliday.date);
-                if (!exists) {
-                    specialHolidays.push(defaultHoliday);
-                    hasChanges = true;
+            // Process each recurring holiday definition
+            recurringSpecialHolidays.forEach(holidayDef => {
+                if (holidayDef.type === 'fixed') {
+                    // Fixed date holidays (month + day)
+                    for (let year = currentYear; year <= currentYear + yearsToCalculate; year++) {
+                        const date = new Date(year, holidayDef.month - 1, holidayDef.day);
+                        const dateKey = formatDateKey(date);
+                        
+                        // Check if already exists
+                        if (!specialHolidays.some(h => h.date === dateKey)) {
+                            defaultHolidays.push({
+                                date: dateKey,
+                                name: holidayDef.name
+                            });
+                        }
+                    }
+                } else if (holidayDef.type === 'easter-relative') {
+                    // Movable holidays based on Orthodox Easter
+                    for (let year = currentYear; year <= currentYear + yearsToCalculate; year++) {
+                        const orthodoxHolidays = calculateOrthodoxHolidays(year);
+                        const easterDate = orthodoxHolidays.easterSunday;
+                        
+                        const holidayDate = new Date(easterDate);
+                        holidayDate.setDate(holidayDate.getDate() + (holidayDef.offset || 0));
+                        
+                        const dateKey = formatDateKey(holidayDate);
+                        
+                        // Check if already exists
+                        if (!specialHolidays.some(h => h.date === dateKey)) {
+                            defaultHolidays.push({
+                                date: dateKey,
+                                name: holidayDef.name
+                            });
+                        }
+                    }
                 }
             });
             
-            // Sort by date
-            if (hasChanges) {
+            // Add default holidays if they don't already exist
+            if (defaultHolidays.length > 0) {
+                defaultHolidays.forEach(defaultHoliday => {
+                    specialHolidays.push(defaultHoliday);
+                });
+                
+                // Sort by date
                 specialHolidays.sort((a, b) => a.date.localeCompare(b.date));
                 // Save to Firebase and localStorage
                 saveData();
+            }
+        }
+        
+        // Load recurring holidays configuration
+        async function loadRecurringHolidaysConfig() {
+            try {
+                if (window.db) {
+                    const db = window.db || firebase.firestore();
+                    const user = window.auth?.currentUser;
+                    
+                    if (user) {
+                        const doc = await db.collection('dutyShifts').doc('recurringSpecialHolidays').get();
+                        if (doc.exists) {
+                            const data = doc.data();
+                            recurringSpecialHolidays = data.list || recurringSpecialHolidays;
+                        }
+                    }
+                }
+                
+                // Fallback to localStorage
+                const saved = localStorage.getItem('dutyShiftsRecurringHolidays');
+                if (saved) {
+                    recurringSpecialHolidays = JSON.parse(saved);
+                }
+            } catch (error) {
+                console.error('Error loading recurring holidays config:', error);
+                const saved = localStorage.getItem('dutyShiftsRecurringHolidays');
+                if (saved) {
+                    recurringSpecialHolidays = JSON.parse(saved);
+                }
+            }
+        }
+        
+        // Save recurring holidays configuration to Firebase
+        async function saveRecurringHolidaysConfig() {
+            try {
+                if (!window.db) {
+                    localStorage.setItem('dutyShiftsRecurringHolidays', JSON.stringify(recurringSpecialHolidays));
+                    return;
+                }
+                
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                
+                if (!user) {
+                    localStorage.setItem('dutyShiftsRecurringHolidays', JSON.stringify(recurringSpecialHolidays));
+                    return;
+                }
+                
+                await db.collection('dutyShifts').doc('recurringSpecialHolidays').set({
+                    list: recurringSpecialHolidays,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
+                
+                localStorage.setItem('dutyShiftsRecurringHolidays', JSON.stringify(recurringSpecialHolidays));
+            } catch (error) {
+                console.error('Error saving recurring holidays config:', error);
+                localStorage.setItem('dutyShiftsRecurringHolidays', JSON.stringify(recurringSpecialHolidays));
             }
         }
 
@@ -1398,6 +1521,133 @@
             if (confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την ειδική αργία;')) {
                 specialHolidays.splice(index, 1);
                 saveData();
+                renderSpecialHolidays();
+                renderCalendar();
+            }
+        }
+
+        // Toggle recurring holiday fields based on type
+        function toggleRecurringHolidayFields() {
+            const type = document.getElementById('recurringHolidayType').value;
+            const fixedFields = document.getElementById('fixedDateFields');
+            const fixedDayFields = document.getElementById('fixedDayFields');
+            const easterFields = document.getElementById('easterOffsetFields');
+            
+            if (type === 'fixed') {
+                fixedFields.style.display = 'block';
+                fixedDayFields.style.display = 'block';
+                easterFields.style.display = 'none';
+            } else {
+                fixedFields.style.display = 'none';
+                fixedDayFields.style.display = 'none';
+                easterFields.style.display = 'block';
+            }
+        }
+
+        // Render recurring holidays configuration
+        function renderRecurringHolidays() {
+            const container = document.getElementById('recurringHolidaysList');
+            if (!container) return;
+            
+            container.innerHTML = '';
+            
+            if (recurringSpecialHolidays.length === 0) {
+                container.innerHTML = '<p class="text-muted text-center">Δεν έχουν οριστεί επαναλαμβανόμενες αργίες</p>';
+                return;
+            }
+            
+            recurringSpecialHolidays.forEach((holiday, index) => {
+                const holidayDiv = document.createElement('div');
+                holidayDiv.className = 'holiday-item';
+                holidayDiv.style.borderLeft = '4px solid #17a2b8';
+                
+                let displayText = '';
+                if (holiday.type === 'fixed') {
+                    const monthNames = ['Ιανουαρίου', 'Φεβρουαρίου', 'Μαρτίου', 'Απριλίου', 'Μαΐου', 'Ιουνίου', 
+                                       'Ιουλίου', 'Αυγούστου', 'Σεπτεμβρίου', 'Οκτωβρίου', 'Νοεμβρίου', 'Δεκεμβρίου'];
+                    displayText = `${holiday.day} ${monthNames[holiday.month - 1]} - ${holiday.name}`;
+                } else if (holiday.type === 'easter-relative') {
+                    const offsetText = holiday.offset === 0 ? 'Πάσχα' : 
+                                      holiday.offset === -1 ? '1 ημέρα πριν το Πάσχα' :
+                                      holiday.offset === 1 ? '1 ημέρα μετά το Πάσχα' :
+                                      `${holiday.offset} ημέρες ${holiday.offset > 0 ? 'μετά' : 'πριν'} το Πάσχα`;
+                    displayText = `${holiday.name} (${offsetText})`;
+                }
+                
+                holidayDiv.innerHTML = `
+                    <div>
+                        <strong><i class="fas fa-repeat text-info me-1"></i>${displayText}</strong>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeRecurringHoliday(${index})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                `;
+                container.appendChild(holidayDiv);
+            });
+        }
+
+        // Add recurring holiday
+        function addRecurringHoliday() {
+            document.getElementById('recurringHolidayType').value = 'fixed';
+            document.getElementById('recurringHolidayMonth').value = '';
+            document.getElementById('recurringHolidayDay').value = '';
+            document.getElementById('recurringHolidayEasterOffset').value = '0';
+            document.getElementById('recurringHolidayName').value = '';
+            toggleRecurringHolidayFields();
+            const modal = new bootstrap.Modal(document.getElementById('addRecurringHolidayModal'));
+            modal.show();
+        }
+
+        // Save recurring holiday
+        function saveRecurringHoliday() {
+            const type = document.getElementById('recurringHolidayType').value;
+            const name = document.getElementById('recurringHolidayName').value.trim();
+            
+            if (!name) {
+                alert('Παρακαλώ εισάγετε όνομα');
+                return;
+            }
+            
+            let holidayDef = { name: name, type: type };
+            
+            if (type === 'fixed') {
+                const month = parseInt(document.getElementById('recurringHolidayMonth').value);
+                const day = parseInt(document.getElementById('recurringHolidayDay').value);
+                
+                if (!month || !day) {
+                    alert('Παρακαλώ επιλέξτε μήνα και ημέρα');
+                    return;
+                }
+                
+                holidayDef.month = month;
+                holidayDef.day = day;
+            } else if (type === 'easter-relative') {
+                const offset = parseInt(document.getElementById('recurringHolidayEasterOffset').value) || 0;
+                holidayDef.offset = offset;
+            }
+            
+            recurringSpecialHolidays.push(holidayDef);
+            saveRecurringHolidaysConfig();
+            renderRecurringHolidays();
+            
+            // Regenerate special holidays for all years
+            initializeDefaultSpecialHolidays();
+            renderSpecialHolidays();
+            renderCalendar();
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addRecurringHolidayModal'));
+            modal.hide();
+        }
+
+        // Remove recurring holiday
+        function removeRecurringHoliday(index) {
+            if (confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την επαναλαμβανόμενη αργία;')) {
+                recurringSpecialHolidays.splice(index, 1);
+                saveRecurringHolidaysConfig();
+                renderRecurringHolidays();
+                
+                // Regenerate special holidays
+                initializeDefaultSpecialHolidays();
                 renderSpecialHolidays();
                 renderCalendar();
             }
