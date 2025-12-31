@@ -677,6 +677,80 @@
         </div>
     </div>
 
+    <!-- Missing Period Modal -->
+    <div class="modal fade" id="missingPeriodModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title"><i class="fas fa-calendar-times me-2"></i>Διαχείριση Περιόδων Απουσίας</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <strong>Άτομο:</strong> <span id="missingPeriodPersonName"></span>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <small>Κατά την περίοδο απουσίας, το άτομο θα παραλείπεται από τις αναθέσεις υπηρεσιών, αλλά η εναλλαγή θα συνεχίζει να υπολογίζεται κανονικά.</small>
+                    </div>
+                    <div class="mb-3">
+                        <h6>Προσθήκη Νέας Περιόδου Απουσίας</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="missingPeriodStart" class="form-label">Ημερομηνία Έναρξης</label>
+                                <input type="date" class="form-control" id="missingPeriodStart" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="missingPeriodEnd" class="form-label">Ημερομηνία Λήξης</label>
+                                <input type="date" class="form-control" id="missingPeriodEnd" required>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="addMissingPeriod()">
+                            <i class="fas fa-plus me-1"></i>Προσθήκη Περιόδου
+                        </button>
+                    </div>
+                    <hr>
+                    <div class="mb-3">
+                        <h6>Υπάρχουσες Περίοδοι Απουσίας</h6>
+                        <div id="missingPeriodsList"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transfer Person Position Modal -->
+    <div class="modal fade" id="transferPositionModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary">
+                    <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Τοποθέτηση Ατόμου σε Νέα Ομάδα</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <small>Βρείτε άτομα από την νέα ομάδα που είχαν υπηρεσία την ίδια ημέρα με το άτομο που μεταφέρεται και τοποθετήστε το πάνω ή κάτω από αυτά σε κάθε λίστα.</small>
+                    </div>
+                    <div class="mb-3">
+                        <strong>Άτομο που μεταφέρεται:</strong> <span id="transferPersonName"></span><br>
+                        <strong>Από Ομάδα:</strong> <span id="transferFromGroup"></span> → <strong>Σε Ομάδα:</strong> <span id="transferToGroup"></span>
+                    </div>
+                    <div id="transferPositionLists"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-primary" onclick="completeTransfer()">
+                        <i class="fas fa-check me-1"></i>Ολοκλήρωση Μεταφοράς
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Day Details Modal -->
     <div class="modal fade" id="dayDetailsModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -752,12 +826,12 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Data storage - each group has four order lists: special, weekend, semi, normal
-        // Each person also has last duty dates for each type
+        // Each person also has last duty dates for each type and missing periods
         let groups = {
-            1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} },
-            2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} },
-            3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} },
-            4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} }
+            1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} },
+            2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} },
+            3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} },
+            4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} }
         };
         let holidays = [];
         let specialHolidays = []; // User-defined special holidays
@@ -977,10 +1051,10 @@
             if (!data) return null;
             
             const migrated = {
-                1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} },
-                2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} },
-                3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} },
-                4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} }
+                1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} },
+                2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} },
+                3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} },
+                4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} }
             };
             
             for (let i = 1; i <= 4; i++) {
@@ -1007,6 +1081,7 @@
                         migrated[i].semi = data[i].semi || [];
                         migrated[i].normal = data[i].normal || [];
                         migrated[i].lastDuties = data[i].lastDuties || {};
+                        migrated[i].missingPeriods = data[i].missingPeriods || {};
                     } else {
                         // Fallback
                         const people = data[i].people || [];
@@ -1014,6 +1089,7 @@
                         migrated[i].weekend = [...people];
                         migrated[i].semi = [...people];
                         migrated[i].normal = [...people];
+                        migrated[i].missingPeriods = {};
                     }
                 }
             }
@@ -1117,9 +1193,21 @@
             personDiv.dataset.index = index;
             personDiv.dataset.listType = listType;
             
+            // Check if person is currently missing
+            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
+            const missingPeriods = groupData.missingPeriods?.[person] || [];
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const isCurrentlyMissing = missingPeriods.some(period => {
+                const start = new Date(period.start + 'T00:00:00');
+                const end = new Date(period.end + 'T00:00:00');
+                return today >= start && today <= end;
+            });
+            const missingBadge = isCurrentlyMissing ? '<span class="badge bg-warning ms-2"><i class="fas fa-user-slash me-1"></i>Απουσία</span>' : '';
+            
             personDiv.innerHTML = `
                 <span class="person-name">
-                    <i class="fas fa-grip-vertical text-muted me-2" style="cursor: move;"></i>${person}
+                    <i class="fas fa-grip-vertical text-muted me-2" style="cursor: move;"></i>${person}${missingBadge}
                 </span>
                 <div class="person-actions">
                     <div class="btn-group btn-group-sm" role="group">
@@ -1130,6 +1218,9 @@
                             <i class="fas fa-arrow-down"></i>
                         </button>
                     </div>
+                    <button class="btn btn-sm btn-outline-warning" onclick="openMissingPeriodModal(${groupNum}, '${person.replace(/'/g, "\\'")}')" title="Διαχείριση Περιόδων Απουσίας">
+                        <i class="fas fa-calendar-times"></i>
+                    </button>
                     <div class="transfer-dropdown">
                         <button class="btn btn-sm btn-outline-primary" onclick="toggleTransferDropdown(${groupNum}, ${index}, '${listType}', event)">
                             <i class="fas fa-exchange-alt"></i>
@@ -1344,57 +1435,298 @@
             dropdown.classList.toggle('show');
         }
 
-        // Transfer person to another group
+        // Global variables for transfer
+        let transferData = {
+            person: null,
+            fromGroup: null,
+            toGroup: null,
+            lastDuties: null,
+            missingPeriods: null,
+            positions: {} // { listType: { referencePerson: string, position: 'above'|'below'|'end' } }
+        };
+
+        // Transfer person to another group - opens positioning modal
         function transferPerson(fromGroup, index, toGroup, listType) {
             const list = groups[fromGroup][listType];
             const person = list[index];
             
             if (!person) return;
             
-            // Remove from current group's all lists
-            const allListTypes = ['special', 'weekend', 'semi', 'normal'];
-            allListTypes.forEach(lt => {
-                const currentList = groups[fromGroup][lt] || [];
-                const currentIndex = currentList.indexOf(person);
-                if (currentIndex !== -1) {
-                    currentList.splice(currentIndex, 1);
-                }
-            });
-            
-            // Transfer last duties if exists
-            const lastDuties = groups[fromGroup].lastDuties?.[person];
-            
-            // Add to target group (all lists)
-            if (!groups[toGroup]) {
-                groups[toGroup] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
-            }
-            allListTypes.forEach(lt => {
-                if (!groups[toGroup][lt]) groups[toGroup][lt] = [];
-                if (!groups[toGroup][lt].includes(person)) {
-                    groups[toGroup][lt].push(person);
-                }
-            });
-            
-            // Transfer last duties
-            if (!groups[toGroup].lastDuties) groups[toGroup].lastDuties = {};
-            if (lastDuties) {
-                groups[toGroup].lastDuties[person] = lastDuties;
-            }
-            
-            // Remove last duties from source group if person is completely removed
-            const stillInSourceGroup = allListTypes.some(lt => (groups[fromGroup][lt] || []).includes(person));
-            if (!stillInSourceGroup && groups[fromGroup].lastDuties) {
-                delete groups[fromGroup].lastDuties[person];
-            }
+            // Store transfer data
+            transferData.person = person;
+            transferData.fromGroup = fromGroup;
+            transferData.toGroup = toGroup;
+            transferData.lastDuties = groups[fromGroup].lastDuties?.[person] || null;
+            transferData.missingPeriods = groups[fromGroup].missingPeriods?.[person] || null;
+            transferData.positions = {};
             
             // Close dropdown
             document.querySelectorAll('.transfer-dropdown-content').forEach(dropdown => {
                 dropdown.classList.remove('show');
             });
             
+            // Open positioning modal
+            openTransferPositionModal();
+        }
+
+        // Open transfer position modal
+        function openTransferPositionModal() {
+            document.getElementById('transferPersonName').textContent = transferData.person;
+            document.getElementById('transferFromGroup').textContent = transferData.fromGroup;
+            document.getElementById('transferToGroup').textContent = transferData.toGroup;
+            
+            // Find people from target group who had duty on same days
+            const sameDayPeople = findPeopleWithSameDutyDays(transferData.person, transferData.fromGroup, transferData.toGroup);
+            
+            // Render positioning options for each list type
+            renderTransferPositionLists(sameDayPeople);
+            
+            const modal = new bootstrap.Modal(document.getElementById('transferPositionModal'));
+            modal.show();
+        }
+
+        // Find people from target group who had duty on same days as the person being transferred
+        function findPeopleWithSameDutyDays(person, fromGroup, toGroup) {
+            const sameDayPeople = {
+                special: [],
+                weekend: [],
+                semi: [],
+                normal: []
+            };
+            
+            // Get all days where person had duty
+            const personDutyDays = [];
+            for (const [dayKey, assignment] of Object.entries(dutyAssignments)) {
+                if (assignment.includes(`${person} (Ομάδα ${fromGroup})`)) {
+                    personDutyDays.push(dayKey);
+                }
+            }
+            
+            if (personDutyDays.length === 0) {
+                return sameDayPeople; // No duty days found
+            }
+            
+            // For each day type, find people from target group who had duty on same days
+            const targetGroupData = groups[toGroup] || { special: [], weekend: [], semi: [], normal: [] };
+            
+            personDutyDays.forEach(dayKey => {
+                const dayDate = new Date(dayKey + 'T00:00:00');
+                const dayType = getDayType(dayDate);
+                let dayTypeCategory = 'normal';
+                
+                if (dayType === 'special-holiday') {
+                    dayTypeCategory = 'special';
+                } else if (dayType === 'semi-normal-day') {
+                    dayTypeCategory = 'semi';
+                } else if (dayType === 'weekend-holiday') {
+                    dayTypeCategory = 'weekend';
+                }
+                
+                // Check if anyone from target group had duty on this day
+                const assignment = dutyAssignments[dayKey];
+                if (assignment) {
+                    const targetGroupPeople = targetGroupData[dayTypeCategory] || [];
+                    targetGroupPeople.forEach(targetPerson => {
+                        if (assignment.includes(`${targetPerson} (Ομάδα ${toGroup})`)) {
+                            if (!sameDayPeople[dayTypeCategory].includes(targetPerson)) {
+                                sameDayPeople[dayTypeCategory].push(targetPerson);
+                            }
+                        }
+                    });
+                }
+            });
+            
+            return sameDayPeople;
+        }
+
+        // Render positioning lists for transfer
+        function renderTransferPositionLists(sameDayPeople) {
+            const container = document.getElementById('transferPositionLists');
+            const listTypes = [
+                { type: 'special', label: 'Ειδικές Αργίες', icon: 'fa-star' },
+                { type: 'weekend', label: 'Σαββατοκύριακα/Αργίες', icon: 'fa-calendar-week' },
+                { type: 'semi', label: 'Ημιαργίες', icon: 'fa-calendar-alt' },
+                { type: 'normal', label: 'Καθημερινές', icon: 'fa-calendar-day' }
+            ];
+            
+            const targetGroupData = groups[transferData.toGroup] || { special: [], weekend: [], semi: [], normal: [] };
+            
+            container.innerHTML = listTypes.map(({ type, label, icon }) => {
+                const list = targetGroupData[type] || [];
+                const sameDayPeopleList = sameDayPeople[type] || [];
+                
+                let optionsHtml = '';
+                
+                if (sameDayPeopleList.length > 0) {
+                    // Show people who had duty on same days
+                    optionsHtml = `
+                        <div class="mb-2">
+                            <small class="text-muted">Άτομα με υπηρεσία την ίδια ημέρα:</small>
+                            <div class="btn-group-vertical w-100" role="group">
+                                ${sameDayPeopleList.map(refPerson => {
+                                    return `
+                                        <div class="btn-group mb-1" role="group">
+                                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="setTransferPosition('${type}', '${refPerson.replace(/'/g, "\\'")}', 'above')">
+                                                <i class="fas fa-arrow-up me-1"></i>Πάνω από ${refPerson}
+                                            </button>
+                                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="setTransferPosition('${type}', '${refPerson.replace(/'/g, "\\'")}', 'below')">
+                                                <i class="fas fa-arrow-down me-1"></i>Κάτω από ${refPerson}
+                                            </button>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Show option to add at end
+                optionsHtml += `
+                    <div class="mb-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="setTransferPosition('${type}', null, 'end')">
+                            <i class="fas fa-plus me-1"></i>Προσθήκη στο τέλος
+                        </button>
+                    </div>
+                `;
+                
+                // Show current selection
+                const currentPosition = transferData.positions[type];
+                let positionDisplay = '<small class="text-muted">Δεν έχει επιλεγεί</small>';
+                if (currentPosition) {
+                    if (currentPosition.position === 'end') {
+                        positionDisplay = '<small class="text-success"><i class="fas fa-check me-1"></i>Θα προστεθεί στο τέλος</small>';
+                    } else {
+                        const positionText = currentPosition.position === 'above' ? 'πάνω' : 'κάτω';
+                        positionDisplay = `<small class="text-success"><i class="fas fa-check me-1"></i>Θα τοποθετηθεί ${positionText} από ${currentPosition.referencePerson}</small>`;
+                    }
+                }
+                
+                return `
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <i class="fas ${icon} me-2"></i><strong>${label}</strong>
+                        </div>
+                        <div class="card-body">
+                            ${optionsHtml}
+                            <div class="mt-2">
+                                ${positionDisplay}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Set transfer position for a list type
+        function setTransferPosition(listType, referencePerson, position) {
+            transferData.positions[listType] = {
+                referencePerson: referencePerson,
+                position: position
+            };
+            
+            // Re-render to show updated selection
+            const sameDayPeople = findPeopleWithSameDutyDays(transferData.person, transferData.fromGroup, transferData.toGroup);
+            renderTransferPositionLists(sameDayPeople);
+        }
+
+        // Complete the transfer with selected positions
+        function completeTransfer() {
+            // Remove from current group's all lists
+            const allListTypes = ['special', 'weekend', 'semi', 'normal'];
+            allListTypes.forEach(lt => {
+                const currentList = groups[transferData.fromGroup][lt] || [];
+                const currentIndex = currentList.indexOf(transferData.person);
+                if (currentIndex !== -1) {
+                    currentList.splice(currentIndex, 1);
+                }
+            });
+            
+            // Initialize target group if needed
+            if (!groups[transferData.toGroup]) {
+                groups[transferData.toGroup] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
+            }
+            
+            // Add to target group with positioning
+            allListTypes.forEach(listType => {
+                if (!groups[transferData.toGroup][listType]) groups[transferData.toGroup][listType] = [];
+                
+                const list = groups[transferData.toGroup][listType];
+                
+                // Remove person if already exists
+                const existingIndex = list.indexOf(transferData.person);
+                if (existingIndex !== -1) {
+                    list.splice(existingIndex, 1);
+                }
+                
+                // Position person according to selection
+                const position = transferData.positions[listType];
+                if (position) {
+                    if (position.position === 'end') {
+                        // Add at end
+                        list.push(transferData.person);
+                    } else if (position.referencePerson) {
+                        // Find reference person index
+                        const refIndex = list.indexOf(position.referencePerson);
+                        if (refIndex !== -1) {
+                            if (position.position === 'above') {
+                                list.splice(refIndex, 0, transferData.person);
+                            } else { // below
+                                list.splice(refIndex + 1, 0, transferData.person);
+                            }
+                        } else {
+                            // Reference person not found, add at end
+                            list.push(transferData.person);
+                        }
+                    } else {
+                        // No valid position, add at end
+                        list.push(transferData.person);
+                    }
+                } else {
+                    // No position selected, add at end
+                    list.push(transferData.person);
+                }
+            });
+            
+            // Transfer last duties
+            if (!groups[transferData.toGroup].lastDuties) groups[transferData.toGroup].lastDuties = {};
+            if (transferData.lastDuties) {
+                groups[transferData.toGroup].lastDuties[transferData.person] = transferData.lastDuties;
+            }
+            
+            // Transfer missing periods
+            if (!groups[transferData.toGroup].missingPeriods) groups[transferData.toGroup].missingPeriods = {};
+            if (transferData.missingPeriods) {
+                groups[transferData.toGroup].missingPeriods[transferData.person] = transferData.missingPeriods;
+            }
+            
+            // Remove last duties and missing periods from source group if person is completely removed
+            const stillInSourceGroup = allListTypes.some(lt => (groups[transferData.fromGroup][lt] || []).includes(transferData.person));
+            if (!stillInSourceGroup) {
+                if (groups[transferData.fromGroup].lastDuties) {
+                    delete groups[transferData.fromGroup].lastDuties[transferData.person];
+                }
+                if (groups[transferData.fromGroup].missingPeriods) {
+                    delete groups[transferData.fromGroup].missingPeriods[transferData.person];
+                }
+            }
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('transferPositionModal'));
+            modal.hide();
+            
             saveData();
             renderGroups();
             updateStatistics();
+            
+            // Reset transfer data
+            transferData = {
+                person: null,
+                fromGroup: null,
+                toGroup: null,
+                lastDuties: null,
+                missingPeriods: null,
+                positions: {}
+            };
         }
 
         // Close dropdowns when clicking outside
@@ -2523,7 +2855,7 @@
             
             // Process each group
             for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
+                const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
                 const specialPeople = groupData.special || [];
                 const weekendPeople = groupData.weekend || [];
                 const semiPeople = groupData.semi || [];
@@ -2587,10 +2919,19 @@
                         // Logic: Each person should be on duty every N days of this specific type
                         // We need to find who has waited the longest (or is most eligible) for this day type
                         
+                        // Check if person is missing on this date
+                        const dayDate = new Date(dayKey + 'T00:00:00');
+                        
                         // First, calculate days since last duty for all people
                         const personEligibility = [];
                         for (let i = 0; i < groupPeople.length; i++) {
                             const person = groupPeople[i];
+                            
+                            // Skip if person is missing on this date
+                            if (isPersonMissingOnDate(person, groupNum, dayDate)) {
+                                continue; // Skip this person but rotation still counts them
+                            }
+                            
                             const daysSinceLastDuty = countDaysSinceLastDuty(dayKey, person, groupNum, dayTypeCategory, dayTypeLists, startDate);
                             const isEligible = daysSinceLastDuty >= rotationDays || daysSinceLastDuty === Infinity;
                             
@@ -2970,6 +3311,144 @@
             modal.hide();
             
             alert('Η ανάθεση υπηρεσίας αφαιρέθηκε επιτυχώς!');
+        }
+
+        // Check if person is missing on a specific date
+        function isPersonMissingOnDate(person, groupNum, date) {
+            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
+            const missingPeriods = groupData.missingPeriods?.[person] || [];
+            if (missingPeriods.length === 0) return false;
+            
+            const checkDate = new Date(date);
+            checkDate.setHours(0, 0, 0, 0);
+            
+            return missingPeriods.some(period => {
+                const start = new Date(period.start + 'T00:00:00');
+                const end = new Date(period.end + 'T00:00:00');
+                return checkDate >= start && checkDate <= end;
+            });
+        }
+
+        // Open missing period modal
+        let currentMissingPeriodGroup = null;
+        let currentMissingPeriodPerson = null;
+        
+        function openMissingPeriodModal(groupNum, person) {
+            currentMissingPeriodGroup = groupNum;
+            currentMissingPeriodPerson = person;
+            
+            document.getElementById('missingPeriodPersonName').textContent = person;
+            document.getElementById('missingPeriodStart').value = '';
+            document.getElementById('missingPeriodEnd').value = '';
+            
+            renderMissingPeriodsList();
+            
+            const modal = new bootstrap.Modal(document.getElementById('missingPeriodModal'));
+            modal.show();
+        }
+
+        // Render missing periods list
+        function renderMissingPeriodsList() {
+            const container = document.getElementById('missingPeriodsList');
+            const groupData = groups[currentMissingPeriodGroup] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
+            const missingPeriods = groupData.missingPeriods?.[currentMissingPeriodPerson] || [];
+            
+            if (missingPeriods.length === 0) {
+                container.innerHTML = '<p class="text-muted text-center small">Δεν υπάρχουν καταχωρημένες περιόδοι απουσίας</p>';
+                return;
+            }
+            
+            container.innerHTML = missingPeriods.map((period, index) => {
+                const startDate = new Date(period.start + 'T00:00:00');
+                const endDate = new Date(period.end + 'T00:00:00');
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const isActive = today >= startDate && today <= endDate;
+                const isPast = today > endDate;
+                const isFuture = today < startDate;
+                
+                let statusBadge = '';
+                if (isActive) statusBadge = '<span class="badge bg-warning ms-2">Ενεργή</span>';
+                else if (isPast) statusBadge = '<span class="badge bg-secondary ms-2">Παρελθούσα</span>';
+                else if (isFuture) statusBadge = '<span class="badge bg-info ms-2">Μελλοντική</span>';
+                
+                return `
+                    <div class="card mb-2">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>${formatDate(startDate)}</strong> - <strong>${formatDate(endDate)}</strong>
+                                    ${statusBadge}
+                                </div>
+                                <button class="btn btn-sm btn-outline-danger" onclick="removeMissingPeriod(${index})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Add missing period
+        function addMissingPeriod() {
+            const start = document.getElementById('missingPeriodStart').value;
+            const end = document.getElementById('missingPeriodEnd').value;
+            
+            if (!start || !end) {
+                alert('Παρακαλώ συμπληρώστε και τις δύο ημερομηνίες');
+                return;
+            }
+            
+            const startDate = new Date(start + 'T00:00:00');
+            const endDate = new Date(end + 'T00:00:00');
+            
+            if (endDate < startDate) {
+                alert('Η ημερομηνία λήξης πρέπει να είναι μετά την ημερομηνία έναρξης');
+                return;
+            }
+            
+            const groupData = groups[currentMissingPeriodGroup] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
+            if (!groupData.missingPeriods) groupData.missingPeriods = {};
+            if (!groupData.missingPeriods[currentMissingPeriodPerson]) {
+                groupData.missingPeriods[currentMissingPeriodPerson] = [];
+            }
+            
+            groupData.missingPeriods[currentMissingPeriodPerson].push({
+                start: start,
+                end: end
+            });
+            
+            // Sort periods by start date
+            groupData.missingPeriods[currentMissingPeriodPerson].sort((a, b) => {
+                return new Date(a.start) - new Date(b.start);
+            });
+            
+            document.getElementById('missingPeriodStart').value = '';
+            document.getElementById('missingPeriodEnd').value = '';
+            
+            saveData();
+            renderMissingPeriodsList();
+            renderGroups();
+        }
+
+        // Remove missing period
+        function removeMissingPeriod(index) {
+            if (!confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την περίοδο απουσίας;')) {
+                return;
+            }
+            
+            const groupData = groups[currentMissingPeriodGroup] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
+            if (groupData.missingPeriods && groupData.missingPeriods[currentMissingPeriodPerson]) {
+                groupData.missingPeriods[currentMissingPeriodPerson].splice(index, 1);
+                if (groupData.missingPeriods[currentMissingPeriodPerson].length === 0) {
+                    delete groupData.missingPeriods[currentMissingPeriodPerson];
+                }
+            }
+            
+            saveData();
+            renderMissingPeriodsList();
+            renderGroups();
         }
 
         // Update statistics
