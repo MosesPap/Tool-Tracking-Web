@@ -349,7 +349,7 @@
     <div class="container-fluid">
         <!-- Statistics Card -->
         <div class="stats-card">
-            <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Στατιστικά Περιστροφής</h5>
+            <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Στατιστικά Εναλλαγής</h5>
             <div class="stats-grid">
                 <div class="stat-item">
                     <div class="stat-value" id="totalPeople">0</div>
@@ -357,7 +357,7 @@
                 </div>
                 <div class="stat-item">
                     <div class="stat-value" id="avgRotation">0</div>
-                    <div class="stat-label">Μέσες Ημέρες Περιστροφής</div>
+                    <div class="stat-label">Μέσες Ημέρες Εναλλαγής</div>
                 </div>
             </div>
         </div>
@@ -376,7 +376,7 @@
                     </div>
                     <div id="group1People"></div>
                     <div class="mt-2">
-                        <small class="text-muted">Περιστροφή: <span id="group1Rotation">-</span> ημέρες</small>
+                        <small class="text-muted">Εναλλαγή: <span id="group1Rotation">-</span> ημέρες</small>
                     </div>
                 </div>
             </div>
@@ -393,7 +393,7 @@
                     </div>
                     <div id="group2People"></div>
                     <div class="mt-2">
-                        <small class="text-muted">Περιστροφή: <span id="group2Rotation">-</span> ημέρες</small>
+                        <small class="text-muted">Εναλλαγή: <span id="group2Rotation">-</span> ημέρες</small>
                     </div>
                 </div>
             </div>
@@ -410,7 +410,7 @@
                     </div>
                     <div id="group3People"></div>
                     <div class="mt-2">
-                        <small class="text-muted">Περιστροφή: <span id="group3Rotation">-</span> ημέρες</small>
+                        <small class="text-muted">Εναλλαγή: <span id="group3Rotation">-</span> ημέρες</small>
                     </div>
                 </div>
             </div>
@@ -427,7 +427,7 @@
                     </div>
                     <div id="group4People"></div>
                     <div class="mt-2">
-                        <small class="text-muted">Περιστροφή: <span id="group4Rotation">-</span> ημέρες</small>
+                        <small class="text-muted">Εναλλαγή: <span id="group4Rotation">-</span> ημέρες</small>
                     </div>
                 </div>
             </div>
@@ -495,6 +495,27 @@
                     <div class="mb-3">
                         <label for="personName" class="form-label">Όνομα</label>
                         <input type="text" class="form-control" id="personName" placeholder="Εισάγετε το όνομά του ατόμου">
+                    </div>
+                    <div class="alert alert-info">
+                        <small><i class="fas fa-info-circle me-1"></i>Εισάγετε την τελευταία ημερομηνία υπηρεσίας για κάθε τύπο ημέρας (προαιρετικό)</small>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="lastSpecialDuty" class="form-label">Τελευταία Ειδική Αργία</label>
+                            <input type="date" class="form-control" id="lastSpecialDuty">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="lastWeekendDuty" class="form-label">Τελευταία Σαββατοκύριακο/Αργία</label>
+                            <input type="date" class="form-control" id="lastWeekendDuty">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="lastSemiDuty" class="form-label">Τελευταία Ημιαργία</label>
+                            <input type="date" class="form-control" id="lastSemiDuty">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="lastNormalDuty" class="form-label">Τελευταία Καθημερινή</label>
+                            <input type="date" class="form-control" id="lastNormalDuty">
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -730,12 +751,13 @@
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Data storage - each group has two order lists: regular and special
+        // Data storage - each group has four order lists: special, weekend, semi, normal
+        // Each person also has last duty dates for each type
         let groups = {
-            1: { regular: [], special: [] },
-            2: { regular: [], special: [] },
-            3: { regular: [], special: [] },
-            4: { regular: [], special: [] }
+            1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} },
+            2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} },
+            3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} },
+            4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} }
         };
         let holidays = [];
         let specialHolidays = []; // User-defined special holidays
@@ -955,51 +977,67 @@
             if (!data) return null;
             
             const migrated = {
-                1: { regular: [], special: [] },
-                2: { regular: [], special: [] },
-                3: { regular: [], special: [] },
-                4: { regular: [], special: [] }
+                1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} },
+                2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} },
+                3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} },
+                4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {} }
             };
             
             for (let i = 1; i <= 4; i++) {
                 if (Array.isArray(data[i])) {
-                    // Old format - array of names
-                    migrated[i].regular = [...data[i]];
-                    migrated[i].special = [...data[i]];
+                    // Old format - array of names, copy to all lists
+                    const people = [...data[i]];
+                    migrated[i].special = [...people];
+                    migrated[i].weekend = [...people];
+                    migrated[i].semi = [...people];
+                    migrated[i].normal = [...people];
                 } else if (data[i] && typeof data[i] === 'object') {
-                    // New format or partial migration
-                    migrated[i].regular = data[i].regular || data[i].people || [];
-                    migrated[i].special = data[i].special || data[i].people || [];
+                    // Check if old format (regular/special) or new format
+                    if (data[i].regular || data[i].special) {
+                        // Old format with regular/special
+                        const allPeople = [...new Set([...(data[i].regular || []), ...(data[i].special || [])])];
+                        migrated[i].special = [...allPeople];
+                        migrated[i].weekend = [...allPeople];
+                        migrated[i].semi = [...allPeople];
+                        migrated[i].normal = [...allPeople];
+                    } else if (data[i].special || data[i].weekend || data[i].semi || data[i].normal) {
+                        // New format - copy as is
+                        migrated[i].special = data[i].special || [];
+                        migrated[i].weekend = data[i].weekend || [];
+                        migrated[i].semi = data[i].semi || [];
+                        migrated[i].normal = data[i].normal || [];
+                        migrated[i].lastDuties = data[i].lastDuties || {};
+                    } else {
+                        // Fallback
+                        const people = data[i].people || [];
+                        migrated[i].special = [...people];
+                        migrated[i].weekend = [...people];
+                        migrated[i].semi = [...people];
+                        migrated[i].normal = [...people];
+                    }
                 }
             }
             
             return migrated;
         }
 
-        // Render groups
+        // Render groups - shows 4 separate order lists per group
         function renderGroups() {
             for (let i = 1; i <= 4; i++) {
                 const container = document.getElementById(`group${i}People`);
                 container.innerHTML = '';
                 
-                const groupData = groups[i] || { regular: [], special: [] };
-                const regularList = groupData.regular || [];
+                const groupData = groups[i] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
                 const specialList = groupData.special || [];
+                const weekendList = groupData.weekend || [];
+                const semiList = groupData.semi || [];
+                const normalList = groupData.normal || [];
                 
-                if (regularList.length === 0 && specialList.length === 0) {
+                const allPeople = new Set([...specialList, ...weekendList, ...semiList, ...normalList]);
+                
+                if (allPeople.size === 0) {
                     container.innerHTML = '<p class="text-muted text-center">Δεν έχουν προστεθεί άτομα ακόμα</p>';
                 } else {
-                    // Regular duties order
-                    const regularDiv = document.createElement('div');
-                    regularDiv.className = 'mb-3';
-                    regularDiv.innerHTML = `
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <strong class="text-primary"><i class="fas fa-calendar-day me-1"></i>Σειρά Κανονικών Υπηρεσιών:</strong>
-                        </div>
-                        <div id="regularList_${i}"></div>
-                    `;
-                    container.appendChild(regularDiv);
-                    
                     // Special holidays order
                     const specialDiv = document.createElement('div');
                     specialDiv.className = 'mb-3';
@@ -1011,32 +1049,62 @@
                     `;
                     container.appendChild(specialDiv);
                     
-                    // Render regular list
-                    const regularContainer = document.getElementById(`regularList_${i}`);
-                    if (regularList.length === 0) {
-                        regularContainer.innerHTML = '<p class="text-muted text-center small">Δεν υπάρχουν άτομα</p>';
-                    } else {
-                        regularList.forEach((person, index) => {
-                            const personDiv = createPersonItem(i, person, index, 'regular', regularList);
-                            regularContainer.appendChild(personDiv);
-                        });
-                    }
+                    // Weekend/Holiday order
+                    const weekendDiv = document.createElement('div');
+                    weekendDiv.className = 'mb-3';
+                    weekendDiv.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <strong class="text-info"><i class="fas fa-calendar-week me-1"></i>Σειρά Σαββατοκύριακων/Αργιών:</strong>
+                        </div>
+                        <div id="weekendList_${i}"></div>
+                    `;
+                    container.appendChild(weekendDiv);
                     
-                    // Render special list
-                    const specialContainer = document.getElementById(`specialList_${i}`);
-                    if (specialList.length === 0) {
-                        specialContainer.innerHTML = '<p class="text-muted text-center small">Δεν υπάρχουν άτομα</p>';
-                    } else {
-                        specialList.forEach((person, index) => {
-                            const personDiv = createPersonItem(i, person, index, 'special', specialList);
-                            specialContainer.appendChild(personDiv);
-                        });
-                    }
+                    // Ημιαργία order
+                    const semiDiv = document.createElement('div');
+                    semiDiv.className = 'mb-3';
+                    semiDiv.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <strong class="text-warning"><i class="fas fa-calendar-alt me-1"></i>Σειρά Ημιαργιών:</strong>
+                        </div>
+                        <div id="semiList_${i}"></div>
+                    `;
+                    container.appendChild(semiDiv);
+                    
+                    // Καθημερινή order
+                    const normalDiv = document.createElement('div');
+                    normalDiv.className = 'mb-3';
+                    normalDiv.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <strong class="text-primary"><i class="fas fa-calendar-day me-1"></i>Σειρά Καθημερινών:</strong>
+                        </div>
+                        <div id="normalList_${i}"></div>
+                    `;
+                    container.appendChild(normalDiv);
+                    
+                    // Render each list
+                    const lists = [
+                        { type: 'special', list: specialList, containerId: `specialList_${i}` },
+                        { type: 'weekend', list: weekendList, containerId: `weekendList_${i}` },
+                        { type: 'semi', list: semiList, containerId: `semiList_${i}` },
+                        { type: 'normal', list: normalList, containerId: `normalList_${i}` }
+                    ];
+                    
+                    lists.forEach(({ type, list, containerId }) => {
+                        const listContainer = document.getElementById(containerId);
+                        if (list.length === 0) {
+                            listContainer.innerHTML = '<p class="text-muted text-center small">Δεν υπάρχουν άτομα</p>';
+                        } else {
+                            list.forEach((person, index) => {
+                                const personDiv = createPersonItem(i, person, index, type, list);
+                                listContainer.appendChild(personDiv);
+                            });
+                        }
+                    });
                 }
                 
                 const rotationSpan = document.getElementById(`group${i}Rotation`);
-                const totalPeople = new Set([...(groupData.regular || []), ...(groupData.special || [])]).size;
-                rotationSpan.textContent = totalPeople > 0 ? totalPeople : '-';
+                rotationSpan.textContent = allPeople.size > 0 ? allPeople.size : '-';
             }
         }
 
@@ -1139,11 +1207,15 @@
             currentGroup = groupNumber;
             document.getElementById('modalGroupNumber').textContent = groupNumber;
             document.getElementById('personName').value = '';
+            document.getElementById('lastSpecialDuty').value = '';
+            document.getElementById('lastWeekendDuty').value = '';
+            document.getElementById('lastSemiDuty').value = '';
+            document.getElementById('lastNormalDuty').value = '';
             const modal = new bootstrap.Modal(document.getElementById('addPersonModal'));
             modal.show();
         }
 
-        // Save person - adds to both regular and special lists
+        // Save person - adds to all 4 lists and stores last duty dates
         function savePerson() {
             const name = document.getElementById('personName').value.trim();
             if (!name) {
@@ -1152,15 +1224,59 @@
             }
             
             if (!groups[currentGroup]) {
-                groups[currentGroup] = { regular: [], special: [] };
+                groups[currentGroup] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
             }
             
-            // Add to both lists
-            if (!groups[currentGroup].regular) groups[currentGroup].regular = [];
+            // Initialize lists if needed
             if (!groups[currentGroup].special) groups[currentGroup].special = [];
+            if (!groups[currentGroup].weekend) groups[currentGroup].weekend = [];
+            if (!groups[currentGroup].semi) groups[currentGroup].semi = [];
+            if (!groups[currentGroup].normal) groups[currentGroup].normal = [];
+            if (!groups[currentGroup].lastDuties) groups[currentGroup].lastDuties = {};
             
-            groups[currentGroup].regular.push(name);
-            groups[currentGroup].special.push(name);
+            // Get last duty dates
+            const lastSpecialDuty = document.getElementById('lastSpecialDuty').value;
+            const lastWeekendDuty = document.getElementById('lastWeekendDuty').value;
+            const lastSemiDuty = document.getElementById('lastSemiDuty').value;
+            const lastNormalDuty = document.getElementById('lastNormalDuty').value;
+            
+            // Store last duties
+            groups[currentGroup].lastDuties[name] = {
+                special: lastSpecialDuty || null,
+                weekend: lastWeekendDuty || null,
+                semi: lastSemiDuty || null,
+                normal: lastNormalDuty || null
+            };
+            
+            // Add person to all lists if not already present
+            const listTypes = ['special', 'weekend', 'semi', 'normal'];
+            listTypes.forEach(listType => {
+                if (!groups[currentGroup][listType].includes(name)) {
+                    groups[currentGroup][listType].push(name);
+                }
+            });
+            
+            // Sort each list by last duty date (most recent first, no date last)
+            listTypes.forEach(listType => {
+                groups[currentGroup][listType].sort((a, b) => {
+                    const dateA = groups[currentGroup].lastDuties[a]?.[listType];
+                    const dateB = groups[currentGroup].lastDuties[b]?.[listType];
+                    
+                    if (!dateA && !dateB) return 0; // Both have no date, maintain order
+                    if (!dateA) return 1; // A has no date, put it last
+                    if (!dateB) return -1; // B has no date, put it last
+                    
+                    // Both have dates, sort by date (most recent first)
+                    return new Date(dateB) - new Date(dateA);
+                });
+            });
+            
+            // Clear form
+            document.getElementById('personName').value = '';
+            document.getElementById('lastSpecialDuty').value = '';
+            document.getElementById('lastWeekendDuty').value = '';
+            document.getElementById('lastSemiDuty').value = '';
+            document.getElementById('lastNormalDuty').value = '';
             
             saveData();
             renderGroups();
@@ -1177,12 +1293,22 @@
                 const person = list[index];
                 list.splice(index, 1);
                 
-                // Also remove from the other list if it exists there
-                const otherListType = listType === 'regular' ? 'special' : 'regular';
-                const otherList = groups[groupNumber][otherListType];
-                const otherIndex = otherList.indexOf(person);
-                if (otherIndex !== -1) {
-                    otherList.splice(otherIndex, 1);
+                // Also remove from all other lists if it exists there
+                const allListTypes = ['special', 'weekend', 'semi', 'normal'];
+                allListTypes.forEach(otherListType => {
+                    if (otherListType !== listType) {
+                        const otherList = groups[groupNumber][otherListType] || [];
+                        const otherIndex = otherList.indexOf(person);
+                        if (otherIndex !== -1) {
+                            otherList.splice(otherIndex, 1);
+                        }
+                    }
+                });
+                
+                // Remove last duties entry if person is removed from all lists
+                const stillInAnyList = allListTypes.some(lt => (groups[groupNumber][lt] || []).includes(person));
+                if (!stillInAnyList && groups[groupNumber].lastDuties) {
+                    delete groups[groupNumber].lastDuties[person];
                 }
                 
                 saveData();
@@ -1225,26 +1351,41 @@
             
             if (!person) return;
             
-            // Remove from current group's list
-            list.splice(index, 1);
+            // Remove from current group's all lists
+            const allListTypes = ['special', 'weekend', 'semi', 'normal'];
+            allListTypes.forEach(lt => {
+                const currentList = groups[fromGroup][lt] || [];
+                const currentIndex = currentList.indexOf(person);
+                if (currentIndex !== -1) {
+                    currentList.splice(currentIndex, 1);
+                }
+            });
             
-            // Also remove from other list in same group
-            const otherListType = listType === 'regular' ? 'special' : 'regular';
-            const otherList = groups[fromGroup][otherListType];
-            const otherIndex = otherList.indexOf(person);
-            if (otherIndex !== -1) {
-                otherList.splice(otherIndex, 1);
-            }
+            // Transfer last duties if exists
+            const lastDuties = groups[fromGroup].lastDuties?.[person];
             
-            // Add to target group (both lists)
+            // Add to target group (all lists)
             if (!groups[toGroup]) {
-                groups[toGroup] = { regular: [], special: [] };
+                groups[toGroup] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
             }
-            if (!groups[toGroup].regular) groups[toGroup].regular = [];
-            if (!groups[toGroup].special) groups[toGroup].special = [];
+            allListTypes.forEach(lt => {
+                if (!groups[toGroup][lt]) groups[toGroup][lt] = [];
+                if (!groups[toGroup][lt].includes(person)) {
+                    groups[toGroup][lt].push(person);
+                }
+            });
             
-            groups[toGroup].regular.push(person);
-            groups[toGroup].special.push(person);
+            // Transfer last duties
+            if (!groups[toGroup].lastDuties) groups[toGroup].lastDuties = {};
+            if (lastDuties) {
+                groups[toGroup].lastDuties[person] = lastDuties;
+            }
+            
+            // Remove last duties from source group if person is completely removed
+            const stillInSourceGroup = allListTypes.some(lt => (groups[fromGroup][lt] || []).includes(person));
+            if (!stillInSourceGroup && groups[fromGroup].lastDuties) {
+                delete groups[fromGroup].lastDuties[person];
+            }
             
             // Close dropdown
             document.querySelectorAll('.transfer-dropdown-content').forEach(dropdown => {
@@ -2047,8 +2188,8 @@
         function getDayTypeLabel(dayType) {
             switch(dayType) {
                 case 'special-holiday': return 'Ειδική';
-                case 'normal-day': return 'Κανονική';
-                case 'semi-normal-day': return 'Ημι-Κανονική';
+                case 'normal-day': return 'Καθημερινή';
+                case 'semi-normal-day': return 'Ημιαργία';
                 case 'weekend-holiday': return 'Σαββατοκύριακο/Αργία';
                 default: return '';
             }
@@ -2222,6 +2363,42 @@
                 }
             }
             
+            // Check lastDuties data first (manually entered last duties)
+            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
+            const lastDuties = groupData.lastDuties?.[person];
+            if (lastDuties) {
+                const lastDutyDateStr = lastDuties[dayTypeCategory];
+                if (lastDutyDateStr) {
+                    const lastDutyDate = new Date(lastDutyDateStr + 'T00:00:00');
+                    const currentDate = new Date(dayKey + 'T00:00:00');
+                    
+                    // Count days of the same type between last duty and current day
+                    let sameTypeDays = 0;
+                    const tempDate = new Date(lastDutyDate);
+                    tempDate.setDate(tempDate.getDate() + 1);
+                    while (tempDate < currentDate) {
+                        const tempDayType = getDayType(tempDate);
+                        let tempTypeCategory = 'normal';
+                        if (tempDayType === 'special-holiday') {
+                            tempTypeCategory = 'special';
+                        } else if (tempDayType === 'semi-normal-day') {
+                            tempTypeCategory = 'semi';
+                        } else if (tempDayType === 'weekend-holiday') {
+                            tempTypeCategory = 'weekend';
+                        }
+                        if (tempTypeCategory === dayTypeCategory) {
+                            sameTypeDays++;
+                        }
+                        tempDate.setDate(tempDate.getDate() + 1);
+                    }
+                    
+                    // If we found a last duty date, use it (unless we found a more recent one in assignments)
+                    if (lastDutyIndex === -1 || (lastDutyDate > new Date(daysOfType[lastDutyIndex] + 'T00:00:00'))) {
+                        return sameTypeDays;
+                    }
+                }
+            }
+            
             // If startDate is provided, also check existing assignments before the start date
             if (startDate && lastDutyIndex === -1) {
                 const currentDate = new Date(dayKey + 'T00:00:00');
@@ -2346,11 +2523,13 @@
             
             // Process each group
             for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                const groupData = groups[groupNum] || { regular: [], special: [] };
-                const regularPeople = groupData.regular || [];
+                const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
                 const specialPeople = groupData.special || [];
+                const weekendPeople = groupData.weekend || [];
+                const semiPeople = groupData.semi || [];
+                const normalPeople = groupData.normal || [];
                 
-                if (regularPeople.length === 0 && specialPeople.length === 0) continue;
+                if (specialPeople.length === 0 && weekendPeople.length === 0 && semiPeople.length === 0 && normalPeople.length === 0) continue;
                 
                 // Separate days by type with priority: special > weekend > semi > normal
                 const dayTypeLists = {
@@ -2538,10 +2717,10 @@
                 // Priority 2: Weekend/Holiday days
                 assignDutiesForDayType('weekend', 2);
                 
-                // Priority 3: Semi-normal days
+                // Priority 3: Ημιαργία days
                 assignDutiesForDayType('semi', 3);
                 
-                // Priority 4: Normal days
+                // Priority 4: Καθημερινή days
                 assignDutiesForDayType('normal', 4);
                 
                 // Old loop - replaced with priority-based assignments above
@@ -2715,10 +2894,12 @@
             
             if (selectedGroup && groups[selectedGroup]) {
                 const groupData = groups[selectedGroup];
-                const regularList = groupData.regular || [];
                 const specialList = groupData.special || [];
-                // Combine both lists, removing duplicates
-                const allPeople = [...new Set([...regularList, ...specialList])];
+                const weekendList = groupData.weekend || [];
+                const semiList = groupData.semi || [];
+                const normalList = groupData.normal || [];
+                // Combine all lists, removing duplicates
+                const allPeople = [...new Set([...specialList, ...weekendList, ...semiList, ...normalList])];
                 
                 if (allPeople.length > 0) {
                     allPeople.forEach(person => {
@@ -2798,11 +2979,13 @@
             let groupCount = 0;
             
             for (let i = 1; i <= 4; i++) {
-                const groupData = groups[i] || { regular: [], special: [] };
-                const regularList = groupData.regular || [];
+                const groupData = groups[i] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
                 const specialList = groupData.special || [];
-                // Count unique people across both lists
-                const uniquePeople = new Set([...regularList, ...specialList]);
+                const weekendList = groupData.weekend || [];
+                const semiList = groupData.semi || [];
+                const normalList = groupData.normal || [];
+                // Count unique people across all lists
+                const uniquePeople = new Set([...specialList, ...weekendList, ...semiList, ...normalList]);
                 const peopleCount = uniquePeople.size;
                 
                 if (peopleCount > 0) {
