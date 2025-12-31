@@ -1383,26 +1383,22 @@
                 { date: lastNormalDuty, type: 'normal' }
             ];
             
+            const addedAssignments = [];
             lastDutyDates.forEach(({ date, type }) => {
-                if (date) {
-                    const dateKey = formatDateKey(new Date(date + 'T00:00:00'));
-                    const dayType = getDayType(new Date(date + 'T00:00:00'));
-                    
-                    // Verify the date matches the expected day type
-                    let matchesType = false;
-                    if (type === 'special' && dayType === 'special-holiday') {
-                        matchesType = true;
-                    } else if (type === 'weekend' && dayType === 'weekend-holiday') {
-                        matchesType = true;
-                    } else if (type === 'semi' && dayType === 'semi-normal-day') {
-                        matchesType = true;
-                    } else if (type === 'normal' && dayType === 'normal-day') {
-                        matchesType = true;
-                    }
-                    
-                    // Add as critical assignment if it matches the type, or if it's a valid date
-                    if (matchesType || date) {
+                if (date && date.trim()) {
+                    try {
+                        const dateObj = new Date(date + 'T00:00:00');
+                        if (isNaN(dateObj.getTime())) {
+                            console.error(`Invalid date: ${date}`);
+                            return;
+                        }
+                        const dateKey = formatDateKey(dateObj);
+                        const dayType = getDayType(dateObj);
+                        
+                        // Always add as critical assignment - these are manually entered baseline dates
                         // personKey is already defined above, use it here
+                        console.log(`Adding critical assignment for ${personKey} on ${dateKey} (type: ${type}, dayType: ${dayType})`);
+                        
                         // Check if assignment already exists for this group
                         const existingAssignment = dutyAssignments[dateKey];
                         if (existingAssignment && existingAssignment.includes(`(Ομάδα ${currentGroup})`)) {
@@ -1410,6 +1406,7 @@
                             const assignments = existingAssignment.split(', ').filter(a => !a.includes(`${personKey} (Ομάδα ${currentGroup})`));
                             assignments.push(`${personKey} (Ομάδα ${currentGroup})`);
                             dutyAssignments[dateKey] = assignments.join(', ');
+                            console.log(`Updated assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
                         } else {
                             // Add new assignment or append to existing
                             if (dutyAssignments[dateKey]) {
@@ -1417,10 +1414,18 @@
                             } else {
                                 dutyAssignments[dateKey] = `${personKey} (Ομάδα ${currentGroup})`;
                             }
+                            console.log(`Added assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
                         }
+                        addedAssignments.push(dateKey);
+                    } catch (error) {
+                        console.error(`Error processing date ${date}:`, error);
                     }
                 }
             });
+            
+            if (addedAssignments.length > 0) {
+                console.log(`Successfully added ${addedAssignments.length} critical assignments:`, addedAssignments);
+            }
             
             if (isEditingPerson) {
                 // Editing mode - update last duties and also update calendar assignments if dates changed
@@ -1488,8 +1493,15 @@
             isEditingPerson = false;
             editingPersonName = null;
             
+            // Log assignments before saving
+            console.log('Assignments before save:', JSON.stringify(dutyAssignments, null, 2));
+            
             saveData();
             renderGroups();
+            
+            // Log assignments after updating (before rendering)
+            console.log('Assignments after update (before render):', JSON.stringify(dutyAssignments, null, 2));
+            
             renderCalendar(); // Refresh calendar to show the new critical assignments
             updateStatistics();
             
@@ -2593,6 +2605,11 @@
                 const isToday = date.getTime() === today.getTime();
                 const key = formatDateKey(date);
                 const assignment = dutyAssignments[key];
+                
+                // Debug: Log assignments for the first few days
+                if (day <= 3 && assignment) {
+                    console.log(`Calendar render: Day ${day}, key: ${key}, assignment: ${assignment}`);
+                }
                 
                 const dayDiv = document.createElement('div');
                 dayDiv.className = `calendar-day ${dayType} ${isToday ? 'today' : ''}`;
