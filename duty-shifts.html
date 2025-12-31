@@ -221,9 +221,7 @@
             font-weight: bold;
         }
 
-        .calendar-day.holiday {
-            background: #FFCDD2;
-        }
+        /* Removed .holiday class - regular holidays now use weekend-holiday styling */
 
         .day-number {
             font-size: 1rem;
@@ -2962,9 +2960,8 @@
                 
                 const dayDiv = document.createElement('div');
                 dayDiv.className = `calendar-day ${dayType} ${isToday ? 'today' : ''}`;
-                if (isHoliday(date) || isOrthodoxOrCyprusHoliday(date)) {
-                    dayDiv.classList.add('holiday');
-                }
+                // Only add special-holiday class for special holidays (purple color)
+                // Regular holidays/weekends will use the weekend-holiday class styling (orange color)
                 if (isSpecialHoliday(date)) {
                     dayDiv.classList.add('special-holiday');
                 }
