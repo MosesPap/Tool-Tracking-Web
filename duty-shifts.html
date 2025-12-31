@@ -1542,6 +1542,11 @@
             
             // Store last duties - use editingPersonName if in edit mode, otherwise use name
             const personKey = isEditingPerson ? editingPersonName : name;
+            
+            // IMPORTANT: Read old lastDuties BEFORE updating, so we can compare and remove old assignments
+            const oldLastDuties = isEditingPerson ? (groups[currentGroup].lastDuties[editingPersonName] || {}) : {};
+            
+            // Now update lastDuties with new values
             groups[currentGroup].lastDuties[personKey] = {
                 special: lastSpecialDuty || null,
                 weekend: lastWeekendDuty || null,
@@ -1645,9 +1650,9 @@
             // The loop runs FIRST, adding new assignments, then we remove old ones if editing
             
             if (isEditingPerson) {
-                console.log(`Editing mode: Removing old assignments for ${editingPersonName}`);
-                // Editing mode - remove old assignments that are no longer valid
-                const oldLastDuties = groups[currentGroup].lastDuties[editingPersonName] || {};
+                console.log(`[EDIT] Editing mode: Removing old assignments for ${editingPersonName}`);
+                console.log(`[EDIT] Old lastDuties:`, oldLastDuties);
+                console.log(`[EDIT] New lastDuties:`, groups[currentGroup].lastDuties[personKey]);
                 
                 // Get the NEW dates that will be set, organized by type
                 const newDatesByType = {
