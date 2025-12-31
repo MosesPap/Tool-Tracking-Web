@@ -2740,6 +2740,34 @@
                 return;
             }
             
+            // CRITICAL: Restore critical assignments to dutyAssignments before rendering
+            // This ensures manually entered last duty dates are always visible
+            Object.keys(criticalAssignments).forEach(dateKey => {
+                const criticalPeople = criticalAssignments[dateKey];
+                if (Array.isArray(criticalPeople) && criticalPeople.length > 0) {
+                    const criticalStr = criticalPeople.join(', ');
+                    if (!dutyAssignments[dateKey]) {
+                        // No assignment exists, add the critical one
+                        dutyAssignments[dateKey] = criticalStr;
+                        console.log(`Restored critical assignment for ${dateKey}: ${criticalStr}`);
+                    } else {
+                        // Assignment exists, merge critical people if not already present
+                        const existing = dutyAssignments[dateKey].split(', ');
+                        let needsUpdate = false;
+                        criticalPeople.forEach(person => {
+                            if (!existing.includes(person)) {
+                                existing.push(person);
+                                needsUpdate = true;
+                            }
+                        });
+                        if (needsUpdate) {
+                            dutyAssignments[dateKey] = existing.join(', ');
+                            console.log(`Merged critical assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
+                        }
+                    }
+                }
+            });
+            
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth();
             
