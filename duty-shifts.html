@@ -2991,13 +2991,18 @@
                 // Get holiday name (special holiday first, then Orthodox/Cyprus holiday)
                 const holidayName = getOrthodoxHolidayName(date);
                 
-                // Remove group names from assignment for display
-                const displayAssignment = assignment ? assignment.replace(/\s*\(Ομάδα\s*\d+\)/g, '') : '';
+                // Remove group names from assignment and split by comma to show each person on a new line
+                let displayAssignmentHtml = '';
+                if (assignment) {
+                    const cleanedAssignment = assignment.replace(/\s*\(Ομάδα\s*\d+\)/g, '');
+                    const persons = cleanedAssignment.split(',').map(p => p.trim()).filter(p => p);
+                    displayAssignmentHtml = persons.map(person => `<div class="duty-person">${person}</div>`).join('');
+                }
                 
                 dayDiv.innerHTML = `
                     <div class="day-number">${day}</div>
                     ${holidayName ? `<div class="orthodox-holiday-name">${holidayName}</div>` : ''}
-                    ${displayAssignment ? `<div class="duty-person">${displayAssignment}</div>` : ''}
+                    ${displayAssignmentHtml}
                 `;
                 
                 grid.appendChild(dayDiv);
