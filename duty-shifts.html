@@ -1399,22 +1399,25 @@
                         // personKey is already defined above, use it here
                         console.log(`Adding critical assignment for ${personKey} on ${dateKey} (type: ${type}, dayType: ${dayType})`);
                         
-                        // Check if assignment already exists for this group
+                        // Always ensure this person's assignment is present for this date
+                        // This is a critical baseline assignment that must be preserved
                         const existingAssignment = dutyAssignments[dateKey];
-                        if (existingAssignment && existingAssignment.includes(`(Ομάδα ${currentGroup})`)) {
-                            // Update existing assignment - replace this person's assignment
-                            const assignments = existingAssignment.split(', ').filter(a => !a.includes(`${personKey} (Ομάδα ${currentGroup})`));
-                            assignments.push(`${personKey} (Ομάδα ${currentGroup})`);
-                            dutyAssignments[dateKey] = assignments.join(', ');
-                            console.log(`Updated assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
-                        } else {
-                            // Add new assignment or append to existing
-                            if (dutyAssignments[dateKey]) {
-                                dutyAssignments[dateKey] += `, ${personKey} (Ομάδα ${currentGroup})`;
+                        const personGroupStr = `${personKey} (Ομάδα ${currentGroup})`;
+                        
+                        if (existingAssignment) {
+                            // Check if this person is already assigned
+                            if (existingAssignment.includes(personGroupStr)) {
+                                // Already assigned, keep it
+                                console.log(`Assignment already exists for ${dateKey}: ${existingAssignment}`);
                             } else {
-                                dutyAssignments[dateKey] = `${personKey} (Ομάδα ${currentGroup})`;
+                                // Add this person to existing assignments
+                                dutyAssignments[dateKey] = existingAssignment + `, ${personGroupStr}`;
+                                console.log(`Added to existing assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
                             }
-                            console.log(`Added assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
+                        } else {
+                            // Create new assignment
+                            dutyAssignments[dateKey] = personGroupStr;
+                            console.log(`Created new assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
                         }
                         addedAssignments.push(dateKey);
                     } catch (error) {
@@ -1425,6 +1428,14 @@
             
             if (addedAssignments.length > 0) {
                 console.log(`Successfully added ${addedAssignments.length} critical assignments:`, addedAssignments);
+                // Verify assignments are actually in the object
+                addedAssignments.forEach(dateKey => {
+                    const verifyAssignment = dutyAssignments[dateKey];
+                    console.log(`Verification: ${dateKey} = ${verifyAssignment}`);
+                    if (!verifyAssignment || !verifyAssignment.includes(personKey)) {
+                        console.error(`ERROR: Assignment for ${dateKey} is missing or incorrect!`);
+                    }
+                });
             }
             
             if (isEditingPerson) {
@@ -1502,7 +1513,28 @@
             // Log assignments after updating (before rendering)
             console.log('Assignments after update (before render):', JSON.stringify(dutyAssignments, null, 2));
             
+            // Force calendar to clear and re-render
+            const calendarGrid = document.getElementById('calendarGrid');
+            if (calendarGrid) {
+                calendarGrid.innerHTML = '';
+            }
+            
             renderCalendar(); // Refresh calendar to show the new critical assignments
+            
+            // Verify assignments are visible after render
+            setTimeout(() => {
+                console.log('Post-render verification - checking if assignments are visible in calendar');
+                const currentYear = currentDate.getFullYear();
+                const currentMonth = currentDate.getMonth();
+                for (let day = 1; day <= 3; day++) {
+                    const date = new Date(currentYear, currentMonth, day);
+                    const key = formatDateKey(date);
+                    const assignment = dutyAssignments[key];
+                    if (assignment) {
+                        console.log(`Post-render: ${key} = ${assignment}`);
+                    }
+                }
+            }, 100);
             updateStatistics();
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('addPersonModal'));
@@ -2599,6 +2631,11 @@
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             
+            // Debug: Log all assignments before rendering
+            console.log('All assignments before calendar render:', Object.keys(dutyAssignments).length, 'dates');
+            const sampleAssignments = Object.entries(dutyAssignments).slice(0, 10);
+            console.log('Sample assignments:', sampleAssignments);
+            
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(year, month, day);
                 const dayType = getDayType(date);
@@ -2606,8 +2643,8 @@
                 const key = formatDateKey(date);
                 const assignment = dutyAssignments[key];
                 
-                // Debug: Log assignments for the first few days
-                if (day <= 3 && assignment) {
+                // Debug: Log assignments for the first few days and any special dates
+                if ((day <= 3 || key.includes('2025-12-25') || key.includes('2025-11-23')) && assignment) {
                     console.log(`Calendar render: Day ${day}, key: ${key}, assignment: ${assignment}`);
                 }
                 
@@ -2642,12 +2679,18 @@
                 // Get holiday name (special holiday first, then Orthodox/Cyprus holiday)
                 const holidayName = getOrthodoxHolidayName(date);
                 
+                const assignmentHtml = assignment ? `<div class="duty-person">${assignment}</div>` : '';
                 dayDiv.innerHTML = `
                     <div class="day-number">${day}</div>
                     <div class="day-type">${getDayTypeLabel(dayType)}</div>
                     ${holidayName ? `<div class="orthodox-holiday-name">${holidayName}</div>` : ''}
-                    ${assignment ? `<div class="duty-person">${assignment}</div>` : ''}
+                    ${assignmentHtml}
                 `;
+                
+                // Debug: Verify assignment is in DOM for critical dates
+                if (assignment && (key.includes('2025-12-25') || key.includes('2025-11-23') || key.includes('2026-01-09') || key.includes('2026-01-07'))) {
+                    console.log(`DOM check: Day ${day} (${key}) has assignment in HTML:`, assignmentHtml ? 'YES' : 'NO');
+                }
                 
                 grid.appendChild(dayDiv);
             }
