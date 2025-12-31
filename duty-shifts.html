@@ -488,7 +488,7 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Προσθήκη Ατόμου στην Ομάδα <span id="modalGroupNumber"></span></h5>
+                    <h5 class="modal-title"><span id="modalTitle">Προσθήκη Ατόμου στην Ομάδα <span id="modalGroupNumber"></span></span></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
@@ -520,7 +520,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
-                    <button type="button" class="btn btn-primary" onclick="savePerson()">Προσθήκη Ατόμου</button>
+                    <button type="button" class="btn btn-primary" onclick="savePerson()" id="savePersonButton">Προσθήκη Ατόμου</button>
                 </div>
             </div>
         </div>
@@ -1218,6 +1218,9 @@
                             <i class="fas fa-arrow-down"></i>
                         </button>
                     </div>
+                    <button class="btn btn-sm btn-outline-info" onclick="editPerson(${groupNum}, '${person.replace(/'/g, "\\'")}')" title="Επεξεργασία Στοιχείων">
+                        <i class="fas fa-edit"></i>
+                    </button>
                     <button class="btn btn-sm btn-outline-warning" onclick="openMissingPeriodModal(${groupNum}, '${person.replace(/'/g, "\\'")}')" title="Διαχείριση Περιόδων Απουσίας">
                         <i class="fas fa-calendar-times"></i>
                     </button>
@@ -1293,15 +1296,47 @@
             draggedElement = null;
         }
 
+        // Global variable to track if we're editing
+        let isEditingPerson = false;
+        let editingPersonName = null;
+
         // Add person
         function addPerson(groupNumber) {
+            isEditingPerson = false;
+            editingPersonName = null;
             currentGroup = groupNumber;
-            document.getElementById('modalGroupNumber').textContent = groupNumber;
+            
+            document.getElementById('modalTitle').innerHTML = `Προσθήκη Ατόμου στην Ομάδα <span id="modalGroupNumber">${groupNumber}</span>`;
             document.getElementById('personName').value = '';
+            document.getElementById('personName').readOnly = false;
             document.getElementById('lastSpecialDuty').value = '';
             document.getElementById('lastWeekendDuty').value = '';
             document.getElementById('lastSemiDuty').value = '';
             document.getElementById('lastNormalDuty').value = '';
+            document.getElementById('savePersonButton').textContent = 'Προσθήκη Ατόμου';
+            
+            const modal = new bootstrap.Modal(document.getElementById('addPersonModal'));
+            modal.show();
+        }
+
+        // Edit person
+        function editPerson(groupNumber, personName) {
+            isEditingPerson = true;
+            editingPersonName = personName;
+            currentGroup = groupNumber;
+            
+            const groupData = groups[groupNumber] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
+            const lastDuties = groupData.lastDuties?.[personName] || {};
+            
+            document.getElementById('modalTitle').innerHTML = `Επεξεργασία Στοιχείων: ${personName}`;
+            document.getElementById('personName').value = personName;
+            document.getElementById('personName').readOnly = true;
+            document.getElementById('lastSpecialDuty').value = lastDuties.special || '';
+            document.getElementById('lastWeekendDuty').value = lastDuties.weekend || '';
+            document.getElementById('lastSemiDuty').value = lastDuties.semi || '';
+            document.getElementById('lastNormalDuty').value = lastDuties.normal || '';
+            document.getElementById('savePersonButton').textContent = 'Αποθήκευση Αλλαγών';
+            
             const modal = new bootstrap.Modal(document.getElementById('addPersonModal'));
             modal.show();
         }
@@ -1339,35 +1374,44 @@
                 normal: lastNormalDuty || null
             };
             
-            // Add person to all lists if not already present
-            const listTypes = ['special', 'weekend', 'semi', 'normal'];
-            listTypes.forEach(listType => {
-                if (!groups[currentGroup][listType].includes(name)) {
-                    groups[currentGroup][listType].push(name);
-                }
-            });
-            
-            // Sort each list by last duty date (most recent first, no date last)
-            listTypes.forEach(listType => {
-                groups[currentGroup][listType].sort((a, b) => {
-                    const dateA = groups[currentGroup].lastDuties[a]?.[listType];
-                    const dateB = groups[currentGroup].lastDuties[b]?.[listType];
-                    
-                    if (!dateA && !dateB) return 0; // Both have no date, maintain order
-                    if (!dateA) return 1; // A has no date, put it last
-                    if (!dateB) return -1; // B has no date, put it last
-                    
-                    // Both have dates, sort by date (most recent first)
-                    return new Date(dateB) - new Date(dateA);
+            if (isEditingPerson) {
+                // Editing mode - just update last duties, don't add to lists or change order
+                // The person is already in the lists, we're just updating their last duty dates
+            } else {
+                // Adding new person - add to all lists if not already present
+                const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                listTypes.forEach(listType => {
+                    if (!groups[currentGroup][listType].includes(name)) {
+                        groups[currentGroup][listType].push(name);
+                    }
                 });
-            });
+                
+                // Sort each list by last duty date (most recent first, no date last)
+                listTypes.forEach(listType => {
+                    groups[currentGroup][listType].sort((a, b) => {
+                        const dateA = groups[currentGroup].lastDuties[a]?.[listType];
+                        const dateB = groups[currentGroup].lastDuties[b]?.[listType];
+                        
+                        if (!dateA && !dateB) return 0; // Both have no date, maintain order
+                        if (!dateA) return 1; // A has no date, put it last
+                        if (!dateB) return -1; // B has no date, put it last
+                        
+                        // Both have dates, sort by date (most recent first)
+                        return new Date(dateB) - new Date(dateA);
+                    });
+                });
+            }
             
             // Clear form
             document.getElementById('personName').value = '';
+            document.getElementById('personName').readOnly = false;
             document.getElementById('lastSpecialDuty').value = '';
             document.getElementById('lastWeekendDuty').value = '';
             document.getElementById('lastSemiDuty').value = '';
             document.getElementById('lastNormalDuty').value = '';
+            
+            isEditingPerson = false;
+            editingPersonName = null;
             
             saveData();
             renderGroups();
