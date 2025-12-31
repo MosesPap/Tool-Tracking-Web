@@ -2701,18 +2701,18 @@
             if (month === 4 && day === 1) return true;  // EOKA Liberation Struggle Day
             if (month === 5 && day === 1) return true;  // Labor Day
             if (month === 8 && day === 15) return true; // Dormition of the Theotokos
-            if (month === 9 && day === 8) return true;  // Nativity of the Theotokos
-            if (month === 9 && day === 14) return true; // Exaltation of the Cross
             if (month === 10 && day === 1) return true; // Cyprus Independence Day
             if (month === 10 && day === 28) return true; // Ochi Day
+            if (month === 12 && day === 24) return true; // Christmas Eve
             if (month === 12 && day === 25) return true; // Christmas (Nativity of Christ)
             if (month === 12 && day === 26) return true; // Synaxis of the Theotokos
             if (month === 12 && day === 31) return true; // New Year's Eve
             
-            // Orthodox holidays based on Easter
+            // Orthodox holidays based on Easter (excluding Ascension and Pentecost)
             const orthodoxHolidays = calculateOrthodoxHolidays(year);
+            const excludedHolidays = ['ascensionDay', 'pentecost']; // Holidays to exclude
             for (const key in orthodoxHolidays) {
-                if (dateKey === formatDateKey(orthodoxHolidays[key])) {
+                if (!excludedHolidays.includes(key) && dateKey === formatDateKey(orthodoxHolidays[key])) {
                     return true;
                 }
             }
@@ -2736,15 +2736,14 @@
             if (month === 4 && day === 1) return 'ΕΟΚΑ';
             if (month === 5 && day === 1) return 'Πρωτομαγιά';
             if (month === 8 && day === 15) return 'Κοίμηση';
-            if (month === 9 && day === 8) return 'Γέννηση Θεοτόκου';
-            if (month === 9 && day === 14) return 'Σταύρωση';
             if (month === 10 && day === 1) return 'Ανεξαρτησία';
             if (month === 10 && day === 28) return 'Όχι';
+            if (month === 12 && day === 24) return 'Παραμονή Χριστουγέννων';
             if (month === 12 && day === 25) return 'Χριστούγεννα';
             if (month === 12 && day === 26) return 'Σύναξης';
             if (month === 12 && day === 31) return 'Παραμονή';
             
-            // Orthodox holidays based on Easter
+            // Orthodox holidays based on Easter (excluding Ascension and Pentecost)
             const orthodoxHolidays = calculateOrthodoxHolidays(year);
             
             if (dateKey === formatDateKey(orthodoxHolidays.cleanMonday)) return 'Καθαρά Δευτέρα';
@@ -2753,8 +2752,6 @@
             if (dateKey === formatDateKey(orthodoxHolidays.greatSaturday)) return 'Μ. Σάββατο';
             if (dateKey === formatDateKey(orthodoxHolidays.easterSunday)) return 'Πάσχα';
             if (dateKey === formatDateKey(orthodoxHolidays.easterMonday)) return 'Δευτέρα Πάσχα';
-            if (dateKey === formatDateKey(orthodoxHolidays.ascensionDay)) return 'Ανάληψη';
-            if (dateKey === formatDateKey(orthodoxHolidays.pentecost)) return 'Πεντηκοστή';
             if (dateKey === formatDateKey(orthodoxHolidays.whitMonday)) return 'Αγίου Πνεύματος';
             
             return null;
