@@ -2989,9 +2989,17 @@
                     const days = dayTypeLists[dayTypeCategory];
                     if (days.length === 0) return;
                     
-                    // Use special order for special holidays, regular order for others
-                    const isSpecialHolidayType = dayTypeCategory === 'special';
-                    const groupPeople = isSpecialHolidayType ? specialPeople : regularPeople;
+                    // Use the appropriate list for each day type
+                    let groupPeople;
+                    if (dayTypeCategory === 'special') {
+                        groupPeople = groupData.special || [];
+                    } else if (dayTypeCategory === 'weekend') {
+                        groupPeople = groupData.weekend || [];
+                    } else if (dayTypeCategory === 'semi') {
+                        groupPeople = groupData.semi || [];
+                    } else { // normal
+                        groupPeople = groupData.normal || [];
+                    }
                     
                     if (groupPeople.length === 0) return;
                     
