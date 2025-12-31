@@ -2443,7 +2443,6 @@
                         
                         // Check for conflicts
                         const hasConflict = hasConsecutiveDuty(dayKey, idealPerson, groupNum) || 
-                                         hasFridaySundayDuty(dayKey, idealPerson, groupNum) ||
                                          hadSpecialHolidayDutyBefore(dayKey, idealPerson, groupNum) ||
                                          hasConsecutiveWeekendHolidayDuty(dayKey, idealPerson, groupNum) ||
                                          hasConsecutiveSpecialHolidayDuty(dayKey, idealPerson, groupNum);
@@ -2486,7 +2485,6 @@
                                 const candidateDaysSince = candidateData.daysSinceLastDuty;
                                 const candidateEligible = candidateData.isEligible;
                                 const candidateConflict = hasConsecutiveDuty(dayKey, candidatePerson, groupNum) || 
-                                                         hasFridaySundayDuty(dayKey, candidatePerson, groupNum) ||
                                                          hadSpecialHolidayDutyBefore(dayKey, candidatePerson, groupNum) ||
                                                          hasConsecutiveWeekendHolidayDuty(dayKey, candidatePerson, groupNum) ||
                                                          hasConsecutiveSpecialHolidayDuty(dayKey, candidatePerson, groupNum);
