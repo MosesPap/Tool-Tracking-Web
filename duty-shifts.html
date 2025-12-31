@@ -1004,12 +1004,70 @@
                     console.log('No criticalAssignments document found in Firestore');
                 }
                 
+                // After loading all data, rebuild criticalAssignments from lastDuties if they're missing
+                // This ensures manually entered dates are always protected
+                rebuildCriticalAssignmentsFromLastDuties();
+                
                 console.log('Data loaded from Firebase');
             } catch (error) {
                 console.error('Error loading data from Firebase:', error);
                 // Fallback to localStorage
                 loadDataFromLocalStorage();
             }
+        }
+
+        // Rebuild criticalAssignments from lastDuties
+        // This ensures manually entered dates are always protected, even if criticalAssignments wasn't saved
+        function rebuildCriticalAssignmentsFromLastDuties() {
+            console.log('Rebuilding criticalAssignments from lastDuties...');
+            let rebuiltCount = 0;
+            
+            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                const groupData = groups[groupNum];
+                if (!groupData || !groupData.lastDuties) continue;
+                
+                Object.keys(groupData.lastDuties).forEach(personName => {
+                    const lastDuties = groupData.lastDuties[personName];
+                    const personGroupStr = `${personName} (Ομάδα ${groupNum})`;
+                    
+                    // Process each last duty date
+                    const dutyTypes = ['special', 'weekend', 'semi', 'normal'];
+                    dutyTypes.forEach(type => {
+                        const dateStr = lastDuties[type];
+                        if (dateStr) {
+                            try {
+                                // Parse date string (YYYY-MM-DD) and create date in local timezone
+                                const [year, month, day] = dateStr.split('-').map(Number);
+                                const dateObj = new Date(year, month - 1, day);
+                                if (!isNaN(dateObj.getTime())) {
+                                    const dateKey = formatDateKey(dateObj);
+                                    
+                                    // Add to criticalAssignments
+                                    if (!criticalAssignments[dateKey]) {
+                                        criticalAssignments[dateKey] = [];
+                                    }
+                                    if (!criticalAssignments[dateKey].includes(personGroupStr)) {
+                                        criticalAssignments[dateKey].push(personGroupStr);
+                                        rebuiltCount++;
+                                        console.log(`Rebuilt critical assignment: ${dateKey} -> ${personGroupStr}`);
+                                    }
+                                    
+                                    // Also ensure it's in dutyAssignments
+                                    if (!dutyAssignments[dateKey]) {
+                                        dutyAssignments[dateKey] = personGroupStr;
+                                    } else if (!dutyAssignments[dateKey].includes(personGroupStr)) {
+                                        dutyAssignments[dateKey] += `, ${personGroupStr}`;
+                                    }
+                                }
+                            } catch (error) {
+                                console.error(`Error rebuilding critical assignment for ${dateStr}:`, error);
+                            }
+                        }
+                    });
+                });
+            }
+            
+            console.log(`Rebuilt ${rebuiltCount} critical assignments from lastDuties`);
         }
 
         // Fallback: Load data from localStorage
@@ -1066,6 +1124,9 @@
                     }
                 });
             }
+            
+            // After loading from localStorage, rebuild criticalAssignments from lastDuties
+            rebuildCriticalAssignmentsFromLastDuties();
         }
 
         // Save data to Firebase Firestore
@@ -1512,7 +1573,8 @@
                         
                         // Always add as critical assignment - these are manually entered baseline dates
                         // personKey is already defined above, use it here
-                        console.log(`Adding critical assignment for ${personKey} on ${dateKey} (type: ${type}, dayType: ${dayType})`);
+                        const mode = isEditingPerson ? 'EDIT' : 'NEW';
+                        console.log(`[${mode}] Adding critical assignment for ${personKey} on ${dateKey} (type: ${type}, dayType: ${dayType})`);
                         
                         // Always ensure this person's assignment is present for this date
                         // This is a critical baseline assignment that must be preserved
@@ -1525,32 +1587,37 @@
                         }
                         if (!criticalAssignments[dateKey].includes(personGroupStr)) {
                             criticalAssignments[dateKey].push(personGroupStr);
-                            console.log(`✓ Added to criticalAssignments[${dateKey}]:`, criticalAssignments[dateKey]);
+                            console.log(`[${mode}] ✓ Added to criticalAssignments[${dateKey}]:`, criticalAssignments[dateKey]);
                         } else {
-                            console.log(`✓ Already in criticalAssignments[${dateKey}]:`, criticalAssignments[dateKey]);
+                            console.log(`[${mode}] ✓ Already in criticalAssignments[${dateKey}]:`, criticalAssignments[dateKey]);
                         }
                         
                         // Verify criticalAssignments was updated
                         if (!criticalAssignments[dateKey] || !criticalAssignments[dateKey].includes(personGroupStr)) {
-                            console.error(`ERROR: Failed to add to criticalAssignments for ${dateKey}!`);
+                            console.error(`[${mode}] ERROR: Failed to add to criticalAssignments for ${dateKey}!`);
                         }
                         
+                        // ALWAYS update dutyAssignments - even if editing, we want the new dates
                         if (existingAssignment) {
                             // Check if this person is already assigned
                             if (!existingAssignment.includes(personGroupStr)) {
                                 // Add this person to existing assignments
                                 dutyAssignments[dateKey] = existingAssignment + `, ${personGroupStr}`;
+                                console.log(`[${mode}] Added to existing assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
+                            } else {
+                                console.log(`[${mode}] Person already in assignment for ${dateKey}`);
                             }
                         } else {
                             // Create new assignment
                             dutyAssignments[dateKey] = personGroupStr;
+                            console.log(`[${mode}] Created new assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
                         }
                         
                         // Verify it was added correctly
                         if (!dutyAssignments[dateKey] || !dutyAssignments[dateKey].includes(personGroupStr)) {
-                            console.error(`ERROR: Failed to add assignment for ${dateKey}! Expected: ${personGroupStr}, Got: ${dutyAssignments[dateKey]}`);
+                            console.error(`[${mode}] ERROR: Failed to add assignment for ${dateKey}! Expected: ${personGroupStr}, Got: ${dutyAssignments[dateKey]}`);
                         } else {
-                            console.log(`✓ Verified assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
+                            console.log(`[${mode}] ✓ Verified assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
                         }
                         
                         addedAssignments.push(dateKey);
@@ -1573,11 +1640,27 @@
                 console.log(`Total criticalAssignments keys:`, Object.keys(criticalAssignments).length);
             }
             
+            // Note: New assignments are added in the lastDutyDates.forEach loop above
+            // This applies to both new and edit modes
+            // The loop runs FIRST, adding new assignments, then we remove old ones if editing
+            
             if (isEditingPerson) {
-                // Editing mode - update last duties and also update calendar assignments if dates changed
+                console.log(`Editing mode: Removing old assignments for ${editingPersonName}`);
+                // Editing mode - remove old assignments that are no longer valid
                 const oldLastDuties = groups[currentGroup].lastDuties[editingPersonName] || {};
                 
-                // Remove old assignments if dates changed
+                // Get the NEW dates that will be set
+                const newDates = [
+                    { date: lastSpecialDuty, type: 'special' },
+                    { date: lastWeekendDuty, type: 'weekend' },
+                    { date: lastSemiDuty, type: 'semi' },
+                    { date: lastNormalDuty, type: 'normal' }
+                ].filter(d => d.date && d.date.trim()).map(d => {
+                    const [year, month, day] = d.date.split('-').map(Number);
+                    return formatDateKey(new Date(year, month - 1, day));
+                });
+                
+                // Remove old assignments that are NOT in the new dates list
                 const oldDates = [
                     { date: oldLastDuties.special, type: 'special' },
                     { date: oldLastDuties.weekend, type: 'weekend' },
@@ -1591,31 +1674,34 @@
                         const [year, month, day] = date.split('-').map(Number);
                         const dateObj = new Date(year, month - 1, day);
                         const dateKey = formatDateKey(dateObj);
-                        const personGroupStr = `${editingPersonName} (Ομάδα ${currentGroup})`;
-                        const existingAssignment = dutyAssignments[dateKey];
                         
-                        // Remove from critical assignments
-                        if (criticalAssignments[dateKey]) {
-                            criticalAssignments[dateKey] = criticalAssignments[dateKey].filter(a => a !== personGroupStr);
-                            if (criticalAssignments[dateKey].length === 0) {
-                                delete criticalAssignments[dateKey];
+                        // Only remove if this date is NOT in the new dates list
+                        if (!newDates.includes(dateKey)) {
+                            const personGroupStr = `${editingPersonName} (Ομάδα ${currentGroup})`;
+                            const existingAssignment = dutyAssignments[dateKey];
+                            
+                            // Remove from critical assignments
+                            if (criticalAssignments[dateKey]) {
+                                criticalAssignments[dateKey] = criticalAssignments[dateKey].filter(a => a !== personGroupStr);
+                                if (criticalAssignments[dateKey].length === 0) {
+                                    delete criticalAssignments[dateKey];
+                                }
+                                console.log(`Removed old critical assignment for ${dateKey}`);
                             }
-                        }
-                        
-                        // Remove from regular assignments
-                        if (existingAssignment && existingAssignment.includes(personGroupStr)) {
-                            const assignments = existingAssignment.split(', ').filter(a => a !== personGroupStr);
-                            if (assignments.length > 0) {
-                                dutyAssignments[dateKey] = assignments.join(', ');
-                            } else {
-                                delete dutyAssignments[dateKey];
+                            
+                            // Remove from regular assignments
+                            if (existingAssignment && existingAssignment.includes(personGroupStr)) {
+                                const assignments = existingAssignment.split(', ').filter(a => a !== personGroupStr);
+                                if (assignments.length > 0) {
+                                    dutyAssignments[dateKey] = assignments.join(', ');
+                                } else {
+                                    delete dutyAssignments[dateKey];
+                                }
+                                console.log(`Removed old assignment for ${dateKey}`);
                             }
                         }
                     }
                 });
-                
-                // Add new assignments (same logic as adding new person)
-                // The code above already handles adding the new dates, so we're good
             } else {
                 // Adding new person - add to all lists if not already present
                 const listTypes = ['special', 'weekend', 'semi', 'normal'];
@@ -1678,8 +1764,24 @@
                 console.log(`  - criticalAssignments['${key}'] =`, criticalAssignments[key]);
             });
             
+            // Force calendar refresh - ensure critical assignments are restored before rendering
+            console.log('About to render calendar. Current criticalAssignments keys:', Object.keys(criticalAssignments).length);
+            console.log('Current dutyAssignments keys:', Object.keys(dutyAssignments).length);
+            
             renderCalendar(); // Refresh calendar to show the new critical assignments
             updateStatistics();
+            
+            // Verify assignments are visible after render
+            setTimeout(() => {
+                console.log('After calendar render - checking if assignments are visible');
+                addedAssignments.forEach(key => {
+                    const assignment = dutyAssignments[key];
+                    console.log(`Post-render check: dutyAssignments['${key}'] =`, assignment);
+                    if (!assignment) {
+                        console.error(`WARNING: Assignment for ${key} is missing after render!`);
+                    }
+                });
+            }, 100);
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('addPersonModal'));
             modal.hide();
