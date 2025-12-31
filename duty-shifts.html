@@ -2275,23 +2275,16 @@
         function initializeDefaultSpecialHolidays() {
             const currentYear = new Date().getFullYear();
             const yearsToCalculate = SPECIAL_HOLIDAYS_YEARS_AHEAD;
-            const defaultHolidays = [];
+            const expectedHolidays = new Map(); // Track which dates SHOULD be special holidays with their names
             
-            // Process each recurring holiday definition
+            // First, collect all dates that SHOULD be special holidays based on recurring config
             recurringSpecialHolidays.forEach(holidayDef => {
                 if (holidayDef.type === 'fixed') {
                     // Fixed date holidays (month + day)
                     for (let year = currentYear; year <= currentYear + yearsToCalculate; year++) {
                         const date = new Date(year, holidayDef.month - 1, holidayDef.day);
                         const dateKey = formatDateKey(date);
-                        
-                        // Check if already exists
-                        if (!specialHolidays.some(h => h.date === dateKey)) {
-                            defaultHolidays.push({
-                                date: dateKey,
-                                name: holidayDef.name
-                            });
-                        }
+                        expectedHolidays.set(dateKey, holidayDef.name);
                     }
                 } else if (holidayDef.type === 'easter-relative') {
                     // Movable holidays based on Orthodox Easter
@@ -2303,29 +2296,39 @@
                         holidayDate.setDate(holidayDate.getDate() + (holidayDef.offset || 0));
                         
                         const dateKey = formatDateKey(holidayDate);
-                        
-                        // Check if already exists
-                        if (!specialHolidays.some(h => h.date === dateKey)) {
-                            defaultHolidays.push({
-                                date: dateKey,
-                                name: holidayDef.name
-                            });
-                        }
+                        expectedHolidays.set(dateKey, holidayDef.name);
                     }
                 }
             });
             
-            // Add default holidays if they don't already exist
-            if (defaultHolidays.length > 0) {
-                defaultHolidays.forEach(defaultHoliday => {
-                    specialHolidays.push(defaultHoliday);
-                });
-                
-                // Sort by date
-                specialHolidays.sort((a, b) => a.date.localeCompare(b.date));
-                // Save to Firebase and localStorage
-                saveData();
-            }
+            // Remove special holidays that are no longer in the recurring configuration
+            // (but keep manually added ones if they exist - though currently all are from recurring)
+            specialHolidays = specialHolidays.filter(h => {
+                // Keep if it's in the expected list OR if it's a manually added one
+                // For now, we'll remove all that aren't in expected list since all come from recurring
+                return expectedHolidays.has(h.date);
+            });
+            
+            // Add missing holidays from recurring configuration
+            expectedHolidays.forEach((holidayName, dateKey) => {
+                if (!specialHolidays.some(h => h.date === dateKey)) {
+                    specialHolidays.push({
+                        date: dateKey,
+                        name: holidayName
+                    });
+                } else {
+                    // Update the name if it changed
+                    const existing = specialHolidays.find(h => h.date === dateKey);
+                    if (existing && existing.name !== holidayName) {
+                        existing.name = holidayName;
+                    }
+                }
+            });
+            
+            // Sort by date
+            specialHolidays.sort((a, b) => a.date.localeCompare(b.date));
+            // Save to Firebase and localStorage
+            saveData();
         }
         
         // Load recurring holidays configuration
