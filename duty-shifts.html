@@ -1202,6 +1202,8 @@
         // Render holidays
         function renderHolidays() {
             const container = document.getElementById('holidaysList');
+            if (!container) return;
+            
             container.innerHTML = '';
             
             if (holidays.length === 0) {
@@ -1226,6 +1228,90 @@
                 `;
                 container.appendChild(holidayDiv);
             });
+        }
+
+        // Render special holidays
+        function renderSpecialHolidays() {
+            const container = document.getElementById('specialHolidaysList');
+            if (!container) return;
+            
+            container.innerHTML = '';
+            
+            if (specialHolidays.length === 0) {
+                container.innerHTML = '<p class="text-muted text-center">Δεν έχουν προστεθεί ειδικές αργίες ακόμα</p>';
+                return;
+            }
+            
+            specialHolidays.sort((a, b) => a.date.localeCompare(b.date));
+            
+            specialHolidays.forEach((holiday, index) => {
+                const holidayDiv = document.createElement('div');
+                holidayDiv.className = 'holiday-item';
+                holidayDiv.style.borderLeft = '4px solid #FFC107';
+                const date = new Date(holiday.date + 'T00:00:00');
+                holidayDiv.innerHTML = `
+                    <div>
+                        <strong><i class="fas fa-star text-warning me-1"></i>${formatDate(date)}</strong>
+                        ${holiday.name ? `<span class="text-muted ms-2">- ${holiday.name}</span>` : ''}
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeSpecialHoliday(${index})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                `;
+                container.appendChild(holidayDiv);
+            });
+        }
+
+        // Add special holiday
+        function addSpecialHoliday() {
+            document.getElementById('specialHolidayDate').value = '';
+            document.getElementById('specialHolidayName').value = '';
+            const modal = new bootstrap.Modal(document.getElementById('addSpecialHolidayModal'));
+            modal.show();
+        }
+
+        // Save special holiday
+        function saveSpecialHoliday() {
+            const date = document.getElementById('specialHolidayDate').value;
+            const name = document.getElementById('specialHolidayName').value.trim();
+            
+            if (!date) {
+                alert('Παρακαλώ επιλέξτε ημερομηνία');
+                return;
+            }
+            
+            const dateKey = formatDateKey(new Date(date + 'T00:00:00'));
+            
+            // Check if already exists
+            if (specialHolidays.some(h => h.date === dateKey)) {
+                alert('Αυτή η ημερομηνία είναι ήδη σημειωμένη ως ειδική αργία');
+                return;
+            }
+            
+            specialHolidays.push({
+                date: dateKey,
+                name: name || ''
+            });
+            
+            // Sort by date
+            specialHolidays.sort((a, b) => a.date.localeCompare(b.date));
+            
+            saveData();
+            renderSpecialHolidays();
+            renderCalendar();
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addSpecialHolidayModal'));
+            modal.hide();
+        }
+
+        // Remove special holiday
+        function removeSpecialHoliday(index) {
+            if (confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την ειδική αργία;')) {
+                specialHolidays.splice(index, 1);
+                saveData();
+                renderSpecialHolidays();
+                renderCalendar();
+            }
         }
 
         // Calculate Orthodox Easter (returns the date of Easter Sunday)
@@ -1507,10 +1593,18 @@
 
         // Render calendar
         function renderCalendar() {
+            const calendarGrid = document.getElementById('calendarGrid');
+            const currentMonthYear = document.getElementById('currentMonthYear');
+            
+            if (!calendarGrid || !currentMonthYear) {
+                console.error('Calendar elements not found');
+                return;
+            }
+            
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth();
             
-            document.getElementById('currentMonthYear').textContent = 
+            currentMonthYear.textContent = 
                 currentDate.toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
             
             const firstDay = new Date(year, month, 1);
@@ -1520,7 +1614,7 @@
             let startingDayOfWeek = firstDay.getDay();
             startingDayOfWeek = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1;
             
-            const grid = document.getElementById('calendarGrid');
+            const grid = calendarGrid;
             grid.innerHTML = '';
             
             // Day headers - Monday first
@@ -1685,6 +1779,39 @@
             return false;
         }
 
+        // Check if person had duty on a special holiday before this date
+        // If so, and current day is a weekend (Saturday/Sunday) or holiday, skip this person
+        function hadSpecialHolidayDutyBefore(dayKey, person, groupNum) {
+            const date = new Date(dayKey + 'T00:00:00');
+            const dayOfWeek = date.getDay(); // 0=Sunday, 6=Saturday
+            const currentDayType = getDayType(date);
+            
+            // Only apply this rule if current day is:
+            // - A weekend (Saturday or Sunday)
+            // - OR a holiday (weekend-holiday type, but not special holiday)
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
+            const isHoliday = currentDayType === 'weekend-holiday' && !isSpecialHoliday(date);
+            
+            if (!isWeekend && !isHoliday) {
+                return false;
+            }
+            
+            // Check the previous 14 days for special holiday duty
+            // This ensures we catch the "next" weekend/holiday after a special holiday
+            for (let i = 1; i <= 14; i++) {
+                const checkDate = new Date(date);
+                checkDate.setDate(checkDate.getDate() - i);
+                const checkKey = formatDateKey(checkDate);
+                
+                // Check if this was a special holiday and person had duty
+                if (isSpecialHoliday(checkDate) && hasDutyOnDay(checkKey, person, groupNum)) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
         // Count days of a specific type since last duty for a person
         function countDaysSinceLastDuty(dayKey, person, groupNum, dayTypeCategory, allDaysByType) {
             const daysOfType = allDaysByType[dayTypeCategory];
@@ -1758,6 +1885,10 @@
                     dateIterator.setDate(dateIterator.getDate() + 1);
                 }
                 
+                // Track deferred assignments for swap logic (shared across all day types)
+                // Format: { skippedPerson: string, skippedDay: string, replacementPerson: string, replacementDay: string, groupNum: number, dayTypeCategory: string }
+                const deferredAssignments = [];
+                
                 // Helper function to assign duty for a day type with proper rotation
                 function assignDutiesForDayType(dayTypeCategory, priorityLevel) {
                     const days = dayTypeLists[dayTypeCategory];
@@ -1792,9 +1923,11 @@
                         
                         // Check for conflicts
                         const hasConflict = hasConsecutiveDuty(dayKey, idealPerson, groupNum) || 
-                                         hasFridaySundayDuty(dayKey, idealPerson, groupNum);
+                                         hasFridaySundayDuty(dayKey, idealPerson, groupNum) ||
+                                         hadSpecialHolidayDutyBefore(dayKey, idealPerson, groupNum);
                         
                         let assignedPerson = null;
+                        let skippedPerson = null;
                         
                         // For special holidays and weekends (priority 1-2), assign even with conflicts if eligible
                         if (priorityLevel <= 2 && isEligible) {
@@ -1804,15 +1937,29 @@
                             assignedPerson = idealPerson;
                         } else {
                             // Need to find alternative person
+                            // Track if ideal person was skipped due to special holiday conflict
+                            const skippedDueToSpecialHoliday = isEligible && hasConflict && 
+                                                              hadSpecialHolidayDutyBefore(dayKey, idealPerson, groupNum);
+                            
+                            if (skippedDueToSpecialHoliday) {
+                                skippedPerson = idealPerson;
+                            }
+                            
                             // Try all people in rotation order, starting from ideal person
                             for (let offset = 0; offset < groupPeople.length; offset++) {
                                 const personIndex = (idealPersonIndex + offset) % groupPeople.length;
                                 const candidatePerson = groupPeople[personIndex];
                                 
+                                // Skip the ideal person if they have conflict
+                                if (candidatePerson === idealPerson && hasConflict) {
+                                    continue;
+                                }
+                                
                                 const candidateDaysSince = countDaysSinceLastDuty(dayKey, candidatePerson, groupNum, dayTypeCategory, dayTypeLists);
                                 const candidateEligible = candidateDaysSince >= rotationDays || candidateDaysSince === Infinity;
                                 const candidateConflict = hasConsecutiveDuty(dayKey, candidatePerson, groupNum) || 
-                                                         hasFridaySundayDuty(dayKey, candidatePerson, groupNum);
+                                                         hasFridaySundayDuty(dayKey, candidatePerson, groupNum) ||
+                                                         hadSpecialHolidayDutyBefore(dayKey, candidatePerson, groupNum);
                                 
                                 // For special holidays and weekends, assign if eligible (even with conflicts)
                                 if (priorityLevel <= 2 && candidateEligible) {
@@ -1825,6 +1972,19 @@
                                     assignedPerson = candidatePerson;
                                     break;
                                 }
+                            }
+                            
+                            // If we found a replacement and ideal person was skipped due to special holiday
+                            if (assignedPerson && skippedPerson && skippedPerson !== assignedPerson) {
+                                // Store deferred assignment for swap
+                                deferredAssignments.push({
+                                    skippedPerson: skippedPerson,
+                                    skippedDay: dayKey,
+                                    replacementPerson: assignedPerson,
+                                    replacementDay: null, // Will be set later
+                                    groupNum: groupNum,
+                                    dayTypeCategory: dayTypeCategory
+                                });
                             }
                         }
                         
