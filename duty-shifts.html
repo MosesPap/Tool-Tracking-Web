@@ -3065,8 +3065,9 @@
         }
 
 
-        // Check if person had duty on a special holiday before this date
+        // Check if person had duty on a special holiday in the same month
         // If so, and current day is a weekend (Saturday/Sunday) or holiday, skip this person
+        // The rotation still counts, so they'll be assigned on the next weekend/holiday that is their turn
         function hadSpecialHolidayDutyBefore(dayKey, person, groupNum) {
             const date = new Date(dayKey + 'T00:00:00');
             const dayOfWeek = date.getDay(); // 0=Sunday, 6=Saturday
@@ -3082,17 +3083,27 @@
                 return false;
             }
             
-            // Check the previous 30 days for special holiday duty
-            // This ensures we catch the "next" weekend/holiday after a special holiday
-            for (let i = 1; i <= 30; i++) {
-                const checkDate = new Date(date);
-                checkDate.setDate(checkDate.getDate() - i);
+            // Get the current month and year
+            const currentMonth = date.getMonth(); // 0-11
+            const currentYear = date.getFullYear();
+            
+            // Check all days in the same month for special holiday duty
+            // Start from day 1 of the month
+            const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+            // End at the last day of the month
+            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+            
+            // Iterate through all days in the month
+            const checkDate = new Date(firstDayOfMonth);
+            while (checkDate <= lastDayOfMonth) {
                 const checkKey = formatDateKey(checkDate);
                 
-                // Check if this was a special holiday and person had duty
+                // Check if this day is a special holiday and person had duty on it
                 if (isSpecialHoliday(checkDate) && hasDutyOnDay(checkKey, person, groupNum)) {
-                    return true;
+                    return true; // Person had special holiday duty in this month, skip them
                 }
+                
+                checkDate.setDate(checkDate.getDate() + 1);
             }
             
             return false;
