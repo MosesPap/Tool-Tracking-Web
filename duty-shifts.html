@@ -1649,18 +1649,26 @@
                 // Editing mode - remove old assignments that are no longer valid
                 const oldLastDuties = groups[currentGroup].lastDuties[editingPersonName] || {};
                 
-                // Get the NEW dates that will be set
-                const newDates = [
-                    { date: lastSpecialDuty, type: 'special' },
-                    { date: lastWeekendDuty, type: 'weekend' },
-                    { date: lastSemiDuty, type: 'semi' },
-                    { date: lastNormalDuty, type: 'normal' }
-                ].filter(d => d.date && d.date.trim()).map(d => {
-                    const [year, month, day] = d.date.split('-').map(Number);
-                    return formatDateKey(new Date(year, month - 1, day));
+                // Get the NEW dates that will be set, organized by type
+                const newDatesByType = {
+                    special: lastSpecialDuty || null,
+                    weekend: lastWeekendDuty || null,
+                    semi: lastSemiDuty || null,
+                    normal: lastNormalDuty || null
+                };
+                
+                // Convert new dates to dateKeys for comparison
+                const newDateKeysByType = {};
+                Object.keys(newDatesByType).forEach(type => {
+                    const dateStr = newDatesByType[type];
+                    if (dateStr && dateStr.trim()) {
+                        const [year, month, day] = dateStr.split('-').map(Number);
+                        newDateKeysByType[type] = formatDateKey(new Date(year, month - 1, day));
+                    }
                 });
                 
-                // Remove old assignments that are NOT in the new dates list
+                // Remove old assignments - compare by TYPE
+                // If the old date for a type is different from the new date for that type, remove the old one
                 const oldDates = [
                     { date: oldLastDuties.special, type: 'special' },
                     { date: oldLastDuties.weekend, type: 'weekend' },
@@ -1673,31 +1681,36 @@
                         // Parse date string (YYYY-MM-DD) and create date in local timezone
                         const [year, month, day] = date.split('-').map(Number);
                         const dateObj = new Date(year, month - 1, day);
-                        const dateKey = formatDateKey(dateObj);
+                        const oldDateKey = formatDateKey(dateObj);
+                        const newDateKey = newDateKeysByType[type];
                         
-                        // Only remove if this date is NOT in the new dates list
-                        if (!newDates.includes(dateKey)) {
+                        // Remove if:
+                        // 1. The old date is different from the new date for this type, OR
+                        // 2. There's no new date for this type (user cleared it)
+                        const shouldRemove = (newDateKey && oldDateKey !== newDateKey) || (!newDateKey && oldDateKey);
+                        
+                        if (shouldRemove) {
                             const personGroupStr = `${editingPersonName} (Ομάδα ${currentGroup})`;
-                            const existingAssignment = dutyAssignments[dateKey];
+                            const existingAssignment = dutyAssignments[oldDateKey];
                             
                             // Remove from critical assignments
-                            if (criticalAssignments[dateKey]) {
-                                criticalAssignments[dateKey] = criticalAssignments[dateKey].filter(a => a !== personGroupStr);
-                                if (criticalAssignments[dateKey].length === 0) {
-                                    delete criticalAssignments[dateKey];
+                            if (criticalAssignments[oldDateKey]) {
+                                criticalAssignments[oldDateKey] = criticalAssignments[oldDateKey].filter(a => a !== personGroupStr);
+                                if (criticalAssignments[oldDateKey].length === 0) {
+                                    delete criticalAssignments[oldDateKey];
                                 }
-                                console.log(`Removed old critical assignment for ${dateKey}`);
+                                console.log(`[EDIT] Removed old critical assignment for ${oldDateKey} (${type} changed from ${oldDateKey} to ${newDateKey || 'empty'})`);
                             }
                             
                             // Remove from regular assignments
                             if (existingAssignment && existingAssignment.includes(personGroupStr)) {
                                 const assignments = existingAssignment.split(', ').filter(a => a !== personGroupStr);
                                 if (assignments.length > 0) {
-                                    dutyAssignments[dateKey] = assignments.join(', ');
+                                    dutyAssignments[oldDateKey] = assignments.join(', ');
                                 } else {
-                                    delete dutyAssignments[dateKey];
+                                    delete dutyAssignments[oldDateKey];
                                 }
-                                console.log(`Removed old assignment for ${dateKey}`);
+                                console.log(`[EDIT] Removed old assignment for ${oldDateKey} (${type} changed)`);
                             }
                         }
                     }
