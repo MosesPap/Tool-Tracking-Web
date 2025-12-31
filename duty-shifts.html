@@ -2991,10 +2991,13 @@
                 // Get holiday name (special holiday first, then Orthodox/Cyprus holiday)
                 const holidayName = getOrthodoxHolidayName(date);
                 
+                // Remove group names from assignment for display
+                const displayAssignment = assignment ? assignment.replace(/\s*\(Ομάδα\s*\d+\)/g, '') : '';
+                
                 dayDiv.innerHTML = `
                     <div class="day-number">${day}</div>
                     ${holidayName ? `<div class="orthodox-holiday-name">${holidayName}</div>` : ''}
-                    ${assignment ? `<div class="duty-person">${assignment}</div>` : ''}
+                    ${displayAssignment ? `<div class="duty-person">${displayAssignment}</div>` : ''}
                 `;
                 
                 grid.appendChild(dayDiv);
