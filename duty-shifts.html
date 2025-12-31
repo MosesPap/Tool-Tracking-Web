@@ -591,6 +591,45 @@
         </div>
     </div>
 
+    <!-- Calculate Duties Modal -->
+    <div class="modal fade" id="calculateDutiesModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary">
+                    <h5 class="modal-title"><i class="fas fa-calculator me-2"></i>Υπολογισμός Υπηρεσιών</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <small>Επιλέξτε τον μήνα ή τους μήνες για τους οποίους θέλετε να υπολογιστούν οι υπηρεσίες. Οι υπηρεσίες προηγούμενων μηνών δεν θα επηρεαστούν.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="calculateStartMonth" class="form-label">Από Μήνα</label>
+                        <input type="month" class="form-control" id="calculateStartMonth" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="calculateEndMonth" class="form-label">Έως Μήνα (Προαιρετικό)</label>
+                        <input type="month" class="form-control" id="calculateEndMonth">
+                        <small class="text-muted">Αφήστε κενό για υπολογισμό μόνο του επιλεγμένου μήνα</small>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="preserveExistingAssignments" checked>
+                        <label class="form-check-label" for="preserveExistingAssignments">
+                            Διατήρηση υπαρχουσών αναθέσεων (μη αντικατάσταση)
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-primary" onclick="calculateDutiesForSelectedMonths()">
+                        <i class="fas fa-calculator me-1"></i>Υπολογισμός
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Holiday Modal -->
     <div class="modal fade" id="addHolidayModal" tabindex="-1">
         <div class="modal-dialog">
@@ -2115,14 +2154,85 @@
                 return false;
             }
             
-            // Check the previous 14 days for special holiday duty
+            // Check the previous 30 days for special holiday duty
             // This ensures we catch the "next" weekend/holiday after a special holiday
-            for (let i = 1; i <= 14; i++) {
+            for (let i = 1; i <= 30; i++) {
                 const checkDate = new Date(date);
                 checkDate.setDate(checkDate.getDate() - i);
                 const checkKey = formatDateKey(checkDate);
                 
                 // Check if this was a special holiday and person had duty
+                if (isSpecialHoliday(checkDate) && hasDutyOnDay(checkKey, person, groupNum)) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        // Check if person had duty on consecutive weekend/holiday days
+        // If so, skip them from the next weekend/holiday
+        function hasConsecutiveWeekendHolidayDuty(dayKey, person, groupNum) {
+            const date = new Date(dayKey + 'T00:00:00');
+            const currentDayType = getDayType(date);
+            
+            // Only apply this rule if current day is a weekend/holiday
+            if (currentDayType !== 'weekend-holiday' || isSpecialHoliday(date)) {
+                return false;
+            }
+            
+            // Check if person had duty on the previous weekend/holiday day
+            // Look back up to 7 days to find the previous weekend/holiday
+            let consecutiveCount = 0;
+            let foundPreviousWeekendHoliday = false;
+            
+            for (let i = 1; i <= 7; i++) {
+                const checkDate = new Date(date);
+                checkDate.setDate(checkDate.getDate() - i);
+                const checkKey = formatDateKey(checkDate);
+                const checkDayType = getDayType(checkDate);
+                
+                // If we find a weekend/holiday day (not special holiday)
+                if (checkDayType === 'weekend-holiday' && !isSpecialHoliday(checkDate)) {
+                    foundPreviousWeekendHoliday = true;
+                    if (hasDutyOnDay(checkKey, person, groupNum)) {
+                        consecutiveCount++;
+                        // Continue checking backwards for more consecutive days
+                    } else {
+                        // Found a weekend/holiday without duty, stop counting
+                        break;
+                    }
+                } else if (checkDayType !== 'weekend-holiday' && foundPreviousWeekendHoliday) {
+                    // We already found a weekend/holiday, and now we hit a non-weekend/holiday
+                    // This breaks the consecutive sequence
+                    break;
+                }
+            }
+            
+            // If person had duty on 2 or more consecutive weekend/holiday days before this one, skip them
+            // This prevents assigning them to a third consecutive weekend/holiday
+            return consecutiveCount >= 2;
+        }
+
+        // Check if person had duty on consecutive special holidays
+        // If so, skip them from the next special holiday
+        function hasConsecutiveSpecialHolidayDuty(dayKey, person, groupNum) {
+            const date = new Date(dayKey + 'T00:00:00');
+            
+            // Only apply this rule if current day is a special holiday
+            if (!isSpecialHoliday(date)) {
+                return false;
+            }
+            
+            // Check if person had duty on any previous special holiday
+            // Look back up to 30 days to catch all special holidays
+            for (let i = 1; i <= 30; i++) {
+                const checkDate = new Date(date);
+                checkDate.setDate(checkDate.getDate() - i);
+                const checkKey = formatDateKey(checkDate);
+                
+                // If we find a special holiday where person had duty, it's consecutive
+                // This prevents assigning the same person to multiple special holidays in a row
                 if (isSpecialHoliday(checkDate) && hasDutyOnDay(checkKey, person, groupNum)) {
                     return true;
                 }
@@ -2347,13 +2457,20 @@
                         // Check for conflicts
                         const hasConflict = hasConsecutiveDuty(dayKey, idealPerson, groupNum) || 
                                          hasFridaySundayDuty(dayKey, idealPerson, groupNum) ||
-                                         hadSpecialHolidayDutyBefore(dayKey, idealPerson, groupNum);
+                                         hadSpecialHolidayDutyBefore(dayKey, idealPerson, groupNum) ||
+                                         hasConsecutiveWeekendHolidayDuty(dayKey, idealPerson, groupNum) ||
+                                         hasConsecutiveSpecialHolidayDuty(dayKey, idealPerson, groupNum);
                         
                         let assignedPerson = null;
                         let skippedPerson = null;
                         
-                        // For special holidays and weekends (priority 1-2), assign even with conflicts if eligible
-                        if (priorityLevel <= 2 && isEligible) {
+                        // Check for strict conflicts (consecutive special holidays or consecutive weekend/holiday)
+                        const hasStrictConflict = hasConsecutiveSpecialHolidayDuty(dayKey, idealPerson, groupNum) ||
+                                                 hasConsecutiveWeekendHolidayDuty(dayKey, idealPerson, groupNum);
+                        
+                        // For special holidays and weekends (priority 1-2), don't assign if there are strict conflicts
+                        // Strict conflicts must be avoided even for high priority days
+                        if (priorityLevel <= 2 && isEligible && !hasStrictConflict) {
                             assignedPerson = idealPerson;
                         } else if (isEligible && !hasConflict) {
                             // Ideal person is eligible and has no conflicts
@@ -2361,8 +2478,9 @@
                         } else {
                             // Need to find alternative person
                             // Track if ideal person was skipped due to special holiday conflict
-                            const skippedDueToSpecialHoliday = isEligible && hasConflict && 
-                                                              hadSpecialHolidayDutyBefore(dayKey, idealPerson, groupNum);
+                            const skippedDueToSpecialHoliday = isEligible && (hasConflict || hasStrictConflict) && 
+                                                              (hadSpecialHolidayDutyBefore(dayKey, idealPerson, groupNum) ||
+                                                               hasConsecutiveSpecialHolidayDuty(dayKey, idealPerson, groupNum));
                             
                             if (skippedDueToSpecialHoliday) {
                                 skippedPerson = idealPerson;
@@ -2382,10 +2500,16 @@
                                 const candidateEligible = candidateDaysSince >= rotationDays || candidateDaysSince === Infinity;
                                 const candidateConflict = hasConsecutiveDuty(dayKey, candidatePerson, groupNum) || 
                                                          hasFridaySundayDuty(dayKey, candidatePerson, groupNum) ||
-                                                         hadSpecialHolidayDutyBefore(dayKey, candidatePerson, groupNum);
+                                                         hadSpecialHolidayDutyBefore(dayKey, candidatePerson, groupNum) ||
+                                                         hasConsecutiveWeekendHolidayDuty(dayKey, candidatePerson, groupNum) ||
+                                                         hasConsecutiveSpecialHolidayDuty(dayKey, candidatePerson, groupNum);
                                 
-                                // For special holidays and weekends, assign if eligible (even with conflicts)
-                                if (priorityLevel <= 2 && candidateEligible) {
+                                // Check for strict conflicts for candidate
+                                const candidateStrictConflict = hasConsecutiveSpecialHolidayDuty(dayKey, candidatePerson, groupNum) ||
+                                                               hasConsecutiveWeekendHolidayDuty(dayKey, candidatePerson, groupNum);
+                                
+                                // For special holidays and weekends, don't assign if there are strict conflicts
+                                if (priorityLevel <= 2 && candidateEligible && !candidateStrictConflict) {
                                     assignedPerson = candidatePerson;
                                     break;
                                 }
