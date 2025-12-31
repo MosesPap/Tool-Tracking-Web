@@ -474,7 +474,7 @@
                     <button class="btn btn-sm btn-success ms-2" onclick="openAssignDutyModalForDate()">
                         <i class="fas fa-user-plus me-1"></i>Χειροκίνητη Ανάθεση
                     </button>
-                    <button class="btn btn-sm btn-primary ms-2" onclick="calculateDuties()">
+                    <button class="btn btn-sm btn-primary ms-2" onclick="openCalculateDutiesModal()">
                         <i class="fas fa-calculator me-1"></i>Υπολογισμός Υπηρεσιών
                     </button>
                 </div>
@@ -2132,7 +2132,8 @@
         }
 
         // Count days of a specific type since last duty for a person
-        function countDaysSinceLastDuty(dayKey, person, groupNum, dayTypeCategory, allDaysByType) {
+        // startDate is optional - if provided, will also check assignments before this date
+        function countDaysSinceLastDuty(dayKey, person, groupNum, dayTypeCategory, allDaysByType, startDate = null) {
             const daysOfType = allDaysByType[dayTypeCategory];
             const currentIndex = daysOfType.indexOf(dayKey);
             
@@ -2149,6 +2150,60 @@
                 }
             }
             
+            // If startDate is provided, also check existing assignments before the start date
+            if (startDate && lastDutyIndex === -1) {
+                const currentDate = new Date(dayKey + 'T00:00:00');
+                const checkDate = new Date(startDate);
+                checkDate.setDate(checkDate.getDate() - 1); // Day before start date
+                
+                // Look backwards from start date to find last duty
+                let daysBack = 0;
+                const maxDaysBack = 365; // Check up to 1 year back
+                
+                while (daysBack < maxDaysBack && checkDate >= new Date(2000, 0, 1)) { // Don't go before year 2000
+                    const checkKey = formatDateKey(checkDate);
+                    const checkDayType = getDayType(checkDate);
+                    let checkTypeCategory = 'normal';
+                    
+                    if (checkDayType === 'special-holiday') {
+                        checkTypeCategory = 'special';
+                    } else if (checkDayType === 'semi-normal-day') {
+                        checkTypeCategory = 'semi';
+                    } else if (checkDayType === 'weekend-holiday') {
+                        checkTypeCategory = 'weekend';
+                    }
+                    
+                    // Only count if it's the same day type category
+                    if (checkTypeCategory === dayTypeCategory && hasDutyOnDay(checkKey, person, groupNum)) {
+                        // Found a previous duty - calculate days between
+                        const daysBetween = Math.floor((currentDate - checkDate) / (1000 * 60 * 60 * 24));
+                        // Count only days of the same type between them
+                        let sameTypeDays = 0;
+                        const tempDate = new Date(checkDate);
+                        tempDate.setDate(tempDate.getDate() + 1);
+                        while (tempDate < currentDate) {
+                            const tempDayType = getDayType(tempDate);
+                            let tempTypeCategory = 'normal';
+                            if (tempDayType === 'special-holiday') {
+                                tempTypeCategory = 'special';
+                            } else if (tempDayType === 'semi-normal-day') {
+                                tempTypeCategory = 'semi';
+                            } else if (tempDayType === 'weekend-holiday') {
+                                tempTypeCategory = 'weekend';
+                            }
+                            if (tempTypeCategory === dayTypeCategory) {
+                                sameTypeDays++;
+                            }
+                            tempDate.setDate(tempDate.getDate() + 1);
+                        }
+                        return sameTypeDays;
+                    }
+                    
+                    checkDate.setDate(checkDate.getDate() - 1);
+                    daysBack++;
+                }
+            }
+            
             if (lastDutyIndex === -1) {
                 return Infinity; // Never had duty of this type
             }
@@ -2157,17 +2212,65 @@
             return currentIndex - lastDutyIndex;
         }
 
-        // Calculate duties
-        function calculateDuties() {
-            if (!confirm('Αυτό θα υπολογίσει εκ νέου όλες τις αναθέσεις υπηρεσιών. Συνέχεια;')) {
+        // Open calculate duties modal
+        function openCalculateDutiesModal() {
+            // Set default to current month
+            const currentYear = currentDate.getFullYear();
+            const currentMonth = String(currentDate.getMonth() + 1).padStart(2, '0');
+            document.getElementById('calculateStartMonth').value = `${currentYear}-${currentMonth}`;
+            document.getElementById('calculateEndMonth').value = '';
+            document.getElementById('preserveExistingAssignments').checked = true;
+            
+            const modal = new bootstrap.Modal(document.getElementById('calculateDutiesModal'));
+            modal.show();
+        }
+
+        // Calculate duties for selected months
+        function calculateDutiesForSelectedMonths() {
+            const startMonth = document.getElementById('calculateStartMonth').value;
+            const endMonth = document.getElementById('calculateEndMonth').value;
+            const preserveExisting = document.getElementById('preserveExistingAssignments').checked;
+            
+            if (!startMonth) {
+                alert('Παρακαλώ επιλέξτε τουλάχιστον τον μήνα έναρξης');
                 return;
             }
             
-            dutyAssignments = {};
+            // Parse start date
+            const [startYear, startMonthNum] = startMonth.split('-').map(Number);
+            const startDate = new Date(startYear, startMonthNum - 1, 1);
             
-            // Get date range (current month and next 2 months)
-            const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-            const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 3, 0);
+            // Parse end date (or use start month if not specified)
+            let endDate;
+            if (endMonth) {
+                const [endYear, endMonthNum] = endMonth.split('-').map(Number);
+                endDate = new Date(endYear, endMonthNum, 0); // Last day of the month
+            } else {
+                endDate = new Date(startYear, startMonthNum, 0); // Last day of start month
+            }
+            
+            // Store existing assignments if preserving
+            const existingAssignments = preserveExisting ? { ...dutyAssignments } : {};
+            
+            // Clear assignments only for the selected date range if not preserving
+            if (!preserveExisting) {
+                const dateIterator = new Date(startDate);
+                while (dateIterator <= endDate) {
+                    const key = formatDateKey(dateIterator);
+                    delete dutyAssignments[key];
+                    dateIterator.setDate(dateIterator.getDate() + 1);
+                }
+            }
+            
+            // Calculate duties for the selected range
+            calculateDutiesForDateRange(startDate, endDate, preserveExisting);
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('calculateDutiesModal'));
+            modal.hide();
+        }
+
+        // Calculate duties for a specific date range
+        function calculateDutiesForDateRange(startDate, endDate, preserveExisting = true) {
             
             // Process each group
             for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -2224,7 +2327,7 @@
                     days.forEach((dayKey, dayIndex) => {
                         // Check if this day already has a manual assignment for this group
                         const existingAssignment = dutyAssignments[dayKey];
-                        if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
+                        if (preserveExisting && existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
                             // Skip - this day already has a manual assignment for this group
                             return;
                         }
@@ -2235,7 +2338,8 @@
                         const idealPerson = groupPeople[idealPersonIndex];
                         
                         // Count days since last duty of this type for ideal person
-                        const daysSinceLastDuty = countDaysSinceLastDuty(dayKey, idealPerson, groupNum, dayTypeCategory, dayTypeLists);
+                        // Need to check all existing assignments, not just current range
+                        const daysSinceLastDuty = countDaysSinceLastDuty(dayKey, idealPerson, groupNum, dayTypeCategory, dayTypeLists, startDate);
                         
                         // Check if ideal person is eligible (has waited enough days)
                         const isEligible = daysSinceLastDuty >= rotationDays || daysSinceLastDuty === Infinity;
@@ -2274,7 +2378,7 @@
                                     continue;
                                 }
                                 
-                                const candidateDaysSince = countDaysSinceLastDuty(dayKey, candidatePerson, groupNum, dayTypeCategory, dayTypeLists);
+                                const candidateDaysSince = countDaysSinceLastDuty(dayKey, candidatePerson, groupNum, dayTypeCategory, dayTypeLists, startDate);
                                 const candidateEligible = candidateDaysSince >= rotationDays || candidateDaysSince === Infinity;
                                 const candidateConflict = hasConsecutiveDuty(dayKey, candidatePerson, groupNum) || 
                                                          hasFridaySundayDuty(dayKey, candidatePerson, groupNum) ||
@@ -2359,7 +2463,7 @@
             
             saveData();
             renderCalendar();
-            alert('Οι αναθέσεις υπηρεσιών υπολογίστηκαν επιτυχώς!');
+            alert('Οι αναθέσεις υπηρεσιών υπολογίστηκαν επιτυχώς για την επιλεγμένη περίοδο!');
         }
 
         // Show day details
