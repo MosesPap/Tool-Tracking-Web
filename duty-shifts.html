@@ -1525,6 +1525,14 @@
                         }
                         if (!criticalAssignments[dateKey].includes(personGroupStr)) {
                             criticalAssignments[dateKey].push(personGroupStr);
+                            console.log(`✓ Added to criticalAssignments[${dateKey}]:`, criticalAssignments[dateKey]);
+                        } else {
+                            console.log(`✓ Already in criticalAssignments[${dateKey}]:`, criticalAssignments[dateKey]);
+                        }
+                        
+                        // Verify criticalAssignments was updated
+                        if (!criticalAssignments[dateKey] || !criticalAssignments[dateKey].includes(personGroupStr)) {
+                            console.error(`ERROR: Failed to add to criticalAssignments for ${dateKey}!`);
                         }
                         
                         if (existingAssignment) {
@@ -1554,6 +1562,15 @@
             
             if (addedAssignments.length > 0) {
                 console.log(`✓ Added ${addedAssignments.length} critical baseline assignments for ${personKey}`);
+                // Verify criticalAssignments contains these dates
+                addedAssignments.forEach(dateKey => {
+                    if (criticalAssignments[dateKey] && criticalAssignments[dateKey].length > 0) {
+                        console.log(`✓ Verified criticalAssignments[${dateKey}] =`, criticalAssignments[dateKey]);
+                    } else {
+                        console.error(`ERROR: criticalAssignments[${dateKey}] is missing or empty!`);
+                    }
+                });
+                console.log(`Total criticalAssignments keys:`, Object.keys(criticalAssignments).length);
             }
             
             if (isEditingPerson) {
@@ -1640,13 +1657,26 @@
                 addedAssignments.map(key => ({ key, assignment: dutyAssignments[key] }))
             );
             
+            // Verify assignments and criticalAssignments before saving
+            console.log('Before saveData:');
+            console.log('  - dutyAssignments keys:', Object.keys(dutyAssignments).length);
+            console.log('  - criticalAssignments keys:', Object.keys(criticalAssignments).length);
+            addedAssignments.forEach(key => {
+                console.log(`  - dutyAssignments['${key}'] =`, dutyAssignments[key]);
+                console.log(`  - criticalAssignments['${key}'] =`, criticalAssignments[key]);
+            });
+            
             saveData();
             renderGroups();
             
             // Double-check assignments are still there after saveData (should be, but verify)
-            console.log('After saveData - dutyAssignments for added dates:', 
-                addedAssignments.map(key => ({ key, assignment: dutyAssignments[key] }))
-            );
+            console.log('After saveData:');
+            console.log('  - dutyAssignments keys:', Object.keys(dutyAssignments).length);
+            console.log('  - criticalAssignments keys:', Object.keys(criticalAssignments).length);
+            addedAssignments.forEach(key => {
+                console.log(`  - dutyAssignments['${key}'] =`, dutyAssignments[key]);
+                console.log(`  - criticalAssignments['${key}'] =`, criticalAssignments[key]);
+            });
             
             renderCalendar(); // Refresh calendar to show the new critical assignments
             updateStatistics();
@@ -2752,11 +2782,13 @@
                 const key = formatDateKey(date);
                 const assignment = dutyAssignments[key];
                 
-                // Debug: Check for specific date that should have assignment
-                if (key === '2026-01-07') {
-                    console.log(`DEBUG 2026-01-07: assignment =`, assignment);
-                    console.log(`DEBUG 2026-01-07: dutyAssignments['2026-01-07'] =`, dutyAssignments['2026-01-07']);
-                    console.log(`DEBUG 2026-01-07: criticalAssignments['2026-01-07'] =`, criticalAssignments['2026-01-07']);
+                // Debug: Check for specific dates that should have assignments
+                if (key === '2026-01-07' || key === '2025-12-25') {
+                    console.log(`DEBUG ${key}:`);
+                    console.log(`  - assignment variable =`, assignment);
+                    console.log(`  - dutyAssignments['${key}'] =`, dutyAssignments[key]);
+                    console.log(`  - criticalAssignments['${key}'] =`, criticalAssignments[key]);
+                    console.log(`  - All dutyAssignments keys:`, Object.keys(dutyAssignments).filter(k => k.includes('2026-01') || k.includes('2025-12')).slice(0, 5));
                 }
                 
                 const dayDiv = document.createElement('div');
