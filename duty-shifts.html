@@ -3171,6 +3171,12 @@
             const days = ['Κυριακή', 'Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτη', 'Παρασκευή', 'Σάββατο'];
             return days[date.getDay()];
         }
+        
+        // Get Greek day name in uppercase for Excel
+        function getGreekDayNameUppercase(date) {
+            const days = ['ΚΥΡΙΑΚΗ', 'ΔΕΥΤΕΡΑ', 'ΤΡΙΤΗ', 'ΤΕΤΑΡΤΗ', 'ΠΕΜΠΤΗ', 'ΠΑΡΑΣΚΕΥΗ', 'ΣΑΒΒΑΤΟ'];
+            return days[date.getDay()];
+        }
 
         // Get Greek month name
         function getGreekMonthName(date) {
@@ -3227,28 +3233,56 @@
                         const workbook = new ExcelJS.Workbook();
                         const worksheet = workbook.addWorksheet('Υπηρεσίες');
                         
-                        // Set title
+                        // Set title - merge cells A1 through C1
                         worksheet.mergeCells('A1:C1');
                         const titleCell = worksheet.getCell('A1');
                         titleCell.value = `ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`;
-                        titleCell.font = { bold: true, size: 14 };
-                        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-                        worksheet.getRow(1).height = 25;
+                        titleCell.font = { 
+                            name: 'Arial', 
+                            bold: true, 
+                            size: 16 
+                        };
+                        titleCell.alignment = { 
+                            horizontal: 'center', 
+                            vertical: 'middle' 
+                        };
+                        titleCell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FF428BCA' } // Blue background like in photo
+                        };
+                        titleCell.font.color = { argb: 'FFFFFFFF' }; // White text
+                        worksheet.getRow(1).height = 30;
                         
                         // Empty row
                         worksheet.getRow(2).height = 5;
                         
                         // Header row
                         const headerRow = worksheet.getRow(3);
-                        headerRow.values = ['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ'];
-                        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                        headerRow.fill = {
-                            type: 'pattern',
-                            pattern: 'solid',
-                            fgColor: { argb: 'FF428BCA' }
-                        };
-                        headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
-                        headerRow.height = 20;
+                        headerRow.getCell(1).value = 'ΗΜΕΡ.';
+                        headerRow.getCell(2).value = 'ΗΜΕΡΑ';
+                        headerRow.getCell(3).value = 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ';
+                        
+                        // Style each header cell individually
+                        ['A3', 'B3', 'C3'].forEach(cellRef => {
+                            const cell = worksheet.getCell(cellRef);
+                            cell.font = { 
+                                name: 'Arial', 
+                                bold: true, 
+                                size: 15,
+                                color: { argb: 'FFFFFFFF' } // White text
+                            };
+                            cell.fill = {
+                                type: 'pattern',
+                                pattern: 'solid',
+                                fgColor: { argb: 'FF428BCA' } // Blue background
+                            };
+                            cell.alignment = { 
+                                horizontal: 'center', 
+                                vertical: 'middle' 
+                            };
+                        });
+                        headerRow.height = 25;
                         
                         // Set column widths
                         worksheet.getColumn(1).width = 12;
@@ -3260,7 +3294,7 @@
                             const date = new Date(year, month, day);
                             const dayKey = formatDateKey(date);
                             const dayType = getDayType(date);
-                            const dayName = getGreekDayName(date);
+                            const dayName = getGreekDayNameUppercase(date); // Use uppercase
                             
                             // Get assignment for this group
                             const assignment = dutyAssignments[dayKey] || '';
@@ -3283,22 +3317,33 @@
                             const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
                             
                             const row = worksheet.getRow(day + 3); // +3 for title, empty, header rows
-                            row.values = [dateStr, dayName, personName];
+                            row.getCell(1).value = dateStr;
+                            row.getCell(2).value = dayName;
+                            row.getCell(3).value = personName;
                             
                             // Apply color based on day type
                             const color = getDayTypeColor(dayType);
                             const hexColor = 'FF' + color.map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase();
                             
-                            row.fill = {
-                                type: 'pattern',
-                                pattern: 'solid',
-                                fgColor: { argb: hexColor }
-                            };
+                            // Style each cell in the row
+                            [1, 2, 3].forEach(colNum => {
+                                const cell = row.getCell(colNum);
+                                cell.fill = {
+                                    type: 'pattern',
+                                    pattern: 'solid',
+                                    fgColor: { argb: hexColor }
+                                };
+                                cell.font = { 
+                                    name: 'Arial', 
+                                    size: 14 
+                                };
+                                cell.alignment = { 
+                                    horizontal: colNum === 1 ? 'left' : 'left', 
+                                    vertical: 'middle' 
+                                };
+                            });
                             
-                            // Set font to Arial for Greek support
-                            row.font = { name: 'Arial', size: 10 };
-                            row.alignment = { horizontal: 'left', vertical: 'middle' };
-                            row.height = 18;
+                            row.height = 20;
                         }
                         
                         // Generate file name
@@ -3332,7 +3377,7 @@
                             const date = new Date(year, month, day);
                             const dayKey = formatDateKey(date);
                             const dayType = getDayType(date);
-                            const dayName = getGreekDayName(date);
+                            const dayName = getGreekDayNameUppercase(date); // Use uppercase
                             
                             const assignment = dutyAssignments[dayKey] || '';
                             let personName = '';
@@ -3358,7 +3403,26 @@
                         if (!ws['!merges']) ws['!merges'] = [];
                         ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } });
                         
-                        // Apply colors (limited support in SheetJS)
+                        // Style title row (row 1)
+                        const titleCell = 'A1';
+                        if (!ws[titleCell]) ws[titleCell] = { t: 's', v: data[0][0] || '' };
+                        if (!ws[titleCell].s) ws[titleCell].s = {};
+                        ws[titleCell].s.font = { name: 'Arial', bold: true, sz: 16, color: { rgb: 'FFFFFF' } };
+                        ws[titleCell].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
+                        ws[titleCell].s.alignment = { horizontal: 'center', vertical: 'center' };
+                        
+                        // Style header row (row 3)
+                        const headerRow = 2; // 0-indexed, so row 3 is index 2
+                        ['A', 'B', 'C'].forEach((col, idx) => {
+                            const cellRef = col + (headerRow + 1);
+                            if (!ws[cellRef]) ws[cellRef] = { t: 's', v: data[headerRow][idx] || '' };
+                            if (!ws[cellRef].s) ws[cellRef].s = {};
+                            ws[cellRef].s.font = { name: 'Arial', bold: true, sz: 15, color: { rgb: 'FFFFFF' } };
+                            ws[cellRef].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
+                            ws[cellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
+                        });
+                        
+                        // Apply colors and fonts to data rows
                         for (let rowIdx = 3; rowIdx < rowDayTypes.length; rowIdx++) {
                             const dayType = rowDayTypes[rowIdx];
                             if (!dayType) continue;
@@ -3374,6 +3438,7 @@
                                 }
                                 if (!ws[cellRef].s) ws[cellRef].s = {};
                                 ws[cellRef].s.fill = { fgColor: { rgb: hexColor }, patternType: 'solid' };
+                                ws[cellRef].s.font = { name: 'Arial', sz: 14 };
                                 ws[cellRef].s.alignment = { horizontal: 'left', vertical: 'center' };
                             });
                         }
