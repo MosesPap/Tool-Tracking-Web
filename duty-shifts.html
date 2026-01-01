@@ -3416,28 +3416,40 @@
                 // Parse assignment and display each person on a separate line (no commas)
                 let displayAssignmentHtml = '';
                 if (assignment) {
-                    // First, try to extract all "Name (Ομάδα X)" patterns using regex
-                    const personGroupMatches = [];
-                    const regex = /([^(]+?)\s*\(Ομάδα\s*(\d+)\)/g;
-                    let match;
-                    while ((match = regex.exec(assignment)) !== null) {
-                        personGroupMatches.push({
-                            name: match[1].trim(),
-                            group: match[2].trim(),
-                            fullString: match[0].trim()
-                        });
-                    }
+                    // Split by comma first, then extract person-group info from each part
+                    const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
+                    const personGroups = [];
                     
-                    // If no matches found, split by comma as fallback
-                    const personGroups = personGroupMatches.length > 0 ? personGroupMatches : 
-                        assignment.split(',').map(p => {
-                            const trimmed = p.trim();
-                            return {
-                                name: trimmed,
-                                group: null,
-                                fullString: trimmed
-                            };
-                        }).filter(p => p.name);
+                    parts.forEach(part => {
+                        // Try to match "Name (Ομάδα X)" pattern
+                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                        if (match) {
+                            personGroups.push({
+                                name: match[1].trim(),
+                                group: match[2].trim(),
+                                fullString: part
+                            });
+                        } else {
+                            // If no group pattern, check if it's just a name
+                            // Try to extract group info if it exists elsewhere in the string
+                            const groupMatch = part.match(/\(Ομάδα\s*(\d+)\)/);
+                            if (groupMatch) {
+                                const name = part.replace(/\s*\(Ομάδα\s*\d+\)\s*/, '').trim();
+                                personGroups.push({
+                                    name: name,
+                                    group: groupMatch[1],
+                                    fullString: part
+                                });
+                            } else {
+                                // Just a name without group info
+                                personGroups.push({
+                                    name: part,
+                                    group: null,
+                                    fullString: part
+                                });
+                            }
+                        }
+                    });
                     
                     // Check if this date has critical assignments
                     const criticalPeople = criticalAssignments[key] || [];
@@ -3470,9 +3482,16 @@
                 
                 // Add click handler AFTER setting innerHTML to ensure it's not removed
                 dayDiv.style.cursor = 'pointer';
+                dayDiv.setAttribute('data-date', key); // Store date key for debugging
                 dayDiv.addEventListener('click', (e) => {
+                    e.preventDefault();
                     e.stopPropagation();
-                    showDayDetails(date);
+                    try {
+                        showDayDetails(date);
+                    } catch (error) {
+                        console.error('Error showing day details:', error);
+                        alert('Σφάλμα κατά το άνοιγμα των λεπτομερειών ημέρας: ' + error.message);
+                    }
                 });
                 
                 grid.appendChild(dayDiv);
@@ -4177,17 +4196,28 @@
 
         // Show day details
         function showDayDetails(date) {
-            const key = formatDateKey(date);
-            const assignment = dutyAssignments[key];
-            const dayType = getDayType(date);
-            
-            // Store selected date for manual assignment
-            selectedDateForDuty = date;
-            currentEditingDayKey = key;
-            currentEditingDayDate = date;
-            
-            const modal = new bootstrap.Modal(document.getElementById('dayDetailsModal'));
-            document.getElementById('dayDetailsTitle').textContent = formatDate(date);
+            try {
+                const key = formatDateKey(date);
+                const assignment = dutyAssignments[key];
+                const dayType = getDayType(date);
+                
+                // Store selected date for manual assignment
+                selectedDateForDuty = date;
+                currentEditingDayKey = key;
+                currentEditingDayDate = date;
+                
+                const modalElement = document.getElementById('dayDetailsModal');
+                if (!modalElement) {
+                    console.error('dayDetailsModal element not found');
+                    alert('Το modal δεν βρέθηκε. Παρακαλώ ανανεώστε τη σελίδα.');
+                    return;
+                }
+                
+                const modal = new bootstrap.Modal(modalElement);
+                const titleElement = document.getElementById('dayDetailsTitle');
+                if (titleElement) {
+                    titleElement.textContent = formatDate(date);
+                }
             
             let content = `
                 <div class="mb-3">
@@ -4325,19 +4355,14 @@
                 </div>
             `;
             
-            document.getElementById('dayDetailsContent').innerHTML = content;
-            
-            // Show/hide buttons based on whether assignment exists
-            const assignBtn = document.getElementById('assignDutyBtn');
-            const editBtn = document.getElementById('editDutyBtn');
-            const removeBtn = document.getElementById('removeDutyBtn');
-            
-            // Hide old buttons, we'll use save button instead
-            assignBtn.style.display = 'none';
-            editBtn.style.display = 'none';
-            removeBtn.style.display = 'none';
-            
-            modal.show();
+                document.getElementById('dayDetailsContent').innerHTML = content;
+                
+                // Buttons are now in the modal footer, no need to show/hide them
+                modal.show();
+            } catch (error) {
+                console.error('Error in showDayDetails:', error);
+                alert('Σφάλμα: ' + error.message);
+            }
         }
         
         // Add a new person field to the day
