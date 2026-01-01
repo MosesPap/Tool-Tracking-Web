@@ -10,6 +10,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
     <style>
         body, html {
             margin: 0;
@@ -3075,7 +3076,7 @@
         }
 
         // Generate Excel files for current month for all groups
-        function generateExcelFilesForCurrentMonth() {
+        async function generateExcelFilesForCurrentMonth() {
             try {
                 const year = currentDate.getFullYear();
                 const month = currentDate.getMonth();
@@ -3093,6 +3094,9 @@
                 loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Δημιουργία Excel αρχείων...';
                 document.body.appendChild(loadingAlert);
                 
+                // Check if ExcelJS is available, otherwise fall back to SheetJS
+                const useExcelJS = typeof ExcelJS !== 'undefined';
+                
                 // Generate Excel file for each group
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const groupName = getGroupName(groupNum);
@@ -3103,120 +3107,166 @@
                         continue;
                     }
                     
-                    // Create workbook
-                    const wb = XLSX.utils.book_new();
-                    
-                    // Prepare data array with day type info for styling
-                    const data = [];
-                    const rowDayTypes = []; // Track day type for each data row
-                    
-                    // Title row
-                    data.push([`ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`]);
-                    data.push([]); // Empty row
-                    rowDayTypes.push(null, null); // No color for title rows
-                    
-                    // Header row
-                    data.push(['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ']);
-                    rowDayTypes.push(null); // Header will be styled separately
-                    
-                    // Data rows
-                    for (let day = 1; day <= daysInMonth; day++) {
-                        const date = new Date(year, month, day);
-                        const dayKey = formatDateKey(date);
-                        const dayType = getDayType(date);
-                        const dayName = getGreekDayName(date);
+                    if (useExcelJS) {
+                        // Use ExcelJS for better styling support
+                        const workbook = new ExcelJS.Workbook();
+                        const worksheet = workbook.addWorksheet('Υπηρεσίες');
                         
-                        // Get assignment for this group
-                        const assignment = dutyAssignments[dayKey] || '';
-                        let personName = '';
+                        // Set title
+                        worksheet.mergeCells('A1:C1');
+                        const titleCell = worksheet.getCell('A1');
+                        titleCell.value = `ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`;
+                        titleCell.font = { bold: true, size: 14 };
+                        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        worksheet.getRow(1).height = 25;
                         
-                        if (assignment) {
-                            // Extract person name for this group
-                            const personGroupMatches = assignment.matchAll(/([^(]+)\s*\(Ομάδα\s*(\d+)\)/g);
-                            for (const match of personGroupMatches) {
-                                if (parseInt(match[2]) === groupNum) {
-                                    personName = match[1].trim();
-                                    break;
+                        // Empty row
+                        worksheet.getRow(2).height = 5;
+                        
+                        // Header row
+                        const headerRow = worksheet.getRow(3);
+                        headerRow.values = ['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ'];
+                        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                        headerRow.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FF428BCA' }
+                        };
+                        headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+                        headerRow.height = 20;
+                        
+                        // Set column widths
+                        worksheet.getColumn(1).width = 12;
+                        worksheet.getColumn(2).width = 15;
+                        worksheet.getColumn(3).width = 30;
+                        
+                        // Data rows
+                        for (let day = 1; day <= daysInMonth; day++) {
+                            const date = new Date(year, month, day);
+                            const dayKey = formatDateKey(date);
+                            const dayType = getDayType(date);
+                            const dayName = getGreekDayName(date);
+                            
+                            // Get assignment for this group
+                            const assignment = dutyAssignments[dayKey] || '';
+                            let personName = '';
+                            
+                            if (assignment) {
+                                // Extract person name for this group - split by comma first to handle properly
+                                const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
+                                for (const part of parts) {
+                                    const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                                    if (match && parseInt(match[2]) === groupNum) {
+                                        // Remove any leading/trailing commas from the name
+                                        personName = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
+                                        break;
+                                    }
                                 }
                             }
+                            
+                            // Format date as DD/MM/YYYY
+                            const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
+                            
+                            const row = worksheet.getRow(day + 3); // +3 for title, empty, header rows
+                            row.values = [dateStr, dayName, personName];
+                            
+                            // Apply color based on day type
+                            const color = getDayTypeColor(dayType);
+                            const hexColor = 'FF' + color.map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase();
+                            
+                            row.fill = {
+                                type: 'pattern',
+                                pattern: 'solid',
+                                fgColor: { argb: hexColor }
+                            };
+                            
+                            // Set font to Arial for Greek support
+                            row.font = { name: 'Arial', size: 10 };
+                            row.alignment = { horizontal: 'left', vertical: 'middle' };
+                            row.height = 18;
                         }
                         
-                        // Format date as DD/MM/YYYY
-                        const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
+                        // Generate file name
+                        const fileName = `YPHRESIA_${groupName.replace(/[^a-zA-Z0-9]/g, '_')}_${monthName.replace(/[^a-zA-Z0-9]/g, '_')}_${year}.xlsx`;
                         
-                        data.push([dateStr, dayName, personName]);
-                        rowDayTypes.push(dayType); // Store day type for this row
-                    }
-                    
-                    // Create worksheet
-                    const ws = XLSX.utils.aoa_to_sheet(data);
-                    
-                    // Set column widths
-                    ws['!cols'] = [
-                        { wch: 12 }, // Date column
-                        { wch: 15 }, // Day name column
-                        { wch: 30 }  // Person name column
-                    ];
-                    
-                    // Merge title row (first row, columns A-C)
-                    if (!ws['!merges']) ws['!merges'] = [];
-                    ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } });
-                    
-                    // Style title row (row 1, 0-indexed)
-                    const titleCell = 'A1';
-                    if (!ws[titleCell]) ws[titleCell] = { t: 's', v: '' };
-                    ws[titleCell].s = {
-                        font: { bold: true, sz: 14 },
-                        alignment: { horizontal: 'center', vertical: 'center' }
-                    };
-                    
-                    // Style header row (row 3, 0-indexed is row 2)
-                    const headerRow = 2;
-                    const headerStyle = {
-                        fill: { fgColor: { rgb: '428BCA' } }, // Blue background
-                        font: { bold: true, color: { rgb: 'FFFFFF' } }, // White text
-                        alignment: { horizontal: 'center', vertical: 'center' }
-                    };
-                    ['A', 'B', 'C'].forEach((col, idx) => {
-                        const cellRef = col + (headerRow + 1);
-                        if (!ws[cellRef]) ws[cellRef] = { t: 's', v: data[headerRow][idx] || '' };
-                        ws[cellRef].s = headerStyle;
-                    });
-                    
-                    // Style data rows with colors based on day type
-                    // rowDayTypes array: [null (title), null (empty), null (header), dayType1, dayType2, ...]
-                    // Excel rows: 1 (title), 2 (empty), 3 (header), 4 (data1), 5 (data2), ...
-                    // So for data rows: Excel row = rowIdx + 1, but we need to skip first 3
-                    for (let rowIdx = 3; rowIdx < rowDayTypes.length; rowIdx++) {
-                        const dayType = rowDayTypes[rowIdx];
-                        if (!dayType) continue; // Skip if somehow null
+                        // Write file
+                        const buffer = await workbook.xlsx.writeBuffer();
+                        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = fileName;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                    } else {
+                        // Fallback to SheetJS (limited styling)
+                        const wb = XLSX.utils.book_new();
+                        const data = [];
+                        const rowDayTypes = [];
                         
-                        const color = getDayTypeColor(dayType);
-                        // Convert RGB array to hex string (without #)
-                        const hexColor = color.map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase();
+                        data.push([`ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`]);
+                        data.push([]);
+                        rowDayTypes.push(null, null);
                         
-                        // Excel rows are 1-indexed, and data starts at row 4 (after title, empty, header)
-                        const excelRow = rowIdx + 1; // rowIdx 3 -> Excel row 4
+                        data.push(['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ']);
+                        rowDayTypes.push(null);
                         
-                        // Apply color to all cells in this row (A, B, C)
-                        ['A', 'B', 'C'].forEach((col) => {
-                            const cellRef = col + excelRow;
-                            if (ws[cellRef]) {
-                                if (!ws[cellRef].s) ws[cellRef].s = {};
-                                ws[cellRef].s.fill = { fgColor: { rgb: hexColor } };
-                                ws[cellRef].s.alignment = { horizontal: 'left', vertical: 'center' };
+                        for (let day = 1; day <= daysInMonth; day++) {
+                            const date = new Date(year, month, day);
+                            const dayKey = formatDateKey(date);
+                            const dayType = getDayType(date);
+                            const dayName = getGreekDayName(date);
+                            
+                            const assignment = dutyAssignments[dayKey] || '';
+                            let personName = '';
+                            
+                            if (assignment) {
+                                const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
+                                for (const part of parts) {
+                                    const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                                    if (match && parseInt(match[2]) === groupNum) {
+                                        personName = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
+                                        break;
+                                    }
+                                }
                             }
-                        });
+                            
+                            const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
+                            data.push([dateStr, dayName, personName]);
+                            rowDayTypes.push(dayType);
+                        }
+                        
+                        const ws = XLSX.utils.aoa_to_sheet(data);
+                        ws['!cols'] = [{ wch: 12 }, { wch: 15 }, { wch: 30 }];
+                        if (!ws['!merges']) ws['!merges'] = [];
+                        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } });
+                        
+                        // Apply colors (limited support in SheetJS)
+                        for (let rowIdx = 3; rowIdx < rowDayTypes.length; rowIdx++) {
+                            const dayType = rowDayTypes[rowIdx];
+                            if (!dayType) continue;
+                            
+                            const color = getDayTypeColor(dayType);
+                            const hexColor = color.map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase();
+                            const excelRow = rowIdx + 1;
+                            
+                            ['A', 'B', 'C'].forEach((col, colIdx) => {
+                                const cellRef = col + excelRow;
+                                if (!ws[cellRef]) {
+                                    ws[cellRef] = { t: 's', v: data[rowIdx] ? (data[rowIdx][colIdx] || '') : '' };
+                                }
+                                if (!ws[cellRef].s) ws[cellRef].s = {};
+                                ws[cellRef].s.fill = { fgColor: { rgb: hexColor }, patternType: 'solid' };
+                                ws[cellRef].s.alignment = { horizontal: 'left', vertical: 'center' };
+                            });
+                        }
+                        
+                        XLSX.utils.book_append_sheet(wb, ws, 'Υπηρεσίες');
+                        const fileName = `YPHRESIA_${groupName.replace(/[^a-zA-Z0-9]/g, '_')}_${monthName.replace(/[^a-zA-Z0-9]/g, '_')}_${year}.xlsx`;
+                        XLSX.writeFile(wb, fileName);
                     }
-                    
-                    // Add worksheet to workbook
-                    XLSX.utils.book_append_sheet(wb, ws, 'Υπηρεσίες');
-                    
-                    // Generate file name
-                    const fileName = `YPHRESIA_${groupName.replace(/[^a-zA-Z0-9]/g, '_')}_${monthName.replace(/[^a-zA-Z0-9]/g, '_')}_${year}.xlsx`;
-                    
-                    // Write file
-                    XLSX.writeFile(wb, fileName);
                 }
                 
                 // Remove loading message
@@ -4332,8 +4382,10 @@
                 });
                 
                 const groupName = person.group ? getGroupName(person.group) : 'Άγνωστη Ομάδα';
-                const criticalClass = isCritical ? 'border-danger' : '';
-                const criticalLabel = isCritical ? '<span class="badge bg-danger ms-2">Κρίσιμη</span>' : '';
+                const criticalClass = isCritical ? 'border-danger bg-light' : '';
+                const criticalLabel = isCritical ? '<span class="badge bg-danger ms-2"><i class="fas fa-lock me-1"></i>Κρίσιμη (Απόβαση)</span>' : '';
+                const disabledAttr = isCritical ? 'disabled' : '';
+                const disabledTitle = isCritical ? 'title="Αυτή η ανάθεση είναι κρίσιμη και δεν μπορεί να αλλάξει"' : '';
                 
                 // Get all people from this group for dropdown
                 const groupData = groups[person.group] || {};
@@ -4352,14 +4404,17 @@
                 ).join('');
                 
                 content += `
-                    <div class="mb-2 p-2 border rounded ${criticalClass}">
+                    <div class="mb-2 p-2 border rounded ${criticalClass}" ${disabledTitle}>
                         <label class="form-label small text-muted">Ομάδα ${person.group}: ${groupName}${criticalLabel}</label>
                         <select class="form-select duty-person-select" 
                                 data-index="${index}" 
                                 data-group="${person.group}" 
-                                data-original-name="${person.name || ''}">
+                                data-original-name="${person.name || ''}"
+                                data-is-critical="${isCritical ? 'true' : 'false'}"
+                                ${disabledAttr}>
                             ${peopleOptions}
                         </select>
+                        ${isCritical ? '<small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i>Αυτή η ανάθεση προέρχεται από τις ημερομηνίες τελευταίας υπηρεσίας και δεν μπορεί να αλλάξει.</small>' : ''}
                     </div>
                 `;
             });
@@ -4389,28 +4444,31 @@
             const selects = container.querySelectorAll('.duty-person-select');
             const newAssignments = [];
             
-            // Get original assignments to preserve critical status
-            const originalAssignment = dutyAssignments[currentEditingDayKey] || '';
-            const originalPersonGroups = [];
-            if (originalAssignment) {
-                const parts = originalAssignment.split(',').map(p => p.trim()).filter(p => p);
-                parts.forEach(part => {
-                    const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
-                    if (match) {
-                        originalPersonGroups.push({
-                            name: match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, ''),
-                            group: parseInt(match[2]),
-                            fullString: part
-                        });
-                    }
-                });
-            }
+            // Get original critical assignments
+            const originalCritical = criticalAssignments[currentEditingDayKey] || [];
+            const originalCriticalPeople = new Set();
+            originalCritical.forEach(cp => {
+                const match = cp.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                if (match) {
+                    const name = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
+                    const group = parseInt(match[2]);
+                    originalCriticalPeople.add(`${name}|${group}`);
+                }
+            });
             
             selects.forEach(select => {
+                const isCritical = select.dataset.isCritical === 'true';
                 const personName = select.value.trim();
                 const group = select.dataset.group;
                 
-                if (personName && group) {
+                // If critical, use the original value (don't allow changes)
+                if (isCritical) {
+                    const originalName = select.dataset.originalName;
+                    if (originalName && group) {
+                        newAssignments.push(`${originalName} (Ομάδα ${group})`);
+                    }
+                } else if (personName && group) {
+                    // Non-critical assignments can be changed
                     newAssignments.push(`${personName} (Ομάδα ${group})`);
                 }
             });
@@ -4422,32 +4480,16 @@
                 delete dutyAssignments[currentEditingDayKey];
             }
             
-            // Update criticalAssignments - preserve critical status if the same person-group was critical
-            const originalCritical = criticalAssignments[currentEditingDayKey] || [];
+            // Preserve all original critical assignments
             const newCritical = [];
-            
             newAssignments.forEach(newAssignment => {
-                const newPersonName = newAssignment.split(' (')[0];
-                const newGroup = parseInt(newAssignment.match(/\(Ομάδα (\d+)\)/)?.[1]);
-                
-                // Check if this person-group combination was in the original critical assignments
-                const wasCritical = originalCritical.some(cp => {
-                    const cpMatch = cp.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
-                    if (cpMatch) {
-                        const cpPersonName = cpMatch[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
-                        const cpGroup = parseInt(cpMatch[2]);
-                        // If same group and same person (or person was changed but group is same and was critical)
-                        return (cpGroup === newGroup && cpPersonName === newPersonName) ||
-                               (cpGroup === newGroup && originalPersonGroups.some(opg => 
-                                   opg.group === newGroup && opg.name === cpPersonName &&
-                                   originalCritical.includes(opg.fullString)
-                               ));
+                const match = newAssignment.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                if (match) {
+                    const name = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
+                    const group = parseInt(match[2]);
+                    if (originalCriticalPeople.has(`${name}|${group}`)) {
+                        newCritical.push(newAssignment);
                     }
-                    return false;
-                });
-                
-                if (wasCritical) {
-                    newCritical.push(newAssignment);
                 }
             });
             
