@@ -3274,20 +3274,21 @@
             // Don't classify it as semi-normal just because next day (Dec 31) is a special holiday
             const isDecember30 = date.getMonth() === 11 && date.getDate() === 30;
             
-            // Check if next day is weekend, holiday, or special holiday
+            // For December 30th, check if it's Friday (semi-normal) or return normal
+            if (isDecember30) {
+                if (date.getDay() === 5) {
+                    return 'semi-normal-day'; // Friday
+                }
+                // December 30th is normal day (unless it's Friday or weekend, which is already checked above)
+                return 'normal-day';
+            }
+            
+            // For all other days, check if next day is weekend, holiday, or special holiday
             const nextDay = new Date(date);
             nextDay.setDate(nextDay.getDate() + 1);
             
-            // For December 30th, only check if next day is weekend or regular holiday (not special holiday)
-            if (isDecember30) {
-                if (isWeekend(nextDay) || isHoliday(nextDay)) {
-                    return 'semi-normal-day';
-                }
-            } else {
-                // For all other days, check if next day is weekend, holiday, or special holiday
-                if (isWeekend(nextDay) || isHoliday(nextDay) || isSpecialHoliday(nextDay)) {
-                    return 'semi-normal-day';
-                }
+            if (isWeekend(nextDay) || isHoliday(nextDay) || isSpecialHoliday(nextDay)) {
+                return 'semi-normal-day';
             }
             
             // Check if it's Friday
