@@ -258,6 +258,15 @@
             line-height: 1.1;
         }
 
+        .duty-person-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-top: 0.25rem;
+            pointer-events: none; /* Allow clicks to pass through to parent */
+        }
+
         .duty-person {
             font-size: 0.75rem;
             margin-top: 0.25rem;
@@ -265,6 +274,7 @@
             font-weight: bold;
             text-align: center;
             word-break: break-word;
+            pointer-events: none; /* Allow clicks to pass through */
         }
 
         .duty-person-critical {
@@ -274,6 +284,7 @@
             font-weight: bold;
             text-align: center;
             word-break: break-word;
+            pointer-events: none; /* Allow clicks to pass through */
         }
 
         .holiday-list {
@@ -3399,48 +3410,45 @@
                     dayDiv.style.boxShadow = `0 0 8px ${mainColor}40, inset 0 0 0 1px ${mainColor}30`;
                 }
                 
-                dayDiv.onclick = () => showDayDetails(date);
-                
                 // Get holiday name (special holiday first, then Orthodox/Cyprus holiday)
                 const holidayName = getOrthodoxHolidayName(date);
                 
-                // Remove group names from assignment and split by comma to show each person on a new line
-                // Check if each person is a critical assignment (from lastDuties) and style accordingly
+                // Parse assignment and display each person on a separate line (no commas)
                 let displayAssignmentHtml = '';
                 if (assignment) {
-                    // Extract all person-group combinations from the assignment
-                    const personGroupMatches = assignment.matchAll(/([^(]+)\s*\(Ομάδα\s*(\d+)\)/g);
-                    const personGroups = [];
-                    for (const match of personGroupMatches) {
-                        personGroups.push({
+                    // First, try to extract all "Name (Ομάδα X)" patterns using regex
+                    const personGroupMatches = [];
+                    const regex = /([^(]+?)\s*\(Ομάδα\s*(\d+)\)/g;
+                    let match;
+                    while ((match = regex.exec(assignment)) !== null) {
+                        personGroupMatches.push({
                             name: match[1].trim(),
                             group: match[2].trim(),
                             fullString: match[0].trim()
                         });
                     }
                     
-                    // Fallback: if no group info found, split by comma
-                    if (personGroups.length === 0) {
-                        assignment.split(',').forEach(p => {
+                    // If no matches found, split by comma as fallback
+                    const personGroups = personGroupMatches.length > 0 ? personGroupMatches : 
+                        assignment.split(',').map(p => {
                             const trimmed = p.trim();
-                            if (trimmed) {
-                                personGroups.push({
-                                    name: trimmed,
-                                    group: null,
-                                    fullString: trimmed
-                                });
-                            }
-                        });
-                    }
+                            return {
+                                name: trimmed,
+                                group: null,
+                                fullString: trimmed
+                            };
+                        }).filter(p => p.name);
                     
                     // Check if this date has critical assignments
                     const criticalPeople = criticalAssignments[key] || [];
                     
-                    displayAssignmentHtml = personGroups.map(({ name, group, fullString }) => {
+                    // Create a container div for all persons - each on separate line
+                    displayAssignmentHtml = '<div class="duty-person-container">';
+                    personGroups.forEach(({ name, group, fullString }) => {
                         // Check if this person-group combination is in critical assignments
                         const isCritical = criticalPeople.some(cp => {
                             if (group) {
-                                return cp === fullString || cp.includes(name) && cp.includes(`(Ομάδα ${group})`);
+                                return cp === fullString || (cp.includes(name) && cp.includes(`(Ομάδα ${group})`));
                             } else {
                                 return cp.includes(name);
                             }
@@ -3448,8 +3456,10 @@
                         
                         // Apply red bold styling for critical assignments
                         const styleClass = isCritical ? 'duty-person-critical' : 'duty-person';
-                        return `<div class="${styleClass}">${name}</div>`;
-                    }).join('');
+                        // Display only the name, no comma, each on separate line
+                        displayAssignmentHtml += `<div class="${styleClass}">${name}</div>`;
+                    });
+                    displayAssignmentHtml += '</div>';
                 }
                 
                 dayDiv.innerHTML = `
@@ -3457,6 +3467,13 @@
                     ${holidayName ? `<div class="orthodox-holiday-name">${holidayName}</div>` : ''}
                     ${displayAssignmentHtml}
                 `;
+                
+                // Add click handler AFTER setting innerHTML to ensure it's not removed
+                dayDiv.style.cursor = 'pointer';
+                dayDiv.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    showDayDetails(date);
+                });
                 
                 grid.appendChild(dayDiv);
             }
