@@ -1624,39 +1624,53 @@
             let lastDutyDate = null;
             let lastDutyFormatted = 'Δεν έχει';
             
-            // First check manually entered last duty
+            // First check manually entered last duty (this is the baseline)
             if (lastDutyDateStr) {
                 lastDutyDate = new Date(lastDutyDateStr + 'T00:00:00');
                 lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
             }
             
-            // Also check actual assignments to find most recent duty of this type
-            const personGroupStr = `${person} (Ομάδα ${groupNum})`;
+            // Also check actual assignments to find most recent duty of THIS SPECIFIC TYPE
+            // Only update if we find a more recent assignment of the same type
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             
-            // Look through assignments to find most recent duty of this type
+            // Look through assignments to find most recent duty of this SPECIFIC type
             for (const [dateKey, assignment] of Object.entries(dutyAssignments)) {
-                if (assignment && assignment.includes(personGroupStr)) {
-                    const assignmentDate = new Date(dateKey + 'T00:00:00');
-                    if (assignmentDate > today) continue; // Skip future dates
-                    
-                    const dayType = getDayType(assignmentDate);
-                    let dayTypeCategory = 'normal';
-                    if (dayType === 'special-holiday') {
-                        dayTypeCategory = 'special';
-                    } else if (dayType === 'semi-normal-day') {
-                        dayTypeCategory = 'semi';
-                    } else if (dayType === 'weekend-holiday') {
-                        dayTypeCategory = 'weekend';
-                    }
-                    
-                    // If this assignment is of the same type and more recent than lastDutyDate
-                    if (dayTypeCategory === listType) {
-                        if (!lastDutyDate || assignmentDate > lastDutyDate) {
-                            lastDutyDate = assignmentDate;
-                            lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                        }
+                if (!assignment) continue;
+                
+                // Use extractAllPersonNames to properly parse the assignment string
+                const assignedPersons = extractAllPersonNames(assignment);
+                
+                // Check if this person is assigned on this date
+                const isPersonAssigned = assignedPersons.some(p => 
+                    p.name === person && p.group === groupNum
+                );
+                
+                if (!isPersonAssigned) continue;
+                
+                const assignmentDate = new Date(dateKey + 'T00:00:00');
+                if (assignmentDate > today) continue; // Skip future dates
+                
+                // Get the day type for this assignment date
+                const dayType = getDayType(assignmentDate);
+                let dayTypeCategory = 'normal';
+                if (dayType === 'special-holiday') {
+                    dayTypeCategory = 'special';
+                } else if (dayType === 'semi-normal-day') {
+                    dayTypeCategory = 'semi';
+                } else if (dayType === 'weekend-holiday') {
+                    dayTypeCategory = 'weekend';
+                }
+                
+                // CRITICAL: Only consider assignments that match the EXACT listType we're looking for
+                // This ensures special holidays are not counted as weekend/holidays, etc.
+                if (dayTypeCategory === listType) {
+                    // Only update if this assignment is more recent than the current lastDutyDate
+                    // (or if we don't have a lastDutyDate yet)
+                    if (!lastDutyDate || assignmentDate > lastDutyDate) {
+                        lastDutyDate = assignmentDate;
+                        lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     }
                 }
             }
@@ -1672,7 +1686,11 @@
                 nextDate.setDate(nextDate.getDate() + 1);
                 
                 // Count only days of the same type
-                while (daysCounted < targetDays) {
+                // Limit search to reasonable range (e.g., 10 years ahead to avoid infinite loops)
+                const maxDaysAhead = 3650; // 10 years
+                let daysChecked = 0;
+                
+                while (daysCounted < targetDays && daysChecked < maxDaysAhead) {
                     const dayType = getDayType(nextDate);
                     let dayTypeCategory = 'normal';
                     if (dayType === 'special-holiday') {
@@ -1689,10 +1707,15 @@
                     
                     if (daysCounted < targetDays) {
                         nextDate.setDate(nextDate.getDate() + 1);
+                        daysChecked++;
                     }
                 }
                 
-                nextDutyFormatted = nextDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                if (daysCounted >= targetDays) {
+                    nextDutyFormatted = nextDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                } else {
+                    nextDutyFormatted = 'Δεν βρέθηκε';
+                }
             }
             
             return { lastDuty: lastDutyFormatted, nextDuty: nextDutyFormatted };
@@ -3955,22 +3978,44 @@
         // Check if a person has duty on consecutive days (day before or day after)
         function hasConsecutiveDuty(dayKey, person, groupNum) {
             const date = new Date(dayKey + 'T00:00:00');
+            const currentDayType = getDayType(date);
             
-            // Check day before
+            // Get day type category for current day
+            let currentTypeCategory = 'normal';
+            if (currentDayType === 'special-holiday') {
+                currentTypeCategory = 'special';
+            } else if (currentDayType === 'semi-normal-day') {
+                currentTypeCategory = 'semi';
+            } else if (currentDayType === 'weekend-holiday') {
+                currentTypeCategory = 'weekend';
+            }
+            
+            // ONLY check day before (day after may not be calculated yet during assignment process)
+            // The day after will be checked when we process that day
             const dayBefore = new Date(date);
             dayBefore.setDate(dayBefore.getDate() - 1);
             const dayBeforeKey = formatDateKey(dayBefore);
+            
             if (hasDutyOnDay(dayBeforeKey, person, groupNum)) {
-                return true;
+                const beforeDayType = getDayType(dayBefore);
+                let beforeTypeCategory = 'normal';
+                if (beforeDayType === 'special-holiday') {
+                    beforeTypeCategory = 'special';
+                } else if (beforeDayType === 'semi-normal-day') {
+                    beforeTypeCategory = 'semi';
+                } else if (beforeDayType === 'weekend-holiday') {
+                    beforeTypeCategory = 'weekend';
+                }
+                
+                // Only flag if different day type (consecutive days of same type are prevented by N-day rotation)
+                // OR if either day is a special holiday (special holidays have priority)
+                if (currentTypeCategory !== beforeTypeCategory || currentDayType === 'special-holiday' || beforeDayType === 'special-holiday') {
+                    return true;
+                }
             }
             
-            // Check day after
-            const dayAfter = new Date(date);
-            dayAfter.setDate(dayAfter.getDate() + 1);
-            const dayAfterKey = formatDateKey(dayAfter);
-            if (hasDutyOnDay(dayAfterKey, person, groupNum)) {
-                return true;
-            }
+            // DO NOT check day after - it may not be calculated yet during assignment process
+            // The day after will be checked when we process that day
             
             return false;
         }
