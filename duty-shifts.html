@@ -405,7 +405,7 @@
                 <div class="group-card">
                     <div class="group-header">
                         <div class="group-title">
-                            <span class="group-badge group-1">Ομάδα 1</span>
+                            <span class="group-badge group-1">ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</span>
                         </div>
                         <button class="btn btn-sm btn-outline-primary" onclick="addPerson(1)">
                             <i class="fas fa-plus"></i>
@@ -422,7 +422,7 @@
                 <div class="group-card">
                     <div class="group-header">
                         <div class="group-title">
-                            <span class="group-badge group-2">Ομάδα 2</span>
+                            <span class="group-badge group-2">ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</span>
                         </div>
                         <button class="btn btn-sm btn-outline-primary" onclick="addPerson(2)">
                             <i class="fas fa-plus"></i>
@@ -439,7 +439,7 @@
                 <div class="group-card">
                     <div class="group-header">
                         <div class="group-title">
-                            <span class="group-badge group-3">Ομάδα 3</span>
+                            <span class="group-badge group-3">ΤΕΧΝΙΚΟΣ Ε/Π AW139</span>
                         </div>
                         <button class="btn btn-sm btn-outline-primary" onclick="addPerson(3)">
                             <i class="fas fa-plus"></i>
@@ -456,7 +456,7 @@
                 <div class="group-card">
                     <div class="group-header">
                         <div class="group-title">
-                            <span class="group-badge group-4">Ομάδα 4</span>
+                            <span class="group-badge group-4">ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</span>
                         </div>
                         <button class="btn btn-sm btn-outline-primary" onclick="addPerson(4)">
                             <i class="fas fa-plus"></i>
@@ -492,13 +492,18 @@
 
         <!-- Regular Holidays Section -->
         <div class="holiday-list">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5><i class="fas fa-calendar-times me-2"></i>Κανονικές Αργίες</h5>
-                <button class="btn btn-primary btn-sm" onclick="addHoliday()">
-                    <i class="fas fa-plus me-1"></i>Προσθήκη Αργίας
-                </button>
+            <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('regularHolidaysContent', 'regularHolidaysChevron')">
+                <h5 class="mb-0"><i class="fas fa-calendar-times me-2"></i>Κανονικές Αργίες</h5>
+                <i id="regularHolidaysChevron" class="fas fa-chevron-down"></i>
             </div>
-            <div id="holidaysList"></div>
+            <div id="regularHolidaysContent" class="collapse">
+                <div class="d-flex justify-content-end mb-3">
+                    <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); addHoliday()">
+                        <i class="fas fa-plus me-1"></i>Προσθήκη Αργίας
+                    </button>
+                </div>
+                <div id="holidaysList"></div>
+            </div>
         </div>
 
         <!-- Calendar Section -->
@@ -870,10 +875,10 @@
                         <label for="assignDutyGroup" class="form-label">Ομάδα</label>
                         <select class="form-control" id="assignDutyGroup" required>
                             <option value="">Επιλέξτε Ομάδα</option>
-                            <option value="1">Ομάδα 1</option>
-                            <option value="2">Ομάδα 2</option>
-                            <option value="3">Ομάδα 3</option>
-                            <option value="4">Ομάδα 4</option>
+                            <option value="1">ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</option>
+                            <option value="2">ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</option>
+                            <option value="3">ΤΕΧΝΙΚΟΣ Ε/Π AW139</option>
+                            <option value="4">ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</option>
                         </select>
                     </div>
                     <div class="mb-3">
@@ -1284,6 +1289,17 @@
             localStorage.setItem('dutyShiftsCriticalAssignments', JSON.stringify(criticalAssignments));
         }
 
+        // Get group name by number
+        function getGroupName(groupNum) {
+            const groupNames = {
+                1: 'ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ',
+                2: 'ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ',
+                3: 'ΤΕΧΝΙΚΟΣ Ε/Π AW139',
+                4: 'ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ'
+            };
+            return groupNames[groupNum] || `Ομάδα ${groupNum}`;
+        }
+
         // Migrate old groups format to new format
         function migrateGroupsFormat(data) {
             if (!data) return null;
@@ -1537,7 +1553,7 @@
             editingPersonName = null;
             currentGroup = groupNumber;
             
-            document.getElementById('modalTitle').innerHTML = `Προσθήκη Ατόμου στην Ομάδα <span id="modalGroupNumber">${groupNumber}</span>`;
+            document.getElementById('modalTitle').innerHTML = `Προσθήκη Ατόμου στην <span id="modalGroupNumber">${getGroupName(groupNumber)}</span>`;
             document.getElementById('personName').value = '';
             document.getElementById('personName').readOnly = false;
             document.getElementById('lastSpecialDuty').value = '';
@@ -1879,7 +1895,7 @@
             currentPersonActionsListType = listType;
             
             document.getElementById('personActionsName').textContent = personName;
-            document.getElementById('personActionsGroup').textContent = groupNum;
+            document.getElementById('personActionsGroup').textContent = getGroupName(groupNum);
             
             const modal = new bootstrap.Modal(document.getElementById('personActionsModal'));
             modal.show();
@@ -1910,7 +1926,7 @@
                 return;
             }
             
-            const groupOptions = availableGroups.map(g => `${g}`).join(', ');
+            const groupOptions = availableGroups.map(g => `${g}: ${getGroupName(g)}`).join(', ');
             const targetGroupStr = prompt(`Επιλέξτε την ομάδα προορισμού (${groupOptions}):`);
             const targetGroup = parseInt(targetGroupStr);
             
@@ -2074,8 +2090,8 @@
         // Open transfer position modal
         function openTransferPositionModal() {
             document.getElementById('transferPersonName').textContent = transferData.person;
-            document.getElementById('transferFromGroup').textContent = transferData.fromGroup;
-            document.getElementById('transferToGroup').textContent = transferData.toGroup;
+            document.getElementById('transferFromGroup').textContent = getGroupName(transferData.fromGroup);
+            document.getElementById('transferToGroup').textContent = getGroupName(transferData.toGroup);
             
             // Find people from target group who had duty on same days
             const sameDayPeople = findPeopleWithSameDutyDays(transferData.person, transferData.fromGroup, transferData.toGroup);
