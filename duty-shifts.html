@@ -95,6 +95,19 @@
             font-size: 1rem;
         }
 
+        .person-name-card {
+            flex: 1;
+            padding: 0.5rem;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+            margin-right: 0.5rem;
+        }
+
+        .person-name-card:hover {
+            background-color: #e9ecef;
+        }
+
         .person-actions {
             display: flex;
             gap: 0.5rem;
@@ -775,6 +788,41 @@
         </div>
     </div>
 
+    <!-- Person Actions Modal -->
+    <div class="modal fade" id="personActionsModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary">
+                    <h5 class="modal-title"><i class="fas fa-user me-2"></i>Ενέργειες Ατόμου</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <h6><strong>Άτομο:</strong> <span id="personActionsName"></span></h6>
+                        <p class="text-muted"><strong>Ομάδα:</strong> <span id="personActionsGroup"></span></p>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="button" class="btn btn-outline-info" onclick="openEditPersonFromActions()">
+                            <i class="fas fa-edit me-2"></i>Επεξεργασία Στοιχείων
+                        </button>
+                        <button type="button" class="btn btn-outline-warning" onclick="openMissingPeriodFromActions()">
+                            <i class="fas fa-calendar-times me-2"></i>Διαχείριση Περιόδων Απουσίας
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" onclick="openTransferFromActions()">
+                            <i class="fas fa-exchange-alt me-2"></i>Αλλαγή Ομάδας
+                        </button>
+                        <button type="button" class="btn btn-outline-danger" onclick="deletePersonFromActions()">
+                            <i class="fas fa-trash me-2"></i>Διαγραφή Ατόμου
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Day Details Modal -->
     <div class="modal fade" id="dayDetailsModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -1399,39 +1447,18 @@
             const missingBadge = isCurrentlyMissing ? '<span class="badge bg-warning ms-2"><i class="fas fa-user-slash me-1"></i>Απουσία</span>' : '';
             
             personDiv.innerHTML = `
-                <span class="person-name">
+                <div class="person-name-card" onclick="openPersonActionsModal(${groupNum}, '${person.replace(/'/g, "\\'")}', ${index}, '${listType}')">
                     <i class="fas fa-grip-vertical text-muted me-2" style="cursor: move;"></i>${person}${missingBadge}
-                </span>
+                </div>
                 <div class="person-actions">
                     <div class="btn-group btn-group-sm" role="group">
-                        <button class="btn btn-outline-secondary" onclick="movePersonInList(${groupNum}, ${index}, '${listType}', 'up')" ${index === 0 ? 'disabled' : ''} title="Μετακίνηση προς τα πάνω">
+                        <button class="btn btn-outline-secondary" onclick="event.stopPropagation(); movePersonInList(${groupNum}, ${index}, '${listType}', 'up')" ${index === 0 ? 'disabled' : ''} title="Μετακίνηση προς τα πάνω">
                             <i class="fas fa-arrow-up"></i>
                         </button>
-                        <button class="btn btn-outline-secondary" onclick="movePersonInList(${groupNum}, ${index}, '${listType}', 'down')" ${index === listArray.length - 1 ? 'disabled' : ''} title="Μετακίνηση προς τα κάτω">
+                        <button class="btn btn-outline-secondary" onclick="event.stopPropagation(); movePersonInList(${groupNum}, ${index}, '${listType}', 'down')" ${index === listArray.length - 1 ? 'disabled' : ''} title="Μετακίνηση προς τα κάτω">
                             <i class="fas fa-arrow-down"></i>
                         </button>
                     </div>
-                    <button class="btn btn-sm btn-outline-info" onclick="editPerson(${groupNum}, '${person.replace(/'/g, "\\'")}')" title="Επεξεργασία Στοιχείων">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-warning" onclick="openMissingPeriodModal(${groupNum}, '${person.replace(/'/g, "\\'")}')" title="Διαχείριση Περιόδων Απουσίας">
-                        <i class="fas fa-calendar-times"></i>
-                    </button>
-                    <div class="transfer-dropdown">
-                        <button class="btn btn-sm btn-outline-primary" onclick="toggleTransferDropdown(${groupNum}, ${index}, '${listType}', event)">
-                            <i class="fas fa-exchange-alt"></i>
-                        </button>
-                        <div class="transfer-dropdown-content" id="transferDropdown_${groupNum}_${index}_${listType}">
-                            ${[1, 2, 3, 4].filter(g => g !== groupNum).map(targetGroup => `
-                                <button onclick="transferPerson(${groupNum}, ${index}, ${targetGroup}, '${listType}')">
-                                    <i class="fas fa-arrow-right me-2"></i>Μεταφορά στην Ομάδα ${targetGroup}
-                                </button>
-                            `).join('')}
-                        </div>
-                    </div>
-                    <button class="btn btn-sm btn-outline-danger" onclick="removePerson(${groupNum}, ${index}, '${listType}')">
-                        <i class="fas fa-trash"></i>
-                    </button>
                 </div>
             `;
             
@@ -1492,6 +1519,12 @@
         // Global variable to track if we're editing
         let isEditingPerson = false;
         let editingPersonName = null;
+        
+        // Global variables for person actions modal
+        let currentPersonActionsGroup = null;
+        let currentPersonActionsName = null;
+        let currentPersonActionsIndex = null;
+        let currentPersonActionsListType = null;
 
         // Add person
         function addPerson(groupNumber) {
@@ -1831,6 +1864,114 @@
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('addPersonModal'));
             modal.hide();
+        }
+
+        // Open person actions modal
+        function openPersonActionsModal(groupNum, personName, index, listType) {
+            currentPersonActionsGroup = groupNum;
+            currentPersonActionsName = personName;
+            currentPersonActionsIndex = index;
+            currentPersonActionsListType = listType;
+            
+            document.getElementById('personActionsName').textContent = personName;
+            document.getElementById('personActionsGroup').textContent = groupNum;
+            
+            const modal = new bootstrap.Modal(document.getElementById('personActionsModal'));
+            modal.show();
+        }
+        
+        // Open edit person from actions modal
+        function openEditPersonFromActions() {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('personActionsModal'));
+            modal.hide();
+            editPerson(currentPersonActionsGroup, currentPersonActionsName);
+        }
+        
+        // Open missing period modal from actions
+        function openMissingPeriodFromActions() {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('personActionsModal'));
+            modal.hide();
+            openMissingPeriodModal(currentPersonActionsGroup, currentPersonActionsName);
+        }
+        
+        // Open transfer modal from actions
+        function openTransferFromActions() {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('personActionsModal'));
+            modal.hide();
+            // Show selection for target group
+            const availableGroups = [1, 2, 3, 4].filter(g => g !== currentPersonActionsGroup);
+            if (availableGroups.length === 0) {
+                alert('Δεν υπάρχουν άλλες ομάδες για μεταφορά');
+                return;
+            }
+            
+            const groupOptions = availableGroups.map(g => `${g}`).join(', ');
+            const targetGroupStr = prompt(`Επιλέξτε την ομάδα προορισμού (${groupOptions}):`);
+            const targetGroup = parseInt(targetGroupStr);
+            
+            if (targetGroup && availableGroups.includes(targetGroup)) {
+                transferPerson(currentPersonActionsGroup, currentPersonActionsIndex, targetGroup, currentPersonActionsListType);
+            } else if (targetGroupStr !== null) {
+                alert('Μη έγκυρη επιλογή ομάδας');
+            }
+        }
+        
+        // Delete person from actions modal
+        function deletePersonFromActions() {
+            if (confirm(`Είστε σίγουροι ότι θέλετε να διαγράψετε το άτομο "${currentPersonActionsName}" από όλες τις λίστες;`)) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('personActionsModal'));
+                modal.hide();
+                
+                // Remove from all lists in the group
+                const allListTypes = ['special', 'weekend', 'semi', 'normal'];
+                allListTypes.forEach(listType => {
+                    const list = groups[currentPersonActionsGroup][listType] || [];
+                    const index = list.indexOf(currentPersonActionsName);
+                    if (index !== -1) {
+                        list.splice(index, 1);
+                    }
+                });
+                
+                // Remove last duties and missing periods
+                if (groups[currentPersonActionsGroup].lastDuties) {
+                    delete groups[currentPersonActionsGroup].lastDuties[currentPersonActionsName];
+                }
+                if (groups[currentPersonActionsGroup].missingPeriods) {
+                    delete groups[currentPersonActionsGroup].missingPeriods[currentPersonActionsName];
+                }
+                
+                // Remove from critical assignments and duty assignments
+                Object.keys(criticalAssignments).forEach(dateKey => {
+                    if (criticalAssignments[dateKey]) {
+                        criticalAssignments[dateKey] = criticalAssignments[dateKey].filter(a => 
+                            !a.includes(`${currentPersonActionsName} (Ομάδα ${currentPersonActionsGroup})`)
+                        );
+                        if (criticalAssignments[dateKey].length === 0) {
+                            delete criticalAssignments[dateKey];
+                        }
+                    }
+                });
+                
+                Object.keys(dutyAssignments).forEach(dateKey => {
+                    if (dutyAssignments[dateKey]) {
+                        const personGroupStr = `${currentPersonActionsName} (Ομάδα ${currentPersonActionsGroup})`;
+                        if (dutyAssignments[dateKey].includes(personGroupStr)) {
+                            dutyAssignments[dateKey] = dutyAssignments[dateKey]
+                                .split(', ')
+                                .filter(a => a !== personGroupStr)
+                                .join(', ');
+                            if (dutyAssignments[dateKey] === '') {
+                                delete dutyAssignments[dateKey];
+                            }
+                        }
+                    }
+                });
+                
+                saveData();
+                renderGroups();
+                renderCalendar();
+                updateStatistics();
+            }
         }
 
         // Remove person from specific list
