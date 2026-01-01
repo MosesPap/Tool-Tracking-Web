@@ -3175,12 +3175,24 @@
                 return 'weekend-holiday';
             }
             
+            // Special case: December 30th should be normal day (unless it's Friday or weekend)
+            // Don't classify it as semi-normal just because next day (Dec 31) is a special holiday
+            const isDecember30 = date.getMonth() === 11 && date.getDate() === 30;
+            
             // Check if next day is weekend, holiday, or special holiday
             const nextDay = new Date(date);
             nextDay.setDate(nextDay.getDate() + 1);
             
-            if (isWeekend(nextDay) || isHoliday(nextDay) || isSpecialHoliday(nextDay)) {
-                return 'semi-normal-day';
+            // For December 30th, only check if next day is weekend or regular holiday (not special holiday)
+            if (isDecember30) {
+                if (isWeekend(nextDay) || isHoliday(nextDay)) {
+                    return 'semi-normal-day';
+                }
+            } else {
+                // For all other days, check if next day is weekend, holiday, or special holiday
+                if (isWeekend(nextDay) || isHoliday(nextDay) || isSpecialHoliday(nextDay)) {
+                    return 'semi-normal-day';
+                }
             }
             
             // Check if it's Friday
@@ -4092,67 +4104,6 @@
             
             // Count how many days of this type between last duty and current day
             return currentIndex - lastDutyIndex;
-        }
-
-        // Debug function to check day counting
-        function debugDayCounting(personName, groupNum, lastDutyDateStr, checkDateStr, dayTypeCategory) {
-            console.log(`\n=== DEBUG: Counting ${dayTypeCategory} days ===`);
-            console.log(`Person: ${personName}`);
-            console.log(`Group: ${groupNum}`);
-            console.log(`Last Duty Date: ${lastDutyDateStr}`);
-            console.log(`Check Date: ${checkDateStr}`);
-            console.log(`Day Type Category: ${dayTypeCategory}`);
-            
-            const lastDutyDate = new Date(lastDutyDateStr + 'T00:00:00');
-            const currentDate = new Date(checkDateStr + 'T00:00:00');
-            
-            console.log(`\nCounting from ${lastDutyDate.toLocaleDateString('el-GR')} + 1 day to ${currentDate.toLocaleDateString('el-GR')} (exclusive)`);
-            
-            let sameTypeDays = 0;
-            const countedDays = [];
-            const skippedDays = [];
-            
-            const tempDate = new Date(lastDutyDate);
-            tempDate.setDate(tempDate.getDate() + 1);
-            
-            while (tempDate < currentDate) {
-                const tempDayType = getDayType(tempDate);
-                let tempTypeCategory = 'normal';
-                if (tempDayType === 'special-holiday') {
-                    tempTypeCategory = 'special';
-                } else if (tempDayType === 'semi-normal-day') {
-                    tempTypeCategory = 'semi';
-                } else if (tempDayType === 'weekend-holiday') {
-                    tempTypeCategory = 'weekend';
-                }
-                
-                const dateStr = tempDate.toLocaleDateString('el-GR');
-                const dayName = getGreekDayName(tempDate);
-                
-                if (tempTypeCategory === dayTypeCategory) {
-                    sameTypeDays++;
-                    countedDays.push(`${dateStr} (${dayName}) - ${tempDayType}`);
-                } else {
-                    skippedDays.push(`${dateStr} (${dayName}) - ${tempDayType} [${tempTypeCategory}]`);
-                }
-                
-                tempDate.setDate(tempDate.getDate() + 1);
-            }
-            
-            console.log(`\n✓ COUNTED ${sameTypeDays} ${dayTypeCategory} days:`);
-            countedDays.forEach(day => console.log(`  - ${day}`));
-            
-            console.log(`\n✗ SKIPPED ${skippedDays.length} days (not ${dayTypeCategory}):`);
-            skippedDays.forEach(day => console.log(`  - ${day}`));
-            
-            console.log(`\n=== RESULT: ${sameTypeDays} ${dayTypeCategory} days counted ===\n`);
-            
-            return sameTypeDays;
-        }
-
-        // Expose debug function to window for console access
-        if (typeof window !== 'undefined') {
-            window.debugDayCounting = debugDayCounting;
         }
 
         // Open calculate duties modal
