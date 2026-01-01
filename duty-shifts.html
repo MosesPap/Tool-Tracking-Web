@@ -848,14 +848,8 @@
                 </div>
                 <div class="modal-body modal-day-details" id="dayDetailsContent"></div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-primary" id="assignDutyBtn" style="display: none;" onclick="openAssignDutyModal()">
-                        <i class="fas fa-user-plus me-1"></i>Ανάθεση Υπηρεσίας
-                    </button>
-                    <button type="button" class="btn btn-warning" id="editDutyBtn" style="display: none;" onclick="openAssignDutyModal()">
-                        <i class="fas fa-edit me-1"></i>Επεξεργασία Υπηρεσίας
-                    </button>
-                    <button type="button" class="btn btn-danger" id="removeDutyBtn" style="display: none;" onclick="removeDutyAssignment()">
-                        <i class="fas fa-trash me-1"></i>Αφαίρεση Υπηρεσίας
+                    <button type="button" class="btn btn-primary" onclick="saveDayAssignments()">
+                        <i class="fas fa-save me-1"></i>Αποθήκευση Αλλαγών
                     </button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
                 </div>
@@ -4160,6 +4154,10 @@
             alert('Οι αναθέσεις υπηρεσιών υπολογίστηκαν επιτυχώς για την επιλεγμένη περίοδο!');
         }
 
+        // Store current day being edited
+        let currentEditingDayKey = null;
+        let currentEditingDayDate = null;
+
         // Show day details
         function showDayDetails(date) {
             const key = formatDateKey(date);
@@ -4168,6 +4166,8 @@
             
             // Store selected date for manual assignment
             selectedDateForDuty = date;
+            currentEditingDayKey = key;
+            currentEditingDayDate = date;
             
             const modal = new bootstrap.Modal(document.getElementById('dayDetailsModal'));
             document.getElementById('dayDetailsTitle').textContent = formatDate(date);
@@ -4206,12 +4206,90 @@
                 `;
             }
             
+            // Extract person-group combinations
+            const personGroups = [];
             if (assignment) {
-                content += `
-                    <div class="duty-assignment">
-                        <strong><i class="fas fa-user-shield me-2"></i>Σε Υπηρεσία:</strong> ${assignment}
-                    </div>
-                `;
+                const personGroupMatches = assignment.matchAll(/([^(]+)\s*\(Ομάδα\s*(\d+)\)/g);
+                for (const match of personGroupMatches) {
+                    personGroups.push({
+                        name: match[1].trim(),
+                        group: parseInt(match[2]),
+                        fullString: match[0].trim()
+                    });
+                }
+                
+                // Fallback for assignments without group info
+                if (personGroups.length === 0) {
+                    assignment.split(',').forEach(p => {
+                        const trimmed = p.trim();
+                        if (trimmed) {
+                            personGroups.push({
+                                name: trimmed,
+                                group: null,
+                                fullString: trimmed
+                            });
+                        }
+                    });
+                }
+            }
+            
+            // Check critical assignments
+            const criticalPeople = criticalAssignments[key] || [];
+            
+            // Create editable fields for each person
+            content += `
+                <div class="mb-3">
+                    <strong><i class="fas fa-user-shield me-2"></i>Σε Υπηρεσία:</strong>
+                    <div id="dutyPersonsContainer" class="mt-2">
+            `;
+            
+            if (personGroups.length > 0) {
+                personGroups.forEach((person, index) => {
+                    const isCritical = criticalPeople.some(cp => {
+                        if (person.group) {
+                            return cp === person.fullString || (cp.includes(person.name) && cp.includes(`(Ομάδα ${person.group})`));
+                        } else {
+                            return cp.includes(person.name);
+                        }
+                    });
+                    
+                    const groupName = person.group ? getGroupName(person.group) : 'Άγνωστη Ομάδα';
+                    const criticalClass = isCritical ? 'border-danger' : '';
+                    const criticalLabel = isCritical ? '<span class="badge bg-danger ms-2">Κρίσιμη</span>' : '';
+                    
+                    // Get all people from this group for dropdown
+                    const groupData = groups[person.group] || {};
+                    const allPeopleInGroup = new Set();
+                    ['special', 'weekend', 'semi', 'normal'].forEach(listType => {
+                        if (groupData[listType]) {
+                            groupData[listType].forEach(p => allPeopleInGroup.add(p));
+                        }
+                    });
+                    const peopleOptions = Array.from(allPeopleInGroup).sort().map(p => 
+                        `<option value="${p}" ${p === person.name ? 'selected' : ''}>${p}</option>`
+                    ).join('');
+                    
+                    content += `
+                        <div class="mb-2 p-2 border rounded ${criticalClass}">
+                            <label class="form-label small text-muted">Ομάδα ${person.group || '?'}: ${groupName}${criticalLabel}</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control duty-person-input" 
+                                       list="personList_${index}"
+                                       data-index="${index}" 
+                                       data-group="${person.group || ''}" 
+                                       data-original-name="${person.name}"
+                                       value="${person.name}" 
+                                       placeholder="Όνομα ατόμου">
+                                <datalist id="personList_${index}">
+                                    ${peopleOptions}
+                                </datalist>
+                                <button class="btn btn-outline-danger" type="button" onclick="removePersonFromDay(${index})" title="Αφαίρεση">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
             } else {
                 content += `
                     <div class="alert alert-secondary">
@@ -4220,6 +4298,16 @@
                 `;
             }
             
+            content += `
+                    </div>
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-success" onclick="addPersonFieldToDay()">
+                            <i class="fas fa-plus me-1"></i>Προσθήκη Ατόμου
+                        </button>
+                    </div>
+                </div>
+            `;
+            
             document.getElementById('dayDetailsContent').innerHTML = content;
             
             // Show/hide buttons based on whether assignment exists
@@ -4227,17 +4315,158 @@
             const editBtn = document.getElementById('editDutyBtn');
             const removeBtn = document.getElementById('removeDutyBtn');
             
-            if (assignment) {
-                assignBtn.style.display = 'none';
-                editBtn.style.display = 'inline-block';
-                removeBtn.style.display = 'inline-block';
-            } else {
-                assignBtn.style.display = 'inline-block';
-                editBtn.style.display = 'none';
-                removeBtn.style.display = 'none';
-            }
+            // Hide old buttons, we'll use save button instead
+            assignBtn.style.display = 'none';
+            editBtn.style.display = 'none';
+            removeBtn.style.display = 'none';
             
             modal.show();
+        }
+        
+        // Add a new person field to the day
+        function addPersonFieldToDay() {
+            const container = document.getElementById('dutyPersonsContainer');
+            const currentFields = container.querySelectorAll('.duty-person-input, .duty-person-select').length;
+            const maxGroup = 4;
+            
+            // Find which groups are already represented
+            const existingGroups = Array.from(container.querySelectorAll('.duty-person-input, .duty-person-select'))
+                .map(input => parseInt(input.dataset.group) || 0)
+                .filter(g => g > 0);
+            
+            // Find first available group (1-4)
+            let newGroup = 1;
+            for (let i = 1; i <= maxGroup; i++) {
+                if (!existingGroups.includes(i)) {
+                    newGroup = i;
+                    break;
+                }
+            }
+            
+            const groupName = getGroupName(newGroup);
+            const groupData = groups[newGroup] || {};
+            const allPeopleInGroup = new Set();
+            ['special', 'weekend', 'semi', 'normal'].forEach(listType => {
+                if (groupData[listType]) {
+                    groupData[listType].forEach(person => allPeopleInGroup.add(person));
+                }
+            });
+            const peopleOptions = Array.from(allPeopleInGroup).sort().map(p => 
+                `<option value="${p}">${p}</option>`
+            ).join('');
+            
+            const newField = document.createElement('div');
+            newField.className = 'mb-2 p-2 border rounded';
+            newField.innerHTML = `
+                <label class="form-label small text-muted">Ομάδα ${newGroup}: ${groupName}</label>
+                <div class="input-group">
+                    <input type="text" class="form-control duty-person-input" 
+                           list="personList_new_${currentFields}"
+                           data-index="${currentFields}" 
+                           data-group="${newGroup}" 
+                           placeholder="Όνομα ατόμου">
+                    <datalist id="personList_new_${currentFields}">
+                        ${peopleOptions}
+                    </datalist>
+                    <button class="btn btn-outline-danger" type="button" onclick="removePersonFromDay(${currentFields})" title="Αφαίρεση">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+            
+            container.appendChild(newField);
+        }
+        
+        // Remove a person field from the day
+        function removePersonFromDay(index) {
+            const container = document.getElementById('dutyPersonsContainer');
+            const fields = container.querySelectorAll('.duty-person-input, .duty-person-select');
+            if (fields[index]) {
+                fields[index].closest('.mb-2').remove();
+            }
+        }
+        
+        // Save day assignments
+        function saveDayAssignments() {
+            if (!currentEditingDayKey) return;
+            
+            const container = document.getElementById('dutyPersonsContainer');
+            const inputs = container.querySelectorAll('.duty-person-input, .duty-person-select');
+            const newAssignments = [];
+            
+            // Get original assignments to preserve critical status
+            const originalAssignment = dutyAssignments[currentEditingDayKey] || '';
+            const originalPersonGroups = [];
+            if (originalAssignment) {
+                const matches = originalAssignment.matchAll(/([^(]+)\s*\(Ομάδα\s*(\d+)\)/g);
+                for (const match of matches) {
+                    originalPersonGroups.push({
+                        name: match[1].trim(),
+                        group: parseInt(match[2]),
+                        fullString: match[0].trim()
+                    });
+                }
+            }
+            
+            inputs.forEach(input => {
+                const personName = input.value.trim();
+                const group = input.dataset.group;
+                const originalName = input.dataset.originalName || '';
+                
+                if (personName && group) {
+                    newAssignments.push(`${personName} (Ομάδα ${group})`);
+                }
+            });
+            
+            // Update dutyAssignments
+            if (newAssignments.length > 0) {
+                dutyAssignments[currentEditingDayKey] = newAssignments.join(', ');
+            } else {
+                delete dutyAssignments[currentEditingDayKey];
+            }
+            
+            // Update criticalAssignments - preserve critical status for unchanged person-group combinations
+            const originalCritical = criticalAssignments[currentEditingDayKey] || [];
+            const newCritical = [];
+            
+            newAssignments.forEach(newAssignment => {
+                const newPersonName = newAssignment.split(' (')[0];
+                const newGroup = parseInt(newAssignment.match(/\(Ομάδα (\d+)\)/)?.[1]);
+                
+                // Check if this person-group combination was in the original critical assignments
+                // Or if the person name matches and group matches (for name changes)
+                const wasCritical = originalCritical.some(cp => {
+                    const cpPersonName = cp.split(' (')[0];
+                    const cpGroup = parseInt(cp.match(/\(Ομάδα (\d+)\)/)?.[1]);
+                    return cp === newAssignment || 
+                           (cpPersonName === newPersonName && cpGroup === newGroup) ||
+                           (originalPersonGroups.some(opg => 
+                               opg.name === newPersonName && opg.group === newGroup &&
+                               originalCritical.includes(opg.fullString)
+                           ));
+                });
+                
+                if (wasCritical) {
+                    newCritical.push(newAssignment);
+                }
+            });
+            
+            if (newCritical.length > 0) {
+                criticalAssignments[currentEditingDayKey] = newCritical;
+            } else {
+                delete criticalAssignments[currentEditingDayKey];
+            }
+            
+            saveData();
+            renderCalendar();
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('dayDetailsModal'));
+            if (modal) {
+                modal.hide();
+            }
+            
+            alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
         }
 
         // Open assign duty modal from day details
