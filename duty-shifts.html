@@ -656,7 +656,7 @@
                         <i class="fas fa-file-excel me-1"></i>Δημιουργία Excel
                     </button>
                     <button class="btn btn-sm btn-warning ms-2" onclick="analyzeRotationViolations()">
-                        <i class="fas fa-exclamation-triangle me-1"></i>Έλεγχος Περιστροφής
+                        <i class="fas fa-exclamation-triangle me-1"></i>Έλεγχος Αναθέσεων Υπηρεσιών
                     </button>
                 </div>
             </div>
@@ -1030,13 +1030,13 @@
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header bg-warning">
-                    <h5 class="modal-title"><i class="fas fa-exclamation-triangle me-2"></i>Παραβιάσεις Περιστροφής</h5>
+                    <h5 class="modal-title"><i class="fas fa-exclamation-triangle me-2"></i>Παραβιάσεις Αναθέσεων Υπηρεσιών</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <small>Αυτή η λίστα εμφανίζει όλες τις αναθέσεις που δεν ακολούθησαν την αυστηρή N-ημέρες περιστροφή, μαζί με τον λόγο για τον οποίο το άτομο μετακινήθηκε.</small>
+                        <small>Αυτή η λίστα εμφανίζει όλες τις αναθέσεις του τρέχοντος μήνα που δεν ακολούθησαν την αυστηρή N-ημέρες περιστροφή, μαζί με τον λόγο για τον οποίο το άτομο μετακινήθηκε.</small>
                     </div>
                     <div id="rotationViolationsList" class="table-responsive">
                         <table class="table table-striped table-hover">
@@ -5105,8 +5105,19 @@
         function analyzeRotationViolations() {
             const violations = [];
             
-            // Get all dates with assignments
-            const allDates = Object.keys(dutyAssignments).sort();
+            // Get dates only for the current month being viewed
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const daysInMonth = lastDay.getDate();
+            
+            // Build list of dates for current month
+            const allDates = [];
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(year, month, day);
+                allDates.push(formatDateKey(date));
+            }
             
             // For each date, check each group
             for (const dayKey of allDates) {
