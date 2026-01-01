@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="css/common.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jspdf-customfonts@0.0.4/dist/jspdf.customfonts.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body, html {
             margin: 0;
@@ -3042,7 +3042,7 @@
         let generatedPDFs = [];
 
         // Generate PDFs for current month for all groups
-        function generatePDFsForCurrentMonth() {
+        async function generatePDFsForCurrentMonth() {
             const { jsPDF } = window.jspdf;
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth();
@@ -3056,6 +3056,13 @@
             // Clear previous PDFs
             generatedPDFs = [];
             
+            // Show loading message
+            const loadingAlert = document.createElement('div');
+            loadingAlert.className = 'alert alert-info position-fixed top-50 start-50 translate-middle';
+            loadingAlert.style.zIndex = '9999';
+            loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Δημιουργία PDF αρχείων...';
+            document.body.appendChild(loadingAlert);
+            
             // Generate PDF for each group
             for (let groupNum = 1; groupNum <= 4; groupNum++) {
                 const groupName = getGroupName(groupNum);
@@ -3066,20 +3073,24 @@
                     compress: true
                 });
                 
-                // Use a workaround for Greek text: convert to canvas or use Unicode properly
-                // For now, we'll use the text method with proper Unicode handling
-                doc.setFontSize(14);
-                doc.setFont('helvetica', 'bold');
-                
-                // Create title with proper Unicode handling
-                const titleParts = [
-                    'YPHRESIA',
-                    groupName,
-                    'MHNOS',
-                    monthName.toUpperCase(),
-                    year.toString()
-                ];
-                doc.text(titleParts.join(' '), 14, 15);
+                // Title - render using html method for Greek support
+                await new Promise((resolve) => {
+                    const titleHtml = `<div style="font-family: Arial, sans-serif; font-size: 14pt; font-weight: bold; color: black;">ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}</div>`;
+                    doc.html(titleHtml, {
+                        x: 14,
+                        y: 15,
+                        width: 270,
+                        windowWidth: 270,
+                        html2canvas: {
+                            scale: 1,
+                            useCORS: true,
+                            letterRendering: true
+                        },
+                        callback: function(doc) {
+                            resolve();
+                        }
+                    });
+                });
                 
                 // Prepare table data - we'll handle Greek text encoding manually
                 const tableData = [];
@@ -3123,22 +3134,34 @@
                 const colWidths = [25, 40, 100];
                 const startX = 14;
                 
-                // Draw header
-                doc.setFillColor(66, 139, 202);
-                doc.rect(startX, startY, colWidths[0] + colWidths[1] + colWidths[2], rowHeight, 'F');
-                doc.setTextColor(255, 255, 255);
-                doc.setFontSize(10);
-                doc.setFont('helvetica', 'bold');
-                doc.text('HMER.', startX + 2, startY + 5);
-                doc.text('HMERA', startX + colWidths[0] + 2, startY + 5);
-                doc.text('ONOMATEPONUMO', startX + colWidths[0] + colWidths[1] + 2, startY + 5);
+                // Draw header with Greek text using html method
+                await new Promise((resolve) => {
+                    const headerHtml = `
+                        <div style="display: flex; background-color: rgb(66, 139, 202); color: white; font-weight: bold; font-size: 10pt; font-family: Arial, sans-serif; padding: 2px;">
+                            <div style="width: 25mm;">ΗΜΕΡ.</div>
+                            <div style="width: 40mm;">ΗΜΕΡΑ</div>
+                            <div style="width: 100mm;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</div>
+                        </div>
+                    `;
+                    doc.html(headerHtml, {
+                        x: startX,
+                        y: startY,
+                        width: colWidths[0] + colWidths[1] + colWidths[2],
+                        windowWidth: colWidths[0] + colWidths[1] + colWidths[2],
+                        html2canvas: {
+                            scale: 1,
+                            useCORS: true,
+                            letterRendering: true
+                        },
+                        callback: function(doc) {
+                            resolve();
+                        }
+                    });
+                });
                 
                 startY += rowHeight;
-                doc.setTextColor(0, 0, 0);
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(9);
                 
-                // Draw table rows
+                // Draw table rows with Greek text
                 for (let i = 0; i < tableData.length; i++) {
                     const row = tableData[i];
                     const color = getDayTypeColor(row.dayType);
@@ -3147,33 +3170,47 @@
                     doc.setFillColor(color[0], color[1], color[2]);
                     doc.rect(startX, startY, colWidths[0] + colWidths[1] + colWidths[2], rowHeight, 'F');
                     
-                    // Draw text - for Greek characters, we'll use a workaround
-                    // Convert Greek to transliteration or use canvas method
+                    // Draw date (numbers only, no encoding issue)
                     doc.text(row.date, startX + 2, startY + 5);
                     
-                    // Render Greek text using canvas method
-                    // Create a canvas to render Greek text and convert to image
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    canvas.width = 200;
-                    canvas.height = 20;
-                    ctx.font = '12px Arial';
-                    ctx.fillStyle = 'rgb(0, 0, 0)';
-                    ctx.fillText(row.dayName, 0, 15);
-                    const dayNameImg = canvas.toDataURL('image/png');
-                    doc.addImage(dayNameImg, 'PNG', startX + colWidths[0] + 2, startY + 1, colWidths[1] - 4, rowHeight - 2);
+                    // Render Greek day name using html method
+                    await new Promise((resolve) => {
+                        const dayNameHtml = `<div style="font-family: Arial, sans-serif; font-size: 9pt; color: black;">${row.dayName}</div>`;
+                        doc.html(dayNameHtml, {
+                            x: startX + colWidths[0] + 2,
+                            y: startY + 1,
+                            width: colWidths[1] - 4,
+                            windowWidth: colWidths[1] - 4,
+                            html2canvas: {
+                                scale: 1,
+                                useCORS: true,
+                                letterRendering: true
+                            },
+                            callback: function(doc) {
+                                resolve();
+                            }
+                        });
+                    });
                     
-                    // Person name - render Greek text using canvas
+                    // Render Greek person name using html method
                     if (row.personName) {
-                        const canvas2 = document.createElement('canvas');
-                        const ctx2 = canvas2.getContext('2d');
-                        canvas2.width = 300;
-                        canvas2.height = 20;
-                        ctx2.font = '12px Arial';
-                        ctx2.fillStyle = 'rgb(0, 0, 0)';
-                        ctx2.fillText(row.personName, 0, 15);
-                        const personNameImg = canvas2.toDataURL('image/png');
-                        doc.addImage(personNameImg, 'PNG', startX + colWidths[0] + colWidths[1] + 2, startY + 1, colWidths[2] - 4, rowHeight - 2);
+                        await new Promise((resolve) => {
+                            const personNameHtml = `<div style="font-family: Arial, sans-serif; font-size: 9pt; color: black;">${row.personName}</div>`;
+                            doc.html(personNameHtml, {
+                                x: startX + colWidths[0] + colWidths[1] + 2,
+                                y: startY + 1,
+                                width: colWidths[2] - 4,
+                                windowWidth: colWidths[2] - 4,
+                                html2canvas: {
+                                    scale: 1,
+                                    useCORS: true,
+                                    letterRendering: true
+                                },
+                                callback: function(doc) {
+                                    resolve();
+                                }
+                            });
+                        });
                     }
                     
                     startY += rowHeight;
@@ -3198,6 +3235,9 @@
                     url: pdfUrl
                 });
             }
+            
+            // Remove loading message
+            document.body.removeChild(loadingAlert);
             
             // Show preview modal
             showPDFPreview();
