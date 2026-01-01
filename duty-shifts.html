@@ -3101,15 +3101,18 @@
                     // Create workbook
                     const wb = XLSX.utils.book_new();
                     
-                    // Prepare data array
+                    // Prepare data array with day type info for styling
                     const data = [];
+                    const rowDayTypes = []; // Track day type for each data row
                     
                     // Title row
                     data.push([`ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`]);
                     data.push([]); // Empty row
+                    rowDayTypes.push(null, null); // No color for title rows
                     
                     // Header row
                     data.push(['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ']);
+                    rowDayTypes.push(null); // Header will be styled separately
                     
                     // Data rows
                     for (let day = 1; day <= daysInMonth; day++) {
@@ -3137,6 +3140,7 @@
                         const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
                         
                         data.push([dateStr, dayName, personName]);
+                        rowDayTypes.push(dayType); // Store day type for this row
                     }
                     
                     // Create worksheet
@@ -3152,6 +3156,53 @@
                     // Merge title row (first row, columns A-C)
                     if (!ws['!merges']) ws['!merges'] = [];
                     ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } });
+                    
+                    // Style title row (row 1, 0-indexed)
+                    const titleCell = 'A1';
+                    if (!ws[titleCell]) ws[titleCell] = { t: 's', v: '' };
+                    ws[titleCell].s = {
+                        font: { bold: true, sz: 14 },
+                        alignment: { horizontal: 'center', vertical: 'center' }
+                    };
+                    
+                    // Style header row (row 3, 0-indexed is row 2)
+                    const headerRow = 2;
+                    const headerStyle = {
+                        fill: { fgColor: { rgb: '428BCA' } }, // Blue background
+                        font: { bold: true, color: { rgb: 'FFFFFF' } }, // White text
+                        alignment: { horizontal: 'center', vertical: 'center' }
+                    };
+                    ['A', 'B', 'C'].forEach((col, idx) => {
+                        const cellRef = col + (headerRow + 1);
+                        if (!ws[cellRef]) ws[cellRef] = { t: 's', v: data[headerRow][idx] || '' };
+                        ws[cellRef].s = headerStyle;
+                    });
+                    
+                    // Style data rows with colors based on day type
+                    // rowDayTypes array: [null (title), null (empty), null (header), dayType1, dayType2, ...]
+                    // Excel rows: 1 (title), 2 (empty), 3 (header), 4 (data1), 5 (data2), ...
+                    // So for data rows: Excel row = rowIdx + 1, but we need to skip first 3
+                    for (let rowIdx = 3; rowIdx < rowDayTypes.length; rowIdx++) {
+                        const dayType = rowDayTypes[rowIdx];
+                        if (!dayType) continue; // Skip if somehow null
+                        
+                        const color = getDayTypeColor(dayType);
+                        // Convert RGB array to hex string (without #)
+                        const hexColor = color.map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase();
+                        
+                        // Excel rows are 1-indexed, and data starts at row 4 (after title, empty, header)
+                        const excelRow = rowIdx + 1; // rowIdx 3 -> Excel row 4
+                        
+                        // Apply color to all cells in this row (A, B, C)
+                        ['A', 'B', 'C'].forEach((col) => {
+                            const cellRef = col + excelRow;
+                            if (ws[cellRef]) {
+                                if (!ws[cellRef].s) ws[cellRef].s = {};
+                                ws[cellRef].s.fill = { fgColor: { rgb: hexColor } };
+                                ws[cellRef].s.alignment = { horizontal: 'left', vertical: 'center' };
+                            }
+                        });
+                    }
                     
                     // Add worksheet to workbook
                     XLSX.utils.book_append_sheet(wb, ws, 'Υπηρεσίες');
