@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="css/common.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf-customfonts@0.0.4/dist/jspdf.customfonts.min.js"></script>
     <style>
         body, html {
             margin: 0;
@@ -832,6 +833,33 @@
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF Preview Modal -->
+    <div class="modal fade" id="pdfPreviewModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header bg-danger">
+                    <h5 class="modal-title"><i class="fas fa-file-pdf me-2"></i>Προεπισκόπηση PDF Αρχείων</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <small>Προεπισκόπηση των PDF αρχείων. Κάντε κλικ στο "Λήψη" για κάθε ομάδα για να κατεβάσετε το αρχείο.</small>
+                    </div>
+                    <div id="pdfPreviewContainer" class="row">
+                        <!-- PDF previews will be inserted here -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-success" onclick="downloadAllPDFs()">
+                        <i class="fas fa-download me-1"></i>Λήψη Όλων
+                    </button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
                 </div>
             </div>
@@ -3010,6 +3038,9 @@
             return colors[dayType] || [255, 255, 255]; // Default white
         }
 
+        // Store generated PDFs for preview
+        let generatedPDFs = [];
+
         // Generate PDFs for current month for all groups
         function generatePDFsForCurrentMonth() {
             const { jsPDF } = window.jspdf;
@@ -3022,17 +3053,35 @@
             const lastDay = new Date(year, month + 1, 0);
             const daysInMonth = lastDay.getDate();
             
+            // Clear previous PDFs
+            generatedPDFs = [];
+            
             // Generate PDF for each group
             for (let groupNum = 1; groupNum <= 4; groupNum++) {
                 const groupName = getGroupName(groupNum);
-                const doc = new jsPDF();
+                const doc = new jsPDF({
+                    orientation: 'landscape',
+                    unit: 'mm',
+                    format: 'a4',
+                    compress: true
+                });
                 
-                // Title
-                doc.setFontSize(16);
+                // Use a workaround for Greek text: convert to canvas or use Unicode properly
+                // For now, we'll use the text method with proper Unicode handling
+                doc.setFontSize(14);
                 doc.setFont('helvetica', 'bold');
-                doc.text(`ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`, 14, 20);
                 
-                // Prepare table data
+                // Create title with proper Unicode handling
+                const titleParts = [
+                    'YPHRESIA',
+                    groupName,
+                    'MHNOS',
+                    monthName.toUpperCase(),
+                    year.toString()
+                ];
+                doc.text(titleParts.join(' '), 14, 15);
+                
+                // Prepare table data - we'll handle Greek text encoding manually
                 const tableData = [];
                 
                 for (let day = 1; day <= daysInMonth; day++) {
@@ -3059,48 +3108,160 @@
                     // Format date as DD/MM/YYYY
                     const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
                     
-                    tableData.push([dateStr, dayName, personName]);
+                    // Store data - we'll render Greek text using custom rendering
+                    tableData.push({
+                        date: dateStr,
+                        dayName: dayName,
+                        personName: personName,
+                        dayType: dayType
+                    });
                 }
                 
-                // Create table with colors
-                doc.autoTable({
-                    head: [['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ']],
-                    body: tableData,
-                    startY: 30,
-                    headStyles: {
-                        fillColor: [66, 139, 202],
-                        textColor: [255, 255, 255],
-                        fontStyle: 'bold',
-                        fontSize: 11
-                    },
-                    bodyStyles: {
-                        fontSize: 10
-                    },
-                    columnStyles: {
-                        0: { cellWidth: 30 },
-                        1: { cellWidth: 50 },
-                        2: { cellWidth: 110 }
-                    },
-                    didParseCell: function(data) {
-                        // Apply row colors based on day type
-                        if (data.row.index >= 0 && data.section === 'body') {
-                            const day = data.row.index + 1;
-                            const date = new Date(year, month, day);
-                            const dayType = getDayType(date);
-                            const color = getDayTypeColor(dayType);
-                            
-                            data.cell.styles.fillColor = color;
-                            data.cell.styles.textColor = [0, 0, 0];
-                        }
-                    }
-                });
+                // Create table manually to handle Greek characters
+                let startY = 25;
+                const rowHeight = 7;
+                const colWidths = [25, 40, 100];
+                const startX = 14;
                 
-                // Save PDF
-                const fileName = `ΥΠΗΡΕΣΙΑ_${groupName.replace(/\s+/g, '_')}_${monthName}_${year}.pdf`;
-                doc.save(fileName);
+                // Draw header
+                doc.setFillColor(66, 139, 202);
+                doc.rect(startX, startY, colWidths[0] + colWidths[1] + colWidths[2], rowHeight, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'bold');
+                doc.text('HMER.', startX + 2, startY + 5);
+                doc.text('HMERA', startX + colWidths[0] + 2, startY + 5);
+                doc.text('ONOMATEPONUMO', startX + colWidths[0] + colWidths[1] + 2, startY + 5);
+                
+                startY += rowHeight;
+                doc.setTextColor(0, 0, 0);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(9);
+                
+                // Draw table rows
+                for (let i = 0; i < tableData.length; i++) {
+                    const row = tableData[i];
+                    const color = getDayTypeColor(row.dayType);
+                    
+                    // Draw background
+                    doc.setFillColor(color[0], color[1], color[2]);
+                    doc.rect(startX, startY, colWidths[0] + colWidths[1] + colWidths[2], rowHeight, 'F');
+                    
+                    // Draw text - for Greek characters, we'll use a workaround
+                    // Convert Greek to transliteration or use canvas method
+                    doc.text(row.date, startX + 2, startY + 5);
+                    
+                    // Render Greek text using canvas method
+                    // Create a canvas to render Greek text and convert to image
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = 200;
+                    canvas.height = 20;
+                    ctx.font = '12px Arial';
+                    ctx.fillStyle = 'rgb(0, 0, 0)';
+                    ctx.fillText(row.dayName, 0, 15);
+                    const dayNameImg = canvas.toDataURL('image/png');
+                    doc.addImage(dayNameImg, 'PNG', startX + colWidths[0] + 2, startY + 1, colWidths[1] - 4, rowHeight - 2);
+                    
+                    // Person name - render Greek text using canvas
+                    if (row.personName) {
+                        const canvas2 = document.createElement('canvas');
+                        const ctx2 = canvas2.getContext('2d');
+                        canvas2.width = 300;
+                        canvas2.height = 20;
+                        ctx2.font = '12px Arial';
+                        ctx2.fillStyle = 'rgb(0, 0, 0)';
+                        ctx2.fillText(row.personName, 0, 15);
+                        const personNameImg = canvas2.toDataURL('image/png');
+                        doc.addImage(personNameImg, 'PNG', startX + colWidths[0] + colWidths[1] + 2, startY + 1, colWidths[2] - 4, rowHeight - 2);
+                    }
+                    
+                    startY += rowHeight;
+                    
+                    // Check if we need a new page
+                    if (startY > 180 && i < tableData.length - 1) {
+                        doc.addPage();
+                        startY = 15;
+                    }
+                }
+                
+                // Store PDF for preview instead of saving directly
+                const pdfBlob = doc.output('blob');
+                const pdfUrl = URL.createObjectURL(pdfBlob);
+                const fileName = `YPHRESIA_${groupName.replace(/[^a-zA-Z0-9]/g, '_')}_${monthName.replace(/[^a-zA-Z0-9]/g, '_')}_${year}.pdf`;
+                
+                generatedPDFs.push({
+                    groupNum: groupNum,
+                    groupName: groupName,
+                    fileName: fileName,
+                    blob: pdfBlob,
+                    url: pdfUrl
+                });
             }
             
-            alert('Τα PDF αρχεία δημιουργήθηκαν επιτυχώς!');
+            // Show preview modal
+            showPDFPreview();
+        }
+
+        // Show PDF preview modal
+        function showPDFPreview() {
+            const container = document.getElementById('pdfPreviewContainer');
+            container.innerHTML = '';
+            
+            generatedPDFs.forEach((pdf, index) => {
+                const colDiv = document.createElement('div');
+                colDiv.className = 'col-12 col-md-6 mb-4';
+                colDiv.innerHTML = `
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0"><i class="fas fa-file-pdf me-2"></i>${pdf.groupName}</h6>
+                        </div>
+                        <div class="card-body p-2">
+                            <div class="mb-2" style="height: 400px; overflow: auto; border: 1px solid #ddd;">
+                                <iframe src="${pdf.url}" style="width: 100%; height: 100%; border: none;"></iframe>
+                            </div>
+                            <button class="btn btn-success btn-sm w-100" onclick="downloadPDF(${index})">
+                                <i class="fas fa-download me-1"></i>Λήψη PDF
+                            </button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(colDiv);
+            });
+            
+            const modal = new bootstrap.Modal(document.getElementById('pdfPreviewModal'));
+            modal.show();
+            
+            // Clean up blob URLs when modal is closed
+            const modalElement = document.getElementById('pdfPreviewModal');
+            modalElement.addEventListener('hidden.bs.modal', function cleanupPDFs() {
+                generatedPDFs.forEach(pdf => {
+                    if (pdf.url) {
+                        URL.revokeObjectURL(pdf.url);
+                    }
+                });
+                modalElement.removeEventListener('hidden.bs.modal', cleanupPDFs);
+            }, { once: true });
+        }
+
+        // Download individual PDF
+        function downloadPDF(index) {
+            const pdf = generatedPDFs[index];
+            const link = document.createElement('a');
+            link.href = pdf.url;
+            link.download = pdf.fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Download all PDFs
+        function downloadAllPDFs() {
+            generatedPDFs.forEach((pdf, index) => {
+                setTimeout(() => {
+                    downloadPDF(index);
+                }, index * 300); // Stagger downloads to avoid browser blocking
+            });
         }
 
         // Generate a consistent color for a person based on their name
