@@ -1615,6 +1615,89 @@
             }
         }
 
+        // Helper function to get last duty and next expected duty dates (simple calculation, no logic)
+        function getLastAndNextDutyDates(person, groupNum, listType, listArrayLength) {
+            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
+            const lastDuties = groupData.lastDuties?.[person] || {};
+            const lastDutyDateStr = lastDuties[listType];
+            
+            let lastDutyDate = null;
+            let lastDutyFormatted = 'Δεν έχει';
+            
+            // First check manually entered last duty
+            if (lastDutyDateStr) {
+                lastDutyDate = new Date(lastDutyDateStr + 'T00:00:00');
+                lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            }
+            
+            // Also check actual assignments to find most recent duty of this type
+            const personGroupStr = `${person} (Ομάδα ${groupNum})`;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Look through assignments to find most recent duty of this type
+            for (const [dateKey, assignment] of Object.entries(dutyAssignments)) {
+                if (assignment && assignment.includes(personGroupStr)) {
+                    const assignmentDate = new Date(dateKey + 'T00:00:00');
+                    if (assignmentDate > today) continue; // Skip future dates
+                    
+                    const dayType = getDayType(assignmentDate);
+                    let dayTypeCategory = 'normal';
+                    if (dayType === 'special-holiday') {
+                        dayTypeCategory = 'special';
+                    } else if (dayType === 'semi-normal-day') {
+                        dayTypeCategory = 'semi';
+                    } else if (dayType === 'weekend-holiday') {
+                        dayTypeCategory = 'weekend';
+                    }
+                    
+                    // If this assignment is of the same type and more recent than lastDutyDate
+                    if (dayTypeCategory === listType) {
+                        if (!lastDutyDate || assignmentDate > lastDutyDate) {
+                            lastDutyDate = assignmentDate;
+                            lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        }
+                    }
+                }
+            }
+            
+            let nextDutyFormatted = 'Δεν έχει';
+            if (lastDutyDate && listArrayLength > 0) {
+                // Count N days of the same type from last duty date
+                const nextDate = new Date(lastDutyDate);
+                let daysCounted = 0;
+                const targetDays = listArrayLength;
+                
+                // Start counting from the day after last duty
+                nextDate.setDate(nextDate.getDate() + 1);
+                
+                // Count only days of the same type
+                while (daysCounted < targetDays) {
+                    const dayType = getDayType(nextDate);
+                    let dayTypeCategory = 'normal';
+                    if (dayType === 'special-holiday') {
+                        dayTypeCategory = 'special';
+                    } else if (dayType === 'semi-normal-day') {
+                        dayTypeCategory = 'semi';
+                    } else if (dayType === 'weekend-holiday') {
+                        dayTypeCategory = 'weekend';
+                    }
+                    
+                    if (dayTypeCategory === listType) {
+                        daysCounted++;
+                    }
+                    
+                    if (daysCounted < targetDays) {
+                        nextDate.setDate(nextDate.getDate() + 1);
+                    }
+                }
+                
+                nextDutyFormatted = nextDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            }
+            
+            return { lastDuty: lastDutyFormatted, nextDuty: nextDutyFormatted };
+        }
+
         // Create person item with reorder controls
         function createPersonItem(groupNum, person, index, listType, listArray) {
             const personDiv = document.createElement('div');
@@ -1636,9 +1719,21 @@
             });
             const missingBadge = isCurrentlyMissing ? '<span class="badge bg-warning ms-2"><i class="fas fa-user-slash me-1"></i>Απουσία</span>' : '';
             
+            // Get last and next duty dates
+            const dutyDates = getLastAndNextDutyDates(person, groupNum, listType, listArray.length);
+            
             personDiv.innerHTML = `
                 <div class="person-name-card" onclick="openPersonActionsModal(${groupNum}, '${person.replace(/'/g, "\\'")}', ${index}, '${listType}')">
-                    <i class="fas fa-grip-vertical text-muted me-2" style="cursor: move;"></i>${person}${missingBadge}
+                    <div style="display: flex; flex-direction: column;">
+                        <div style="display: flex; align-items: center;">
+                            <i class="fas fa-grip-vertical text-muted me-2" style="cursor: move;"></i>
+                            <span>${person}${missingBadge}</span>
+                        </div>
+                        <div style="font-size: 0.75rem; color: #666; margin-top: 0.25rem; margin-left: 1.5rem;">
+                            <div><strong>Τελευταία:</strong> ${dutyDates.lastDuty}</div>
+                            <div><strong>Επόμενη:</strong> ${dutyDates.nextDuty}</div>
+                        </div>
+                    </div>
                 </div>
                 <div class="person-actions">
                     <div class="btn-group btn-group-sm" role="group">
