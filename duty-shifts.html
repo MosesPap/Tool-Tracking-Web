@@ -3702,6 +3702,12 @@
                 }
                 
                 const dayDiv = document.createElement('div');
+                // dayType is determined by getDayType() which handles:
+                // - normal-day: green background (#E8F5E9)
+                // - semi-normal-day: yellow background (#FFF9C4) - Fridays or days before holidays/weekends
+                // - weekend-holiday: orange background (#FFE0B2) - weekends and regular holidays
+                // - special-holiday: purple background (#E1BEE7) - special holidays
+                // Note: December 30th is treated as normal-day (green) unless it's Friday or weekend
                 dayDiv.className = `calendar-day ${dayType} ${isToday ? 'today' : ''}`;
                 // Only add special-holiday class for special holidays (purple color)
                 // Regular holidays/weekends will use the weekend-holiday class styling (orange color)
