@@ -3047,28 +3047,29 @@
 
         // Generate PDFs for current month for all groups
         async function generatePDFsForCurrentMonth() {
-            const { jsPDF } = window.jspdf;
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth();
-            const monthName = getGreekMonthName(currentDate);
-            
-            // Get all days of the month
-            const firstDay = new Date(year, month, 1);
-            const lastDay = new Date(year, month + 1, 0);
-            const daysInMonth = lastDay.getDate();
-            
-            // Clear previous PDFs
-            generatedPDFs = [];
-            
-            // Show loading message
-            const loadingAlert = document.createElement('div');
-            loadingAlert.className = 'alert alert-info position-fixed top-50 start-50 translate-middle';
-            loadingAlert.style.zIndex = '9999';
-            loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Δημιουργία PDF αρχείων...';
-            document.body.appendChild(loadingAlert);
-            
-            // Generate PDF for each group
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+            try {
+                const { jsPDF } = window.jspdf;
+                const year = currentDate.getFullYear();
+                const month = currentDate.getMonth();
+                const monthName = getGreekMonthName(currentDate);
+                
+                // Get all days of the month
+                const firstDay = new Date(year, month, 1);
+                const lastDay = new Date(year, month + 1, 0);
+                const daysInMonth = lastDay.getDate();
+                
+                // Clear previous PDFs
+                generatedPDFs = [];
+                
+                // Show loading message
+                const loadingAlert = document.createElement('div');
+                loadingAlert.className = 'alert alert-info position-fixed top-50 start-50 translate-middle';
+                loadingAlert.style.zIndex = '9999';
+                loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Δημιουργία PDF αρχείων...';
+                document.body.appendChild(loadingAlert);
+                
+                // Generate PDF for each group
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
                 const groupName = getGroupName(groupNum);
                 const doc = new jsPDF({
                     orientation: 'landscape',
@@ -3077,24 +3078,12 @@
                     compress: true
                 });
                 
-                // Title - render using html method for Greek support
-                await new Promise((resolve) => {
-                    const titleHtml = `<div style="font-family: Arial, sans-serif; font-size: 14pt; font-weight: bold; color: black;">ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}</div>`;
-                    doc.html(titleHtml, {
-                        x: 14,
-                        y: 15,
-                        width: 270,
-                        windowWidth: 270,
-                        html2canvas: {
-                            scale: 1,
-                            useCORS: true,
-                            letterRendering: true
-                        },
-                        callback: function(doc) {
-                            resolve();
-                        }
-                    });
-                });
+                // Title - use text method with transliteration for now, or use html with timeout
+                doc.setFontSize(14);
+                doc.setFont('helvetica', 'bold');
+                // For title, use transliteration since it's just group name and month
+                const titleText = `YPHRESIA ${groupName} MHNOS ${monthName.toUpperCase()} ${year}`;
+                doc.text(titleText, 14, 15);
                 
                 // Prepare table data - we'll handle Greek text encoding manually
                 const tableData = [];
@@ -3138,93 +3127,113 @@
                 const colWidths = [25, 40, 100];
                 const startX = 14;
                 
-                // Draw header with Greek text using html method
-                await new Promise((resolve) => {
-                    const headerHtml = `
-                        <div style="display: flex; background-color: rgb(66, 139, 202); color: white; font-weight: bold; font-size: 10pt; font-family: Arial, sans-serif; padding: 2px;">
-                            <div style="width: 25mm;">ΗΜΕΡ.</div>
-                            <div style="width: 40mm;">ΗΜΕΡΑ</div>
-                            <div style="width: 100mm;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</div>
-                        </div>
-                    `;
-                    doc.html(headerHtml, {
-                        x: startX,
-                        y: startY,
-                        width: colWidths[0] + colWidths[1] + colWidths[2],
-                        windowWidth: colWidths[0] + colWidths[1] + colWidths[2],
-                        html2canvas: {
-                            scale: 1,
-                            useCORS: true,
-                            letterRendering: true
-                        },
-                        callback: function(doc) {
-                            resolve();
-                        }
-                    });
-                });
+                // Draw header - use text method for now
+                doc.setFillColor(66, 139, 202);
+                doc.rect(startX, startY, colWidths[0] + colWidths[1] + colWidths[2], rowHeight, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'bold');
+                doc.text('HMER.', startX + 2, startY + 5);
+                doc.text('HMERA', startX + colWidths[0] + 2, startY + 5);
+                doc.text('ONOMATEPONUMO', startX + colWidths[0] + colWidths[1] + 2, startY + 5);
                 
                 startY += rowHeight;
                 
-                // Draw table rows with Greek text
+                // Create HTML table for faster rendering with Greek text
+                const tableContainer = document.createElement('div');
+                tableContainer.style.position = 'absolute';
+                tableContainer.style.left = '-9999px';
+                tableContainer.style.fontFamily = 'Arial, sans-serif';
+                tableContainer.style.fontSize = '9pt';
+                tableContainer.style.width = (colWidths[0] + colWidths[1] + colWidths[2]) + 'mm';
+                
+                let tableHTML = '<table style="border-collapse: collapse; width: 100%;">';
+                tableHTML += '<thead><tr style="background-color: rgb(66, 139, 202); color: white; font-weight: bold;">';
+                tableHTML += `<td style="width: ${colWidths[0]}mm; padding: 2mm; border: 1px solid #ccc;">ΗΜΕΡ.</td>`;
+                tableHTML += `<td style="width: ${colWidths[1]}mm; padding: 2mm; border: 1px solid #ccc;">ΗΜΕΡΑ</td>`;
+                tableHTML += `<td style="width: ${colWidths[2]}mm; padding: 2mm; border: 1px solid #ccc;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</td>`;
+                tableHTML += '</tr></thead><tbody>';
+                
                 for (let i = 0; i < tableData.length; i++) {
                     const row = tableData[i];
                     const color = getDayTypeColor(row.dayType);
-                    
-                    // Draw background
-                    doc.setFillColor(color[0], color[1], color[2]);
-                    doc.rect(startX, startY, colWidths[0] + colWidths[1] + colWidths[2], rowHeight, 'F');
-                    
-                    // Draw date (numbers only, no encoding issue)
-                    doc.text(row.date, startX + 2, startY + 5);
-                    
-                    // Render Greek day name using html method
-                    await new Promise((resolve) => {
-                        const dayNameHtml = `<div style="font-family: Arial, sans-serif; font-size: 9pt; color: black;">${row.dayName}</div>`;
-                        doc.html(dayNameHtml, {
-                            x: startX + colWidths[0] + 2,
-                            y: startY + 1,
-                            width: colWidths[1] - 4,
-                            windowWidth: colWidths[1] - 4,
-                            html2canvas: {
-                                scale: 1,
-                                useCORS: true,
-                                letterRendering: true
-                            },
-                            callback: function(doc) {
-                                resolve();
-                            }
-                        });
+                    tableHTML += `<tr style="background-color: rgb(${color[0]}, ${color[1]}, ${color[2]});">`;
+                    tableHTML += `<td style="padding: 2mm; border: 1px solid #ccc;">${row.date}</td>`;
+                    tableHTML += `<td style="padding: 2mm; border: 1px solid #ccc;">${row.dayName}</td>`;
+                    tableHTML += `<td style="padding: 2mm; border: 1px solid #ccc;">${row.personName || ''}</td>`;
+                    tableHTML += '</tr>';
+                }
+                
+                tableHTML += '</tbody></table>';
+                tableContainer.innerHTML = tableHTML;
+                document.body.appendChild(tableContainer);
+                
+                // Render entire table at once using html2canvas
+                try {
+                    const canvas = await html2canvas(tableContainer, {
+                        scale: 2,
+                        useCORS: true,
+                        letterRendering: true,
+                        backgroundColor: '#ffffff'
                     });
                     
-                    // Render Greek person name using html method
-                    if (row.personName) {
-                        await new Promise((resolve) => {
-                            const personNameHtml = `<div style="font-family: Arial, sans-serif; font-size: 9pt; color: black;">${row.personName}</div>`;
-                            doc.html(personNameHtml, {
-                                x: startX + colWidths[0] + colWidths[1] + 2,
-                                y: startY + 1,
-                                width: colWidths[2] - 4,
-                                windowWidth: colWidths[2] - 4,
-                                html2canvas: {
-                                    scale: 1,
-                                    useCORS: true,
-                                    letterRendering: true
-                                },
-                                callback: function(doc) {
-                                    resolve();
-                                }
-                            });
-                        });
+                    const imgData = canvas.toDataURL('image/png');
+                    const imgWidth = 270; // A4 landscape width - margins
+                    const imgHeight = (canvas.height / canvas.width) * imgWidth;
+                    
+                    // Add image to PDF, handling page breaks
+                    let currentY = startY;
+                    const pageHeight = 190; // A4 landscape height - margins
+                    let imgY = 0;
+                    
+                    while (imgY < imgHeight) {
+                        const remainingHeight = pageHeight - (currentY - 15);
+                        const sliceHeight = Math.min(remainingHeight, imgHeight - imgY);
+                        
+                        // Create a temporary canvas for this slice
+                        const sliceCanvas = document.createElement('canvas');
+                        sliceCanvas.width = canvas.width;
+                        sliceCanvas.height = (sliceHeight / imgWidth) * canvas.width;
+                        const ctx = sliceCanvas.getContext('2d');
+                        ctx.drawImage(canvas, 0, imgY * (canvas.width / imgWidth), canvas.width, sliceCanvas.height);
+                        
+                        const sliceData = sliceCanvas.toDataURL('image/png');
+                        doc.addImage(sliceData, 'PNG', startX, currentY, imgWidth, sliceHeight);
+                        
+                        imgY += sliceHeight;
+                        
+                        if (imgY < imgHeight) {
+                            doc.addPage();
+                            currentY = 15;
+                        }
                     }
-                    
-                    startY += rowHeight;
-                    
-                    // Check if we need a new page
-                    if (startY > 180 && i < tableData.length - 1) {
-                        doc.addPage();
-                        startY = 15;
+                } catch (error) {
+                    console.error('Error rendering table:', error);
+                    // Fallback: draw rows manually without Greek text
+                    for (let i = 0; i < tableData.length; i++) {
+                        const row = tableData[i];
+                        const color = getDayTypeColor(row.dayType);
+                        
+                        doc.setFillColor(color[0], color[1], color[2]);
+                        doc.rect(startX, startY, colWidths[0] + colWidths[1] + colWidths[2], rowHeight, 'F');
+                        
+                        doc.setTextColor(0, 0, 0);
+                        doc.setFontSize(9);
+                        doc.text(row.date, startX + 2, startY + 5);
+                        doc.text(row.dayName, startX + colWidths[0] + 2, startY + 5);
+                        if (row.personName) {
+                            doc.text(row.personName, startX + colWidths[0] + colWidths[1] + 2, startY + 5);
+                        }
+                        
+                        startY += rowHeight;
+                        if (startY > 180 && i < tableData.length - 1) {
+                            doc.addPage();
+                            startY = 15;
+                        }
                     }
                 }
+                
+                document.body.removeChild(tableContainer);
                 
                 // Store PDF for preview instead of saving directly
                 const pdfBlob = doc.output('blob');
@@ -3241,10 +3250,21 @@
             }
             
             // Remove loading message
-            document.body.removeChild(loadingAlert);
+            if (document.body.contains(loadingAlert)) {
+                document.body.removeChild(loadingAlert);
+            }
             
             // Show preview modal
             showPDFPreview();
+            } catch (error) {
+                console.error('Error generating PDFs:', error);
+                alert('Σφάλμα κατά τη δημιουργία των PDF: ' + error.message);
+                // Remove loading message if still present
+                const loadingAlert = document.querySelector('.alert.position-fixed');
+                if (loadingAlert) {
+                    document.body.removeChild(loadingAlert);
+                }
+            }
         }
 
         // Current PDF preview index
