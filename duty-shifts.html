@@ -9,9 +9,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body, html {
             margin: 0;
@@ -527,8 +525,8 @@
                     <button class="btn btn-sm btn-primary ms-2" onclick="openCalculateDutiesModal()">
                         <i class="fas fa-calculator me-1"></i>Υπολογισμός Υπηρεσιών
                     </button>
-                    <button class="btn btn-sm btn-danger ms-2" onclick="generatePDFsForCurrentMonth()">
-                        <i class="fas fa-file-pdf me-1"></i>Δημιουργία PDF
+                    <button class="btn btn-sm btn-success ms-2" onclick="generateExcelFilesForCurrentMonth()">
+                        <i class="fas fa-file-excel me-1"></i>Δημιουργία Excel
                     </button>
                 </div>
             </div>
@@ -839,36 +837,6 @@
         </div>
     </div>
 
-    <!-- PDF Preview Modal -->
-    <div class="modal fade" id="pdfPreviewModal" tabindex="-1">
-        <div class="modal-dialog modal-fullscreen">
-            <div class="modal-content">
-                <div class="modal-header bg-danger">
-                    <h5 class="modal-title"><i class="fas fa-file-pdf me-2"></i>Προεπισκόπηση PDF Αρχείων</h5>
-                    <div class="d-flex align-items-center gap-2">
-                        <select id="pdfPreviewSelector" class="form-select form-select-sm" style="width: auto;" onchange="switchPDFPreview()">
-                            <!-- Options will be inserted here -->
-                        </select>
-                        <button type="button" class="btn btn-success btn-sm" onclick="downloadCurrentPDF()">
-                            <i class="fas fa-download me-1"></i>Λήψη
-                        </button>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                </div>
-                <div class="modal-body p-0" style="height: calc(100vh - 120px);">
-                    <div id="pdfPreviewContainer" style="width: 100%; height: 100%;">
-                        <!-- PDF preview will be inserted here -->
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-success" onclick="downloadAllPDFs()">
-                        <i class="fas fa-download me-1"></i>Λήψη Όλων
-                    </button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Day Details Modal -->
     <div class="modal fade" id="dayDetailsModal" tabindex="-1">
@@ -3042,13 +3010,9 @@
             return colors[dayType] || [255, 255, 255]; // Default white
         }
 
-        // Store generated PDFs for preview
-        let generatedPDFs = [];
-
-        // Generate PDFs for current month for all groups
-        async function generatePDFsForCurrentMonth() {
+        // Generate Excel files for current month for all groups
+        function generateExcelFilesForCurrentMonth() {
             try {
-                const { jsPDF } = window.jspdf;
                 const year = currentDate.getFullYear();
                 const month = currentDate.getMonth();
                 const monthName = getGreekMonthName(currentDate);
@@ -3058,207 +3022,97 @@
                 const lastDay = new Date(year, month + 1, 0);
                 const daysInMonth = lastDay.getDate();
                 
-                // Clear previous PDFs
-                generatedPDFs = [];
-                
                 // Show loading message
                 const loadingAlert = document.createElement('div');
                 loadingAlert.className = 'alert alert-info position-fixed top-50 start-50 translate-middle';
                 loadingAlert.style.zIndex = '9999';
-                loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Δημιουργία PDF αρχείων...';
+                loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Δημιουργία Excel αρχείων...';
                 document.body.appendChild(loadingAlert);
                 
-                // Generate PDF for each group
+                // Generate Excel file for each group
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                const groupName = getGroupName(groupNum);
-                const doc = new jsPDF({
-                    orientation: 'landscape',
-                    unit: 'mm',
-                    format: 'a4',
-                    compress: true
-                });
-                
-                // Title - use text method with transliteration for now, or use html with timeout
-                doc.setFontSize(14);
-                doc.setFont('helvetica', 'bold');
-                // For title, use transliteration since it's just group name and month
-                const titleText = `YPHRESIA ${groupName} MHNOS ${monthName.toUpperCase()} ${year}`;
-                doc.text(titleText, 14, 15);
-                
-                // Prepare table data - we'll handle Greek text encoding manually
-                const tableData = [];
-                
-                for (let day = 1; day <= daysInMonth; day++) {
-                    const date = new Date(year, month, day);
-                    const dayKey = formatDateKey(date);
-                    const dayType = getDayType(date);
-                    const dayName = getGreekDayName(date);
+                    const groupName = getGroupName(groupNum);
+                    const groupData = groups[groupNum];
                     
-                    // Get assignment for this group
-                    const assignment = dutyAssignments[dayKey] || '';
-                    let personName = '';
+                    // Skip if group has no people
+                    if (!groupData || (!groupData.special?.length && !groupData.weekend?.length && !groupData.semi?.length && !groupData.normal?.length)) {
+                        continue;
+                    }
                     
-                    if (assignment) {
-                        // Extract person name for this group
-                        const personGroupMatches = assignment.matchAll(/([^(]+)\s*\(Ομάδα\s*(\d+)\)/g);
-                        for (const match of personGroupMatches) {
-                            if (parseInt(match[2]) === groupNum) {
-                                personName = match[1].trim();
-                                break;
+                    // Create workbook
+                    const wb = XLSX.utils.book_new();
+                    
+                    // Prepare data array
+                    const data = [];
+                    
+                    // Title row
+                    data.push([`ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`]);
+                    data.push([]); // Empty row
+                    
+                    // Header row
+                    data.push(['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ']);
+                    
+                    // Data rows
+                    for (let day = 1; day <= daysInMonth; day++) {
+                        const date = new Date(year, month, day);
+                        const dayKey = formatDateKey(date);
+                        const dayType = getDayType(date);
+                        const dayName = getGreekDayName(date);
+                        
+                        // Get assignment for this group
+                        const assignment = dutyAssignments[dayKey] || '';
+                        let personName = '';
+                        
+                        if (assignment) {
+                            // Extract person name for this group
+                            const personGroupMatches = assignment.matchAll(/([^(]+)\s*\(Ομάδα\s*(\d+)\)/g);
+                            for (const match of personGroupMatches) {
+                                if (parseInt(match[2]) === groupNum) {
+                                    personName = match[1].trim();
+                                    break;
+                                }
                             }
                         }
+                        
+                        // Format date as DD/MM/YYYY
+                        const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
+                        
+                        data.push([dateStr, dayName, personName]);
                     }
                     
-                    // Format date as DD/MM/YYYY
-                    const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
+                    // Create worksheet
+                    const ws = XLSX.utils.aoa_to_sheet(data);
                     
-                    // Store data - we'll render Greek text using custom rendering
-                    tableData.push({
-                        date: dateStr,
-                        dayName: dayName,
-                        personName: personName,
-                        dayType: dayType
-                    });
+                    // Set column widths
+                    ws['!cols'] = [
+                        { wch: 12 }, // Date column
+                        { wch: 15 }, // Day name column
+                        { wch: 30 }  // Person name column
+                    ];
+                    
+                    // Merge title row (first row, columns A-C)
+                    if (!ws['!merges']) ws['!merges'] = [];
+                    ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } });
+                    
+                    // Add worksheet to workbook
+                    XLSX.utils.book_append_sheet(wb, ws, 'Υπηρεσίες');
+                    
+                    // Generate file name
+                    const fileName = `YPHRESIA_${groupName.replace(/[^a-zA-Z0-9]/g, '_')}_${monthName.replace(/[^a-zA-Z0-9]/g, '_')}_${year}.xlsx`;
+                    
+                    // Write file
+                    XLSX.writeFile(wb, fileName);
                 }
                 
-                // Create table manually to handle Greek characters
-                let startY = 25;
-                const rowHeight = 7;
-                const colWidths = [25, 40, 100];
-                const startX = 14;
-                
-                // Draw header - use text method for now
-                doc.setFillColor(66, 139, 202);
-                doc.rect(startX, startY, colWidths[0] + colWidths[1] + colWidths[2], rowHeight, 'F');
-                doc.setTextColor(255, 255, 255);
-                doc.setFontSize(10);
-                doc.setFont('helvetica', 'bold');
-                doc.text('HMER.', startX + 2, startY + 5);
-                doc.text('HMERA', startX + colWidths[0] + 2, startY + 5);
-                doc.text('ONOMATEPONUMO', startX + colWidths[0] + colWidths[1] + 2, startY + 5);
-                
-                startY += rowHeight;
-                
-                // Create HTML table for faster rendering with Greek text
-                const tableContainer = document.createElement('div');
-                tableContainer.style.position = 'absolute';
-                tableContainer.style.left = '-9999px';
-                tableContainer.style.fontFamily = 'Arial, sans-serif';
-                tableContainer.style.fontSize = '9pt';
-                tableContainer.style.width = (colWidths[0] + colWidths[1] + colWidths[2]) + 'mm';
-                
-                let tableHTML = '<table style="border-collapse: collapse; width: 100%;">';
-                tableHTML += '<thead><tr style="background-color: rgb(66, 139, 202); color: white; font-weight: bold;">';
-                tableHTML += `<td style="width: ${colWidths[0]}mm; padding: 2mm; border: 1px solid #ccc;">ΗΜΕΡ.</td>`;
-                tableHTML += `<td style="width: ${colWidths[1]}mm; padding: 2mm; border: 1px solid #ccc;">ΗΜΕΡΑ</td>`;
-                tableHTML += `<td style="width: ${colWidths[2]}mm; padding: 2mm; border: 1px solid #ccc;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</td>`;
-                tableHTML += '</tr></thead><tbody>';
-                
-                for (let i = 0; i < tableData.length; i++) {
-                    const row = tableData[i];
-                    const color = getDayTypeColor(row.dayType);
-                    tableHTML += `<tr style="background-color: rgb(${color[0]}, ${color[1]}, ${color[2]});">`;
-                    tableHTML += `<td style="padding: 2mm; border: 1px solid #ccc;">${row.date}</td>`;
-                    tableHTML += `<td style="padding: 2mm; border: 1px solid #ccc;">${row.dayName}</td>`;
-                    tableHTML += `<td style="padding: 2mm; border: 1px solid #ccc;">${row.personName || ''}</td>`;
-                    tableHTML += '</tr>';
+                // Remove loading message
+                if (document.body.contains(loadingAlert)) {
+                    document.body.removeChild(loadingAlert);
                 }
                 
-                tableHTML += '</tbody></table>';
-                tableContainer.innerHTML = tableHTML;
-                document.body.appendChild(tableContainer);
-                
-                // Render entire table at once using html2canvas
-                try {
-                    const canvas = await html2canvas(tableContainer, {
-                        scale: 2,
-                        useCORS: true,
-                        letterRendering: true,
-                        backgroundColor: '#ffffff'
-                    });
-                    
-                    const imgData = canvas.toDataURL('image/png');
-                    const imgWidth = 270; // A4 landscape width - margins
-                    const imgHeight = (canvas.height / canvas.width) * imgWidth;
-                    
-                    // Add image to PDF, handling page breaks
-                    let currentY = startY;
-                    const pageHeight = 190; // A4 landscape height - margins
-                    let imgY = 0;
-                    
-                    while (imgY < imgHeight) {
-                        const remainingHeight = pageHeight - (currentY - 15);
-                        const sliceHeight = Math.min(remainingHeight, imgHeight - imgY);
-                        
-                        // Create a temporary canvas for this slice
-                        const sliceCanvas = document.createElement('canvas');
-                        sliceCanvas.width = canvas.width;
-                        sliceCanvas.height = (sliceHeight / imgWidth) * canvas.width;
-                        const ctx = sliceCanvas.getContext('2d');
-                        ctx.drawImage(canvas, 0, imgY * (canvas.width / imgWidth), canvas.width, sliceCanvas.height);
-                        
-                        const sliceData = sliceCanvas.toDataURL('image/png');
-                        doc.addImage(sliceData, 'PNG', startX, currentY, imgWidth, sliceHeight);
-                        
-                        imgY += sliceHeight;
-                        
-                        if (imgY < imgHeight) {
-                            doc.addPage();
-                            currentY = 15;
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error rendering table:', error);
-                    // Fallback: draw rows manually without Greek text
-                    for (let i = 0; i < tableData.length; i++) {
-                        const row = tableData[i];
-                        const color = getDayTypeColor(row.dayType);
-                        
-                        doc.setFillColor(color[0], color[1], color[2]);
-                        doc.rect(startX, startY, colWidths[0] + colWidths[1] + colWidths[2], rowHeight, 'F');
-                        
-                        doc.setTextColor(0, 0, 0);
-                        doc.setFontSize(9);
-                        doc.text(row.date, startX + 2, startY + 5);
-                        doc.text(row.dayName, startX + colWidths[0] + 2, startY + 5);
-                        if (row.personName) {
-                            doc.text(row.personName, startX + colWidths[0] + colWidths[1] + 2, startY + 5);
-                        }
-                        
-                        startY += rowHeight;
-                        if (startY > 180 && i < tableData.length - 1) {
-                            doc.addPage();
-                            startY = 15;
-                        }
-                    }
-                }
-                
-                document.body.removeChild(tableContainer);
-                
-                // Store PDF for preview instead of saving directly
-                const pdfBlob = doc.output('blob');
-                const pdfUrl = URL.createObjectURL(pdfBlob);
-                const fileName = `YPHRESIA_${groupName.replace(/[^a-zA-Z0-9]/g, '_')}_${monthName.replace(/[^a-zA-Z0-9]/g, '_')}_${year}.pdf`;
-                
-                generatedPDFs.push({
-                    groupNum: groupNum,
-                    groupName: groupName,
-                    fileName: fileName,
-                    blob: pdfBlob,
-                    url: pdfUrl
-                });
-            }
-            
-            // Remove loading message
-            if (document.body.contains(loadingAlert)) {
-                document.body.removeChild(loadingAlert);
-            }
-            
-            // Show preview modal
-            showPDFPreview();
+                alert('Τα Excel αρχεία δημιουργήθηκαν επιτυχώς!');
             } catch (error) {
-                console.error('Error generating PDFs:', error);
-                alert('Σφάλμα κατά τη δημιουργία των PDF: ' + error.message);
+                console.error('Error generating Excel files:', error);
+                alert('Σφάλμα κατά τη δημιουργία των Excel αρχείων: ' + error.message);
                 // Remove loading message if still present
                 const loadingAlert = document.querySelector('.alert.position-fixed');
                 if (loadingAlert) {
@@ -3267,85 +3121,6 @@
             }
         }
 
-        // Current PDF preview index
-        let currentPDFPreviewIndex = 0;
-
-        // Show PDF preview modal
-        function showPDFPreview() {
-            const container = document.getElementById('pdfPreviewContainer');
-            const selector = document.getElementById('pdfPreviewSelector');
-            
-            // Clear and populate selector
-            selector.innerHTML = '';
-            generatedPDFs.forEach((pdf, index) => {
-                const option = document.createElement('option');
-                option.value = index;
-                option.textContent = pdf.groupName;
-                if (index === 0) option.selected = true;
-                selector.appendChild(option);
-            });
-            
-            // Set initial preview
-            currentPDFPreviewIndex = 0;
-            updatePDFPreview();
-            
-            const modal = new bootstrap.Modal(document.getElementById('pdfPreviewModal'));
-            modal.show();
-            
-            // Clean up blob URLs when modal is closed
-            const modalElement = document.getElementById('pdfPreviewModal');
-            modalElement.addEventListener('hidden.bs.modal', function cleanupPDFs() {
-                generatedPDFs.forEach(pdf => {
-                    if (pdf.url) {
-                        URL.revokeObjectURL(pdf.url);
-                    }
-                });
-                modalElement.removeEventListener('hidden.bs.modal', cleanupPDFs);
-            }, { once: true });
-        }
-
-        // Update PDF preview display
-        function updatePDFPreview() {
-            const container = document.getElementById('pdfPreviewContainer');
-            if (generatedPDFs.length === 0) return;
-            
-            const pdf = generatedPDFs[currentPDFPreviewIndex];
-            container.innerHTML = `
-                <iframe src="${pdf.url}" style="width: 100%; height: 100%; border: none;"></iframe>
-            `;
-        }
-
-        // Switch PDF preview
-        function switchPDFPreview() {
-            const selector = document.getElementById('pdfPreviewSelector');
-            currentPDFPreviewIndex = parseInt(selector.value);
-            updatePDFPreview();
-        }
-
-        // Download current PDF
-        function downloadCurrentPDF() {
-            downloadPDF(currentPDFPreviewIndex);
-        }
-
-        // Download individual PDF
-        function downloadPDF(index) {
-            const pdf = generatedPDFs[index];
-            const link = document.createElement('a');
-            link.href = pdf.url;
-            link.download = pdf.fileName;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
-        // Download all PDFs
-        function downloadAllPDFs() {
-            generatedPDFs.forEach((pdf, index) => {
-                setTimeout(() => {
-                    downloadPDF(index);
-                }, index * 300); // Stagger downloads to avoid browser blocking
-            });
-        }
 
         // Generate a consistent color for a person based on their name
         function getPersonColor(personName) {
