@@ -1588,7 +1588,7 @@
             
             document.getElementById('modalTitle').innerHTML = `Επεξεργασία Στοιχείων: ${personName}`;
             document.getElementById('personName').value = personName;
-            document.getElementById('personName').readOnly = true;
+            document.getElementById('personName').readOnly = false;
             document.getElementById('lastSpecialDuty').value = lastDuties.special || '';
             document.getElementById('lastWeekendDuty').value = lastDuties.weekend || '';
             document.getElementById('lastSemiDuty').value = lastDuties.semi || '';
@@ -1627,13 +1627,70 @@
             const lastSemiDuty = document.getElementById('lastSemiDuty').value;
             const lastNormalDuty = document.getElementById('lastNormalDuty').value;
             
-            // Store last duties - use editingPersonName if in edit mode, otherwise use name
-            const personKey = isEditingPerson ? editingPersonName : name;
+            // Check if name changed when editing
+            const nameChanged = isEditingPerson && name !== editingPersonName;
+            const oldName = isEditingPerson ? editingPersonName : null;
+            
+            // Store last duties - use new name (name) for the key
+            const personKey = name;
             
             // IMPORTANT: Read old lastDuties BEFORE updating, so we can compare and remove old assignments
-            const oldLastDuties = isEditingPerson ? (groups[currentGroup].lastDuties[editingPersonName] || {}) : {};
+            const oldLastDuties = isEditingPerson ? (groups[currentGroup].lastDuties[oldName] || {}) : {};
             
-            // Now update lastDuties with new values
+            // If name changed, we need to update all references
+            if (nameChanged) {
+                console.log(`[EDIT] Name changed from "${oldName}" to "${name}"`);
+                
+                // Update name in all 4 lists
+                const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                listTypes.forEach(listType => {
+                    const index = groups[currentGroup][listType].indexOf(oldName);
+                    if (index !== -1) {
+                        groups[currentGroup][listType][index] = name;
+                        console.log(`[EDIT] Updated name in ${listType} list`);
+                    }
+                });
+                
+                // Rename key in lastDuties
+                if (groups[currentGroup].lastDuties[oldName]) {
+                    groups[currentGroup].lastDuties[name] = groups[currentGroup].lastDuties[oldName];
+                    delete groups[currentGroup].lastDuties[oldName];
+                    console.log(`[EDIT] Renamed lastDuties key from "${oldName}" to "${name}"`);
+                }
+                
+                // Rename key in missingPeriods
+                if (groups[currentGroup].missingPeriods && groups[currentGroup].missingPeriods[oldName]) {
+                    if (!groups[currentGroup].missingPeriods[name]) {
+                        groups[currentGroup].missingPeriods[name] = groups[currentGroup].missingPeriods[oldName];
+                    }
+                    delete groups[currentGroup].missingPeriods[oldName];
+                    console.log(`[EDIT] Renamed missingPeriods key from "${oldName}" to "${name}"`);
+                }
+                
+                // Update all occurrences in dutyAssignments
+                const oldPersonGroupStr = `${oldName} (Ομάδα ${currentGroup})`;
+                const newPersonGroupStr = `${name} (Ομάδα ${currentGroup})`;
+                
+                Object.keys(dutyAssignments).forEach(dateKey => {
+                    if (dutyAssignments[dateKey] && dutyAssignments[dateKey].includes(oldPersonGroupStr)) {
+                        dutyAssignments[dateKey] = dutyAssignments[dateKey].replace(oldPersonGroupStr, newPersonGroupStr);
+                        console.log(`[EDIT] Updated dutyAssignments[${dateKey}]`);
+                    }
+                });
+                
+                // Update all occurrences in criticalAssignments
+                Object.keys(criticalAssignments).forEach(dateKey => {
+                    if (criticalAssignments[dateKey]) {
+                        const index = criticalAssignments[dateKey].indexOf(oldPersonGroupStr);
+                        if (index !== -1) {
+                            criticalAssignments[dateKey][index] = newPersonGroupStr;
+                            console.log(`[EDIT] Updated criticalAssignments[${dateKey}]`);
+                        }
+                    }
+                });
+            }
+            
+            // Now update lastDuties with new values (using new name as key)
             groups[currentGroup].lastDuties[personKey] = {
                 special: lastSpecialDuty || null,
                 weekend: lastWeekendDuty || null,
@@ -1782,7 +1839,9 @@
                         const shouldRemove = (newDateKey && oldDateKey !== newDateKey) || (!newDateKey && oldDateKey);
                         
                         if (shouldRemove) {
-                            const personGroupStr = `${editingPersonName} (Ομάδα ${currentGroup})`;
+                            // Use current name (may have been changed) for removal
+                            // If name changed, all references were already updated to use new name
+                            const personGroupStr = `${name} (Ομάδα ${currentGroup})`;
                             const existingAssignment = dutyAssignments[oldDateKey];
                             
                             // Remove from critical assignments
