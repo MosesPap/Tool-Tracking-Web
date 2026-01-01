@@ -9,6 +9,8 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <style>
         body, html {
             margin: 0;
@@ -523,6 +525,9 @@
                     </button>
                     <button class="btn btn-sm btn-primary ms-2" onclick="openCalculateDutiesModal()">
                         <i class="fas fa-calculator me-1"></i>Υπολογισμός Υπηρεσιών
+                    </button>
+                    <button class="btn btn-sm btn-danger ms-2" onclick="generatePDFsForCurrentMonth()">
+                        <i class="fas fa-file-pdf me-1"></i>Δημιουργία PDF
                     </button>
                 </div>
             </div>
@@ -2979,6 +2984,123 @@
                 day: 'numeric',
                 weekday: 'long'
             });
+        }
+
+        // Get Greek day name (short)
+        function getGreekDayName(date) {
+            const days = ['Κυριακή', 'Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτη', 'Παρασκευή', 'Σάββατο'];
+            return days[date.getDay()];
+        }
+
+        // Get Greek month name
+        function getGreekMonthName(date) {
+            const months = ['Ιανουαρίου', 'Φεβρουαρίου', 'Μαρτίου', 'Απριλίου', 'Μαΐου', 'Ιουνίου',
+                          'Ιουλίου', 'Αυγούστου', 'Σεπτεμβρίου', 'Οκτωβρίου', 'Νοεμβρίου', 'Δεκεμβρίου'];
+            return months[date.getMonth()];
+        }
+
+        // Get day type background color for PDF
+        function getDayTypeColor(dayType) {
+            const colors = {
+                'normal-day': [232, 245, 233],      // #E8F5E9 - light green
+                'semi-normal-day': [255, 249, 196], // #FFF9C4 - light yellow
+                'weekend-holiday': [255, 224, 178],  // #FFE0B2 - light orange
+                'special-holiday': [225, 190, 231]   // #E1BEE7 - light purple
+            };
+            return colors[dayType] || [255, 255, 255]; // Default white
+        }
+
+        // Generate PDFs for current month for all groups
+        function generatePDFsForCurrentMonth() {
+            const { jsPDF } = window.jspdf;
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const monthName = getGreekMonthName(currentDate);
+            
+            // Get all days of the month
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const daysInMonth = lastDay.getDate();
+            
+            // Generate PDF for each group
+            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                const groupName = getGroupName(groupNum);
+                const doc = new jsPDF();
+                
+                // Title
+                doc.setFontSize(16);
+                doc.setFont('helvetica', 'bold');
+                doc.text(`ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`, 14, 20);
+                
+                // Prepare table data
+                const tableData = [];
+                
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const date = new Date(year, month, day);
+                    const dayKey = formatDateKey(date);
+                    const dayType = getDayType(date);
+                    const dayName = getGreekDayName(date);
+                    
+                    // Get assignment for this group
+                    const assignment = dutyAssignments[dayKey] || '';
+                    let personName = '';
+                    
+                    if (assignment) {
+                        // Extract person name for this group
+                        const personGroupMatches = assignment.matchAll(/([^(]+)\s*\(Ομάδα\s*(\d+)\)/g);
+                        for (const match of personGroupMatches) {
+                            if (parseInt(match[2]) === groupNum) {
+                                personName = match[1].trim();
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Format date as DD/MM/YYYY
+                    const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
+                    
+                    tableData.push([dateStr, dayName, personName]);
+                }
+                
+                // Create table with colors
+                doc.autoTable({
+                    head: [['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ']],
+                    body: tableData,
+                    startY: 30,
+                    headStyles: {
+                        fillColor: [66, 139, 202],
+                        textColor: [255, 255, 255],
+                        fontStyle: 'bold',
+                        fontSize: 11
+                    },
+                    bodyStyles: {
+                        fontSize: 10
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 30 },
+                        1: { cellWidth: 50 },
+                        2: { cellWidth: 110 }
+                    },
+                    didParseCell: function(data) {
+                        // Apply row colors based on day type
+                        if (data.row.index >= 0 && data.section === 'body') {
+                            const day = data.row.index + 1;
+                            const date = new Date(year, month, day);
+                            const dayType = getDayType(date);
+                            const color = getDayTypeColor(dayType);
+                            
+                            data.cell.styles.fillColor = color;
+                            data.cell.styles.textColor = [0, 0, 0];
+                        }
+                    }
+                });
+                
+                // Save PDF
+                const fileName = `ΥΠΗΡΕΣΙΑ_${groupName.replace(/\s+/g, '_')}_${monthName}_${year}.pdf`;
+                doc.save(fileName);
+            }
+            
+            alert('Τα PDF αρχεία δημιουργήθηκαν επιτυχώς!');
         }
 
         // Generate a consistent color for a person based on their name
