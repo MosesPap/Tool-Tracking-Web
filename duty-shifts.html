@@ -3283,7 +3283,7 @@
                         titleCell.font = { 
                             name: 'Arial', 
                             bold: true, 
-                            size: 16 
+                            size: 12 
                         };
                         titleCell.alignment = { 
                             horizontal: 'center', 
@@ -3295,7 +3295,14 @@
                             fgColor: { argb: 'FF428BCA' } // Blue background like in photo
                         };
                         titleCell.font.color = { argb: 'FFFFFFFF' }; // White text
-                        worksheet.getRow(1).height = 30;
+                        // Add borders to title cell
+                        titleCell.border = {
+                            top: { style: 'thick' },
+                            left: { style: 'thick' },
+                            bottom: { style: 'thick' },
+                            right: { style: 'thick' }
+                        };
+                        worksheet.getRow(1).height = 22;
                         
                         // Empty row
                         worksheet.getRow(2).height = 5;
@@ -3312,7 +3319,7 @@
                             cell.font = { 
                                 name: 'Arial', 
                                 bold: true, 
-                                size: 15,
+                                size: 12,
                                 color: { argb: 'FFFFFFFF' } // White text
                             };
                             cell.fill = {
@@ -3324,8 +3331,18 @@
                                 horizontal: 'center', 
                                 vertical: 'middle' 
                             };
+                            // Add borders to header cells
+                            cell.border = {
+                                top: { style: 'thick' },
+                                left: { style: 'thin' },
+                                bottom: { style: 'thick' },
+                                right: { style: 'thin' }
+                            };
                         });
-                        headerRow.height = 25;
+                        // Add thick left and right borders to first and last header cells
+                        worksheet.getCell('A3').border.left = { style: 'thick' };
+                        worksheet.getCell('C3').border.right = { style: 'thick' };
+                        headerRow.height = 22;
                         
                         // Set column widths
                         worksheet.getColumn(1).width = 12;
@@ -3369,6 +3386,9 @@
                             const hexColor = 'FF' + color.map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase();
                             
                             // Style each cell in the row
+                            const isFirstDataRow = day === 1;
+                            const isLastDataRow = day === daysInMonth;
+                            
                             [1, 2, 3].forEach(colNum => {
                                 const cell = row.getCell(colNum);
                                 cell.fill = {
@@ -3378,15 +3398,26 @@
                                 };
                                 cell.font = { 
                                     name: 'Arial', 
-                                    size: 14 
+                                    size: 12 
                                 };
                                 cell.alignment = { 
-                                    horizontal: colNum === 1 ? 'left' : 'left', 
+                                    horizontal: 'left', 
                                     vertical: 'middle' 
+                                };
+                                
+                                // Add borders - thick on outside, thin on inside
+                                const isFirstCol = colNum === 1;
+                                const isLastCol = colNum === 3;
+                                
+                                cell.border = {
+                                    top: isFirstDataRow ? { style: 'thick' } : { style: 'thin' },
+                                    bottom: isLastDataRow ? { style: 'thick' } : { style: 'thin' },
+                                    left: isFirstCol ? { style: 'thick' } : { style: 'thin' },
+                                    right: isLastCol ? { style: 'thick' } : { style: 'thin' }
                                 };
                             });
                             
-                            row.height = 20;
+                            row.height = 22;
                         }
                         
                         // Generate file name
@@ -3450,7 +3481,7 @@
                         const titleCell = 'A1';
                         if (!ws[titleCell]) ws[titleCell] = { t: 's', v: data[0][0] || '' };
                         if (!ws[titleCell].s) ws[titleCell].s = {};
-                        ws[titleCell].s.font = { name: 'Arial', bold: true, sz: 16, color: { rgb: 'FFFFFF' } };
+                        ws[titleCell].s.font = { name: 'Arial', bold: true, sz: 12, color: { rgb: 'FFFFFF' } };
                         ws[titleCell].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
                         ws[titleCell].s.alignment = { horizontal: 'center', vertical: 'center' };
                         
@@ -3460,7 +3491,7 @@
                             const cellRef = col + (headerRow + 1);
                             if (!ws[cellRef]) ws[cellRef] = { t: 's', v: data[headerRow][idx] || '' };
                             if (!ws[cellRef].s) ws[cellRef].s = {};
-                            ws[cellRef].s.font = { name: 'Arial', bold: true, sz: 15, color: { rgb: 'FFFFFF' } };
+                            ws[cellRef].s.font = { name: 'Arial', bold: true, sz: 12, color: { rgb: 'FFFFFF' } };
                             ws[cellRef].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
                             ws[cellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
                         });
@@ -3481,7 +3512,7 @@
                                 }
                                 if (!ws[cellRef].s) ws[cellRef].s = {};
                                 ws[cellRef].s.fill = { fgColor: { rgb: hexColor }, patternType: 'solid' };
-                                ws[cellRef].s.font = { name: 'Arial', sz: 14 };
+                                ws[cellRef].s.font = { name: 'Arial', sz: 12 };
                                 ws[cellRef].s.alignment = { horizontal: 'left', vertical: 'center' };
                             });
                         }
