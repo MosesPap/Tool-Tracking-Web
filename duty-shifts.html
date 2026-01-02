@@ -1638,12 +1638,6 @@
             let lastDutyDate = null;
             let lastDutyFormatted = 'Δεν έχει';
             
-            // DEBUG: Log the person and what we're looking for
-            if (listType === 'special') {
-                console.log(`[DEBUG] Calculating for ${person} (Group ${groupNum}), listType: ${listType}, listArrayLength: ${listArrayLength}`);
-                console.log(`[DEBUG] Manual lastDutyDateStr from lastDuties:`, lastDutyDateStr);
-            }
-            
             // First check manually entered last duty (this is the baseline)
             if (lastDutyDateStr) {
                 // Parse the date string - handle both YYYY-MM-DD and DD/MM/YYYY formats
@@ -1667,9 +1661,6 @@
                     lastDutyDate = new Date(parsedDate);
                     lastDutyDate.setHours(0, 0, 0, 0);
                     lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                    if (listType === 'special') {
-                        console.log(`[DEBUG] Parsed manual lastDutyDate:`, lastDutyDate, `Formatted:`, lastDutyFormatted);
-                    }
                 }
             }
             
@@ -1693,11 +1684,6 @@
                 const isPersonAssigned = assignedPersons.some(p => 
                     p.name === person && p.group === groupNum
                 );
-                
-                if (listType === 'special' && isPersonAssigned) {
-                    console.log(`[DEBUG] Found assignment for ${person} on ${dateKey}:`, assignment);
-                    console.log(`[DEBUG] Extracted persons:`, assignedPersons);
-                }
                 
                 if (!isPersonAssigned) continue;
                 
@@ -1731,22 +1717,12 @@
                         lastDutyDate = new Date(assignmentDate);
                         lastDutyDate.setHours(0, 0, 0, 0);
                         lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                        if (listType === 'special') {
-                            console.log(`[DEBUG] Found assignment for ${person} on ${dateKey}, dayTypeCategory: ${dayTypeCategory}, updated lastDutyDate to:`, lastDutyDate);
-                        }
                     }
                 }
             }
             
-            if (listType === 'special') {
-                console.log(`[DEBUG] Final lastDutyDate for ${person}:`, lastDutyDate, `Formatted:`, lastDutyFormatted);
-            }
-            
             let nextDutyFormatted = 'Δεν έχει';
             if (lastDutyDate && listArrayLength > 0) {
-                if (listType === 'special') {
-                    console.log(`[DEBUG] Starting calculation for next duty. lastDutyDate:`, lastDutyDate, `targetDays:`, listArrayLength);
-                }
                 // Count N special holidays from last duty date
                 const nextDate = new Date(lastDutyDate);
                 nextDate.setHours(0, 0, 0, 0);
@@ -1755,10 +1731,6 @@
                 
                 // Start counting from the day after last duty
                 nextDate.setDate(nextDate.getDate() + 1);
-                
-                if (listType === 'special') {
-                    console.log(`[DEBUG] ${person}: Starting to count from day after last duty: ${nextDate.toLocaleDateString('el-GR')} (${formatDateKey(nextDate)})`);
-                }
                 
                 // Count only days of the same type
                 // Limit search to reasonable range (e.g., 10 years ahead to avoid infinite loops)
@@ -1774,7 +1746,8 @@
                     // CRITICAL: Check for special holidays FIRST using isSpecialHoliday() directly
                     // This ensures accuracy even if getDayType() has any issues
                     let dayTypeCategory = 'normal';
-                    if (isSpecialHoliday(nextDate)) {
+                    const isSpecial = isSpecialHoliday(nextDate);
+                    if (isSpecial) {
                         dayTypeCategory = 'special';
                     } else {
                         // For non-special holidays, use getDayType()
@@ -1791,35 +1764,26 @@
                         daysCounted++;
                         if (listType === 'special') {
                             const dateStr = nextDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                            const dateKey = formatDateKey(nextDate);
                             countedSpecialHolidays.push(dateStr);
-                            console.log(`[DEBUG] ${person}: Counted special holiday #${daysCounted}: ${dateStr} (${formatDateKey(nextDate)})`);
+                            console.log(`[DEBUG] ${person}: ✓ Counted special holiday #${daysCounted}/${targetDays}: ${dateStr} (${dateKey})`);
                         }
                     }
                     
-                    if (daysCounted < targetDays) {
-                        nextDate.setDate(nextDate.getDate() + 1);
-                        daysChecked++;
+                    // Always increment to next day
+                    nextDate.setDate(nextDate.getDate() + 1);
+                    daysChecked++;
+                    
+                    // Stop if we've counted enough
+                    if (daysCounted >= targetDays) {
+                        break;
                     }
-                }
-                
-                if (listType === 'special' && countedSpecialHolidays.length > 0) {
-                    console.log(`[DEBUG] ${person}: Counted ${countedSpecialHolidays.length} special holidays:`, countedSpecialHolidays);
                 }
                 
                 if (daysCounted >= targetDays) {
                     nextDutyFormatted = nextDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                    if (listType === 'special') {
-                        console.log(`[DEBUG] Calculated nextDuty for ${person}:`, nextDutyFormatted, `(counted ${daysCounted} special holidays)`);
-                    }
                 } else {
                     nextDutyFormatted = 'Δεν βρέθηκε';
-                    if (listType === 'special') {
-                        console.log(`[DEBUG] Could not find nextDuty for ${person} (only counted ${daysCounted} out of ${targetDays})`);
-                    }
-                }
-            } else {
-                if (listType === 'special') {
-                    console.log(`[DEBUG] Cannot calculate nextDuty for ${person}: lastDutyDate is`, lastDutyDate, `listArrayLength is`, listArrayLength);
                 }
             }
             
