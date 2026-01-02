@@ -1283,9 +1283,11 @@
 
         // Rebuild criticalAssignments from lastDuties
         // This ensures manually entered dates are always protected, even if criticalAssignments wasn't saved
+        // IMPORTANT: This function only updates in-memory data. It does NOT save to Firebase.
+        // Saving should only happen when actual changes are made by the user.
         function rebuildCriticalAssignmentsFromLastDuties() {
-            console.log('Rebuilding criticalAssignments from lastDuties...');
             let rebuiltCount = 0;
+            let updatedCount = 0;
             
             for (let groupNum = 1; groupNum <= 4; groupNum++) {
                 const groupData = groups[groupNum];
@@ -1301,27 +1303,43 @@
                         const dateStr = lastDuties[type];
                         if (dateStr) {
                             try {
-                                // Parse date string (YYYY-MM-DD) and create date in local timezone
-                                const [year, month, day] = dateStr.split('-').map(Number);
-                                const dateObj = new Date(year, month - 1, day);
-                                if (!isNaN(dateObj.getTime())) {
+                                // Parse date string - handle both YYYY-MM-DD and DD/MM/YYYY formats
+                                let dateObj;
+                                if (dateStr.includes('/')) {
+                                    // DD/MM/YYYY format
+                                    const parts = dateStr.split('/');
+                                    if (parts.length === 3) {
+                                        let year = parseInt(parts[2]);
+                                        if (year < 100) {
+                                            year = year < 50 ? 2000 + year : 1900 + year;
+                                        }
+                                        dateObj = new Date(year, parseInt(parts[1]) - 1, parseInt(parts[0]));
+                                    }
+                                } else {
+                                    // YYYY-MM-DD format
+                                    const [year, month, day] = dateStr.split('-').map(Number);
+                                    dateObj = new Date(year, month - 1, day);
+                                }
+                                
+                                if (dateObj && !isNaN(dateObj.getTime())) {
                                     const dateKey = formatDateKey(dateObj);
                                     
-                                    // Add to criticalAssignments
+                                    // Add to criticalAssignments (only if not already there)
                                     if (!criticalAssignments[dateKey]) {
                                         criticalAssignments[dateKey] = [];
                                     }
                                     if (!criticalAssignments[dateKey].includes(personGroupStr)) {
                                         criticalAssignments[dateKey].push(personGroupStr);
                                         rebuiltCount++;
-                                        console.log(`Rebuilt critical assignment: ${dateKey} -> ${personGroupStr}`);
                                     }
                                     
-                                    // Also ensure it's in dutyAssignments
+                                    // Also ensure it's in dutyAssignments (only if not already there)
                                     if (!dutyAssignments[dateKey]) {
                                         dutyAssignments[dateKey] = personGroupStr;
+                                        updatedCount++;
                                     } else if (!dutyAssignments[dateKey].includes(personGroupStr)) {
                                         dutyAssignments[dateKey] += `, ${personGroupStr}`;
+                                        updatedCount++;
                                     }
                                 }
                             } catch (error) {
@@ -1332,7 +1350,10 @@
                 });
             }
             
-            console.log(`Rebuilt ${rebuiltCount} critical assignments from lastDuties`);
+            // Only log if there were actual changes
+            if (rebuiltCount > 0 || updatedCount > 0) {
+                console.log(`Rebuilt ${rebuiltCount} critical assignments and updated ${updatedCount} duty assignments from lastDuties (in-memory only, not saved)`);
+            }
         }
 
         // Fallback: Load data from localStorage
@@ -1758,17 +1779,20 @@
                 const countedSpecialHolidays = [];
                 
                 while (daysCounted < targetDays && daysChecked < maxDaysAhead) {
-                    nextDate.setHours(0, 0, 0, 0);
+                    // CRITICAL: Create a copy of nextDate before any operations to prevent modification
+                    const currentDate = new Date(nextDate.getTime());
+                    currentDate.setHours(0, 0, 0, 0);
                     
                     // CRITICAL: Check for special holidays FIRST using isSpecialHoliday() directly
                     // This ensures accuracy even if getDayType() has any issues
                     let dayTypeCategory = 'normal';
-                    const isSpecial = isSpecialHoliday(nextDate);
+                    const isSpecial = isSpecialHoliday(currentDate);
                     if (isSpecial) {
                         dayTypeCategory = 'special';
                     } else {
                         // For non-special holidays, use getDayType()
-                        const dayType = getDayType(nextDate);
+                        // Pass a copy to prevent any modification
+                        const dayType = getDayType(new Date(currentDate.getTime()));
                         if (dayType === 'semi-normal-day') {
                             dayTypeCategory = 'semi';
                         } else if (dayType === 'weekend-holiday') {
@@ -1780,14 +1804,15 @@
                     if (dayTypeCategory === listType) {
                         daysCounted++;
                         if (listType === 'special') {
-                            const dateStr = nextDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                            const dateKey = formatDateKey(nextDate);
+                            const dateStr = currentDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                            const dateKey = formatDateKey(currentDate);
                             countedSpecialHolidays.push(dateStr);
                             console.log(`[DEBUG] ${person}: ✓ Counted special holiday #${daysCounted}/${targetDays}: ${dateStr} (${dateKey})`);
                         }
                     }
                     
-                    // Always increment to next day
+                    // Always increment to next day - update nextDate from currentDate
+                    nextDate.setTime(currentDate.getTime());
                     nextDate.setDate(nextDate.getDate() + 1);
                     daysChecked++;
                     
@@ -1798,7 +1823,16 @@
                 }
                 
                 if (daysCounted >= targetDays) {
-                    nextDutyFormatted = nextDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    // Use the last counted date, not nextDate (which is one day ahead)
+                    if (countedSpecialHolidays.length > 0) {
+                        // Get the last counted special holiday date
+                        const lastCountedDate = new Date(nextDate.getTime());
+                        lastCountedDate.setDate(lastCountedDate.getDate() - 1); // Go back one day to get the actual last counted date
+                        lastCountedDate.setHours(0, 0, 0, 0);
+                        nextDutyFormatted = lastCountedDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    } else {
+                        nextDutyFormatted = nextDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    }
                 } else {
                     nextDutyFormatted = 'Δεν βρέθηκε';
                 }
@@ -2928,8 +2962,8 @@
             
             // Sort by date
             specialHolidays.sort((a, b) => a.date.localeCompare(b.date));
-            // Save to Firebase and localStorage
-            saveData();
+            // NOTE: Do NOT call saveData() here - it will be called when user makes actual changes
+            // This prevents unnecessary Firebase writes on every page load
         }
         
         // Load recurring holidays configuration
