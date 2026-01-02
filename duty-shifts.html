@@ -1728,9 +1728,17 @@
                     console.log(`[DEBUG] ${person}: Using lastDutyDate: ${lastDutyDate.toLocaleDateString('el-GR')} (${formatDateKey(lastDutyDate)}) for calculation`);
                 }
                 
-                // Count N special holidays from last duty date
-                const nextDate = new Date(lastDutyDate);
+                // CRITICAL: Create a completely new Date object to avoid any reference issues
+                // Get the timestamp and create a new date from it
+                const lastDutyTimestamp = lastDutyDate.getTime();
+                const nextDate = new Date(lastDutyTimestamp);
                 nextDate.setHours(0, 0, 0, 0);
+                
+                // Verify the date is correct before starting
+                if (listType === 'special') {
+                    console.log(`[DEBUG] ${person}: Created nextDate from lastDutyDate: ${nextDate.toLocaleDateString('el-GR')} (${formatDateKey(nextDate)})`);
+                }
+                
                 let daysCounted = 0;
                 const targetDays = listArrayLength;
                 
