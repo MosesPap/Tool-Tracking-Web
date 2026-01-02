@@ -1659,15 +1659,20 @@
                 const assignmentDate = new Date(dateKey + 'T00:00:00');
                 if (assignmentDate > today) continue; // Skip future dates
                 
-                // Get the day type for this assignment date
-                const dayType = getDayType(assignmentDate);
+                // CRITICAL: Check for special holidays FIRST using isSpecialHoliday() directly
+                // This ensures accuracy even if getDayType() has any issues
                 let dayTypeCategory = 'normal';
-                if (dayType === 'special-holiday') {
+                if (isSpecialHoliday(assignmentDate)) {
                     dayTypeCategory = 'special';
-                } else if (dayType === 'semi-normal-day') {
-                    dayTypeCategory = 'semi';
-                } else if (dayType === 'weekend-holiday') {
-                    dayTypeCategory = 'weekend';
+                } else {
+                    // For non-special holidays, use getDayType()
+                    const dayType = getDayType(assignmentDate);
+                    if (dayType === 'semi-normal-day') {
+                        dayTypeCategory = 'semi';
+                    } else if (dayType === 'weekend-holiday') {
+                        dayTypeCategory = 'weekend';
+                    }
+                    // else remains 'normal'
                 }
                 
                 // CRITICAL: Only consider assignments that match the EXACT listType we're looking for
@@ -1698,14 +1703,20 @@
                 let daysChecked = 0;
                 
                 while (daysCounted < targetDays && daysChecked < maxDaysAhead) {
-                    const dayType = getDayType(nextDate);
+                    // CRITICAL: Check for special holidays FIRST using isSpecialHoliday() directly
+                    // This ensures accuracy even if getDayType() has any issues
                     let dayTypeCategory = 'normal';
-                    if (dayType === 'special-holiday') {
+                    if (isSpecialHoliday(nextDate)) {
                         dayTypeCategory = 'special';
-                    } else if (dayType === 'semi-normal-day') {
-                        dayTypeCategory = 'semi';
-                    } else if (dayType === 'weekend-holiday') {
-                        dayTypeCategory = 'weekend';
+                    } else {
+                        // For non-special holidays, use getDayType()
+                        const dayType = getDayType(nextDate);
+                        if (dayType === 'semi-normal-day') {
+                            dayTypeCategory = 'semi';
+                        } else if (dayType === 'weekend-holiday') {
+                            dayTypeCategory = 'weekend';
+                        }
+                        // else remains 'normal'
                     }
                     
                     if (dayTypeCategory === listType) {
@@ -3837,12 +3848,19 @@
                 
                 // CRITICAL: Special holidays must always have purple color, even if they're also weekends/holidays
                 // Remove conflicting day type classes and ensure special-holiday class is applied
-                if (isSpecialHoliday(date)) {
+                const isSpecial = isSpecialHoliday(date);
+                if (isSpecial) {
                     // For special holidays, only use special-holiday class (purple color)
                     dayDiv.className = `calendar-day special-holiday ${isToday ? 'today' : ''}`;
+                    // Explicitly set background color to ensure it's purple
+                    dayDiv.style.background = '#E1BEE7';
+                    dayDiv.style.borderColor = '#9C27B0';
                 } else {
                     // For non-special holidays, use the normal dayType
                     dayDiv.className = `calendar-day ${dayType} ${isToday ? 'today' : ''}`;
+                    // Clear any inline background styles to let CSS handle it
+                    dayDiv.style.background = '';
+                    dayDiv.style.borderColor = '';
                 }
                 
                 // Apply person-specific colors
