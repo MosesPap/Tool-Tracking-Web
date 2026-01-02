@@ -246,9 +246,16 @@
         }
 
         .calendar-day.special-holiday {
-            background: #E1BEE7;
+            background: #E1BEE7 !important;
             border-color: #9C27B0;
             font-weight: bold;
+        }
+        
+        /* Ensure special holidays always have purple color, even if they have other day type classes */
+        .calendar-day.special-holiday.weekend-holiday,
+        .calendar-day.special-holiday.normal-day,
+        .calendar-day.special-holiday.semi-normal-day {
+            background: #E1BEE7 !important;
         }
 
         /* Removed .holiday class - regular holidays now use weekend-holiday styling */
@@ -3827,11 +3834,15 @@
                 // - weekend-holiday: orange background (#FFE0B2) - weekends and regular holidays
                 // - special-holiday: purple background (#E1BEE7) - special holidays
                 // Note: December 30th is treated as normal-day (green) unless it's Friday or weekend
-                dayDiv.className = `calendar-day ${dayType} ${isToday ? 'today' : ''}`;
-                // Only add special-holiday class for special holidays (purple color)
-                // Regular holidays/weekends will use the weekend-holiday class styling (orange color)
+                
+                // CRITICAL: Special holidays must always have purple color, even if they're also weekends/holidays
+                // Remove conflicting day type classes and ensure special-holiday class is applied
                 if (isSpecialHoliday(date)) {
-                    dayDiv.classList.add('special-holiday');
+                    // For special holidays, only use special-holiday class (purple color)
+                    dayDiv.className = `calendar-day special-holiday ${isToday ? 'today' : ''}`;
+                } else {
+                    // For non-special holidays, use the normal dayType
+                    dayDiv.className = `calendar-day ${dayType} ${isToday ? 'today' : ''}`;
                 }
                 
                 // Apply person-specific colors
