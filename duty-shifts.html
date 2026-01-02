@@ -247,7 +247,7 @@
 
         .calendar-day.special-holiday {
             background: #E1BEE7 !important;
-            border-color: #9C27B0;
+            border-color: #9C27B0 !important;
             font-weight: bold;
         }
         
@@ -256,6 +256,13 @@
         .calendar-day.special-holiday.normal-day,
         .calendar-day.special-holiday.semi-normal-day {
             background: #E1BEE7 !important;
+            border-color: #9C27B0 !important;
+        }
+        
+        /* Force purple background for special holidays via data attribute */
+        .calendar-day[data-special-holiday="true"] {
+            background: #E1BEE7 !important;
+            border-color: #9C27B0 !important;
         }
 
         /* Removed .holiday class - regular holidays now use weekend-holiday styling */
@@ -1633,8 +1640,20 @@
             
             // First check manually entered last duty (this is the baseline)
             if (lastDutyDateStr) {
-                lastDutyDate = new Date(lastDutyDateStr + 'T00:00:00');
-                lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                // Parse the date string - handle both YYYY-MM-DD and DD/MM/YYYY formats
+                let parsedDate;
+                if (lastDutyDateStr.includes('/')) {
+                    // DD/MM/YYYY format
+                    const parts = lastDutyDateStr.split('/');
+                    parsedDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+                } else {
+                    // YYYY-MM-DD format
+                    parsedDate = new Date(lastDutyDateStr + 'T00:00:00');
+                }
+                if (!isNaN(parsedDate.getTime())) {
+                    lastDutyDate = parsedDate;
+                    lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                }
             }
             
             // Also check actual assignments to find most recent duty of THIS SPECIFIC TYPE
@@ -1643,7 +1662,11 @@
             today.setHours(0, 0, 0, 0);
             
             // Look through assignments to find most recent duty of this SPECIFIC type
-            for (const [dateKey, assignment] of Object.entries(dutyAssignments)) {
+            // Sort by date key to process chronologically
+            const sortedDateKeys = Object.keys(dutyAssignments).sort();
+            
+            for (const dateKey of sortedDateKeys) {
+                const assignment = dutyAssignments[dateKey];
                 if (!assignment) continue;
                 
                 // Use extractAllPersonNames to properly parse the assignment string
@@ -1657,6 +1680,7 @@
                 if (!isPersonAssigned) continue;
                 
                 const assignmentDate = new Date(dateKey + 'T00:00:00');
+                if (isNaN(assignmentDate.getTime())) continue; // Skip invalid dates
                 if (assignmentDate > today) continue; // Skip future dates
                 
                 // CRITICAL: Check for special holidays FIRST using isSpecialHoliday() directly
@@ -3852,15 +3876,9 @@
                 if (isSpecial) {
                     // For special holidays, only use special-holiday class (purple color)
                     dayDiv.className = `calendar-day special-holiday ${isToday ? 'today' : ''}`;
-                    // Explicitly set background color to ensure it's purple
-                    dayDiv.style.background = '#E1BEE7';
-                    dayDiv.style.borderColor = '#9C27B0';
                 } else {
                     // For non-special holidays, use the normal dayType
                     dayDiv.className = `calendar-day ${dayType} ${isToday ? 'today' : ''}`;
-                    // Clear any inline background styles to let CSS handle it
-                    dayDiv.style.background = '';
-                    dayDiv.style.borderColor = '';
                 }
                 
                 // Apply person-specific colors
@@ -3878,6 +3896,16 @@
                     
                     // Add a subtle box shadow with the person's color
                     dayDiv.style.boxShadow = `0 0 8px ${mainColor}40, inset 0 0 0 1px ${mainColor}30`;
+                }
+                
+                // CRITICAL: Set special holiday background AFTER person colors to ensure it's not overridden
+                // Apply background with higher specificity by setting it last
+                if (isSpecial) {
+                    // Set background and border after all other styles to ensure they take precedence
+                    dayDiv.style.background = '#E1BEE7';
+                    dayDiv.style.borderColor = '#9C27B0';
+                    // Also add a data attribute for CSS targeting if needed
+                    dayDiv.setAttribute('data-special-holiday', 'true');
                 }
                 
                 // Get holiday name (special holiday first, then Orthodox/Cyprus holiday)
