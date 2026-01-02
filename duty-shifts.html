@@ -1643,15 +1643,23 @@
                 // Parse the date string - handle both YYYY-MM-DD and DD/MM/YYYY formats
                 let parsedDate;
                 if (lastDutyDateStr.includes('/')) {
-                    // DD/MM/YYYY format
+                    // DD/MM/YYYY or DD/MM/YY format
                     const parts = lastDutyDateStr.split('/');
-                    parsedDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+                    if (parts.length === 3) {
+                        let year = parseInt(parts[2]);
+                        // Handle 2-digit years: if year < 50, assume 20XX, else assume 19XX
+                        if (year < 100) {
+                            year = year < 50 ? 2000 + year : 1900 + year;
+                        }
+                        parsedDate = new Date(year, parseInt(parts[1]) - 1, parseInt(parts[0]));
+                    }
                 } else {
                     // YYYY-MM-DD format
                     parsedDate = new Date(lastDutyDateStr + 'T00:00:00');
                 }
-                if (!isNaN(parsedDate.getTime())) {
-                    lastDutyDate = parsedDate;
+                if (parsedDate && !isNaN(parsedDate.getTime())) {
+                    lastDutyDate = new Date(parsedDate);
+                    lastDutyDate.setHours(0, 0, 0, 0);
                     lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 }
             }
@@ -1662,8 +1670,8 @@
             today.setHours(0, 0, 0, 0);
             
             // Look through assignments to find most recent duty of this SPECIFIC type
-            // Sort by date key to process chronologically
-            const sortedDateKeys = Object.keys(dutyAssignments).sort();
+            // Sort by date key to process chronologically (newest first for efficiency)
+            const sortedDateKeys = Object.keys(dutyAssignments).sort().reverse();
             
             for (const dateKey of sortedDateKeys) {
                 const assignment = dutyAssignments[dateKey];
@@ -1681,6 +1689,7 @@
                 
                 const assignmentDate = new Date(dateKey + 'T00:00:00');
                 if (isNaN(assignmentDate.getTime())) continue; // Skip invalid dates
+                assignmentDate.setHours(0, 0, 0, 0);
                 if (assignmentDate > today) continue; // Skip future dates
                 
                 // CRITICAL: Check for special holidays FIRST using isSpecialHoliday() directly
@@ -1705,7 +1714,8 @@
                     // Only update if this assignment is more recent than the current lastDutyDate
                     // (or if we don't have a lastDutyDate yet)
                     if (!lastDutyDate || assignmentDate > lastDutyDate) {
-                        lastDutyDate = assignmentDate;
+                        lastDutyDate = new Date(assignmentDate);
+                        lastDutyDate.setHours(0, 0, 0, 0);
                         lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     }
                 }
@@ -1713,8 +1723,9 @@
             
             let nextDutyFormatted = 'Δεν έχει';
             if (lastDutyDate && listArrayLength > 0) {
-                // Count N days of the same type from last duty date
+                // Count N special holidays from last duty date
                 const nextDate = new Date(lastDutyDate);
+                nextDate.setHours(0, 0, 0, 0);
                 let daysCounted = 0;
                 const targetDays = listArrayLength;
                 
@@ -1727,6 +1738,8 @@
                 let daysChecked = 0;
                 
                 while (daysCounted < targetDays && daysChecked < maxDaysAhead) {
+                    nextDate.setHours(0, 0, 0, 0);
+                    
                     // CRITICAL: Check for special holidays FIRST using isSpecialHoliday() directly
                     // This ensures accuracy even if getDayType() has any issues
                     let dayTypeCategory = 'normal';
