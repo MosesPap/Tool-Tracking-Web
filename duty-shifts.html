@@ -1862,11 +1862,19 @@
             });
             const missingBadge = isCurrentlyMissing ? '<span class="badge bg-warning ms-2"><i class="fas fa-user-slash me-1"></i>Απουσία</span>' : '';
             
+            // Get last duty date for this specific list type
+            const dutyDates = getLastAndNextDutyDates(person, groupNum, listType, listArray.length);
+            
             personDiv.innerHTML = `
                 <div class="person-name-card" onclick="openPersonActionsModal(${groupNum}, '${person.replace(/'/g, "\\'")}', ${index}, '${listType}')">
-                    <div style="display: flex; align-items: center;">
-                        <i class="fas fa-grip-vertical text-muted me-2" style="cursor: move;"></i>
-                        <span>${person}${missingBadge}</span>
+                    <div style="display: flex; flex-direction: column;">
+                        <div style="display: flex; align-items: center;">
+                            <i class="fas fa-grip-vertical text-muted me-2" style="cursor: move;"></i>
+                            <span>${person}${missingBadge}</span>
+                        </div>
+                        <div style="font-size: 0.75rem; color: #666; margin-top: 0.25rem; margin-left: 1.5rem;">
+                            <div><strong>Τελευταία:</strong> ${dutyDates.lastDuty}</div>
+                        </div>
                     </div>
                 </div>
                 <div class="person-actions">
