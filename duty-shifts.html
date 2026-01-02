@@ -1638,6 +1638,12 @@
             let lastDutyDate = null;
             let lastDutyFormatted = 'Δεν έχει';
             
+            // DEBUG: Log the person and what we're looking for
+            if (listType === 'special') {
+                console.log(`[DEBUG] Calculating for ${person} (Group ${groupNum}), listType: ${listType}, listArrayLength: ${listArrayLength}`);
+                console.log(`[DEBUG] Manual lastDutyDateStr from lastDuties:`, lastDutyDateStr);
+            }
+            
             // First check manually entered last duty (this is the baseline)
             if (lastDutyDateStr) {
                 // Parse the date string - handle both YYYY-MM-DD and DD/MM/YYYY formats
@@ -1661,6 +1667,9 @@
                     lastDutyDate = new Date(parsedDate);
                     lastDutyDate.setHours(0, 0, 0, 0);
                     lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    if (listType === 'special') {
+                        console.log(`[DEBUG] Parsed manual lastDutyDate:`, lastDutyDate, `Formatted:`, lastDutyFormatted);
+                    }
                 }
             }
             
@@ -1684,6 +1693,11 @@
                 const isPersonAssigned = assignedPersons.some(p => 
                     p.name === person && p.group === groupNum
                 );
+                
+                if (listType === 'special' && isPersonAssigned) {
+                    console.log(`[DEBUG] Found assignment for ${person} on ${dateKey}:`, assignment);
+                    console.log(`[DEBUG] Extracted persons:`, assignedPersons);
+                }
                 
                 if (!isPersonAssigned) continue;
                 
@@ -1717,12 +1731,22 @@
                         lastDutyDate = new Date(assignmentDate);
                         lastDutyDate.setHours(0, 0, 0, 0);
                         lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        if (listType === 'special') {
+                            console.log(`[DEBUG] Found assignment for ${person} on ${dateKey}, dayTypeCategory: ${dayTypeCategory}, updated lastDutyDate to:`, lastDutyDate);
+                        }
                     }
                 }
             }
             
+            if (listType === 'special') {
+                console.log(`[DEBUG] Final lastDutyDate for ${person}:`, lastDutyDate, `Formatted:`, lastDutyFormatted);
+            }
+            
             let nextDutyFormatted = 'Δεν έχει';
             if (lastDutyDate && listArrayLength > 0) {
+                if (listType === 'special') {
+                    console.log(`[DEBUG] Starting calculation for next duty. lastDutyDate:`, lastDutyDate, `targetDays:`, listArrayLength);
+                }
                 // Count N special holidays from last duty date
                 const nextDate = new Date(lastDutyDate);
                 nextDate.setHours(0, 0, 0, 0);
@@ -1768,8 +1792,18 @@
                 
                 if (daysCounted >= targetDays) {
                     nextDutyFormatted = nextDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    if (listType === 'special') {
+                        console.log(`[DEBUG] Calculated nextDuty for ${person}:`, nextDutyFormatted, `(counted ${daysCounted} special holidays)`);
+                    }
                 } else {
                     nextDutyFormatted = 'Δεν βρέθηκε';
+                    if (listType === 'special') {
+                        console.log(`[DEBUG] Could not find nextDuty for ${person} (only counted ${daysCounted} out of ${targetDays})`);
+                    }
+                }
+            } else {
+                if (listType === 'special') {
+                    console.log(`[DEBUG] Cannot calculate nextDuty for ${person}: lastDutyDate is`, lastDutyDate, `listArrayLength is`, listArrayLength);
                 }
             }
             
