@@ -3881,27 +3881,9 @@
                     dayDiv.className = `calendar-day ${dayType} ${isToday ? 'today' : ''}`;
                 }
                 
-                // Apply person-specific colors
-                const personColorData = getDayPersonColors(assignment);
-                
-                if (personColorData.length > 0) {
-                    // Use the first person's color as left border
-                    const mainColor = personColorData[0].color;
-                    dayDiv.style.borderLeft = `4px solid ${mainColor}`;
-                    
-                    // If multiple people, add top border with second color
-                    if (personColorData.length > 1) {
-                        dayDiv.style.borderTop = `3px solid ${personColorData[1].color}`;
-                    }
-                    
-                    // Add a subtle box shadow with the person's color
-                    dayDiv.style.boxShadow = `0 0 8px ${mainColor}40, inset 0 0 0 1px ${mainColor}30`;
-                }
-                
-                // CRITICAL: Set special holiday background AFTER person colors to ensure it's not overridden
-                // Apply background with higher specificity by setting it last
+                // Set special holiday background and border
                 if (isSpecial) {
-                    // Set background and border after all other styles to ensure they take precedence
+                    // Set background and border for special holidays
                     dayDiv.style.background = '#E1BEE7';
                     dayDiv.style.borderColor = '#9C27B0';
                     // Also add a data attribute for CSS targeting if needed
