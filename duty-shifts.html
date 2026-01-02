@@ -1724,6 +1724,10 @@
             
             let nextDutyFormatted = 'Δεν έχει';
             if (lastDutyDate && listArrayLength > 0) {
+                if (listType === 'special') {
+                    console.log(`[DEBUG] ${person}: Using lastDutyDate: ${lastDutyDate.toLocaleDateString('el-GR')} (${formatDateKey(lastDutyDate)}) for calculation`);
+                }
+                
                 // Count N special holidays from last duty date
                 const nextDate = new Date(lastDutyDate);
                 nextDate.setHours(0, 0, 0, 0);
@@ -1732,6 +1736,10 @@
                 
                 // Start counting from the day after last duty
                 nextDate.setDate(nextDate.getDate() + 1);
+                
+                if (listType === 'special') {
+                    console.log(`[DEBUG] ${person}: Starting count from: ${nextDate.toLocaleDateString('el-GR')} (${formatDateKey(nextDate)}), target: ${targetDays} special holidays`);
+                }
                 
                 // Count only days of the same type
                 // Limit search to reasonable range (e.g., 10 years ahead to avoid infinite loops)
