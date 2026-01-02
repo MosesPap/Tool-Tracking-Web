@@ -1638,7 +1638,9 @@
             let lastDutyDate = null;
             let lastDutyFormatted = 'Δεν έχει';
             
-            // First check manually entered last duty (this is the baseline)
+            // CRITICAL: For "next duty" calculation, we MUST use the manually entered last duty date
+            // This is the baseline that the user explicitly set when adding/editing the person
+            // We should NOT overwrite it with assignments, as those might be from calculations, not the actual last duty
             if (lastDutyDateStr) {
                 // Parse the date string - handle both YYYY-MM-DD and DD/MM/YYYY formats
                 let parsedDate;
@@ -1664,59 +1666,58 @@
                 }
             }
             
-            // Also check actual assignments to find most recent duty of THIS SPECIFIC TYPE
-            // Only update if we find a more recent assignment of the same type
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            
-            // Look through assignments to find most recent duty of this SPECIFIC type
-            // Sort by date key to process chronologically (newest first for efficiency)
-            const sortedDateKeys = Object.keys(dutyAssignments).sort().reverse();
-            
-            for (const dateKey of sortedDateKeys) {
-                const assignment = dutyAssignments[dateKey];
-                if (!assignment) continue;
+            // If no manually entered date, then check actual assignments to find most recent duty of THIS SPECIFIC TYPE
+            // This is a fallback only if the user hasn't manually entered a last duty date
+            if (!lastDutyDate) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
                 
-                // Use extractAllPersonNames to properly parse the assignment string
-                const assignedPersons = extractAllPersonNames(assignment);
+                // Look through assignments to find most recent duty of this SPECIFIC type
+                // Sort by date key to process chronologically (newest first for efficiency)
+                const sortedDateKeys = Object.keys(dutyAssignments).sort().reverse();
                 
-                // Check if this person is assigned on this date
-                const isPersonAssigned = assignedPersons.some(p => 
-                    p.name === person && p.group === groupNum
-                );
-                
-                if (!isPersonAssigned) continue;
-                
-                const assignmentDate = new Date(dateKey + 'T00:00:00');
-                if (isNaN(assignmentDate.getTime())) continue; // Skip invalid dates
-                assignmentDate.setHours(0, 0, 0, 0);
-                if (assignmentDate > today) continue; // Skip future dates
-                
-                // CRITICAL: Check for special holidays FIRST using isSpecialHoliday() directly
-                // This ensures accuracy even if getDayType() has any issues
-                let dayTypeCategory = 'normal';
-                if (isSpecialHoliday(assignmentDate)) {
-                    dayTypeCategory = 'special';
-                } else {
-                    // For non-special holidays, use getDayType()
-                    const dayType = getDayType(assignmentDate);
-                    if (dayType === 'semi-normal-day') {
-                        dayTypeCategory = 'semi';
-                    } else if (dayType === 'weekend-holiday') {
-                        dayTypeCategory = 'weekend';
+                for (const dateKey of sortedDateKeys) {
+                    const assignment = dutyAssignments[dateKey];
+                    if (!assignment) continue;
+                    
+                    // Use extractAllPersonNames to properly parse the assignment string
+                    const assignedPersons = extractAllPersonNames(assignment);
+                    
+                    // Check if this person is assigned on this date
+                    const isPersonAssigned = assignedPersons.some(p => 
+                        p.name === person && p.group === groupNum
+                    );
+                    
+                    if (!isPersonAssigned) continue;
+                    
+                    const assignmentDate = new Date(dateKey + 'T00:00:00');
+                    if (isNaN(assignmentDate.getTime())) continue; // Skip invalid dates
+                    assignmentDate.setHours(0, 0, 0, 0);
+                    if (assignmentDate > today) continue; // Skip future dates
+                    
+                    // CRITICAL: Check for special holidays FIRST using isSpecialHoliday() directly
+                    // This ensures accuracy even if getDayType() has any issues
+                    let dayTypeCategory = 'normal';
+                    if (isSpecialHoliday(assignmentDate)) {
+                        dayTypeCategory = 'special';
+                    } else {
+                        // For non-special holidays, use getDayType()
+                        const dayType = getDayType(assignmentDate);
+                        if (dayType === 'semi-normal-day') {
+                            dayTypeCategory = 'semi';
+                        } else if (dayType === 'weekend-holiday') {
+                            dayTypeCategory = 'weekend';
+                        }
+                        // else remains 'normal'
                     }
-                    // else remains 'normal'
-                }
-                
-                // CRITICAL: Only consider assignments that match the EXACT listType we're looking for
-                // This ensures special holidays are not counted as weekend/holidays, etc.
-                if (dayTypeCategory === listType) {
-                    // Only update if this assignment is more recent than the current lastDutyDate
-                    // (or if we don't have a lastDutyDate yet)
-                    if (!lastDutyDate || assignmentDate > lastDutyDate) {
+                    
+                    // CRITICAL: Only consider assignments that match the EXACT listType we're looking for
+                    // This ensures special holidays are not counted as weekend/holidays, etc.
+                    if (dayTypeCategory === listType) {
                         lastDutyDate = new Date(assignmentDate);
                         lastDutyDate.setHours(0, 0, 0, 0);
                         lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        break; // Found the most recent one, stop searching
                     }
                 }
             }
