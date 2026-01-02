@@ -1650,18 +1650,15 @@
             }
         }
 
-        // Helper function to get last duty and next expected duty dates (simple calculation, no logic)
-        function getLastAndNextDutyDates(person, groupNum, listType, listArrayLength) {
+        // Helper function to get last duty date only (no calculation, just display)
+        function getLastDutyDate(person, groupNum, listType) {
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
             const lastDuties = groupData.lastDuties?.[person] || {};
             const lastDutyDateStr = lastDuties[listType];
             
-            let lastDutyDate = null;
             let lastDutyFormatted = 'Δεν έχει';
             
-            // CRITICAL: For "next duty" calculation, we MUST use the manually entered last duty date
-            // This is the baseline that the user explicitly set when adding/editing the person
-            // We should NOT overwrite it with assignments, as those might be from calculations, not the actual last duty
+            // First check manually entered last duty date
             if (lastDutyDateStr) {
                 // Parse the date string - handle both YYYY-MM-DD and DD/MM/YYYY formats
                 let parsedDate;
@@ -1681,20 +1678,18 @@
                     parsedDate = new Date(lastDutyDateStr + 'T00:00:00');
                 }
                 if (parsedDate && !isNaN(parsedDate.getTime())) {
-                    lastDutyDate = new Date(parsedDate);
+                    const lastDutyDate = new Date(parsedDate);
                     lastDutyDate.setHours(0, 0, 0, 0);
                     lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 }
             }
             
-            // If no manually entered date, then check actual assignments to find most recent duty of THIS SPECIFIC TYPE
-            // This is a fallback only if the user hasn't manually entered a last duty date
-            if (!lastDutyDate) {
+            // If no manually entered date, check actual assignments to find most recent duty of THIS SPECIFIC TYPE
+            if (lastDutyFormatted === 'Δεν έχει') {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 
                 // Look through assignments to find most recent duty of this SPECIFIC type
-                // Sort by date key to process chronologically (newest first for efficiency)
                 const sortedDateKeys = Object.keys(dutyAssignments).sort().reverse();
                 
                 for (const dateKey of sortedDateKeys) {
@@ -1716,8 +1711,7 @@
                     assignmentDate.setHours(0, 0, 0, 0);
                     if (assignmentDate > today) continue; // Skip future dates
                     
-                    // CRITICAL: Check for special holidays FIRST using isSpecialHoliday() directly
-                    // This ensures accuracy even if getDayType() has any issues
+                    // Check for special holidays FIRST using isSpecialHoliday() directly
                     let dayTypeCategory = 'normal';
                     if (isSpecialHoliday(assignmentDate)) {
                         dayTypeCategory = 'special';
@@ -1732,10 +1726,9 @@
                         // else remains 'normal'
                     }
                     
-                    // CRITICAL: Only consider assignments that match the EXACT listType we're looking for
-                    // This ensures special holidays are not counted as weekend/holidays, etc.
+                    // Only consider assignments that match the EXACT listType we're looking for
                     if (dayTypeCategory === listType) {
-                        lastDutyDate = new Date(assignmentDate);
+                        const lastDutyDate = new Date(assignmentDate);
                         lastDutyDate.setHours(0, 0, 0, 0);
                         lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                         break; // Found the most recent one, stop searching
@@ -1743,102 +1736,7 @@
                 }
             }
             
-            let nextDutyFormatted = 'Δεν έχει';
-            if (lastDutyDate && listArrayLength > 0) {
-                if (listType === 'special') {
-                    console.log(`[DEBUG] ${person}: Using lastDutyDate: ${lastDutyDate.toLocaleDateString('el-GR')} (${formatDateKey(lastDutyDate)}) for calculation`);
-                }
-                
-                // CRITICAL: Create a completely new Date object to avoid any reference issues
-                // Get the timestamp and create a new date from it
-                const lastDutyTimestamp = lastDutyDate.getTime();
-                const nextDate = new Date(lastDutyTimestamp);
-                nextDate.setHours(0, 0, 0, 0);
-                
-                // Verify the date is correct before starting
-                if (listType === 'special') {
-                    console.log(`[DEBUG] ${person}: Created nextDate from lastDutyDate: ${nextDate.toLocaleDateString('el-GR')} (${formatDateKey(nextDate)})`);
-                }
-                
-                let daysCounted = 0;
-                const targetDays = listArrayLength;
-                
-                // Start counting from the day after last duty
-                nextDate.setDate(nextDate.getDate() + 1);
-                
-                if (listType === 'special') {
-                    console.log(`[DEBUG] ${person}: Starting count from: ${nextDate.toLocaleDateString('el-GR')} (${formatDateKey(nextDate)}), target: ${targetDays} special holidays`);
-                }
-                
-                // Count only days of the same type
-                // Limit search to reasonable range (e.g., 10 years ahead to avoid infinite loops)
-                const maxDaysAhead = 3650; // 10 years
-                let daysChecked = 0;
-                
-                // Track which special holidays we're counting (for debugging)
-                const countedSpecialHolidays = [];
-                
-                while (daysCounted < targetDays && daysChecked < maxDaysAhead) {
-                    // CRITICAL: Create a copy of nextDate before any operations to prevent modification
-                    const currentDate = new Date(nextDate.getTime());
-                    currentDate.setHours(0, 0, 0, 0);
-                    
-                    // CRITICAL: Check for special holidays FIRST using isSpecialHoliday() directly
-                    // This ensures accuracy even if getDayType() has any issues
-                    let dayTypeCategory = 'normal';
-                    const isSpecial = isSpecialHoliday(currentDate);
-                    if (isSpecial) {
-                        dayTypeCategory = 'special';
-                    } else {
-                        // For non-special holidays, use getDayType()
-                        // Pass a copy to prevent any modification
-                        const dayType = getDayType(new Date(currentDate.getTime()));
-                        if (dayType === 'semi-normal-day') {
-                            dayTypeCategory = 'semi';
-                        } else if (dayType === 'weekend-holiday') {
-                            dayTypeCategory = 'weekend';
-                        }
-                        // else remains 'normal'
-                    }
-                    
-                    if (dayTypeCategory === listType) {
-                        daysCounted++;
-                        if (listType === 'special') {
-                            const dateStr = currentDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                            const dateKey = formatDateKey(currentDate);
-                            countedSpecialHolidays.push(dateStr);
-                            console.log(`[DEBUG] ${person}: ✓ Counted special holiday #${daysCounted}/${targetDays}: ${dateStr} (${dateKey})`);
-                        }
-                    }
-                    
-                    // Always increment to next day - update nextDate from currentDate
-                    nextDate.setTime(currentDate.getTime());
-                    nextDate.setDate(nextDate.getDate() + 1);
-                    daysChecked++;
-                    
-                    // Stop if we've counted enough
-                    if (daysCounted >= targetDays) {
-                        break;
-                    }
-                }
-                
-                if (daysCounted >= targetDays) {
-                    // Use the last counted date, not nextDate (which is one day ahead)
-                    if (countedSpecialHolidays.length > 0) {
-                        // Get the last counted special holiday date
-                        const lastCountedDate = new Date(nextDate.getTime());
-                        lastCountedDate.setDate(lastCountedDate.getDate() - 1); // Go back one day to get the actual last counted date
-                        lastCountedDate.setHours(0, 0, 0, 0);
-                        nextDutyFormatted = lastCountedDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                    } else {
-                        nextDutyFormatted = nextDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                    }
-                } else {
-                    nextDutyFormatted = 'Δεν βρέθηκε';
-                }
-            }
-            
-            return { lastDuty: lastDutyFormatted, nextDuty: nextDutyFormatted };
+            return lastDutyFormatted;
         }
 
         // Create person item with reorder controls
@@ -1863,7 +1761,7 @@
             const missingBadge = isCurrentlyMissing ? '<span class="badge bg-warning ms-2"><i class="fas fa-user-slash me-1"></i>Απουσία</span>' : '';
             
             // Get last duty date for this specific list type
-            const dutyDates = getLastAndNextDutyDates(person, groupNum, listType, listArray.length);
+            const lastDuty = getLastDutyDate(person, groupNum, listType);
             
             personDiv.innerHTML = `
                 <div class="person-name-card" onclick="openPersonActionsModal(${groupNum}, '${person.replace(/'/g, "\\'")}', ${index}, '${listType}')">
@@ -1873,7 +1771,7 @@
                             <span>${person}${missingBadge}</span>
                         </div>
                         <div style="font-size: 0.75rem; color: #666; margin-top: 0.25rem; margin-left: 1.5rem;">
-                            <div><strong>Τελευταία:</strong> ${dutyDates.lastDuty}</div>
+                            <div><strong>Τελευταία:</strong> ${lastDuty}</div>
                         </div>
                     </div>
                 </div>
