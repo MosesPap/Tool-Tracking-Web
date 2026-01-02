@@ -1756,10 +1756,17 @@
                 // Start counting from the day after last duty
                 nextDate.setDate(nextDate.getDate() + 1);
                 
+                if (listType === 'special') {
+                    console.log(`[DEBUG] ${person}: Starting to count from day after last duty: ${nextDate.toLocaleDateString('el-GR')} (${formatDateKey(nextDate)})`);
+                }
+                
                 // Count only days of the same type
                 // Limit search to reasonable range (e.g., 10 years ahead to avoid infinite loops)
                 const maxDaysAhead = 3650; // 10 years
                 let daysChecked = 0;
+                
+                // Track which special holidays we're counting (for debugging)
+                const countedSpecialHolidays = [];
                 
                 while (daysCounted < targetDays && daysChecked < maxDaysAhead) {
                     nextDate.setHours(0, 0, 0, 0);
@@ -1782,12 +1789,21 @@
                     
                     if (dayTypeCategory === listType) {
                         daysCounted++;
+                        if (listType === 'special') {
+                            const dateStr = nextDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                            countedSpecialHolidays.push(dateStr);
+                            console.log(`[DEBUG] ${person}: Counted special holiday #${daysCounted}: ${dateStr} (${formatDateKey(nextDate)})`);
+                        }
                     }
                     
                     if (daysCounted < targetDays) {
                         nextDate.setDate(nextDate.getDate() + 1);
                         daysChecked++;
                     }
+                }
+                
+                if (listType === 'special' && countedSpecialHolidays.length > 0) {
+                    console.log(`[DEBUG] ${person}: Counted ${countedSpecialHolidays.length} special holidays:`, countedSpecialHolidays);
                 }
                 
                 if (daysCounted >= targetDays) {
