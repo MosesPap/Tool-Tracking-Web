@@ -1662,24 +1662,30 @@
             // First check manually entered last duty date
             if (lastDutyDateStr) {
                 // Parse the date string - handle both YYYY-MM-DD and DD/MM/YYYY formats
-                let parsedDate;
+                let parsedDate = null;
                 if (lastDutyDateStr.includes('/')) {
                     // DD/MM/YYYY or DD/MM/YY format
                     const parts = lastDutyDateStr.split('/');
                     if (parts.length === 3) {
                         let year = parseInt(parts[2]);
+                        const month = parseInt(parts[1]);
+                        const day = parseInt(parts[0]);
                         // Handle 2-digit years: if year < 50, assume 20XX, else assume 19XX
                         if (year < 100) {
                             year = year < 50 ? 2000 + year : 1900 + year;
                         }
-                        parsedDate = new Date(year, parseInt(parts[1]) - 1, parseInt(parts[0]));
+                        // Validate the date components
+                        if (!isNaN(year) && !isNaN(month) && !isNaN(day) && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                            parsedDate = new Date(year, month - 1, day);
+                        }
                     }
                 } else {
                     // YYYY-MM-DD format
                     parsedDate = new Date(lastDutyDateStr + 'T00:00:00');
                 }
                 if (parsedDate && !isNaN(parsedDate.getTime())) {
-                    lastDutyDate = new Date(parsedDate);
+                    // Create a fresh Date object to avoid any reference issues
+                    lastDutyDate = new Date(parsedDate.getTime());
                     lastDutyDate.setHours(0, 0, 0, 0);
                     lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 }
@@ -1729,7 +1735,8 @@
                     
                     // Only consider assignments that match the EXACT listType we're looking for
                     if (dayTypeCategory === listType) {
-                        lastDutyDate = new Date(assignmentDate);
+                        // Create a fresh Date object to avoid any reference issues
+                        lastDutyDate = new Date(assignmentDate.getTime());
                         lastDutyDate.setHours(0, 0, 0, 0);
                         lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                         break; // Found the most recent one, stop searching
@@ -1739,10 +1746,18 @@
             
             // Calculate next duty date by counting forward N days of the same type (simple count, no logic)
             let nextDutyFormatted = 'Δεν έχει';
-            if (lastDutyDate && listArrayLength > 0) {
-                // Create a copy of lastDutyDate to avoid modifying the original
-                const currentDate = new Date(lastDutyDate.getTime());
+            // CRITICAL: Only calculate if we have a valid lastDutyDate
+            if (lastDutyDate && !isNaN(lastDutyDate.getTime()) && listArrayLength > 0) {
+                // CRITICAL: Create a completely new Date object from lastDutyDate to avoid any reference issues
+                // Get the timestamp and create a new date from it
+                const lastDutyTimestamp = lastDutyDate.getTime();
+                const currentDate = new Date(lastDutyTimestamp);
                 currentDate.setHours(0, 0, 0, 0);
+                
+                // Verify we have a valid date before starting
+                if (isNaN(currentDate.getTime())) {
+                    return { lastDuty: lastDutyFormatted, nextDuty: 'Δεν έχει' };
+                }
                 
                 // Start counting from the day after last duty
                 currentDate.setDate(currentDate.getDate() + 1);
@@ -1754,22 +1769,31 @@
                 
                 // Count forward N days of the same type
                 while (daysCounted < targetDays && daysChecked < maxDaysAhead) {
-                    // Create a copy for checking day type
+                    // CRITICAL: Create a fresh copy for checking day type to avoid any date modification issues
                     const checkDate = new Date(currentDate.getTime());
                     checkDate.setHours(0, 0, 0, 0);
                     
                     // Determine day type category
                     let dayTypeCategory = 'normal';
-                    if (isSpecialHoliday(checkDate)) {
-                        dayTypeCategory = 'special';
-                    } else {
-                        const dayType = getDayType(checkDate);
-                        if (dayType === 'semi-normal-day') {
-                            dayTypeCategory = 'semi';
-                        } else if (dayType === 'weekend-holiday') {
-                            dayTypeCategory = 'weekend';
+                    if (listType === 'special') {
+                        // For special holidays, ONLY check isSpecialHoliday, don't use getDayType
+                        // because getDayType might have priority issues
+                        if (isSpecialHoliday(checkDate)) {
+                            dayTypeCategory = 'special';
                         }
-                        // else remains 'normal'
+                    } else {
+                        // For other types, use the standard logic
+                        if (isSpecialHoliday(checkDate)) {
+                            dayTypeCategory = 'special';
+                        } else {
+                            const dayType = getDayType(checkDate);
+                            if (dayType === 'semi-normal-day') {
+                                dayTypeCategory = 'semi';
+                            } else if (dayType === 'weekend-holiday') {
+                                dayTypeCategory = 'weekend';
+                            }
+                            // else remains 'normal'
+                        }
                     }
                     
                     // If this day matches the list type, count it
@@ -1777,7 +1801,9 @@
                         daysCounted++;
                     }
                     
-                    // Move to next day
+                    // Move to next day - create a new date from currentDate's timestamp
+                    const nextDayTimestamp = currentDate.getTime();
+                    currentDate.setTime(nextDayTimestamp);
                     currentDate.setDate(currentDate.getDate() + 1);
                     daysChecked++;
                     
