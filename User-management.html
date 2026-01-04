@@ -833,6 +833,12 @@
                                     <span class="badge-avionics"><i class="fas fa-cog"></i> Avionics</span>
                                 </label>
                             </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="editUserDuty">
+                                <label class="form-check-label" for="editUserDuty">
+                                    <span class="badge-admin"><i class="fas fa-calendar-alt"></i> Duty</span>
+                                </label>
+                            </div>
                         </div>
                     </form>
                 </div>
@@ -1076,11 +1082,13 @@
                     const isAdmin = userData.isAdmin || false;
                     const isInstructor = userData.isInstructor || false;
                     const isAvionics = userData.isAvionics || false;
+                    const hasDuty = userData.hasDuty || false;
                     
                     const badges = [];
                     if (isAdmin) badges.push('<span class="badge-admin"><i class="fas fa-shield-alt"></i> Admin</span>');
                     if (isInstructor) badges.push('<span class="badge-instructor"><i class="fas fa-chalkboard-teacher"></i> Instructor</span>');
                     if (isAvionics) badges.push('<span class="badge-avionics"><i class="fas fa-cog"></i> Avionics</span>');
+                    if (hasDuty) badges.push('<span class="badge-admin"><i class="fas fa-calendar-alt"></i> Duty</span>');
                     if (badges.length === 0) badges.push('<span class="badge-user">User</span>');
                     
                     const card = document.createElement('div');
@@ -1101,7 +1109,7 @@
                         <div class="user-card-roles">
                             ${badges.join('')}
                         </div>
-                        <button class="user-card-edit-btn" onclick="openEditUserModal('${userId}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}', ${isAdmin}, ${isInstructor}, ${isAvionics}, '${(userData.email || '').replace(/'/g, "\\'")}')">
+                        <button class="user-card-edit-btn" onclick="openEditUserModal('${userId}', '${(userData.fullName || 'N/A').replace(/'/g, "\\'")}', ${isAdmin}, ${isInstructor}, ${isAvionics}, ${hasDuty}, '${(userData.email || '').replace(/'/g, "\\'")}')">
                             <i class="fas fa-edit"></i> Edit
                         </button>
                     `;
@@ -1179,7 +1187,7 @@
         };
         
         // Open Edit User Modal
-        window.openEditUserModal = function(userId, currentName, isAdmin, isInstructor, isAvionics, userEmail) {
+        window.openEditUserModal = function(userId, currentName, isAdmin, isInstructor, isAvionics, hasDuty, userEmail) {
             document.getElementById('editUserId').value = userId;
             document.getElementById('editUserNameHidden').value = currentName;
             document.getElementById('editUserNameInput').value = currentName;
@@ -1187,6 +1195,7 @@
             document.getElementById('editUserAdmin').checked = isAdmin;
             document.getElementById('editUserInstructor').checked = isInstructor;
             document.getElementById('editUserAvionics').checked = isAvionics;
+            document.getElementById('editUserDuty').checked = hasDuty || false;
             
             const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
             modal.show();
@@ -1267,6 +1276,7 @@
             const isAdmin = document.getElementById('editUserAdmin').checked;
             const isInstructor = document.getElementById('editUserInstructor').checked;
             const isAvionics = document.getElementById('editUserAvionics').checked;
+            const hasDuty = document.getElementById('editUserDuty').checked;
             
             if (!newName) {
                 alert('Name cannot be empty!');
@@ -1278,7 +1288,8 @@
                     fullName: newName,
                     isAdmin: isAdmin,
                     isInstructor: isInstructor,
-                    isAvionics: isAvionics
+                    isAvionics: isAvionics,
+                    hasDuty: hasDuty
                 });
                 
                 const modal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
