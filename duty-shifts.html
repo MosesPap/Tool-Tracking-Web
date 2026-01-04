@@ -1773,27 +1773,20 @@
                     const checkDate = new Date(currentDate.getTime());
                     checkDate.setHours(0, 0, 0, 0);
                     
-                    // Determine day type category
+                    // Use the EXACT same logic as when finding the last duty date
+                    // Check for special holidays FIRST using isSpecialHoliday() directly
                     let dayTypeCategory = 'normal';
-                    if (listType === 'special') {
-                        // For special holidays, ONLY check isSpecialHoliday, don't use getDayType
-                        // because getDayType might have priority issues
-                        if (isSpecialHoliday(checkDate)) {
-                            dayTypeCategory = 'special';
-                        }
+                    if (isSpecialHoliday(checkDate)) {
+                        dayTypeCategory = 'special';
                     } else {
-                        // For other types, use the standard logic
-                        if (isSpecialHoliday(checkDate)) {
-                            dayTypeCategory = 'special';
-                        } else {
-                            const dayType = getDayType(checkDate);
-                            if (dayType === 'semi-normal-day') {
-                                dayTypeCategory = 'semi';
-                            } else if (dayType === 'weekend-holiday') {
-                                dayTypeCategory = 'weekend';
-                            }
-                            // else remains 'normal'
+                        // For non-special holidays, use getDayType()
+                        const dayType = getDayType(checkDate);
+                        if (dayType === 'semi-normal-day') {
+                            dayTypeCategory = 'semi';
+                        } else if (dayType === 'weekend-holiday') {
+                            dayTypeCategory = 'weekend';
                         }
+                        // else remains 'normal'
                     }
                     
                     // If this day matches the list type, count it
