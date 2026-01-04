@@ -1758,13 +1758,12 @@
                         // else remains 'normal'
                     }
                     
-                    // DEBUG: Log for special holidays
-                    if (listType === 'special') {
-                        console.log(`[DEBUG] ${person} (Group ${groupNum}): Checking ${dateKey}, isSpecialHoliday(${dateKey}): ${isSpecial}, dayTypeCategory: ${dayTypeCategory}, listType: ${listType}, match: ${dayTypeCategory === listType}`);
-                    }
-                    
                     // Only consider assignments that match the EXACT listType we're looking for
                     if (dayTypeCategory === listType) {
+                        // DEBUG: Log only when a match is found
+                        if (listType === 'special') {
+                            console.log(`[DEBUG] ${person} (Group ${groupNum}): Found assignment on special holiday ${dateKey}, isSpecialHoliday: ${isSpecial}`);
+                        }
                         // Create a fresh Date object to avoid any reference issues
                         lastDutyDate = new Date(assignmentDate.getTime());
                         lastDutyDate.setHours(0, 0, 0, 0);
@@ -1839,14 +1838,14 @@
                         // else remains 'normal'
                     }
                     
-                    // DEBUG: Log for special holidays (only first few and when counting)
-                    if (listType === 'special' && (daysCounted < 3 || dayTypeCategory === 'special')) {
-                        console.log(`[DEBUG] ${person} (Group ${groupNum}): Day ${daysChecked}: ${formatDateKey(checkDate)}, isSpecialHoliday: ${isSpecial}, dayTypeCategory: ${dayTypeCategory}, daysCounted: ${daysCounted}/${targetDays}`);
-                    }
-                    
                     // If this day matches the list type, count it
                     if (dayTypeCategory === listType) {
                         daysCounted++;
+                        
+                        // DEBUG: Log only when special holidays are found (not every day)
+                        if (listType === 'special') {
+                            console.log(`[DEBUG] ${person} (Group ${groupNum}): Found special holiday #${daysCounted}/${targetDays}: ${formatDateKey(checkDate)}`);
+                        }
                     }
                     
                     // Move to next day - create a new date from currentDate's timestamp
@@ -3345,10 +3344,41 @@
             return holidays;
         }
 
-        // Check if date is a special holiday (only user-defined special holidays)
+        // Check if date is a special holiday (checks both specialHolidays array and recurring configuration)
         function isSpecialHoliday(date) {
             const key = formatDateKey(date);
-            return specialHolidays.some(h => h.date === key);
+            
+            // First check the specialHolidays array (for current/future years)
+            if (specialHolidays.some(h => h.date === key)) {
+                return true;
+            }
+            
+            // Also check against recurring configuration (works for ANY year, including past years)
+            const year = date.getFullYear();
+            const month = date.getMonth() + 1; // 1-12
+            const day = date.getDate();
+            
+            for (const holidayDef of recurringSpecialHolidays) {
+                if (holidayDef.type === 'fixed') {
+                    // Fixed date holidays (month + day)
+                    if (holidayDef.month === month && holidayDef.day === day) {
+                        return true;
+                    }
+                } else if (holidayDef.type === 'easter-relative') {
+                    // Movable holidays based on Orthodox Easter
+                    const orthodoxHolidays = calculateOrthodoxHolidays(year);
+                    const easterDate = orthodoxHolidays.easterSunday;
+                    const holidayDate = new Date(easterDate);
+                    holidayDate.setDate(holidayDate.getDate() + (holidayDef.offset || 0));
+                    
+                    // Check if the date matches
+                    if (formatDateKey(holidayDate) === key) {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
         }
 
         // Check if date is holiday (including automatically detected Orthodox/Cyprus holidays)
