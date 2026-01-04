@@ -1650,12 +1650,13 @@
             }
         }
 
-        // Helper function to get last duty date only (no calculation, just display)
-        function getLastDutyDate(person, groupNum, listType) {
+        // Helper function to get last duty date and calculate next duty date (simple count, no logic)
+        function getLastAndNextDutyDates(person, groupNum, listType, listArrayLength) {
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
             const lastDuties = groupData.lastDuties?.[person] || {};
             const lastDutyDateStr = lastDuties[listType];
             
+            let lastDutyDate = null;
             let lastDutyFormatted = 'Δεν έχει';
             
             // First check manually entered last duty date
@@ -1678,14 +1679,14 @@
                     parsedDate = new Date(lastDutyDateStr + 'T00:00:00');
                 }
                 if (parsedDate && !isNaN(parsedDate.getTime())) {
-                    const lastDutyDate = new Date(parsedDate);
+                    lastDutyDate = new Date(parsedDate);
                     lastDutyDate.setHours(0, 0, 0, 0);
                     lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 }
             }
             
             // If no manually entered date, check actual assignments to find most recent duty of THIS SPECIFIC TYPE
-            if (lastDutyFormatted === 'Δεν έχει') {
+            if (!lastDutyDate) {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 
@@ -1728,7 +1729,7 @@
                     
                     // Only consider assignments that match the EXACT listType we're looking for
                     if (dayTypeCategory === listType) {
-                        const lastDutyDate = new Date(assignmentDate);
+                        lastDutyDate = new Date(assignmentDate);
                         lastDutyDate.setHours(0, 0, 0, 0);
                         lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                         break; // Found the most recent one, stop searching
@@ -1736,7 +1737,65 @@
                 }
             }
             
-            return lastDutyFormatted;
+            // Calculate next duty date by counting forward N days of the same type (simple count, no logic)
+            let nextDutyFormatted = 'Δεν έχει';
+            if (lastDutyDate && listArrayLength > 0) {
+                // Create a copy of lastDutyDate to avoid modifying the original
+                const currentDate = new Date(lastDutyDate.getTime());
+                currentDate.setHours(0, 0, 0, 0);
+                
+                // Start counting from the day after last duty
+                currentDate.setDate(currentDate.getDate() + 1);
+                
+                let daysCounted = 0;
+                const targetDays = listArrayLength;
+                const maxDaysAhead = 3650; // 10 years limit to avoid infinite loops
+                let daysChecked = 0;
+                
+                // Count forward N days of the same type
+                while (daysCounted < targetDays && daysChecked < maxDaysAhead) {
+                    // Create a copy for checking day type
+                    const checkDate = new Date(currentDate.getTime());
+                    checkDate.setHours(0, 0, 0, 0);
+                    
+                    // Determine day type category
+                    let dayTypeCategory = 'normal';
+                    if (isSpecialHoliday(checkDate)) {
+                        dayTypeCategory = 'special';
+                    } else {
+                        const dayType = getDayType(checkDate);
+                        if (dayType === 'semi-normal-day') {
+                            dayTypeCategory = 'semi';
+                        } else if (dayType === 'weekend-holiday') {
+                            dayTypeCategory = 'weekend';
+                        }
+                        // else remains 'normal'
+                    }
+                    
+                    // If this day matches the list type, count it
+                    if (dayTypeCategory === listType) {
+                        daysCounted++;
+                    }
+                    
+                    // Move to next day
+                    currentDate.setDate(currentDate.getDate() + 1);
+                    daysChecked++;
+                    
+                    // Stop if we've counted enough
+                    if (daysCounted >= targetDays) {
+                        // Go back one day to get the actual next duty date
+                        currentDate.setDate(currentDate.getDate() - 1);
+                        nextDutyFormatted = currentDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        break;
+                    }
+                }
+                
+                if (daysCounted < targetDays) {
+                    nextDutyFormatted = 'Δεν βρέθηκε';
+                }
+            }
+            
+            return { lastDuty: lastDutyFormatted, nextDuty: nextDutyFormatted };
         }
 
         // Create person item with reorder controls
@@ -1760,8 +1819,8 @@
             });
             const missingBadge = isCurrentlyMissing ? '<span class="badge bg-warning ms-2"><i class="fas fa-user-slash me-1"></i>Απουσία</span>' : '';
             
-            // Get last duty date for this specific list type
-            const lastDuty = getLastDutyDate(person, groupNum, listType);
+            // Get last duty date and calculate next duty date
+            const dutyDates = getLastAndNextDutyDates(person, groupNum, listType, listArray.length);
             
             personDiv.innerHTML = `
                 <div class="person-name-card" onclick="openPersonActionsModal(${groupNum}, '${person.replace(/'/g, "\\'")}', ${index}, '${listType}')">
@@ -1771,7 +1830,8 @@
                             <span>${person}${missingBadge}</span>
                         </div>
                         <div style="font-size: 0.75rem; color: #666; margin-top: 0.25rem; margin-left: 1.5rem;">
-                            <div><strong>Τελευταία:</strong> ${lastDuty}</div>
+                            <div><strong>Τελευταία:</strong> ${dutyDates.lastDuty}</div>
+                            <div><strong>Επόμενη:</strong> ${dutyDates.nextDuty}</div>
                         </div>
                     </div>
                 </div>
