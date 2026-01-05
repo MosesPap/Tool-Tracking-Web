@@ -4358,27 +4358,17 @@
                 return false;
             }
             
-            // Get the current month and year
-            const currentMonth = date.getMonth(); // 0-11
-            const currentYear = date.getFullYear();
-            
-            // Check all days in the same month for special holiday duty
-            // Start from day 1 of the month
-            const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
-            // End at the last day of the month
-            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
-            
-            // Iterate through all days in the month
-            const checkDate = new Date(firstDayOfMonth);
-            while (checkDate <= lastDayOfMonth) {
+            // Check if person had special holiday duty BEFORE this day (not in the entire month)
+            // Look back up to 30 days to find previous special holidays
+            for (let i = 1; i <= 30; i++) {
+                const checkDate = new Date(date);
+                checkDate.setDate(checkDate.getDate() - i);
                 const checkKey = formatDateKey(checkDate);
                 
                 // Check if this day is a special holiday and person had duty on it
                 if (isSpecialHoliday(checkDate) && hasDutyOnDay(checkKey, person, groupNum)) {
-                    return true; // Person had special holiday duty in this month, skip them
+                    return true; // Person had special holiday duty before this day, skip them
                 }
-                
-                checkDate.setDate(checkDate.getDate() + 1);
             }
             
             return false;
@@ -4909,11 +4899,37 @@
                         removePersonFromDay(dayKey, currentPersonForGroup, groupNum);
                         assignPersonToDay(dayKey, person, groupNum);
                         
+                        // IMPORTANT: Re-check that this assignment doesn't create consecutive days
+                        // Check day after to ensure we don't create consecutive days
+                        const dayAfter = new Date(dayDate);
+                        dayAfter.setDate(dayAfter.getDate() + 1);
+                        const dayAfterKey = formatDateKey(dayAfter);
+                        
+                        // Check if person has duty the day after (would create consecutive days)
+                        if (hasDutyOnDay(dayAfterKey, person, groupNum)) {
+                            // This creates consecutive days - undo and try next day
+                            removePersonFromDay(dayKey, person, groupNum);
+                            assignPersonToDay(dayKey, currentPersonForGroup, groupNum); // Restore original
+                            continue; // Try next day
+                        }
+                        
                         // Recursively find next day for the displaced person
                         findAndAssignNextAvailableDay(currentPersonForGroup, dayKey, dayTypeCategory, groupNum, dayTypeLists, sortedDays, startDate);
                     } else {
                         // Day is free - assign person here
                         assignPersonToDay(dayKey, person, groupNum);
+                        
+                        // IMPORTANT: Re-check that this assignment doesn't create consecutive days
+                        const dayAfter = new Date(dayDate);
+                        dayAfter.setDate(dayAfter.getDate() + 1);
+                        const dayAfterKey = formatDateKey(dayAfter);
+                        
+                        // Check if person has duty the day after (would create consecutive days)
+                        if (hasDutyOnDay(dayAfterKey, person, groupNum)) {
+                            // This creates consecutive days - undo and try next day
+                            removePersonFromDay(dayKey, person, groupNum);
+                            continue; // Try next day
+                        }
                     }
                     
                     return true; // Found and assigned
@@ -5025,9 +5041,32 @@
                     // Assign expected person to this day
                     assignPersonToDay(dayKey, expectedPerson, groupNum);
                     
-                    // Now find next available day for current person (cascade)
-                    findAndAssignNextAvailableDay(currentPerson, dayKey, dayTypeCategory, groupNum, dayTypeLists, sortedDays, startDate);
-                } else {
+                    // IMPORTANT: Re-check that this assignment doesn't create consecutive days
+                    // Check day after to ensure we don't create consecutive days
+                    const dayAfter = new Date(dayDate);
+                    dayAfter.setDate(dayAfter.getDate() + 1);
+                    const dayAfterKey = formatDateKey(dayAfter);
+                    
+                    if (hasDutyOnDay(dayAfterKey, expectedPerson, groupNum)) {
+                        // This creates consecutive days - undo the swap
+                        removePersonFromDay(dayKey, expectedPerson, groupNum);
+                        assignPersonToDay(dayKey, currentPerson, groupNum); // Restore original
+                        // Track as intended assignment since expected person can't be assigned due to consecutive days
+                        if (!intendedAssignments[dayKey]) {
+                            intendedAssignments[dayKey] = {};
+                        }
+                        intendedAssignments[dayKey][groupNum] = expectedPerson;
+                        // Find replacement person instead
+                        // (fall through to the else block logic)
+                    } else {
+                        // Assignment is valid - now find next available day for current person (cascade)
+                        findAndAssignNextAvailableDay(currentPerson, dayKey, dayTypeCategory, groupNum, dayTypeLists, sortedDays, startDate);
+                        continue; // Skip the else block
+                    }
+                }
+                
+                // If we reach here, expected person has conflicts or creates consecutive days
+                if (strictConflict || generalConflict) {
                     // Expected person has conflict - track as intended assignment
                     // This ensures N-day rotation counts from the intended day (this day), not the actual assignment day
                     if (!intendedAssignments[dayKey]) {
