@@ -68,6 +68,11 @@ if (typeof window !== 'undefined' && window.console) {
     };
 }
 
+// Track technician document checks to prevent duplicate reads
+let technicianDocChecked = new Set(); // Track which user IDs have been checked in this session
+let lastTechnicianCheckTime = null;
+const TECHNICIAN_CHECK_COOLDOWN = 5 * 60 * 1000; // 5 minutes cooldown between checks for same user
+
 // Set custom error messages for unverified emails and ensure technician document exists
 auth.onAuthStateChanged(async function(user) {
     if (user && !user.emailVerified) {
@@ -77,7 +82,23 @@ auth.onAuthStateChanged(async function(user) {
     
     // Ensure technician document exists for authenticated users
     if (user && user.emailVerified) {
+        // Prevent duplicate reads: check if we've already processed this user in this session
+        // or if we checked recently (within cooldown period)
+        const now = Date.now();
+        const recentlyChecked = lastTechnicianCheckTime && 
+                                 (now - lastTechnicianCheckTime) < TECHNICIAN_CHECK_COOLDOWN &&
+                                 technicianDocChecked.has(user.uid);
+        
+        if (recentlyChecked) {
+            // Already checked recently, skip to prevent duplicate reads
+            return;
+        }
+        
         try {
+            // Mark as checking and update timestamp
+            technicianDocChecked.add(user.uid);
+            lastTechnicianCheckTime = now;
+            
             const technicianDoc = await db.collection('technicians').doc(user.uid).get();
             
             if (!technicianDoc.exists) {
@@ -120,14 +141,41 @@ auth.onAuthStateChanged(async function(user) {
                     }
                 }
             } else {
-                // Update lastSignIn for existing users
-                await db.collection('technicians').doc(user.uid).update({
-                    lastSignIn: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                // Only update lastSignIn if it's been more than 1 hour since last update
+                // This prevents excessive writes on every token refresh
+                const lastSignIn = technicianDoc.data().lastSignIn;
+                let shouldUpdateLastSignIn = true;
+                
+                if (lastSignIn && lastSignIn.toDate) {
+                    const lastSignInTime = lastSignIn.toDate().getTime();
+                    const oneHourAgo = now - (60 * 60 * 1000);
+                    if (lastSignInTime > oneHourAgo) {
+                        shouldUpdateLastSignIn = false;
+                    }
+                }
+                
+                if (shouldUpdateLastSignIn) {
+                    // Update lastSignIn for existing users (only if more than 1 hour passed)
+                    await db.collection('technicians').doc(user.uid).update({
+                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+                
+                // Update localStorage with current fullName if available
+                const currentFullName = technicianDoc.data().fullName;
+                if (currentFullName && !localStorage.getItem('fullName')) {
+                    localStorage.setItem('fullName', currentFullName);
+                }
             }
         } catch (error) {
             console.error('Error ensuring technician document exists:', error);
+            // Remove from checked set on error so it can retry
+            technicianDocChecked.delete(user.uid);
         }
+    } else {
+        // User logged out, clear the checked set
+        technicianDocChecked.clear();
+        lastTechnicianCheckTime = null;
     }
 });
 
