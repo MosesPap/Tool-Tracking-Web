@@ -5400,40 +5400,71 @@
                         }
                         
                         // If no eligible person without conflicts found, we MUST still assign someone
-                        // Use the person who has waited longest (first in sorted list)
+                        // CRITICAL: Always assign the first person in rotation order (personEligibility[0])
+                        // This ensures strict N-day rotation is followed
+                        // Only skip if they have conflicts that prevent assignment
                         if (!assignedPerson && personEligibility.length > 0) {
-                            // Find the person with least conflicts (prefer non-strict conflicts over strict ones)
-                            let bestPerson = null;
-                            let bestConflictLevel = Infinity; // Lower is better
+                            // Check the first person (ideal person) - they should be assigned if possible
+                            const firstPerson = personEligibility[0].person;
                             
-                            for (let i = 0; i < personEligibility.length; i++) {
-                                const candidateData = personEligibility[i];
-                                const candidatePerson = candidateData.person;
+                            // Check conflicts for first person
+                            const firstHasConsecutive = hasConsecutiveDuty(dayKey, firstPerson, groupNum);
+                            const firstHadSpecialBefore = hadSpecialHolidayDutyBefore(dayKey, firstPerson, groupNum);
+                            const firstHasConsecutiveWeekend = hasConsecutiveWeekendHolidayDuty(dayKey, firstPerson, groupNum);
+                            const firstHasConsecutiveSpecial = hasConsecutiveSpecialHolidayDuty(dayKey, firstPerson, groupNum);
+                            
+                            const firstStrictConflict = firstHasConsecutiveSpecial || firstHasConsecutiveWeekend;
+                            const firstGeneralConflict = firstHasConsecutive || firstHadSpecialBefore;
+                            
+                            // For priority 1-2 (special/weekend), check both strict and general conflicts
+                            // For priority 3-4 (semi/normal), only check general conflicts
+                            const firstHasConflict = (priorityLevel <= 2) ? (firstStrictConflict || firstGeneralConflict) : firstGeneralConflict;
+                            
+                            // If first person has no conflicts, assign them (even if not eligible yet)
+                            // This ensures we follow rotation order strictly
+                            if (!firstHasConflict) {
+                                assignedPerson = firstPerson;
+                            } else {
+                                // First person has conflicts - find person with least conflicts
+                                // But still prefer those with more days since last duty
+                                let bestPerson = null;
+                                let bestConflictLevel = Infinity; // Lower is better
+                                let bestDaysSinceLastDuty = -1;
                                 
-                                const candidateStrictConflict = hasConsecutiveSpecialHolidayDuty(dayKey, candidatePerson, groupNum) ||
-                                                               hasConsecutiveWeekendHolidayDuty(dayKey, candidatePerson, groupNum);
-                                const candidateConflict = hasConsecutiveDuty(dayKey, candidatePerson, groupNum) || 
-                                                         hadSpecialHolidayDutyBefore(dayKey, candidatePerson, groupNum) ||
-                                                         hasConsecutiveWeekendHolidayDuty(dayKey, candidatePerson, groupNum) ||
-                                                         hasConsecutiveSpecialHolidayDuty(dayKey, candidatePerson, groupNum);
-                                
-                                // Score: 0 = no conflict, 1 = non-strict conflict, 2 = strict conflict
-                                let conflictLevel = 0;
-                                if (candidateStrictConflict) {
-                                    conflictLevel = 2;
-                                } else if (candidateConflict) {
-                                    conflictLevel = 1;
+                                for (let i = 0; i < personEligibility.length; i++) {
+                                    const candidateData = personEligibility[i];
+                                    const candidatePerson = candidateData.person;
+                                    
+                                    const candidateStrictConflict = hasConsecutiveSpecialHolidayDuty(dayKey, candidatePerson, groupNum) ||
+                                                                   hasConsecutiveWeekendHolidayDuty(dayKey, candidatePerson, groupNum);
+                                    const candidateConflict = hasConsecutiveDuty(dayKey, candidatePerson, groupNum) || 
+                                                             hadSpecialHolidayDutyBefore(dayKey, candidatePerson, groupNum) ||
+                                                             hasConsecutiveWeekendHolidayDuty(dayKey, candidatePerson, groupNum) ||
+                                                             hasConsecutiveSpecialHolidayDuty(dayKey, candidatePerson, groupNum);
+                                    
+                                    // Score: 0 = no conflict, 1 = non-strict conflict, 2 = strict conflict
+                                    let conflictLevel = 0;
+                                    if (candidateStrictConflict) {
+                                        conflictLevel = 2;
+                                    } else if (candidateConflict) {
+                                        conflictLevel = 1;
+                                    }
+                                    
+                                    // Prefer person with lower conflict level
+                                    // If conflict level is tied, prefer the one with more days since last duty (lower index = more days)
+                                    // This ensures we follow rotation order as much as possible
+                                    if (!bestPerson || 
+                                        conflictLevel < bestConflictLevel || 
+                                        (conflictLevel === bestConflictLevel && candidateData.daysSinceLastDuty > bestDaysSinceLastDuty) ||
+                                        (conflictLevel === bestConflictLevel && candidateData.daysSinceLastDuty === bestDaysSinceLastDuty && i < personEligibility.findIndex(p => p.person === bestPerson))) {
+                                        bestPerson = candidatePerson;
+                                        bestConflictLevel = conflictLevel;
+                                        bestDaysSinceLastDuty = candidateData.daysSinceLastDuty;
+                                    }
                                 }
                                 
-                                // Prefer person with lower conflict level, or if tied, the one who waited longer (lower index)
-                                if (!bestPerson || conflictLevel < bestConflictLevel || 
-                                    (conflictLevel === bestConflictLevel && i < personEligibility.findIndex(p => p.person === bestPerson))) {
-                                    bestPerson = candidatePerson;
-                                    bestConflictLevel = conflictLevel;
-                                }
+                                assignedPerson = bestPerson || personEligibility[0].person; // Fallback to first person
                             }
-                            
-                            assignedPerson = bestPerson || personEligibility[0].person; // Fallback to first person
                             
                             // Track if ideal person was skipped due to conflicts
                             // The ideal person is the first in rotation order (personEligibility[0])
