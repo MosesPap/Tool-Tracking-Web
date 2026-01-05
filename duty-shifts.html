@@ -6222,9 +6222,11 @@
                             } else if (hadSpecialBefore) {
                                 violationReason = 'Παράλειψη λόγω προηγούμενης ειδικής αργίας';
                             } else if (!expectedData.isEligible) {
-                                violationReason = `Το άτομο δεν έχει περάσει ${rotationDays} ημέρες από την τελευταία υπηρεσία (έχει περάσει ${expectedData.daysSinceLastDuty})`;
+                                violationReason = `Το άτομο που έπρεπε να ανέθεται δεν έχει περάσει ${rotationDays} ημέρες από την τελευταία υπηρεσία (έχει περάσει ${expectedData.daysSinceLastDuty})`;
                             } else if (assignedData.daysSinceLastDuty < expectedData.daysSinceLastDuty) {
-                                violationReason = `Το ανέθετο άτομο έχει περισσότερες ημέρες από την τελευταία υπηρεσία (${assignedData.daysSinceLastDuty} vs ${expectedData.daysSinceLastDuty})`;
+                                // The expected person (who was NOT assigned) has more days than the assigned person
+                                // This means the expected person was skipped due to conflicts
+                                violationReason = `Το άτομο που έπρεπε να ανέθεται (${expectedData.daysSinceLastDuty} ημέρες) παραλείφθηκε λόγω συγκρούσεων. Ανέθεθηκε άτομο με ${assignedData.daysSinceLastDuty} ημέρες`;
                             } else {
                                 violationReason = 'Αλλαγή λόγω προτεραιότητας ή άλλου περιορισμού';
                             }
