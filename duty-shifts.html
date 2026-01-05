@@ -5279,12 +5279,88 @@
                     dateIterator.setDate(dateIterator.getDate() + 1);
                 }
                 
-                // Track deferred assignments for swap logic (shared across all day types)
-                // Format: { skippedPerson: string, skippedDay: string, replacementPerson: string, replacementDay: string, groupNum: number, dayTypeCategory: string }
-                const deferredAssignments = [];
+                // Helper function to check if person has special holiday duty in a given month
+                function hasSpecialHolidayDutyInMonth(person, groupNum, month, year) {
+                    const firstDay = new Date(year, month, 1);
+                    const lastDay = new Date(year, month + 1, 0);
+                    const checkDate = new Date(firstDay);
+                    
+                    while (checkDate <= lastDay) {
+                        if (isSpecialHoliday(checkDate) && hasDutyOnDay(formatDateKey(checkDate), person, groupNum)) {
+                            return true;
+                        }
+                        checkDate.setDate(checkDate.getDate() + 1);
+                    }
+                    return false;
+                }
                 
-                // Helper function to assign duty for a day type with proper rotation
-                function assignDutiesForDayType(dayTypeCategory, priorityLevel) {
+                // Helper function to find next available day for a skipped person
+                function findNextAvailableDayForPerson(person, groupNum, dayTypeCategory, startFromDayKey, dayTypeLists) {
+                    const days = dayTypeLists[dayTypeCategory];
+                    const startIndex = days.indexOf(startFromDayKey);
+                    if (startIndex === -1) return null;
+                    
+                    // Find next day after startFromDayKey where person can be assigned
+                    for (let i = startIndex + 1; i < days.length; i++) {
+                        const dayKey = days[i];
+                        const dayDate = new Date(dayKey + 'T00:00:00');
+                        
+                        // Skip if person is missing on this date
+                        if (isPersonMissingOnDate(person, groupNum, dayDate)) {
+                            continue;
+                        }
+                        
+                        // Skip if day already has assignment for this group
+                        const existingAssignment = dutyAssignments[dayKey];
+                        if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
+                            continue;
+                        }
+                        
+                        // Check for conflicts based on day type
+                        let hasConflict = false;
+                        if (dayTypeCategory === 'semi') {
+                            // Check consecutive day with weekend/holiday
+                            const dayBefore = new Date(dayDate);
+                            dayBefore.setDate(dayBefore.getDate() - 1);
+                            const dayAfter = new Date(dayDate);
+                            dayAfter.setDate(dayAfter.getDate() + 1);
+                            
+                            const beforeType = getDayType(dayBefore);
+                            const afterType = getDayType(dayAfter);
+                            
+                            if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), person, groupNum)) {
+                                hasConflict = true;
+                            }
+                            if ((afterType === 'weekend-holiday' || afterType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayAfter), person, groupNum)) {
+                                hasConflict = true;
+                            }
+                        } else if (dayTypeCategory === 'normal') {
+                            // Check consecutive day with semi-normal
+                            const dayBefore = new Date(dayDate);
+                            dayBefore.setDate(dayBefore.getDate() - 1);
+                            const dayAfter = new Date(dayDate);
+                            dayAfter.setDate(dayAfter.getDate() + 1);
+                            
+                            const beforeType = getDayType(dayBefore);
+                            const afterType = getDayType(dayAfter);
+                            
+                            if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), person, groupNum)) {
+                                hasConflict = true;
+                            }
+                            if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), person, groupNum)) {
+                                hasConflict = true;
+                            }
+                        }
+                        
+                        if (!hasConflict) {
+                            return dayKey;
+                        }
+                    }
+                    return null;
+                }
+                
+                // Simplified assignment function for each day type
+                function assignDutiesForDayType(dayTypeCategory) {
                     const days = dayTypeLists[dayTypeCategory];
                     if (days.length === 0) return;
                     
@@ -5304,41 +5380,33 @@
                     
                     const rotationDays = groupPeople.length;
                     
-                    days.forEach((dayKey, dayIndex) => {
-                        // Check if this day already has a manual assignment for this group
-                        // ALWAYS skip days with existing assignments (they are critical baseline dates from last duties)
+                    // Process each day in order
+                    days.forEach((dayKey) => {
+                        // Skip if day already has assignment for this group (critical assignments)
                         const existingAssignment = dutyAssignments[dayKey];
-                        const isCritical = criticalAssignments[dayKey] && criticalAssignments[dayKey].some(a => a.includes(`(Ομάδα ${groupNum})`));
-                        
                         if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
-                            // Skip - this day already has an assignment for this group
-                            // If it's critical, log it for debugging
-                            if (isCritical) {
-                                console.log(`Skipping critical assignment for ${dayKey} (Ομάδα ${groupNum})`);
-                            }
                             return;
                         }
                         
-                        // Find the person who should be on duty based on rotation
-                        // Logic: Each person should be on duty every N days of this specific type
-                        // We need to find who has waited the longest (or is most eligible) for this day type
-                        
-                        // Check if person is missing on this date
                         const dayDate = new Date(dayKey + 'T00:00:00');
+                        const month = dayDate.getMonth();
+                        const year = dayDate.getFullYear();
                         
-                        // First, calculate days since last duty for all people
+                        // Find person who should be assigned (N-day rotation)
+                        let assignedPerson = null;
+                        let skippedPerson = null;
+                        
+                        // Calculate eligibility for all people
                         const personEligibility = [];
                         for (let i = 0; i < groupPeople.length; i++) {
                             const person = groupPeople[i];
                             
                             // Skip if person is missing on this date
                             if (isPersonMissingOnDate(person, groupNum, dayDate)) {
-                                continue; // Skip this person but rotation still counts them
+                                continue;
                             }
                             
                             const daysSinceLastDuty = countDaysSinceLastDuty(dayKey, person, groupNum, dayTypeCategory, dayTypeLists, startDate);
-                            // Person is eligible if they have waited at least N days (where N = group size)
-                            // This ensures strict N-day rotation: each person serves every Nth day of that type
                             const isEligible = daysSinceLastDuty >= rotationDays || daysSinceLastDuty === Infinity;
                             
                             personEligibility.push({
@@ -5349,194 +5417,114 @@
                             });
                         }
                         
-                        // Sort by eligibility (eligible first), then by days since last duty (longest wait first)
-                        // If tied, use rotation order (index)
+                        // Sort by eligibility, then by days since last duty, then by rotation order
                         personEligibility.sort((a, b) => {
                             if (a.isEligible !== b.isEligible) {
-                                return b.isEligible - a.isEligible; // Eligible first
+                                return b.isEligible - a.isEligible;
                             }
                             if (a.daysSinceLastDuty !== b.daysSinceLastDuty) {
-                                return b.daysSinceLastDuty - a.daysSinceLastDuty; // Longest wait first
+                                return b.daysSinceLastDuty - a.daysSinceLastDuty;
                             }
-                            return a.index - b.index; // Rotation order
+                            return a.index - b.index;
                         });
                         
-                        // CRITICAL: We MUST assign someone from this group to this day
-                        // Find the best person based on strict N-day rotation, then handle conflicts
-                        
-                        let assignedPerson = null;
-                        let skippedPerson = null;
-                        
-                        // First, try to find someone who is eligible (waited N days) and has no conflicts
+                        // Find the first eligible person without conflicts
                         for (let i = 0; i < personEligibility.length; i++) {
-                            const candidateData = personEligibility[i];
-                            const candidatePerson = candidateData.person;
-                            const candidateEligible = candidateData.isEligible;
+                            const candidate = personEligibility[i];
+                            const person = candidate.person;
                             
-                            // Check conflicts for this candidate
-                            const hasConsecutive = hasConsecutiveDuty(dayKey, candidatePerson, groupNum);
-                            const hadSpecialBefore = hadSpecialHolidayDutyBefore(dayKey, candidatePerson, groupNum);
-                            const hasConsecutiveWeekend = hasConsecutiveWeekendHolidayDuty(dayKey, candidatePerson, groupNum);
-                            const hasConsecutiveSpecial = hasConsecutiveSpecialHolidayDuty(dayKey, candidatePerson, groupNum);
+                            if (!candidate.isEligible) {
+                                continue; // Skip non-eligible people
+                            }
                             
-                            const candidateConflict = hasConsecutive || hadSpecialBefore || hasConsecutiveWeekend || hasConsecutiveSpecial;
+                            let hasConflict = false;
                             
-                            // Check for strict conflicts (consecutive special holidays or consecutive weekend/holiday)
-                            const candidateStrictConflict = hasConsecutiveSpecial || hasConsecutiveWeekend;
-                            
-                            // For special holidays and weekends (priority 1-2), avoid ALL conflicts (both strict and general)
-                            if (priorityLevel <= 2) {
-                                if (candidateEligible && !candidateStrictConflict && !candidateConflict) {
-                                    assignedPerson = candidatePerson;
-                                    break;
+                            // Check conflicts based on day type
+                            if (dayTypeCategory === 'special') {
+                                // No conflicts to check for special holidays
+                                hasConflict = false;
+                            } else if (dayTypeCategory === 'weekend') {
+                                // Check if person has special holiday duty in the same month
+                                if (hasSpecialHolidayDutyInMonth(person, groupNum, month, year)) {
+                                    hasConflict = true;
                                 }
-                            } else {
-                                // For semi and normal days, assign if eligible and no conflicts
-                                if (candidateEligible && !candidateConflict) {
-                                    assignedPerson = candidatePerson;
-                                    break;
+                            } else if (dayTypeCategory === 'semi') {
+                                // Check consecutive day with weekend/holiday
+                                const dayBefore = new Date(dayDate);
+                                dayBefore.setDate(dayBefore.getDate() - 1);
+                                const dayAfter = new Date(dayDate);
+                                dayAfter.setDate(dayAfter.getDate() + 1);
+                                
+                                const beforeType = getDayType(dayBefore);
+                                const afterType = getDayType(dayAfter);
+                                
+                                if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), person, groupNum)) {
+                                    hasConflict = true;
                                 }
+                                if ((afterType === 'weekend-holiday' || afterType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayAfter), person, groupNum)) {
+                                    hasConflict = true;
+                                }
+                            } else if (dayTypeCategory === 'normal') {
+                                // Check consecutive day with semi-normal
+                                const dayBefore = new Date(dayDate);
+                                dayBefore.setDate(dayBefore.getDate() - 1);
+                                const dayAfter = new Date(dayDate);
+                                dayAfter.setDate(dayAfter.getDate() + 1);
+                                
+                                const beforeType = getDayType(dayBefore);
+                                const afterType = getDayType(dayAfter);
+                                
+                                if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), person, groupNum)) {
+                                    hasConflict = true;
+                                }
+                                if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), person, groupNum)) {
+                                    hasConflict = true;
+                                }
+                            }
+                            
+                            if (!hasConflict) {
+                                assignedPerson = person;
+                                break;
+                            } else if (i === 0) {
+                                // First person (should be assigned) has conflict - mark as skipped
+                                skippedPerson = person;
                             }
                         }
                         
-                        // If no eligible person without conflicts found, we MUST still assign someone
-                        // CRITICAL: Always assign the first person in rotation order (personEligibility[0])
-                        // This ensures strict N-day rotation is followed
-                        // Only skip if they have conflicts that prevent assignment
+                        // If no eligible person without conflicts, assign first eligible person anyway
+                        if (!assignedPerson && personEligibility.length > 0 && personEligibility[0].isEligible) {
+                            assignedPerson = personEligibility[0].person;
+                        }
+                        
+                        // If still no assignment, assign first person in rotation (emergency fallback)
                         if (!assignedPerson && personEligibility.length > 0) {
-                            // Check the first person (ideal person) - they should be assigned if possible
-                            const firstPerson = personEligibility[0].person;
-                            
-                            // Check conflicts for first person
-                            const firstHasConsecutive = hasConsecutiveDuty(dayKey, firstPerson, groupNum);
-                            const firstHadSpecialBefore = hadSpecialHolidayDutyBefore(dayKey, firstPerson, groupNum);
-                            const firstHasConsecutiveWeekend = hasConsecutiveWeekendHolidayDuty(dayKey, firstPerson, groupNum);
-                            const firstHasConsecutiveSpecial = hasConsecutiveSpecialHolidayDuty(dayKey, firstPerson, groupNum);
-                            
-                            const firstStrictConflict = firstHasConsecutiveSpecial || firstHasConsecutiveWeekend;
-                            const firstGeneralConflict = firstHasConsecutive || firstHadSpecialBefore;
-                            
-                            // For priority 1-2 (special/weekend), check both strict and general conflicts
-                            // For priority 3-4 (semi/normal), only check general conflicts
-                            const firstHasConflict = (priorityLevel <= 2) ? (firstStrictConflict || firstGeneralConflict) : firstGeneralConflict;
-                            
-                            // If first person has no conflicts, assign them (even if not eligible yet)
-                            // This ensures we follow rotation order strictly
-                            if (!firstHasConflict) {
-                                assignedPerson = firstPerson;
-                            } else {
-                                // First person has conflicts - find person with least conflicts
-                                // But still prefer those with more days since last duty
-                                let bestPerson = null;
-                                let bestConflictLevel = Infinity; // Lower is better
-                                let bestDaysSinceLastDuty = -1;
-                                
-                                for (let i = 0; i < personEligibility.length; i++) {
-                                    const candidateData = personEligibility[i];
-                                    const candidatePerson = candidateData.person;
-                                    
-                                    const candidateStrictConflict = hasConsecutiveSpecialHolidayDuty(dayKey, candidatePerson, groupNum) ||
-                                                                   hasConsecutiveWeekendHolidayDuty(dayKey, candidatePerson, groupNum);
-                                    const candidateConflict = hasConsecutiveDuty(dayKey, candidatePerson, groupNum) || 
-                                                             hadSpecialHolidayDutyBefore(dayKey, candidatePerson, groupNum) ||
-                                                             hasConsecutiveWeekendHolidayDuty(dayKey, candidatePerson, groupNum) ||
-                                                             hasConsecutiveSpecialHolidayDuty(dayKey, candidatePerson, groupNum);
-                                    
-                                    // Score: 0 = no conflict, 1 = non-strict conflict, 2 = strict conflict
-                                    let conflictLevel = 0;
-                                    if (candidateStrictConflict) {
-                                        conflictLevel = 2;
-                                    } else if (candidateConflict) {
-                                        conflictLevel = 1;
-                                    }
-                                    
-                                    // Prefer person with lower conflict level
-                                    // If conflict level is tied, prefer the one with more days since last duty (lower index = more days)
-                                    // This ensures we follow rotation order as much as possible
-                                    if (!bestPerson || 
-                                        conflictLevel < bestConflictLevel || 
-                                        (conflictLevel === bestConflictLevel && candidateData.daysSinceLastDuty > bestDaysSinceLastDuty) ||
-                                        (conflictLevel === bestConflictLevel && candidateData.daysSinceLastDuty === bestDaysSinceLastDuty && i < personEligibility.findIndex(p => p.person === bestPerson))) {
-                                        bestPerson = candidatePerson;
-                                        bestConflictLevel = conflictLevel;
-                                        bestDaysSinceLastDuty = candidateData.daysSinceLastDuty;
-                                    }
-                                }
-                                
-                                assignedPerson = bestPerson || personEligibility[0].person; // Fallback to first person
-                            }
-                            
-                            // Track if ideal person was skipped due to conflicts
-                            // The ideal person is the first in rotation order (personEligibility[0])
-                            const idealPerson = personEligibility[0].person;
-                            const idealEligible = personEligibility[0].isEligible;
-                            const idealHasConsecutive = hasConsecutiveDuty(dayKey, idealPerson, groupNum);
-                            const idealHadSpecialBefore = hadSpecialHolidayDutyBefore(dayKey, idealPerson, groupNum);
-                            const idealHasConsecutiveWeekend = hasConsecutiveWeekendHolidayDuty(dayKey, idealPerson, groupNum);
-                            const idealHasConsecutiveSpecial = hasConsecutiveSpecialHolidayDuty(dayKey, idealPerson, groupNum);
-                            const idealStrictConflict = idealHasConsecutiveSpecial || idealHasConsecutiveWeekend;
-                            const idealGeneralConflict = idealHasConsecutive || idealHadSpecialBefore;
-                            
-                            // If ideal person should be assigned but has conflicts, track as intended assignment
-                            // This ensures N-day rotation counts from the intended day, not the actual assignment day
-                            // IMPORTANT: For weekends skipped due to special holiday, track the skipped weekend
-                            if (idealEligible && assignedPerson !== idealPerson) {
-                                // Check if ideal person has any conflict
-                                const idealHasConflict = (priorityLevel <= 2 && idealStrictConflict) || idealGeneralConflict;
-                                
-                                if (idealHasConflict) {
-                                    // Track intended assignment - person should be here but has conflict
-                                    // This is especially important for weekends skipped due to special holiday
-                                    if (!intendedAssignments[dayKey]) {
-                                        intendedAssignments[dayKey] = {};
-                                    }
-                                    intendedAssignments[dayKey][groupNum] = idealPerson;
-                                    skippedPerson = idealPerson;
-                                }
-                            } else if (idealEligible && idealHadSpecialBefore && dayTypeCategory === 'weekend') {
-                                // Special case: If person is eligible but skipped due to special holiday,
-                                // track as intended assignment so counting continues from this skipped weekend
-                                if (!intendedAssignments[dayKey]) {
-                                    intendedAssignments[dayKey] = {};
-                                }
-                                intendedAssignments[dayKey][groupNum] = idealPerson;
-                                skippedPerson = idealPerson;
-                            }
+                            assignedPerson = personEligibility[0].person;
                         }
                         
-                        // Track swap logic if ideal person was skipped due to special holiday
-                        if (skippedPerson && assignedPerson && skippedPerson !== assignedPerson) {
-                            deferredAssignments.push({
-                                skippedPerson: skippedPerson,
-                                skippedDay: dayKey,
-                                replacementPerson: assignedPerson,
-                                replacementDay: null, // Will be set later
-                                groupNum: groupNum,
-                                dayTypeCategory: dayTypeCategory
-                            });
-                        }
-                        
-                        // CRITICAL: Always assign someone - we MUST have one person per group per day
+                        // Assign person to day
                         if (assignedPerson) {
                             if (dutyAssignments[dayKey]) {
-                                // Check if this group already has someone assigned (shouldn't happen, but safety check)
                                 if (!dutyAssignments[dayKey].includes(`(Ομάδα ${groupNum})`)) {
                                     dutyAssignments[dayKey] += `, ${assignedPerson} (Ομάδα ${groupNum})`;
                                 }
                             } else {
                                 dutyAssignments[dayKey] = `${assignedPerson} (Ομάδα ${groupNum})`;
                             }
-                        } else {
-                            // Emergency fallback: assign first available person (should never reach here)
-                            console.warn(`WARNING: No person assigned for ${dayKey} (Ομάδα ${groupNum}), using first person as fallback`);
-                            if (groupPeople.length > 0) {
-                                const fallbackPerson = groupPeople[0];
-                                if (dutyAssignments[dayKey]) {
-                                    if (!dutyAssignments[dayKey].includes(`(Ομάδα ${groupNum})`)) {
-                                        dutyAssignments[dayKey] += `, ${fallbackPerson} (Ομάδα ${groupNum})`;
+                        }
+                        
+                        // If person was skipped due to conflict, find next available day for them
+                        if (skippedPerson && skippedPerson !== assignedPerson && (dayTypeCategory === 'semi' || dayTypeCategory === 'normal' || dayTypeCategory === 'weekend')) {
+                            const nextAvailableDay = findNextAvailableDayForPerson(skippedPerson, groupNum, dayTypeCategory, dayKey, dayTypeLists);
+                            if (nextAvailableDay) {
+                                // Check if next available day already has assignment for this group
+                                const nextAssignment = dutyAssignments[nextAvailableDay];
+                                if (!nextAssignment || !nextAssignment.includes(`(Ομάδα ${groupNum})`)) {
+                                    // Assign skipped person to next available day
+                                    if (nextAssignment) {
+                                        dutyAssignments[nextAvailableDay] += `, ${skippedPerson} (Ομάδα ${groupNum})`;
+                                    } else {
+                                        dutyAssignments[nextAvailableDay] = `${skippedPerson} (Ομάδα ${groupNum})`;
                                     }
-                                } else {
-                                    dutyAssignments[dayKey] = `${fallbackPerson} (Ομάδα ${groupNum})`;
                                 }
                             }
                         }
@@ -5544,23 +5532,17 @@
                 }
                 
                 // Assign duties in priority order: special > weekend > semi > normal
-                // Priority 1: Special Holidays (highest priority)
-                assignDutiesForDayType('special', 1);
+                // Priority 1: Special Holidays (highest priority) - simple N-day rotation, no conflicts
+                assignDutiesForDayType('special');
                 
-                // Priority 2: Weekend/Holiday days
-                assignDutiesForDayType('weekend', 2);
+                // Priority 2: Weekend/Holiday days - N-day rotation, check for special holiday duty in same month
+                assignDutiesForDayType('weekend');
                 
-                // Priority 3: Ημιαργία days
-                assignDutiesForDayType('semi', 3);
+                // Priority 3: Ημιαργία days - N-day rotation, check consecutive day conflicts with weekends/holidays
+                assignDutiesForDayType('semi');
                 
-                // Priority 4: Καθημερινή days
-                assignDutiesForDayType('normal', 4);
-                
-                // Process cascading swaps for each day type to handle conflicts properly
-                processCascadingSwaps('special', groupNum, dayTypeLists, startDate);
-                processCascadingSwaps('weekend', groupNum, dayTypeLists, startDate);
-                processCascadingSwaps('semi', groupNum, dayTypeLists, startDate);
-                processCascadingSwaps('normal', groupNum, dayTypeLists, startDate);
+                // Priority 4: Καθημερινή days - N-day rotation, check consecutive day conflicts with semi-normal
+                assignDutiesForDayType('normal');
                 
                 // Old loop - replaced with priority-based assignments above
                 /*for (const typeCategory in dayTypeLists) {
