@@ -6240,6 +6240,25 @@
             return null;
         }
         
+        // Helper function to get missing period for a person on a specific date
+        function getPersonMissingPeriod(person, groupNum, date) {
+            const groupData = groups[groupNum] || {};
+            const personData = groupData.missingPeriods?.[person];
+            if (!personData || !Array.isArray(personData)) return null;
+            
+            for (const period of personData) {
+                const startDate = new Date(period.start + 'T00:00:00');
+                const endDate = new Date(period.end + 'T00:00:00');
+                if (date >= startDate && date <= endDate) {
+                    return {
+                        start: startDate,
+                        end: endDate
+                    };
+                }
+            }
+            return null;
+        }
+        
         // Analyze rotation violations
         function analyzeRotationViolations() {
             const violations = [];
@@ -6432,8 +6451,23 @@
                             const hasConsecutiveWeekend = hasConsecutiveWeekendHolidayDuty(dayKey, expectedPerson, groupNum);
                             const hasConsecutiveSpecial = hasConsecutiveSpecialHolidayDuty(dayKey, expectedPerson, groupNum);
                             
+                            // Check if person is missing on this date
+                            const isMissing = isPersonMissingOnDate(expectedPerson, groupNum, date);
+                            
                             // Get detailed information about conflicts
                             let conflictDetails = [];
+                            
+                            // Check if person is missing
+                            if (isMissing) {
+                                const missingPeriod = getPersonMissingPeriod(expectedPerson, groupNum, date);
+                                if (missingPeriod) {
+                                    const startStr = missingPeriod.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                    const endStr = missingPeriod.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                    conflictDetails.push(`Άτομο λείπει: ${startStr} - ${endStr}`);
+                                } else {
+                                    conflictDetails.push(`Άτομο λείπει`);
+                                }
+                            }
                             
                             // Check consecutive days and get the dates
                             if (hasConsecutive) {
@@ -6458,8 +6492,23 @@
                                 }
                             }
                             
-                            // Build detailed violation reason
+                            // Check consecutive weekend/holiday
+                            if (hasConsecutiveWeekend) {
+                                conflictDetails.push(`Συνεχόμενα σαββατοκύριακα/αργίες`);
+                            }
+                            
+                            // Check consecutive special holidays
                             if (hasConsecutiveSpecial) {
+                                conflictDetails.push(`Συνεχόμενες ειδικές αργίες`);
+                            }
+                            
+                            // Build detailed violation reason
+                            if (isMissing) {
+                                violationReason = 'Άτομο λείπει την ημερομηνία';
+                                if (conflictDetails.length > 0) {
+                                    violationReason += ` (${conflictDetails.join('; ')})`;
+                                }
+                            } else if (hasConsecutiveSpecial) {
                                 violationReason = 'Αποφυγή συνεχόμενων ειδικών αργιών';
                                 if (conflictDetails.length > 0) {
                                     violationReason += ` (${conflictDetails.join('; ')})`;
@@ -6483,10 +6532,12 @@
                                 violationReason = `Το άτομο που έπρεπε να ανέθεται δεν έχει περάσει ${rotationDays} ημέρες από την τελευταία υπηρεσία (έχει περάσει ${expectedData.daysSinceLastDuty})`;
                             } else if (assignedData.daysSinceLastDuty < expectedData.daysSinceLastDuty) {
                                 // The expected person (who was NOT assigned) has more days than the assigned person
-                                // This means the expected person was skipped due to conflicts
-                                violationReason = `Το άτομο που έπρεπε να ανέθεται (${expectedData.daysSinceLastDuty} ημέρες) παραλείφθηκε λόγω συγκρούσεων. Ανέθεθηκε άτομο με ${assignedData.daysSinceLastDuty} ημέρες`;
+                                // Check if we found any actual conflicts
                                 if (conflictDetails.length > 0) {
-                                    violationReason += ` (${conflictDetails.join('; ')})`;
+                                    violationReason = `Το άτομο που έπρεπε να ανέθεται (${expectedData.daysSinceLastDuty} ημέρες) παραλείφθηκε λόγω συγκρούσεων. Ανέθεθηκε άτομο με ${assignedData.daysSinceLastDuty} ημέρες (${conflictDetails.join('; ')})`;
+                                } else {
+                                    // No conflicts found - this indicates a potential bug or unexpected behavior
+                                    violationReason = `⚠️ Το άτομο που έπρεπε να ανέθεται (${expectedData.daysSinceLastDuty} ημέρες) παραλείφθηκε ΧΩΡΙΣ να εντοπιστεί σύγκρουση. Ανέθεθηκε άτομο με ${assignedData.daysSinceLastDuty} ημέρες. Αυτό μπορεί να υποδεικνύει σφάλμα στη λογική ανάθεσης.`;
                                 }
                             } else {
                                 violationReason = 'Αλλαγή λόγω προτεραιότητας ή άλλου περιορισμού';
