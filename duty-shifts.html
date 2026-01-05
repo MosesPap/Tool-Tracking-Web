@@ -1659,13 +1659,6 @@
             let lastDutyDate = null;
             let lastDutyFormatted = 'Δεν έχει';
             
-            // DEBUG: Log for special holidays
-            if (listType === 'special') {
-                console.log(`[DEBUG] ${person} (Group ${groupNum}): Starting getLastAndNextDutyDates for special holidays`);
-                console.log(`[DEBUG] ${person} (Group ${groupNum}): lastDutyDateStr from lastDuties:`, lastDutyDateStr);
-                console.log(`[DEBUG] ${person} (Group ${groupNum}): lastDuties object:`, lastDuties);
-            }
-            
             // First check manually entered last duty date
             if (lastDutyDateStr) {
                 // Parse the date string - handle both YYYY-MM-DD and DD/MM/YYYY formats
@@ -1695,16 +1688,7 @@
                     lastDutyDate = new Date(parsedDate.getTime());
                     lastDutyDate.setHours(0, 0, 0, 0);
                     lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                    
-                    // DEBUG: Log for special holidays
-                    if (listType === 'special') {
-                        console.log(`[DEBUG] ${person} (Group ${groupNum}): ✓ Found manual lastDutyDate for special: ${lastDutyFormatted} (from string: ${lastDutyDateStr}, parsed: ${parsedDate.toISOString()})`);
-                    }
-                } else if (listType === 'special') {
-                    console.warn(`[DEBUG] ${person} (Group ${groupNum}): ✗ Failed to parse lastDutyDateStr: ${lastDutyDateStr}`);
                 }
-            } else if (listType === 'special') {
-                console.log(`[DEBUG] ${person} (Group ${groupNum}): No manual lastDutyDateStr found`);
             }
             
             // If no manually entered date, check actual assignments to find most recent duty of THIS SPECIFIC TYPE
@@ -1714,14 +1698,6 @@
                 
                 // Look through assignments to find most recent duty of this SPECIFIC type
                 const sortedDateKeys = Object.keys(dutyAssignments).sort().reverse();
-                
-                if (listType === 'special') {
-                    console.log(`[DEBUG] ${person} (Group ${groupNum}): No manual date, searching assignments. Total assignments: ${sortedDateKeys.length}`);
-                    console.log(`[DEBUG] ${person} (Group ${groupNum}): specialHolidays array length: ${specialHolidays.length}`);
-                    if (specialHolidays.length > 0) {
-                        console.log(`[DEBUG] ${person} (Group ${groupNum}): First 3 special holidays:`, specialHolidays.slice(0, 3));
-                    }
-                }
                 
                 for (const dateKey of sortedDateKeys) {
                     const assignment = dutyAssignments[dateKey];
@@ -1760,24 +1736,12 @@
                     
                     // Only consider assignments that match the EXACT listType we're looking for
                     if (dayTypeCategory === listType) {
-                        // DEBUG: Log only when a match is found
-                        if (listType === 'special') {
-                            console.log(`[DEBUG] ${person} (Group ${groupNum}): Found assignment on special holiday ${dateKey}, isSpecialHoliday: ${isSpecial}`);
-                        }
                         // Create a fresh Date object to avoid any reference issues
                         lastDutyDate = new Date(assignmentDate.getTime());
                         lastDutyDate.setHours(0, 0, 0, 0);
                         lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                        
-                        if (listType === 'special') {
-                            console.log(`[DEBUG] ${person} (Group ${groupNum}): ✓ Found lastDutyDate from assignments: ${lastDutyFormatted} (${dateKey})`);
-                        }
                         break; // Found the most recent one, stop searching
                     }
-                }
-                
-                if (!lastDutyDate && listType === 'special') {
-                    console.warn(`[DEBUG] ${person} (Group ${groupNum}): ✗ No lastDutyDate found in assignments for special holidays`);
                 }
             }
             
@@ -1785,10 +1749,6 @@
             let nextDutyFormatted = 'Δεν έχει';
             // CRITICAL: Only calculate if we have a valid lastDutyDate
             if (lastDutyDate && !isNaN(lastDutyDate.getTime()) && listArrayLength > 0) {
-                if (listType === 'special') {
-                    console.log(`[DEBUG] ${person} (Group ${groupNum}): Calculating next duty from ${lastDutyFormatted} (${formatDateKey(lastDutyDate)}), counting ${listArrayLength} special holidays`);
-                }
-                
                 // CRITICAL: Create a completely new Date object from lastDutyDate to avoid any reference issues
                 // Get the timestamp and create a new date from it
                 const lastDutyTimestamp = lastDutyDate.getTime();
@@ -1797,18 +1757,11 @@
                 
                 // Verify we have a valid date before starting
                 if (isNaN(currentDate.getTime())) {
-                    if (listType === 'special') {
-                        console.warn(`[DEBUG] ${person} (Group ${groupNum}): Invalid currentDate, returning early`);
-                    }
                     return { lastDuty: lastDutyFormatted, nextDuty: 'Δεν έχει' };
                 }
                 
                 // Start counting from the day after last duty
                 currentDate.setDate(currentDate.getDate() + 1);
-                
-                if (listType === 'special') {
-                    console.log(`[DEBUG] ${person} (Group ${groupNum}): Starting count from day after last duty: ${formatDateKey(currentDate)}`);
-                }
                 
                 let daysCounted = 0;
                 const targetDays = listArrayLength;
@@ -1841,11 +1794,6 @@
                     // If this day matches the list type, count it
                     if (dayTypeCategory === listType) {
                         daysCounted++;
-                        
-                        // DEBUG: Log only when special holidays are found (not every day)
-                        if (listType === 'special') {
-                            console.log(`[DEBUG] ${person} (Group ${groupNum}): Found special holiday #${daysCounted}/${targetDays}: ${formatDateKey(checkDate)}`);
-                        }
                     }
                     
                     // Move to next day - create a new date from currentDate's timestamp
@@ -1859,22 +1807,13 @@
                         // Go back one day to get the actual next duty date
                         currentDate.setDate(currentDate.getDate() - 1);
                         nextDutyFormatted = currentDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                        
-                        if (listType === 'special') {
-                            console.log(`[DEBUG] ${person} (Group ${groupNum}): ✓ Calculated next duty: ${nextDutyFormatted} (${formatDateKey(currentDate)})`);
-                        }
                         break;
                     }
                 }
                 
                 if (daysCounted < targetDays) {
                     nextDutyFormatted = 'Δεν βρέθηκε';
-                    if (listType === 'special') {
-                        console.warn(`[DEBUG] ${person} (Group ${groupNum}): ✗ Could not find ${targetDays} special holidays (found ${daysCounted})`);
-                    }
                 }
-            } else if (listType === 'special') {
-                console.warn(`[DEBUG] ${person} (Group ${groupNum}): ✗ Cannot calculate next duty - lastDutyDate: ${lastDutyDate}, isValid: ${lastDutyDate && !isNaN(lastDutyDate.getTime())}, listArrayLength: ${listArrayLength}`);
             }
             
             return { lastDuty: lastDutyFormatted, nextDuty: nextDutyFormatted };
@@ -4000,15 +3939,6 @@
                 const isToday = date.getTime() === today.getTime();
                 const key = formatDateKey(date);
                 const assignment = dutyAssignments[key];
-                
-                // Debug: Check for specific dates that should have assignments
-                if (key === '2026-01-07' || key === '2025-12-25') {
-                    console.log(`DEBUG ${key}:`);
-                    console.log(`  - assignment variable =`, assignment);
-                    console.log(`  - dutyAssignments['${key}'] =`, dutyAssignments[key]);
-                    console.log(`  - criticalAssignments['${key}'] =`, criticalAssignments[key]);
-                    console.log(`  - All dutyAssignments keys:`, Object.keys(dutyAssignments).filter(k => k.includes('2026-01') || k.includes('2025-12')).slice(0, 5));
-                }
                 
                 const dayDiv = document.createElement('div');
                 // dayType is determined by getDayType() which handles:
