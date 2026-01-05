@@ -1131,6 +1131,10 @@
         // Track critical assignments from last duties - these must NEVER be deleted
         // Format: { "2025-12-25": ["Person Name (Ομάδα 1)", ...], ... }
         let criticalAssignments = {};
+        // Track intended assignments - when a person should be assigned but was skipped due to conflicts
+        // Format: { "2026-02-05": { "1": "Person A", "2": "Person B", ... }, ... }
+        // This ensures N-day rotation counts from the intended day, not the actual assignment day
+        let intendedAssignments = {};
         let currentDate = new Date();
         let currentGroup = null;
         let selectedDateForDuty = null;
@@ -4470,6 +4474,26 @@
                 }
             }
             
+            // Check intended assignments - these count for rotation even if person was skipped due to conflicts
+            // This ensures N-day rotation counts from the intended day, not the actual assignment day
+            let intendedDutyIndex = -1;
+            for (let i = currentIndex - 1; i >= 0; i--) {
+                const checkDayKey = daysOfType[i];
+                // Check if this person had an intended assignment on this day
+                if (intendedAssignments[checkDayKey] && 
+                    intendedAssignments[checkDayKey][groupNum] === person) {
+                    intendedDutyIndex = i;
+                    break;
+                }
+            }
+            
+            // Use intended assignment if it's more recent than actual assignment
+            // This ensures rotation counts from when person SHOULD have been assigned, not when they actually were
+            if (intendedDutyIndex !== -1 && (lastDutyIndex === -1 || intendedDutyIndex > lastDutyIndex)) {
+                // Count from intended assignment instead of actual assignment
+                return currentIndex - intendedDutyIndex;
+            }
+            
             // Check lastDuties data first (manually entered last duties)
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
             const lastDuties = groupData.lastDuties?.[person];
@@ -4695,6 +4719,15 @@
                 }
             } else {
                 dutyAssignments[dayKey] = `${person} (Ομάδα ${groupNum})`;
+            }
+            
+            // Clear intended assignment if person is now actually assigned on this day
+            // This ensures we don't double-count when person actually gets assigned
+            if (intendedAssignments[dayKey] && intendedAssignments[dayKey][groupNum] === person) {
+                delete intendedAssignments[dayKey][groupNum];
+                if (Object.keys(intendedAssignments[dayKey]).length === 0) {
+                    delete intendedAssignments[dayKey];
+                }
             }
         }
 
@@ -4995,6 +5028,13 @@
                     // Now find next available day for current person (cascade)
                     findAndAssignNextAvailableDay(currentPerson, dayKey, dayTypeCategory, groupNum, dayTypeLists, sortedDays, startDate);
                 } else {
+                    // Expected person has conflict - track as intended assignment
+                    // This ensures N-day rotation counts from the intended day (this day), not the actual assignment day
+                    if (!intendedAssignments[dayKey]) {
+                        intendedAssignments[dayKey] = {};
+                    }
+                    intendedAssignments[dayKey][groupNum] = expectedPerson;
+                    
                     // Expected person has conflict - find next person in rotation who can take this day
                     let replacementPerson = null;
                     
@@ -5059,6 +5099,17 @@
 
         // Calculate duties for a specific date range
         function calculateDutiesForDateRange(startDate, endDate, preserveExisting = true) {
+            
+            // Clear intended assignments for the date range being calculated
+            // This ensures fresh tracking for this calculation cycle
+            const dateIterator = new Date(startDate);
+            while (dateIterator <= endDate) {
+                const key = formatDateKey(dateIterator);
+                if (intendedAssignments[key]) {
+                    delete intendedAssignments[key];
+                }
+                dateIterator.setDate(dateIterator.getDate() + 1);
+            }
             
             // Process each group
             for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -5252,16 +5303,29 @@
                             
                             assignedPerson = bestPerson || personEligibility[0].person; // Fallback to first person
                             
-                            // Track if ideal person was skipped due to special holiday conflict
+                            // Track if ideal person was skipped due to conflicts
+                            // The ideal person is the first in rotation order (personEligibility[0])
                             const idealPerson = personEligibility[0].person;
                             const idealEligible = personEligibility[0].isEligible;
                             const idealStrictConflict = hasConsecutiveSpecialHolidayDuty(dayKey, idealPerson, groupNum) ||
                                                        hasConsecutiveWeekendHolidayDuty(dayKey, idealPerson, groupNum);
-                            const idealSpecialHolidaySkip = hadSpecialHolidayDutyBefore(dayKey, idealPerson, groupNum) ||
-                                                             hasConsecutiveSpecialHolidayDuty(dayKey, idealPerson, groupNum);
+                            const idealGeneralConflict = hasConsecutiveDuty(dayKey, idealPerson, groupNum) || 
+                                                        hadSpecialHolidayDutyBefore(dayKey, idealPerson, groupNum);
                             
-                            if (idealEligible && idealSpecialHolidaySkip && assignedPerson !== idealPerson) {
-                                skippedPerson = idealPerson;
+                            // If ideal person should be assigned but has conflicts, track as intended assignment
+                            // This ensures N-day rotation counts from the intended day, not the actual assignment day
+                            if (idealEligible && assignedPerson !== idealPerson) {
+                                // Check if ideal person has any conflict
+                                const idealHasConflict = (priorityLevel <= 2 && idealStrictConflict) || idealGeneralConflict;
+                                
+                                if (idealHasConflict) {
+                                    // Track intended assignment - person should be here but has conflict
+                                    if (!intendedAssignments[dayKey]) {
+                                        intendedAssignments[dayKey] = {};
+                                    }
+                                    intendedAssignments[dayKey][groupNum] = idealPerson;
+                                    skippedPerson = idealPerson;
+                                }
                             }
                         }
                         
