@@ -4309,20 +4309,11 @@
                 currentTypeCategory = 'weekend';
             }
             
-            // Debug logging for specific dates
-            const debugDates = ['2026-02-01', '2026-02-08', '2026-02-26'];
-            const isDebug = debugDates.includes(dayKey);
-            
             // Check day before
             const dayBefore = new Date(date);
             dayBefore.setDate(dayBefore.getDate() - 1);
             const dayBeforeKey = formatDateKey(dayBefore);
             const hasDutyBefore = hasDutyOnDay(dayBeforeKey, person, groupNum);
-            
-            if (isDebug) {
-                console.log(`[DEBUG hasConsecutiveDuty ${dayKey}] Checking ${person}:`);
-                console.log(`  - Day before (${dayBeforeKey}): hasDuty=${hasDutyBefore}`);
-            }
             
             if (hasDutyBefore) {
                 const beforeDayType = getDayType(dayBefore);
@@ -4338,10 +4329,6 @@
                 // Only flag if different day type (consecutive days of same type are prevented by N-day rotation)
                 // OR if either day is a special holiday (special holidays have priority)
                 const isConflict = currentTypeCategory !== beforeTypeCategory || currentDayType === 'special-holiday' || beforeDayType === 'special-holiday';
-                if (isDebug) {
-                    console.log(`  - Current type: ${currentTypeCategory}, Before type: ${beforeTypeCategory}`);
-                    console.log(`  - Is conflict: ${isConflict}`);
-                }
                 if (isConflict) {
                     return true;
                 }
@@ -4356,10 +4343,6 @@
             const dayAfterKey = formatDateKey(dayAfter);
             const dayAfterAssigned = dutyAssignments[dayAfterKey];
             const hasDutyAfter = dayAfterAssigned && hasDutyOnDay(dayAfterKey, person, groupNum);
-            
-            if (isDebug) {
-                console.log(`  - Day after (${dayAfterKey}): assigned=${!!dayAfterAssigned}, hasDuty=${hasDutyAfter}`);
-            }
             
             // Only check day after if it's already assigned (exists in dutyAssignments)
             // This means it was processed earlier due to higher priority
@@ -4376,34 +4359,27 @@
                 
                 // Only flag if different day type OR if either day is a special holiday
                 const isConflict = currentTypeCategory !== afterTypeCategory || currentDayType === 'special-holiday' || afterDayType === 'special-holiday';
-                if (isDebug) {
-                    console.log(`  - Current type: ${currentTypeCategory}, After type: ${afterTypeCategory}`);
-                    console.log(`  - Is conflict: ${isConflict}`);
-                }
                 if (isConflict) {
                     return true;
                 }
-            }
-            
-            if (isDebug) {
-                console.log(`[DEBUG hasConsecutiveDuty ${dayKey}] Result: false (no consecutive duty)`);
             }
             
             return false;
         }
 
 
-        // Check if person had duty on a special holiday in the same month
-        // If so, and current day is a weekend (Saturday/Sunday) or holiday, skip this person
-        // The rotation still counts, so they'll be assigned on the next weekend/holiday that is their turn
+        // Check if person should be skipped from weekend/holiday duty due to special holiday duty
+        // Logic:
+        // 1. Find last weekend/holiday duty for the person
+        // 2. Calculate what the next weekend/holiday duty should be (based on N-day rotation)
+        // 3. Check if there's a special holiday duty between the last weekend duty and the calculated next weekend duty
+        // 4. If yes, and the current day is that calculated next weekend duty, skip it
+        // 5. Then, count N weekends from the skipped date
+        // 6. If the result is too close to the special holiday (within 7 days), skip it again
         function hadSpecialHolidayDutyBefore(dayKey, person, groupNum) {
             const date = new Date(dayKey + 'T00:00:00');
             const dayOfWeek = date.getDay(); // 0=Sunday, 6=Saturday
             const currentDayType = getDayType(date);
-            
-            // Debug logging for specific dates
-            const debugDates = ['2026-02-01', '2026-02-08', '2026-02-26'];
-            const isDebug = debugDates.includes(dayKey);
             
             // Only apply this rule if current day is:
             // - A weekend (Saturday or Sunday)
@@ -4411,45 +4387,159 @@
             const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
             const isHoliday = currentDayType === 'weekend-holiday' && !isSpecialHoliday(date);
             
-            if (isDebug) {
-                console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] Checking ${person}:`);
-                console.log(`  - isWeekend: ${isWeekend}, isHoliday: ${isHoliday}, currentDayType: ${currentDayType}`);
-            }
-            
             if (!isWeekend && !isHoliday) {
-                if (isDebug) {
-                    console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] Not a weekend/holiday, returning false`);
-                }
                 return false;
             }
             
-            // Check if person had special holiday duty BEFORE this day (not in the entire month)
-            // Look back up to 30 days to find previous special holidays
-            for (let i = 1; i <= 30; i++) {
-                const checkDate = new Date(date);
-                checkDate.setDate(checkDate.getDate() - i);
+            // Get group data to find rotation days
+            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
+            const groupPeople = groupData.weekend || [];
+            if (groupPeople.length === 0) return false;
+            
+            const rotationDays = groupPeople.length;
+            
+            // Find last weekend/holiday duty for this person
+            let lastWeekendDutyKey = null;
+            let lastWeekendDutyDate = null;
+            
+            // Check manually entered last duties first
+            const lastDuties = groupData.lastDuties?.[person];
+            if (lastDuties && lastDuties.weekend) {
+                lastWeekendDutyDate = new Date(lastDuties.weekend + 'T00:00:00');
+                lastWeekendDutyKey = formatDateKey(lastWeekendDutyDate);
+            }
+            
+            // Also check actual assignments (use the more recent one)
+            const checkDate = new Date(date);
+            for (let i = 1; i <= 365; i++) { // Look back up to 1 year
+                checkDate.setDate(checkDate.getDate() - 1);
                 const checkKey = formatDateKey(checkDate);
-                const isSpecial = isSpecialHoliday(checkDate);
-                const hasDuty = hasDutyOnDay(checkKey, person, groupNum);
+                const checkDayType = getDayType(checkDate);
+                const isCheckWeekend = checkDate.getDay() === 0 || checkDate.getDay() === 6;
+                const isCheckHoliday = checkDayType === 'weekend-holiday' && !isSpecialHoliday(checkDate);
                 
-                if (isDebug && isSpecial) {
-                    console.log(`  - Checking ${checkKey}: isSpecial=${isSpecial}, hasDuty=${hasDuty}`);
-                }
-                
-                // Check if this day is a special holiday and person had duty on it
-                if (isSpecial && hasDuty) {
-                    if (isDebug) {
-                        console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] Found special holiday duty on ${checkKey}, returning true`);
+                if ((isCheckWeekend || isCheckHoliday) && hasDutyOnDay(checkKey, person, groupNum)) {
+                    const checkDateCopy = new Date(checkDate);
+                    if (!lastWeekendDutyDate || checkDateCopy > lastWeekendDutyDate) {
+                        lastWeekendDutyDate = checkDateCopy;
+                        lastWeekendDutyKey = checkKey;
                     }
-                    return true; // Person had special holiday duty before this day, skip them
+                    break; // Found the most recent one
                 }
             }
             
-            if (isDebug) {
-                console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] No special holiday duty found, returning false`);
+            if (!lastWeekendDutyKey || !lastWeekendDutyDate) {
+                return false; // No previous weekend duty found
             }
             
-            return false;
+            // Calculate what the next weekend/holiday duty should be (N weekends after last duty)
+            let nextWeekendDutyDate = new Date(lastWeekendDutyDate);
+            nextWeekendDutyDate.setDate(nextWeekendDutyDate.getDate() + 1); // Start from day after last duty
+            let weekendsCounted = 0;
+            let daysChecked = 0;
+            const maxDaysToCheck = 365; // Don't check more than 1 year ahead
+            
+            while (weekendsCounted < rotationDays && daysChecked < maxDaysToCheck) {
+                const checkDayType = getDayType(nextWeekendDutyDate);
+                const isCheckWeekend = nextWeekendDutyDate.getDay() === 0 || nextWeekendDutyDate.getDay() === 6;
+                const isCheckHoliday = checkDayType === 'weekend-holiday' && !isSpecialHoliday(nextWeekendDutyDate);
+                
+                if (isCheckWeekend || isCheckHoliday) {
+                    weekendsCounted++;
+                }
+                
+                if (weekendsCounted < rotationDays) {
+                    nextWeekendDutyDate.setDate(nextWeekendDutyDate.getDate() + 1);
+                    daysChecked++;
+                }
+            }
+            
+            if (weekendsCounted < rotationDays) {
+                return false; // Couldn't find enough weekends
+            }
+            
+            const nextWeekendDutyKey = formatDateKey(nextWeekendDutyDate);
+            
+            // Check if current day is the calculated next weekend duty
+            if (dayKey !== nextWeekendDutyKey) {
+                // Current day is not the calculated next weekend duty
+                // But we still need to check if it's the second skip (too close to special holiday)
+                
+                // Check if there's a special holiday between last weekend duty and next weekend duty
+                let specialHolidayBetween = null;
+                const checkSpecialDate = new Date(lastWeekendDutyDate);
+                checkSpecialDate.setDate(checkSpecialDate.getDate() + 1);
+                while (checkSpecialDate < nextWeekendDutyDate) {
+                    if (isSpecialHoliday(checkSpecialDate) && hasDutyOnDay(formatDateKey(checkSpecialDate), person, groupNum)) {
+                        specialHolidayBetween = new Date(checkSpecialDate);
+                        break;
+                    }
+                    checkSpecialDate.setDate(checkSpecialDate.getDate() + 1);
+                }
+                
+                if (!specialHolidayBetween) {
+                    return false; // No special holiday between last and next weekend duty
+                }
+                
+                // Calculate the second weekend duty (N weekends from the skipped first one)
+                let secondWeekendDutyDate = new Date(nextWeekendDutyDate);
+                secondWeekendDutyDate.setDate(secondWeekendDutyDate.getDate() + 1);
+                weekendsCounted = 0;
+                daysChecked = 0;
+                
+                while (weekendsCounted < rotationDays && daysChecked < maxDaysToCheck) {
+                    const checkDayType = getDayType(secondWeekendDutyDate);
+                    const isCheckWeekend = secondWeekendDutyDate.getDay() === 0 || secondWeekendDutyDate.getDay() === 6;
+                    const isCheckHoliday = checkDayType === 'weekend-holiday' && !isSpecialHoliday(secondWeekendDutyDate);
+                    
+                    if (isCheckWeekend || isCheckHoliday) {
+                        weekendsCounted++;
+                    }
+                    
+                    if (weekendsCounted < rotationDays) {
+                        secondWeekendDutyDate.setDate(secondWeekendDutyDate.getDate() + 1);
+                        daysChecked++;
+                    }
+                }
+                
+                if (weekendsCounted < rotationDays) {
+                    return false;
+                }
+                
+                const secondWeekendDutyKey = formatDateKey(secondWeekendDutyDate);
+                
+                // Check if current day is the second weekend duty and if it's too close to special holiday
+                if (dayKey === secondWeekendDutyKey) {
+                    // Check if this day is too close to the special holiday (within 7 days)
+                    const daysDiff = Math.abs((secondWeekendDutyDate - specialHolidayBetween) / (1000 * 60 * 60 * 24));
+                    if (daysDiff <= 7) {
+                        return true; // Too close to special holiday, skip it
+                    }
+                }
+                
+                return false;
+            }
+            
+            // Current day is the calculated next weekend duty
+            // Check if there's a special holiday between last weekend duty and this day
+            let specialHolidayBetween = null;
+            const checkSpecialDate = new Date(lastWeekendDutyDate);
+            checkSpecialDate.setDate(checkSpecialDate.getDate() + 1);
+            while (checkSpecialDate < date) {
+                if (isSpecialHoliday(checkSpecialDate) && hasDutyOnDay(formatDateKey(checkSpecialDate), person, groupNum)) {
+                    specialHolidayBetween = new Date(checkSpecialDate);
+                    break;
+                }
+                checkSpecialDate.setDate(checkSpecialDate.getDate() + 1);
+            }
+            
+            if (!specialHolidayBetween) {
+                return false; // No special holiday between last and next weekend duty
+            }
+            
+            // There is a special holiday between last weekend duty and this day
+            // Skip this day (first skip)
+            return true;
         }
 
         // Check if person had duty on consecutive weekend/holiday days
@@ -5370,41 +5460,17 @@
                             // Check for strict conflicts (consecutive special holidays or consecutive weekend/holiday)
                             const candidateStrictConflict = hasConsecutiveSpecial || hasConsecutiveWeekend;
                             
-                            // Debug logging for specific dates
-                            const debugDates = ['2026-02-01', '2026-02-08', '2026-02-26'];
-                            if (debugDates.includes(dayKey) && i === 0) {
-                                console.log(`[DEBUG ${dayKey}] Checking first person in rotation: ${candidatePerson}`);
-                                console.log(`[DEBUG ${dayKey}] Eligible: ${candidateEligible}, Days since last duty: ${candidateData.daysSinceLastDuty}`);
-                                console.log(`[DEBUG ${dayKey}] Conflicts:`);
-                                console.log(`  - hasConsecutiveDuty: ${hasConsecutive}`);
-                                console.log(`  - hadSpecialHolidayDutyBefore: ${hadSpecialBefore}`);
-                                console.log(`  - hasConsecutiveWeekendHolidayDuty: ${hasConsecutiveWeekend}`);
-                                console.log(`  - hasConsecutiveSpecialHolidayDuty: ${hasConsecutiveSpecial}`);
-                                console.log(`[DEBUG ${dayKey}] candidateConflict: ${candidateConflict}, candidateStrictConflict: ${candidateStrictConflict}`);
-                                console.log(`[DEBUG ${dayKey}] Priority level: ${priorityLevel}`);
-                            }
-                            
                             // For special holidays and weekends (priority 1-2), avoid strict conflicts
                             if (priorityLevel <= 2) {
                                 if (candidateEligible && !candidateStrictConflict) {
-                                    if (debugDates.includes(dayKey) && i === 0) {
-                                        console.log(`[DEBUG ${dayKey}] Assigning ${candidatePerson} (no strict conflict)`);
-                                    }
                                     assignedPerson = candidatePerson;
                                     break;
-                                } else if (debugDates.includes(dayKey) && i === 0) {
-                                    console.log(`[DEBUG ${dayKey}] NOT assigning ${candidatePerson} - eligible: ${candidateEligible}, strictConflict: ${candidateStrictConflict}`);
                                 }
                             } else {
                                 // For semi and normal days, assign if eligible and no conflicts
                                 if (candidateEligible && !candidateConflict) {
-                                    if (debugDates.includes(dayKey) && i === 0) {
-                                        console.log(`[DEBUG ${dayKey}] Assigning ${candidatePerson} (no conflicts)`);
-                                    }
                                     assignedPerson = candidatePerson;
                                     break;
-                                } else if (debugDates.includes(dayKey) && i === 0) {
-                                    console.log(`[DEBUG ${dayKey}] NOT assigning ${candidatePerson} - eligible: ${candidateEligible}, conflict: ${candidateConflict}`);
                                 }
                             }
                         }
@@ -5455,21 +5521,6 @@
                             const idealHasConsecutiveSpecial = hasConsecutiveSpecialHolidayDuty(dayKey, idealPerson, groupNum);
                             const idealStrictConflict = idealHasConsecutiveSpecial || idealHasConsecutiveWeekend;
                             const idealGeneralConflict = idealHasConsecutive || idealHadSpecialBefore;
-                            
-                            // Debug logging for specific dates
-                            const debugDates = ['2026-02-01', '2026-02-08', '2026-02-26'];
-                            if (debugDates.includes(dayKey) && idealEligible && assignedPerson !== idealPerson) {
-                                console.log(`[DEBUG ${dayKey}] Ideal person ${idealPerson} was skipped, assigned ${assignedPerson} instead`);
-                                console.log(`[DEBUG ${dayKey}] Ideal person conflicts:`);
-                                console.log(`  - hasConsecutiveDuty: ${idealHasConsecutive}`);
-                                console.log(`  - hadSpecialHolidayDutyBefore: ${idealHadSpecialBefore}`);
-                                console.log(`  - hasConsecutiveWeekendHolidayDuty: ${idealHasConsecutiveWeekend}`);
-                                console.log(`  - hasConsecutiveSpecialHolidayDuty: ${idealHasConsecutiveSpecial}`);
-                                console.log(`[DEBUG ${dayKey}] idealStrictConflict: ${idealStrictConflict}, idealGeneralConflict: ${idealGeneralConflict}`);
-                                console.log(`[DEBUG ${dayKey}] Priority level: ${priorityLevel}`);
-                                const idealHasConflict = (priorityLevel <= 2 && idealStrictConflict) || idealGeneralConflict;
-                                console.log(`[DEBUG ${dayKey}] idealHasConflict (final): ${idealHasConflict}`);
-                            }
                             
                             // If ideal person should be assigned but has conflicts, track as intended assignment
                             // This ensures N-day rotation counts from the intended day, not the actual assignment day
