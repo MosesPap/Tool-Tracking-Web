@@ -4681,6 +4681,382 @@
             window.calculateDutiesForSelectedMonths = calculateDutiesForSelectedMonths;
         }
 
+        // Helper function to add/remove person from day assignment
+        function assignPersonToDay(dayKey, person, groupNum) {
+            if (dutyAssignments[dayKey]) {
+                if (!dutyAssignments[dayKey].includes(`(Ομάδα ${groupNum})`)) {
+                    dutyAssignments[dayKey] += `, ${person} (Ομάδα ${groupNum})`;
+                } else {
+                    // Replace existing assignment for this group
+                    const parts = dutyAssignments[dayKey].split(',').map(p => p.trim()).filter(p => p);
+                    const filtered = parts.filter(p => !p.includes(`(Ομάδα ${groupNum})`));
+                    filtered.push(`${person} (Ομάδα ${groupNum})`);
+                    dutyAssignments[dayKey] = filtered.join(', ');
+                }
+            } else {
+                dutyAssignments[dayKey] = `${person} (Ομάδα ${groupNum})`;
+            }
+        }
+
+        function removePersonFromDay(dayKey, person, groupNum) {
+            if (!dutyAssignments[dayKey]) return;
+            
+            const parts = dutyAssignments[dayKey].split(',').map(p => p.trim()).filter(p => p);
+            const filtered = parts.filter(p => {
+                const match = p.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                if (match && parseInt(match[2]) === groupNum) {
+                    return match[1].trim() !== person;
+                }
+                return true;
+            });
+            
+            if (filtered.length === 0) {
+                delete dutyAssignments[dayKey];
+            } else {
+                dutyAssignments[dayKey] = filtered.join(', ');
+            }
+        }
+
+        // Helper function to check if person can take a day (no conflicts)
+        function canPersonTakeDay(dayKey, person, groupNum, dayTypeCategory) {
+            const dayDate = new Date(dayKey + 'T00:00:00');
+            
+            // Skip if person is missing on this date
+            if (isPersonMissingOnDate(person, groupNum, dayDate)) return false;
+            
+            const priorityLevel = dayTypeCategory === 'special' ? 1 : 
+                                (dayTypeCategory === 'weekend' ? 2 : 
+                                (dayTypeCategory === 'semi' ? 3 : 4));
+            
+            const hasConsecutive = hasConsecutiveDuty(dayKey, person, groupNum);
+            const hadSpecialBefore = hadSpecialHolidayDutyBefore(dayKey, person, groupNum);
+            const hasConsecutiveWeekend = hasConsecutiveWeekendHolidayDuty(dayKey, person, groupNum);
+            const hasConsecutiveSpecial = hasConsecutiveSpecialHolidayDuty(dayKey, person, groupNum);
+            
+            const strictConflict = (priorityLevel <= 2) && (hasConsecutiveSpecial || hasConsecutiveWeekend);
+            const generalConflict = hasConsecutive || hadSpecialBefore;
+            
+            return !strictConflict && !generalConflict;
+        }
+
+        // Helper to find last duty key for a person
+        function findLastDutyKeyForPerson(person, groupNum, dayTypeCategory, dayTypeLists, startDate, currentDayKey) {
+            const days = dayTypeLists[dayTypeCategory];
+            const sortedDays = [...days].sort();
+            const currentDayIndex = sortedDays.indexOf(currentDayKey);
+            
+            // Look backwards from current day to find last assignment
+            for (let i = currentDayIndex - 1; i >= 0; i--) {
+                const dayKey = sortedDays[i];
+                const assignment = dutyAssignments[dayKey] || '';
+                if (assignment) {
+                    const parts = assignment.split(',').map(p => p.trim());
+                    for (const part of parts) {
+                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                        if (match && parseInt(match[2]) === groupNum && match[1].trim() === person) {
+                            return dayKey;
+                        }
+                    }
+                }
+            }
+            
+            // Check last duties from person data
+            const groupData = groups[groupNum] || {};
+            const personData = groupData.lastDuties && groupData.lastDuties[person];
+            if (personData) {
+                let lastDutyKey = null;
+                if (dayTypeCategory === 'special' && personData.special) {
+                    lastDutyKey = formatDateKey(new Date(personData.special));
+                } else if (dayTypeCategory === 'weekend' && personData.weekend) {
+                    lastDutyKey = formatDateKey(new Date(personData.weekend));
+                } else if (dayTypeCategory === 'semi' && personData.semi) {
+                    lastDutyKey = formatDateKey(new Date(personData.semi));
+                } else if (dayTypeCategory === 'normal' && personData.normal) {
+                    lastDutyKey = formatDateKey(new Date(personData.normal));
+                }
+                
+                if (lastDutyKey && sortedDays.includes(lastDutyKey)) {
+                    return lastDutyKey;
+                }
+            }
+            
+            return null;
+        }
+
+        // Helper function to find person's original day in rotation based on N-day rotation
+        function findPersonOriginalDayInRotation(person, dayTypeCategory, groupNum, dayTypeLists, startDate, currentDayKey) {
+            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
+            let groupPeople;
+            if (dayTypeCategory === 'special') {
+                groupPeople = groupData.special || [];
+            } else if (dayTypeCategory === 'weekend') {
+                groupPeople = groupData.weekend || [];
+            } else if (dayTypeCategory === 'semi') {
+                groupPeople = groupData.semi || [];
+            } else {
+                groupPeople = groupData.normal || [];
+            }
+            
+            const personIndex = groupPeople.indexOf(person);
+            if (personIndex === -1) return null;
+            
+            const days = dayTypeLists[dayTypeCategory];
+            const sortedDays = [...days].sort();
+            const currentDayIndex = sortedDays.indexOf(currentDayKey);
+            
+            // Calculate when this person should be assigned based on rotation
+            const rotationDays = groupPeople.length;
+            
+            // Find the last duty date for this person
+            const lastDutyKey = findLastDutyKeyForPerson(person, groupNum, dayTypeCategory, dayTypeLists, startDate, currentDayKey);
+            
+            // If person has never had duty, they should be assigned on their rotation position
+            if (!lastDutyKey) {
+                // Find first day where this person should be assigned
+                for (let i = 0; i < sortedDays.length; i++) {
+                    if (i % rotationDays === personIndex) {
+                        return sortedDays[i];
+                    }
+                }
+                return null;
+            }
+            
+            // Find the next day where this person should be assigned (N days after last duty)
+            const lastDutyIndex = sortedDays.indexOf(lastDutyKey);
+            if (lastDutyIndex === -1) return null;
+            
+            // Find the day that is N positions after last duty
+            const nextDutyIndex = lastDutyIndex + rotationDays;
+            if (nextDutyIndex < sortedDays.length) {
+                return sortedDays[nextDutyIndex];
+            }
+            
+            return null;
+        }
+
+        // Helper function to find and assign person to next available day (cascade)
+        function findAndAssignNextAvailableDay(person, skipDay, dayTypeCategory, groupNum, dayTypeLists, sortedDays, startDate) {
+            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
+            
+            // Find next available day after skipDay
+            const skipIndex = sortedDays.indexOf(skipDay);
+            if (skipIndex === -1) return false; // Day not found
+            
+            for (let i = skipIndex + 1; i < sortedDays.length; i++) {
+                const dayKey = sortedDays[i];
+                const dayDate = new Date(dayKey + 'T00:00:00');
+                
+                // Skip if person is missing on this date
+                if (isPersonMissingOnDate(person, groupNum, dayDate)) continue;
+                
+                // Skip critical assignments
+                const isCritical = criticalAssignments[dayKey] && 
+                                criticalAssignments[dayKey].some(a => a.includes(`(Ομάδα ${groupNum})`));
+                if (isCritical) continue;
+                
+                // Check if person can take this day (no conflicts)
+                if (canPersonTakeDay(dayKey, person, groupNum, dayTypeCategory)) {
+                    // Check if this day already has someone assigned for this group
+                    const currentAssignment = dutyAssignments[dayKey] || '';
+                    let currentPersonForGroup = null;
+                    
+                    if (currentAssignment) {
+                        const parts = currentAssignment.split(',').map(p => p.trim());
+                        for (const part of parts) {
+                            const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                            if (match && parseInt(match[2]) === groupNum) {
+                                currentPersonForGroup = match[1].trim();
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (currentPersonForGroup && currentPersonForGroup !== person) {
+                        // Day already has someone - cascade: move that person forward
+                        removePersonFromDay(dayKey, currentPersonForGroup, groupNum);
+                        assignPersonToDay(dayKey, person, groupNum);
+                        
+                        // Recursively find next day for the displaced person
+                        findAndAssignNextAvailableDay(currentPersonForGroup, dayKey, dayTypeCategory, groupNum, dayTypeLists, sortedDays, startDate);
+                    } else {
+                        // Day is free - assign person here
+                        assignPersonToDay(dayKey, person, groupNum);
+                    }
+                    
+                    return true; // Found and assigned
+                }
+            }
+            
+            return false; // No available day found
+        }
+
+        // Process cascading swaps for a day type
+        function processCascadingSwaps(dayTypeCategory, groupNum, dayTypeLists, startDate) {
+            const days = dayTypeLists[dayTypeCategory];
+            if (days.length === 0) return;
+            
+            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
+            let groupPeople;
+            if (dayTypeCategory === 'special') {
+                groupPeople = groupData.special || [];
+            } else if (dayTypeCategory === 'weekend') {
+                groupPeople = groupData.weekend || [];
+            } else if (dayTypeCategory === 'semi') {
+                groupPeople = groupData.semi || [];
+            } else {
+                groupPeople = groupData.normal || [];
+            }
+            
+            if (groupPeople.length === 0) return;
+            
+            const rotationDays = groupPeople.length;
+            const priorityLevel = dayTypeCategory === 'special' ? 1 : 
+                                (dayTypeCategory === 'weekend' ? 2 : 
+                                (dayTypeCategory === 'semi' ? 3 : 4));
+            
+            // Process days in chronological order
+            const sortedDays = [...days].sort();
+            
+            for (const dayKey of sortedDays) {
+                const dayDate = new Date(dayKey + 'T00:00:00');
+                
+                // Skip critical assignments
+                const isCritical = criticalAssignments[dayKey] && 
+                                criticalAssignments[dayKey].some(a => a.includes(`(Ομάδα ${groupNum})`));
+                if (isCritical) continue;
+                
+                // Get current assignment for this group on this day
+                const currentAssignment = dutyAssignments[dayKey] || '';
+                let currentPerson = null;
+                if (currentAssignment) {
+                    const parts = currentAssignment.split(',').map(p => p.trim());
+                    for (const part of parts) {
+                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                        if (match && parseInt(match[2]) === groupNum) {
+                            currentPerson = match[1].trim();
+                            break;
+                        }
+                    }
+                }
+                
+                if (!currentPerson) continue; // No assignment yet, skip
+                
+                // Determine who SHOULD be assigned based on rotation order
+                const personEligibility = [];
+                
+                for (let i = 0; i < groupPeople.length; i++) {
+                    const person = groupPeople[i];
+                    if (isPersonMissingOnDate(person, groupNum, dayDate)) continue;
+                    
+                    const daysSinceLastDuty = countDaysSinceLastDuty(dayKey, person, groupNum, dayTypeCategory, dayTypeLists, startDate);
+                    const isEligible = daysSinceLastDuty >= rotationDays || daysSinceLastDuty === Infinity;
+                    
+                    personEligibility.push({
+                        person: person,
+                        index: i,
+                        daysSinceLastDuty: daysSinceLastDuty,
+                        isEligible: isEligible
+                    });
+                }
+                
+                // Sort by rotation order (eligibility, then days, then index)
+                personEligibility.sort((a, b) => {
+                    if (a.isEligible !== b.isEligible) {
+                        return b.isEligible - a.isEligible;
+                    }
+                    if (a.daysSinceLastDuty !== b.daysSinceLastDuty) {
+                        return b.daysSinceLastDuty - a.daysSinceLastDuty;
+                    }
+                    return a.index - b.index;
+                });
+                
+                // Find who should be assigned (first person in rotation order)
+                const expectedPerson = personEligibility.length > 0 ? personEligibility[0].person : null;
+                
+                if (!expectedPerson || expectedPerson === currentPerson) continue; // Already correct
+                
+                // Check if expected person has conflicts
+                const hasConsecutive = hasConsecutiveDuty(dayKey, expectedPerson, groupNum);
+                const hadSpecialBefore = hadSpecialHolidayDutyBefore(dayKey, expectedPerson, groupNum);
+                const hasConsecutiveWeekend = hasConsecutiveWeekendHolidayDuty(dayKey, expectedPerson, groupNum);
+                const hasConsecutiveSpecial = hasConsecutiveSpecialHolidayDuty(dayKey, expectedPerson, groupNum);
+                
+                const strictConflict = (priorityLevel <= 2) && (hasConsecutiveSpecial || hasConsecutiveWeekend);
+                const generalConflict = hasConsecutive || hadSpecialBefore;
+                
+                // If expected person has no conflicts, they should be here - swap them in
+                if (!strictConflict && !generalConflict) {
+                    // Remove current person from this day
+                    removePersonFromDay(dayKey, currentPerson, groupNum);
+                    
+                    // Assign expected person to this day
+                    assignPersonToDay(dayKey, expectedPerson, groupNum);
+                    
+                    // Now find next available day for current person (cascade)
+                    findAndAssignNextAvailableDay(currentPerson, dayKey, dayTypeCategory, groupNum, dayTypeLists, sortedDays, startDate);
+                } else {
+                    // Expected person has conflict - find next person in rotation who can take this day
+                    let replacementPerson = null;
+                    
+                    for (let i = 1; i < personEligibility.length; i++) {
+                        const candidate = personEligibility[i];
+                        const candidatePerson = candidate.person;
+                        
+                        const candidateHasConsecutive = hasConsecutiveDuty(dayKey, candidatePerson, groupNum);
+                        const candidateHadSpecialBefore = hadSpecialHolidayDutyBefore(dayKey, candidatePerson, groupNum);
+                        const candidateHasConsecutiveWeekend = hasConsecutiveWeekendHolidayDuty(dayKey, candidatePerson, groupNum);
+                        const candidateHasConsecutiveSpecial = hasConsecutiveSpecialHolidayDuty(dayKey, candidatePerson, groupNum);
+                        
+                        const candidateStrictConflict = (priorityLevel <= 2) && (candidateHasConsecutiveSpecial || candidateHasConsecutiveWeekend);
+                        const candidateGeneralConflict = candidateHasConsecutive || candidateHadSpecialBefore;
+                        
+                        if (!candidateStrictConflict && !candidateGeneralConflict) {
+                            replacementPerson = candidatePerson;
+                            break;
+                        }
+                    }
+                    
+                    if (replacementPerson && replacementPerson !== currentPerson) {
+                        // Find where replacement person should be assigned (their original day in rotation)
+                        const replacementOriginalDay = findPersonOriginalDayInRotation(replacementPerson, dayTypeCategory, groupNum, dayTypeLists, startDate, dayKey);
+                        
+                        // Remove current person from this day
+                        removePersonFromDay(dayKey, currentPerson, groupNum);
+                        
+                        // Assign replacement person to this day
+                        assignPersonToDay(dayKey, replacementPerson, groupNum);
+                        
+                        // Cascade: Try to assign expected person to replacement person's original day
+                        if (replacementOriginalDay && replacementOriginalDay !== dayKey) {
+                            // Check if expected person can take replacement's original day
+                            const expectedCanTakeReplacementDay = canPersonTakeDay(replacementOriginalDay, expectedPerson, groupNum, dayTypeCategory);
+                            
+                            if (expectedCanTakeReplacementDay) {
+                                // Remove replacement person from their original day (if assigned)
+                                removePersonFromDay(replacementOriginalDay, replacementPerson, groupNum);
+                                
+                                // Assign expected person to replacement's original day
+                                assignPersonToDay(replacementOriginalDay, expectedPerson, groupNum);
+                                
+                                // Now find next available day for replacement person
+                                findAndAssignNextAvailableDay(replacementPerson, replacementOriginalDay, dayTypeCategory, groupNum, dayTypeLists, sortedDays, startDate);
+                            } else {
+                                // Expected person can't take replacement's day - cascade further
+                                findAndAssignNextAvailableDay(expectedPerson, dayKey, dayTypeCategory, groupNum, dayTypeLists, sortedDays, startDate);
+                                findAndAssignNextAvailableDay(replacementPerson, replacementOriginalDay, dayTypeCategory, groupNum, dayTypeLists, sortedDays, startDate);
+                            }
+                        } else {
+                            // Find next available day for expected person
+                            findAndAssignNextAvailableDay(expectedPerson, dayKey, dayTypeCategory, groupNum, dayTypeLists, sortedDays, startDate);
+                        }
+                        
+                        // Find next available day for current person
+                        findAndAssignNextAvailableDay(currentPerson, dayKey, dayTypeCategory, groupNum, dayTypeLists, sortedDays, startDate);
+                    }
+                }
+            }
+        }
+
         // Calculate duties for a specific date range
         function calculateDutiesForDateRange(startDate, endDate, preserveExisting = true) {
             
@@ -4940,6 +5316,12 @@
                 
                 // Priority 4: Καθημερινή days
                 assignDutiesForDayType('normal', 4);
+                
+                // Process cascading swaps for each day type to handle conflicts properly
+                processCascadingSwaps('special', groupNum, dayTypeLists, startDate);
+                processCascadingSwaps('weekend', groupNum, dayTypeLists, startDate);
+                processCascadingSwaps('semi', groupNum, dayTypeLists, startDate);
+                processCascadingSwaps('normal', groupNum, dayTypeLists, startDate);
                 
                 // Old loop - replaced with priority-based assignments above
                 /*for (const typeCategory in dayTypeLists) {
