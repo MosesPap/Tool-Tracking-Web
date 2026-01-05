@@ -3656,12 +3656,11 @@
                     const rgbColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
                     
                     const row = document.createElement('tr');
-                    row.style.backgroundColor = rgbColor;
                     row.style.height = '22px';
                     row.innerHTML = `
-                        <td style="padding: 4px; border: 1px solid #ddd;">${dateStr}</td>
-                        <td style="padding: 4px; border: 1px solid #ddd;">${dayName}</td>
-                        <td style="padding: 4px; border: 1px solid #ddd;">${personName || ''}</td>
+                        <td style="padding: 4px; border: 1px solid #ddd; background-color: ${rgbColor} !important;">${dateStr}</td>
+                        <td style="padding: 4px; border: 1px solid #ddd; background-color: ${rgbColor} !important;">${dayName}</td>
+                        <td style="padding: 4px; border: 1px solid #ddd; background-color: ${rgbColor} !important;">${personName || ''}</td>
                     `;
                     tbody.appendChild(row);
                 }
