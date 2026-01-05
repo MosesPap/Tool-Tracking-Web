@@ -5384,9 +5384,9 @@
                             // Check for strict conflicts (consecutive special holidays or consecutive weekend/holiday)
                             const candidateStrictConflict = hasConsecutiveSpecial || hasConsecutiveWeekend;
                             
-                            // For special holidays and weekends (priority 1-2), avoid strict conflicts
+                            // For special holidays and weekends (priority 1-2), avoid ALL conflicts (both strict and general)
                             if (priorityLevel <= 2) {
-                                if (candidateEligible && !candidateStrictConflict) {
+                                if (candidateEligible && !candidateStrictConflict && !candidateConflict) {
                                     assignedPerson = candidatePerson;
                                     break;
                                 }
