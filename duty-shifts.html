@@ -4545,13 +4545,26 @@
             
             // Check intended assignments - these count for rotation even if person was skipped due to conflicts
             // This ensures N-day rotation counts from the intended day, not the actual assignment day
+            // IMPORTANT: For weekends skipped due to special holiday, we need to count from the NEXT weekend after the skipped one
             let intendedDutyIndex = -1;
+            
             for (let i = currentIndex - 1; i >= 0; i--) {
                 const checkDayKey = daysOfType[i];
                 // Check if this person had an intended assignment on this day
                 if (intendedAssignments[checkDayKey] && 
                     intendedAssignments[checkDayKey][groupNum] === person) {
                     intendedDutyIndex = i;
+                    
+                    // If this is a weekend/holiday day that was skipped due to special holiday,
+                    // we need to count from the NEXT weekend/holiday day after it (not from the skipped one)
+                    if (dayTypeCategory === 'weekend' && i + 1 < daysOfType.length) {
+                        // The next day in the daysOfType array is the next weekend/holiday day
+                        // Count from there instead of from the skipped weekend
+                        const nextWeekendIndex = i + 1;
+                        if (nextWeekendIndex < currentIndex) {
+                            return currentIndex - nextWeekendIndex;
+                        }
+                    }
                     break;
                 }
             }
@@ -4559,7 +4572,7 @@
             // Use intended assignment if it's more recent than actual assignment
             // This ensures rotation counts from when person SHOULD have been assigned, not when they actually were
             if (intendedDutyIndex !== -1 && (lastDutyIndex === -1 || intendedDutyIndex > lastDutyIndex)) {
-                // Count from intended assignment instead of actual assignment
+                // Count from intended assignment
                 return currentIndex - intendedDutyIndex;
             }
             
@@ -5435,18 +5448,28 @@
                             
                             // If ideal person should be assigned but has conflicts, track as intended assignment
                             // This ensures N-day rotation counts from the intended day, not the actual assignment day
+                            // IMPORTANT: For weekends skipped due to special holiday, track the skipped weekend
                             if (idealEligible && assignedPerson !== idealPerson) {
                                 // Check if ideal person has any conflict
                                 const idealHasConflict = (priorityLevel <= 2 && idealStrictConflict) || idealGeneralConflict;
                                 
                                 if (idealHasConflict) {
                                     // Track intended assignment - person should be here but has conflict
+                                    // This is especially important for weekends skipped due to special holiday
                                     if (!intendedAssignments[dayKey]) {
                                         intendedAssignments[dayKey] = {};
                                     }
                                     intendedAssignments[dayKey][groupNum] = idealPerson;
                                     skippedPerson = idealPerson;
                                 }
+                            } else if (idealEligible && idealHadSpecialBefore && dayTypeCategory === 'weekend') {
+                                // Special case: If person is eligible but skipped due to special holiday,
+                                // track as intended assignment so counting continues from this skipped weekend
+                                if (!intendedAssignments[dayKey]) {
+                                    intendedAssignments[dayKey] = {};
+                                }
+                                intendedAssignments[dayKey][groupNum] = idealPerson;
+                                skippedPerson = idealPerson;
                             }
                         }
                         
