@@ -258,6 +258,11 @@
             console.log('[MAIN-MENU] localStorage.fullName:', localStorage.getItem('fullName'));
             console.log('[MAIN-MENU] auth.currentUser (sync):', auth.currentUser ? auth.currentUser.email : 'null');
             
+            // Track technician data fetch to prevent duplicate reads
+            let technicianDataFetched = false;
+            let lastTechnicianFetchTime = null;
+            const TECHNICIAN_FETCH_COOLDOWN = 5 * 60 * 1000; // 5 minutes cooldown
+            
             auth.onAuthStateChanged(function(user) {
             console.log('[MAIN-MENU] onAuthStateChanged fired, user:', user ? user.email : 'null');
             console.log('[MAIN-MENU] user.emailVerified:', user ? user.emailVerified : 'N/A');
@@ -276,8 +281,51 @@
                 localStorage.setItem('authVerified', 'true');
                 console.log('[MAIN-MENU] authVerified flag set to true');
                 
+                // Check if we've already fetched technician data recently to prevent duplicate reads
+                const now = Date.now();
+                const recentlyFetched = technicianDataFetched && 
+                                       lastTechnicianFetchTime && 
+                                       (now - lastTechnicianFetchTime) < TECHNICIAN_FETCH_COOLDOWN;
+                
+                if (recentlyFetched) {
+                    // Use cached data from localStorage
+                    console.log('[MAIN-MENU] Using cached technician data, skipping Firestore read');
+                    const cachedFullName = localStorage.getItem('fullName');
+                    const cachedIsAdmin = localStorage.getItem('isAdmin') === 'true';
+                    const cachedIsInstructor = localStorage.getItem('isInstructor') === 'true';
+                    const cachedHasDuty = localStorage.getItem('hasDuty') === 'true';
+                    
+                    if (cachedFullName) {
+                        document.getElementById('fullName').textContent = cachedFullName;
+                    } else {
+                        document.getElementById('fullName').textContent = user.email;
+                    }
+                    
+                    // Show/hide buttons based on cached permissions
+                    const menuAdminBtn = document.getElementById('menuAdminBtn');
+                    if (menuAdminBtn) {
+                        menuAdminBtn.style.display = cachedIsAdmin ? 'block' : 'none';
+                    }
+                    
+                    const menuTrainingQuestionsBtn = document.getElementById('menuTrainingQuestionsBtn');
+                    if (menuTrainingQuestionsBtn) {
+                        menuTrainingQuestionsBtn.style.display = cachedIsInstructor ? 'block' : 'none';
+                    }
+                    
+                    const menuDutyShiftsBtn = document.getElementById('menuDutyShiftsBtn');
+                    if (menuDutyShiftsBtn) {
+                        menuDutyShiftsBtn.style.display = cachedHasDuty ? 'block' : 'none';
+                    }
+                    
+                    updatePreviousOutToolsCount();
+                    return;
+                }
+                
                 // Fetch data and show menu
                 console.log('[MAIN-MENU] Fetching technician data from Firestore...');
+                technicianDataFetched = true;
+                lastTechnicianFetchTime = now;
+                
                 db.collection('technicians').doc(user.uid)
                     .get()
                     .then(doc => {
@@ -312,25 +360,40 @@
                             
                             // Check if user has Duty permission
                             if (technicianData.hasDuty) {
+                                localStorage.setItem('hasDuty', 'true');
                                 const menuDutyShiftsBtn = document.getElementById('menuDutyShiftsBtn');
                                 if (menuDutyShiftsBtn) {
                                     menuDutyShiftsBtn.style.display = 'block';
                                 }
                             } else {
+                                localStorage.removeItem('hasDuty');
                                 const menuDutyShiftsBtn = document.getElementById('menuDutyShiftsBtn');
                                 if (menuDutyShiftsBtn) {
                                     menuDutyShiftsBtn.style.display = 'none';
                                 }
                             }
+                            
+                            // Cache instructor status
+                            if (technicianData.isInstructor) {
+                                localStorage.setItem('isInstructor', 'true');
+                            } else {
+                                localStorage.removeItem('isInstructor');
+                            }
                         } else {
                             console.log('[MAIN-MENU] Technician doc does not exist, using email');
                             document.getElementById('fullName').textContent = user.email;
+                            // Reset flags on error
+                            technicianDataFetched = false;
+                            lastTechnicianFetchTime = null;
                         }
                         console.log('[MAIN-MENU] Calling updatePreviousOutToolsCount()');
                         updatePreviousOutToolsCount();
                     }).catch(error => {
                         console.error('[MAIN-MENU] Error fetching technician data:', error);
                         document.getElementById('fullName').textContent = user.email;
+                        // Reset flags on error so it can retry
+                        technicianDataFetched = false;
+                        lastTechnicianFetchTime = null;
                         updatePreviousOutToolsCount();
                     });
             } else {

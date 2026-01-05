@@ -1119,14 +1119,40 @@
             { name: 'Πάσχα', type: 'easter-relative', offset: 0 } // Easter Sunday
         ];
 
+        // Track data loading to prevent duplicate loads
+        let dataLastLoaded = null;
+        let isLoadingData = false;
+        const DATA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache duration
+        
         // Initialize
         document.addEventListener('DOMContentLoaded', async function() {
             // Wait for Firebase to be ready
             if (window.auth && window.db) {
                 // Check authentication
-                window.auth.onAuthStateChanged(async function(user) {
+                let authListenerUnsubscribed = false;
+                const unsubscribe = window.auth.onAuthStateChanged(async function(user) {
+                    // Prevent duplicate processing if listener fires multiple times
+                    if (authListenerUnsubscribed) return;
+                    
                     if (user && user.emailVerified) {
+                        // Check if data was recently loaded to prevent duplicate reads
+                        const now = Date.now();
+                        if (dataLastLoaded && (now - dataLastLoaded) < DATA_CACHE_DURATION && !isLoadingData) {
+                            console.log('[DUTY-SHIFTS] Data recently loaded, skipping reload');
+                            // Still render with existing data
+                            renderGroups();
+                            renderHolidays();
+                            renderRecurringHolidays();
+                            renderCalendar();
+                            updateStatistics();
+                            return;
+                        }
+                        
+                        isLoadingData = true;
                         await loadData();
+                        dataLastLoaded = Date.now();
+                        isLoadingData = false;
+                        
                         renderGroups();
                         renderHolidays();
                         renderRecurringHolidays();
@@ -1140,6 +1166,25 @@
                         renderRecurringHolidays();
                         renderCalendar();
                         updateStatistics();
+                    }
+                });
+                
+                // Clean up listener when page is hidden/unloaded to prevent background reads
+                document.addEventListener('visibilitychange', function() {
+                    if (document.hidden) {
+                        // Page is hidden, unsubscribe to prevent background reads
+                        if (unsubscribe && typeof unsubscribe === 'function') {
+                            unsubscribe();
+                            authListenerUnsubscribed = true;
+                        }
+                    }
+                });
+                
+                window.addEventListener('beforeunload', function() {
+                    // Page is unloading, unsubscribe to prevent reads
+                    if (unsubscribe && typeof unsubscribe === 'function') {
+                        unsubscribe();
+                        authListenerUnsubscribed = true;
                     }
                 });
             } else {
