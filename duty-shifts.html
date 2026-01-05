@@ -4381,13 +4381,26 @@
             const dayOfWeek = date.getDay(); // 0=Sunday, 6=Saturday
             const currentDayType = getDayType(date);
             
+            // Debug logging for specific people and dates
+            const debugPeople = ['ΑΝΘΣΓΟΣ ΒΑΒΒΑΣ ΔΗΜΗΤΡΙΟΣ', 'ΕΣΜΙΑΣ ΧΡΥΣΑΝΘΟΥ ΑΝΔΡΕΑΣ'];
+            const debugDates = ['2026-02-01', '2026-02-07', '2026-02-26'];
+            const isDebug = debugPeople.includes(person) && debugDates.includes(dayKey);
+            
             // Only apply this rule if current day is:
             // - A weekend (Saturday or Sunday)
             // - OR a holiday (weekend-holiday type, but not special holiday)
             const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
             const isHoliday = currentDayType === 'weekend-holiday' && !isSpecialHoliday(date);
             
+            if (isDebug) {
+                console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] Checking ${person}:`);
+                console.log(`  - isWeekend: ${isWeekend}, isHoliday: ${isHoliday}, currentDayType: ${currentDayType}`);
+            }
+            
             if (!isWeekend && !isHoliday) {
+                if (isDebug) {
+                    console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] Not a weekend/holiday, returning false`);
+                }
                 return false;
             }
             
@@ -4429,7 +4442,15 @@
             }
             
             if (!lastWeekendDutyKey || !lastWeekendDutyDate) {
+                if (isDebug) {
+                    console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] No previous weekend duty found, returning false`);
+                }
                 return false; // No previous weekend duty found
+            }
+            
+            if (isDebug) {
+                const lastWeekendFormatted = lastWeekendDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] Last weekend duty: ${lastWeekendFormatted} (${lastWeekendDutyKey}), Rotation days: ${rotationDays}`);
             }
             
             // Calculate what the next weekend/holiday duty should be (N weekends after last duty)
@@ -4455,14 +4476,26 @@
             }
             
             if (weekendsCounted < rotationDays) {
+                if (isDebug) {
+                    console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] Couldn't find enough weekends (${weekendsCounted}/${rotationDays}), returning false`);
+                }
                 return false; // Couldn't find enough weekends
             }
             
             const nextWeekendDutyKey = formatDateKey(nextWeekendDutyDate);
             
+            if (isDebug) {
+                const nextWeekendFormatted = nextWeekendDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] Calculated next weekend duty: ${nextWeekendFormatted} (${nextWeekendDutyKey})`);
+                console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] Current day: ${dayKey}, Match: ${dayKey === nextWeekendDutyKey}`);
+            }
+            
             // Check if current day is the calculated next weekend duty
             if (dayKey !== nextWeekendDutyKey) {
                 // Current day is not the calculated next weekend duty
+                if (isDebug) {
+                    console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] Current day is NOT the calculated next weekend duty, returning false`);
+                }
                 return false;
             }
             
@@ -4479,12 +4512,24 @@
                 checkSpecialDate.setDate(checkSpecialDate.getDate() + 1);
             }
             
+            if (isDebug) {
+                if (specialHolidayBetween) {
+                    const specialFormatted = specialHolidayBetween.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] Found special holiday between: ${specialFormatted}`);
+                } else {
+                    console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] No special holiday between last and next weekend duty, returning false`);
+                }
+            }
+            
             if (!specialHolidayBetween) {
                 return false; // No special holiday between last and next weekend duty
             }
             
             // There is a special holiday between last weekend duty and this day
             // Skip this day (the calculated next weekend duty)
+            if (isDebug) {
+                console.log(`[DEBUG hadSpecialHolidayDutyBefore ${dayKey}] Returning true - skipping this weekend due to special holiday`);
+            }
             return true;
         }
 
@@ -5341,6 +5386,13 @@
                             // This ensures strict N-day rotation: each person serves every Nth day of that type
                             const isEligible = daysSinceLastDuty >= rotationDays || daysSinceLastDuty === Infinity;
                             
+                            // Debug logging for specific people and dates
+                            const debugPeople = ['ΑΝΘΣΓΟΣ ΒΑΒΒΑΣ ΔΗΜΗΤΡΙΟΣ', 'ΕΣΜΙΑΣ ΧΡΥΣΑΝΘΟΥ ΑΝΔΡΕΑΣ'];
+                            const debugDates = ['2026-02-01', '2026-02-07', '2026-02-26'];
+                            if (debugPeople.includes(person) && debugDates.includes(dayKey) && dayTypeCategory === 'weekend') {
+                                console.log(`[DEBUG countDaysSinceLastDuty ${dayKey}] ${person}: daysSinceLastDuty=${daysSinceLastDuty}, rotationDays=${rotationDays}, isEligible=${isEligible}`);
+                            }
+                            
                             personEligibility.push({
                                 person: person,
                                 index: i,
@@ -5384,17 +5436,37 @@
                             // Check for strict conflicts (consecutive special holidays or consecutive weekend/holiday)
                             const candidateStrictConflict = hasConsecutiveSpecial || hasConsecutiveWeekend;
                             
+                            // Debug logging for specific people and dates
+                            const debugPeople = ['ΑΝΘΣΓΟΣ ΒΑΒΒΑΣ ΔΗΜΗΤΡΙΟΣ', 'ΕΣΜΙΑΣ ΧΡΥΣΑΝΘΟΥ ΑΝΔΡΕΑΣ'];
+                            const debugDates = ['2026-02-01', '2026-02-07', '2026-02-26'];
+                            if (debugPeople.includes(candidatePerson) && debugDates.includes(dayKey) && dayTypeCategory === 'weekend' && i === 0) {
+                                console.log(`[DEBUG Assignment ${dayKey}] Candidate: ${candidatePerson} (first in rotation)`);
+                                console.log(`  - Eligible: ${candidateEligible}, Days since last: ${candidateData.daysSinceLastDuty}`);
+                                console.log(`  - Conflicts: hasConsecutive=${hasConsecutive}, hadSpecialBefore=${hadSpecialBefore}, hasConsecutiveWeekend=${hasConsecutiveWeekend}, hasConsecutiveSpecial=${hasConsecutiveSpecial}`);
+                                console.log(`  - candidateConflict: ${candidateConflict}, candidateStrictConflict: ${candidateStrictConflict}, priorityLevel: ${priorityLevel}`);
+                            }
+                            
                             // For special holidays and weekends (priority 1-2), avoid strict conflicts
                             if (priorityLevel <= 2) {
                                 if (candidateEligible && !candidateStrictConflict) {
+                                    if (debugPeople.includes(candidatePerson) && debugDates.includes(dayKey) && dayTypeCategory === 'weekend' && i === 0) {
+                                        console.log(`[DEBUG Assignment ${dayKey}] ✓ ASSIGNED ${candidatePerson} (eligible, no strict conflict)`);
+                                    }
                                     assignedPerson = candidatePerson;
                                     break;
+                                } else if (debugPeople.includes(candidatePerson) && debugDates.includes(dayKey) && dayTypeCategory === 'weekend' && i === 0) {
+                                    console.log(`[DEBUG Assignment ${dayKey}] ✗ NOT ASSIGNED ${candidatePerson} (eligible: ${candidateEligible}, strictConflict: ${candidateStrictConflict})`);
                                 }
                             } else {
                                 // For semi and normal days, assign if eligible and no conflicts
                                 if (candidateEligible && !candidateConflict) {
+                                    if (debugPeople.includes(candidatePerson) && debugDates.includes(dayKey) && dayTypeCategory === 'weekend' && i === 0) {
+                                        console.log(`[DEBUG Assignment ${dayKey}] ✓ ASSIGNED ${candidatePerson} (eligible, no conflict)`);
+                                    }
                                     assignedPerson = candidatePerson;
                                     break;
+                                } else if (debugPeople.includes(candidatePerson) && debugDates.includes(dayKey) && dayTypeCategory === 'weekend' && i === 0) {
+                                    console.log(`[DEBUG Assignment ${dayKey}] ✗ NOT ASSIGNED ${candidatePerson} (eligible: ${candidateEligible}, conflict: ${candidateConflict})`);
                                 }
                             }
                         }
