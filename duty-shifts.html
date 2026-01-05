@@ -666,7 +666,7 @@
                     <button class="btn btn-sm btn-primary ms-2" onclick="openCalculateDutiesModal()">
                         <i class="fas fa-calculator me-1"></i>Υπολογισμός Υπηρεσιών
                     </button>
-                    <button class="btn btn-sm btn-success ms-2" onclick="generateExcelFilesForCurrentMonth()">
+                    <button class="btn btn-sm btn-success ms-2" onclick="showExcelPreview()">
                         <i class="fas fa-file-excel me-1"></i>Δημιουργία Excel
                     </button>
                     <button class="btn btn-sm btn-warning ms-2" onclick="analyzeRotationViolations()">
@@ -1074,6 +1074,33 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Excel Preview Modal -->
+    <div class="modal fade" id="excelPreviewModal" tabindex="-1">
+        <div class="modal-dialog modal-fullscreen">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-file-excel me-2"></i>Προεπισκόπηση Excel Αρχείων</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" style="max-height: calc(100vh - 200px); overflow-y: auto;">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <small>Παρακάτω εμφανίζεται η προεπισκόπηση των Excel αρχείων που θα δημιουργηθούν. Κάθε ομάδα θα έχει το δικό της αρχείο.</small>
+                    </div>
+                    <div id="excelPreviewContent">
+                        <!-- Preview content will be inserted here -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-success" id="generateExcelBtn" onclick="generateExcelFilesForCurrentMonth(true)">
+                        <i class="fas fa-download me-1"></i>Δημιουργία Excel Αρχείων
+                    </button>
                 </div>
             </div>
         </div>
@@ -3544,8 +3571,127 @@
             return colors[dayType] || [255, 255, 255]; // Default white
         }
 
+        // Show Excel preview before generating files
+        function showExcelPreview() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const monthName = getGreekMonthName(currentDate);
+            
+            // Get all days of the month
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const daysInMonth = lastDay.getDate();
+            
+            const previewContent = document.getElementById('excelPreviewContent');
+            previewContent.innerHTML = '';
+            
+            let hasAnyGroup = false;
+            
+            // Generate preview for each group
+            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                const groupName = getGroupName(groupNum);
+                const groupData = groups[groupNum];
+                
+                // Skip if group has no people
+                if (!groupData || (!groupData.special?.length && !groupData.weekend?.length && !groupData.semi?.length && !groupData.normal?.length)) {
+                    continue;
+                }
+                
+                hasAnyGroup = true;
+                
+                // Create preview table for this group
+                const groupPreview = document.createElement('div');
+                groupPreview.className = 'mb-4';
+                groupPreview.innerHTML = `
+                    <h5 class="mb-3" style="color: #428BCA;">
+                        <i class="fas fa-users me-2"></i>${groupName} - ${monthName} ${year}
+                    </h5>
+                    <div class="table-responsive">
+                        <table class="table table-bordered" style="font-size: 12px;">
+                            <thead>
+                                <tr style="background-color: #428BCA; color: white;">
+                                    <th style="width: 12%; text-align: center; padding: 8px;">ΗΜΕΡ.</th>
+                                    <th style="width: 15%; text-align: center; padding: 8px;">ΗΜΕΡΑ</th>
+                                    <th style="width: 30%; text-align: center; padding: 8px;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="previewGroup${groupNum}">
+                                <!-- Rows will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                previewContent.appendChild(groupPreview);
+                
+                const tbody = document.getElementById(`previewGroup${groupNum}`);
+                
+                // Add data rows
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const date = new Date(year, month, day);
+                    const dayKey = formatDateKey(date);
+                    const dayType = getDayType(date);
+                    const dayName = getGreekDayNameUppercase(date);
+                    
+                    // Get assignment for this group
+                    const assignment = dutyAssignments[dayKey] || '';
+                    let personName = '';
+                    
+                    if (assignment) {
+                        // Extract person name for this group
+                        const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
+                        for (const part of parts) {
+                            const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                            if (match && parseInt(match[2]) === groupNum) {
+                                personName = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Format date as DD/MM/YYYY
+                    const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
+                    
+                    // Get color for this day type
+                    const color = getDayTypeColor(dayType);
+                    const rgbColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+                    
+                    const row = document.createElement('tr');
+                    row.style.backgroundColor = rgbColor;
+                    row.style.height = '22px';
+                    row.innerHTML = `
+                        <td style="padding: 4px; border: 1px solid #ddd;">${dateStr}</td>
+                        <td style="padding: 4px; border: 1px solid #ddd;">${dayName}</td>
+                        <td style="padding: 4px; border: 1px solid #ddd;">${personName || ''}</td>
+                    `;
+                    tbody.appendChild(row);
+                }
+            }
+            
+            // Show message if no groups have data
+            const generateBtn = document.getElementById('generateExcelBtn');
+            if (!hasAnyGroup) {
+                previewContent.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Δεν υπάρχουν ομάδες με άτομα για να δημιουργηθούν Excel αρχεία.
+                    </div>
+                `;
+                if (generateBtn) {
+                    generateBtn.disabled = true;
+                }
+            } else {
+                if (generateBtn) {
+                    generateBtn.disabled = false;
+                }
+            }
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('excelPreviewModal'));
+            modal.show();
+        }
+
         // Generate Excel files for current month for all groups
-        async function generateExcelFilesForCurrentMonth() {
+        async function generateExcelFilesForCurrentMonth(skipPreview = false) {
             try {
                 const year = currentDate.getFullYear();
                 const month = currentDate.getMonth();
@@ -3831,6 +3977,14 @@
                 // Remove loading message
                 if (document.body.contains(loadingAlert)) {
                     document.body.removeChild(loadingAlert);
+                }
+                
+                // Close preview modal if it's open
+                if (skipPreview) {
+                    const previewModal = bootstrap.Modal.getInstance(document.getElementById('excelPreviewModal'));
+                    if (previewModal) {
+                        previewModal.hide();
+                    }
                 }
                 
                 alert('Τα Excel αρχεία δημιουργήθηκαν επιτυχώς!');
