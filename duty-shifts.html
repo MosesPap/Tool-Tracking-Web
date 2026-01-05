@@ -4378,46 +4378,11 @@
 
         // Check if person had duty on consecutive weekend/holiday days
         // If so, skip them from the next weekend/holiday
+        // DISABLED: This logic was causing incorrect swaps on 01/02/26, 08/02/26, and 26/02/2026
+        // TODO: Re-implement with corrected logic if needed
         function hasConsecutiveWeekendHolidayDuty(dayKey, person, groupNum) {
-            const date = new Date(dayKey + 'T00:00:00');
-            const currentDayType = getDayType(date);
-            
-            // Only apply this rule if current day is a weekend/holiday
-            if (currentDayType !== 'weekend-holiday' || isSpecialHoliday(date)) {
-                return false;
-            }
-            
-            // Check if person had duty on the previous weekend/holiday day
-            // Look back up to 7 days to find the previous weekend/holiday
-            let consecutiveCount = 0;
-            let foundPreviousWeekendHoliday = false;
-            
-            for (let i = 1; i <= 7; i++) {
-                const checkDate = new Date(date);
-                checkDate.setDate(checkDate.getDate() - i);
-                const checkKey = formatDateKey(checkDate);
-                const checkDayType = getDayType(checkDate);
-                
-                // If we find a weekend/holiday day (not special holiday)
-                if (checkDayType === 'weekend-holiday' && !isSpecialHoliday(checkDate)) {
-                    foundPreviousWeekendHoliday = true;
-                    if (hasDutyOnDay(checkKey, person, groupNum)) {
-                        consecutiveCount++;
-                        // Continue checking backwards for more consecutive days
-                    } else {
-                        // Found a weekend/holiday without duty, stop counting
-                        break;
-                    }
-                } else if (checkDayType !== 'weekend-holiday' && foundPreviousWeekendHoliday) {
-                    // We already found a weekend/holiday, and now we hit a non-weekend/holiday
-                    // This breaks the consecutive sequence
-                    break;
-                }
-            }
-            
-            // If person had duty on 2 or more consecutive weekend/holiday days before this one, skip them
-            // This prevents assigning them to a third consecutive weekend/holiday
-            return consecutiveCount >= 2;
+            // Temporarily disabled to prevent incorrect swaps
+            return false;
         }
 
         // Check if person had duty on consecutive special holidays
