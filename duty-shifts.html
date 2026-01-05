@@ -5216,6 +5216,139 @@
                             // This ensures strict N-day rotation: each person serves every Nth day of that type
                             const isEligible = daysSinceLastDuty >= rotationDays || daysSinceLastDuty === Infinity;
                             
+                            // DEBUG: Log weekend duty calculations for ΑΝΘΣΓΟΣ ΒΑΒΒΑΣ ΔΗΜΗΤΡΙΟΣ
+                            if (person === 'ΑΝΘΣΓΟΣ ΒΑΒΒΑΣ ΔΗΜΗΤΡΙΟΣ' && dayTypeCategory === 'weekend') {
+                                // Find last weekend duty
+                                const groupData = groups[groupNum] || {};
+                                const lastDuties = groupData.lastDuties?.[person];
+                                let lastWeekendDutyKey = null;
+                                let lastWeekendDutyDate = null;
+                                
+                                if (lastDuties && lastDuties.weekend) {
+                                    lastWeekendDutyDate = new Date(lastDuties.weekend + 'T00:00:00');
+                                    lastWeekendDutyKey = formatDateKey(lastWeekendDutyDate);
+                                }
+                                
+                                // Also check actual assignments
+                                const checkDate = new Date(dayDate);
+                                for (let j = 1; j <= 365; j++) {
+                                    checkDate.setDate(checkDate.getDate() - 1);
+                                    const checkKey = formatDateKey(checkDate);
+                                    const checkDayType = getDayType(checkDate);
+                                    const isCheckWeekend = checkDate.getDay() === 0 || checkDate.getDay() === 6;
+                                    const isCheckHoliday = checkDayType === 'weekend-holiday' && !isSpecialHoliday(checkDate);
+                                    
+                                    if ((isCheckWeekend || isCheckHoliday) && hasDutyOnDay(checkKey, person, groupNum)) {
+                                        const checkDateCopy = new Date(checkDate);
+                                        if (!lastWeekendDutyDate || checkDateCopy > lastWeekendDutyDate) {
+                                            lastWeekendDutyDate = checkDateCopy;
+                                            lastWeekendDutyKey = checkKey;
+                                        }
+                                        break;
+                                    }
+                                }
+                                
+                                if (lastWeekendDutyKey && lastWeekendDutyDate) {
+                                    const lastWeekendFormatted = lastWeekendDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                    
+                                    // Calculate expected next weekend duty (N weekends after last)
+                                    let nextWeekendDutyDate = new Date(lastWeekendDutyDate);
+                                    nextWeekendDutyDate.setDate(nextWeekendDutyDate.getDate() + 1);
+                                    let weekendsCounted = 0;
+                                    let daysChecked = 0;
+                                    const maxDaysToCheck = 365;
+                                    
+                                    while (weekendsCounted < rotationDays && daysChecked < maxDaysToCheck) {
+                                        const checkDayType = getDayType(nextWeekendDutyDate);
+                                        const isCheckWeekend = nextWeekendDutyDate.getDay() === 0 || nextWeekendDutyDate.getDay() === 6;
+                                        const isCheckHoliday = checkDayType === 'weekend-holiday' && !isSpecialHoliday(nextWeekendDutyDate);
+                                        
+                                        if (isCheckWeekend || isCheckHoliday) {
+                                            weekendsCounted++;
+                                        }
+                                        
+                                        if (weekendsCounted < rotationDays) {
+                                            nextWeekendDutyDate.setDate(nextWeekendDutyDate.getDate() + 1);
+                                            daysChecked++;
+                                        }
+                                    }
+                                    
+                                    const nextWeekendDutyKey = formatDateKey(nextWeekendDutyDate);
+                                    const nextWeekendFormatted = nextWeekendDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                    
+                                    console.log(`[DEBUG ΒΑΒΒΑΣ Weekend] Day: ${dayKey}, Last weekend duty: ${lastWeekendFormatted} (${lastWeekendDutyKey}), Expected next: ${nextWeekendFormatted} (${nextWeekendDutyKey}), Current day eligible: ${isEligible}, Days since last: ${daysSinceLastDuty}`);
+                                    
+                                    // Check if current day is the expected next weekend duty
+                                    if (dayKey === nextWeekendDutyKey) {
+                                        console.log(`[DEBUG ΒΑΒΒΑΣ Weekend] ✓ Current day (${dayKey}) IS the expected next weekend duty`);
+                                    } else {
+                                        console.log(`[DEBUG ΒΑΒΒΑΣ Weekend] ✗ Current day (${dayKey}) is NOT the expected next weekend duty (expected: ${nextWeekendDutyKey})`);
+                                        
+                                        // Calculate second expected weekend duty (if first was skipped)
+                                        let secondWeekendDutyDate = new Date(nextWeekendDutyDate);
+                                        secondWeekendDutyDate.setDate(secondWeekendDutyDate.getDate() + 1);
+                                        weekendsCounted = 0;
+                                        daysChecked = 0;
+                                        
+                                        while (weekendsCounted < rotationDays && daysChecked < maxDaysToCheck) {
+                                            const checkDayType = getDayType(secondWeekendDutyDate);
+                                            const isCheckWeekend = secondWeekendDutyDate.getDay() === 0 || secondWeekendDutyDate.getDay() === 6;
+                                            const isCheckHoliday = checkDayType === 'weekend-holiday' && !isSpecialHoliday(secondWeekendDutyDate);
+                                            
+                                            if (isCheckWeekend || isCheckHoliday) {
+                                                weekendsCounted++;
+                                            }
+                                            
+                                            if (weekendsCounted < rotationDays) {
+                                                secondWeekendDutyDate.setDate(secondWeekendDutyDate.getDate() + 1);
+                                                daysChecked++;
+                                            }
+                                        }
+                                        
+                                        const secondWeekendDutyKey = formatDateKey(secondWeekendDutyDate);
+                                        const secondWeekendFormatted = secondWeekendDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                        
+                                        if (dayKey === secondWeekendDutyKey) {
+                                            console.log(`[DEBUG ΒΑΒΒΑΣ Weekend] ✓ Current day (${dayKey}) IS the second expected weekend duty (first was skipped)`);
+                                        } else {
+                                            console.log(`[DEBUG ΒΑΒΒΑΣ Weekend] ✗ Current day (${dayKey}) is NOT the second expected weekend duty (expected: ${secondWeekendDutyKey})`);
+                                            
+                                            // Calculate third expected weekend duty (if second was also skipped)
+                                            let thirdWeekendDutyDate = new Date(secondWeekendDutyDate);
+                                            thirdWeekendDutyDate.setDate(thirdWeekendDutyDate.getDate() + 1);
+                                            weekendsCounted = 0;
+                                            daysChecked = 0;
+                                            
+                                            while (weekendsCounted < rotationDays && daysChecked < maxDaysToCheck) {
+                                                const checkDayType = getDayType(thirdWeekendDutyDate);
+                                                const isCheckWeekend = thirdWeekendDutyDate.getDay() === 0 || thirdWeekendDutyDate.getDay() === 6;
+                                                const isCheckHoliday = checkDayType === 'weekend-holiday' && !isSpecialHoliday(thirdWeekendDutyDate);
+                                                
+                                                if (isCheckWeekend || isCheckHoliday) {
+                                                    weekendsCounted++;
+                                                }
+                                                
+                                                if (weekendsCounted < rotationDays) {
+                                                    thirdWeekendDutyDate.setDate(thirdWeekendDutyDate.getDate() + 1);
+                                                    daysChecked++;
+                                                }
+                                            }
+                                            
+                                            const thirdWeekendDutyKey = formatDateKey(thirdWeekendDutyDate);
+                                            const thirdWeekendFormatted = thirdWeekendDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                            
+                                            if (dayKey === thirdWeekendDutyKey) {
+                                                console.log(`[DEBUG ΒΑΒΒΑΣ Weekend] ✓ Current day (${dayKey}) IS the third expected weekend duty (first and second were skipped)`);
+                                            } else {
+                                                console.log(`[DEBUG ΒΑΒΒΑΣ Weekend] ✗ Current day (${dayKey}) is NOT the third expected weekend duty (expected: ${thirdWeekendDutyKey})`);
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    console.log(`[DEBUG ΒΑΒΒΑΣ Weekend] Day: ${dayKey}, No last weekend duty found`);
+                                }
+                            }
+                            
                             personEligibility.push({
                                 person: person,
                                 index: i,
@@ -5259,17 +5392,34 @@
                             // Check for strict conflicts (consecutive special holidays or consecutive weekend/holiday)
                             const candidateStrictConflict = hasConsecutiveSpecial || hasConsecutiveWeekend;
                             
+                            // DEBUG: Log conflict checks for ΑΝΘΣΓΟΣ ΒΑΒΒΑΣ ΔΗΜΗΤΡΙΟΣ
+                            if (candidatePerson === 'ΑΝΘΣΓΟΣ ΒΑΒΒΑΣ ΔΗΜΗΤΡΙΟΣ' && dayTypeCategory === 'weekend') {
+                                console.log(`[DEBUG ΒΑΒΒΑΣ Weekend Conflicts] Day: ${dayKey}, Eligible: ${candidateEligible}, Days since last: ${candidateData.daysSinceLastDuty}`);
+                                console.log(`[DEBUG ΒΑΒΒΑΣ Weekend Conflicts]   hasConsecutive: ${hasConsecutive}, hadSpecialBefore: ${hadSpecialBefore}, hasConsecutiveWeekend: ${hasConsecutiveWeekend}, hasConsecutiveSpecial: ${hasConsecutiveSpecial}`);
+                                console.log(`[DEBUG ΒΑΒΒΑΣ Weekend Conflicts]   candidateConflict: ${candidateConflict}, candidateStrictConflict: ${candidateStrictConflict}, priorityLevel: ${priorityLevel}`);
+                            }
+                            
                             // For special holidays and weekends (priority 1-2), avoid strict conflicts
                             if (priorityLevel <= 2) {
                                 if (candidateEligible && !candidateStrictConflict) {
+                                    if (candidatePerson === 'ΑΝΘΣΓΟΣ ΒΑΒΒΑΣ ΔΗΜΗΤΡΙΟΣ' && dayTypeCategory === 'weekend') {
+                                        console.log(`[DEBUG ΒΑΒΒΑΣ Weekend] ✓ ASSIGNED on ${dayKey} (eligible, no strict conflict)`);
+                                    }
                                     assignedPerson = candidatePerson;
                                     break;
+                                } else if (candidatePerson === 'ΑΝΘΣΓΟΣ ΒΑΒΒΑΣ ΔΗΜΗΤΡΙΟΣ' && dayTypeCategory === 'weekend') {
+                                    console.log(`[DEBUG ΒΑΒΒΑΣ Weekend] ✗ NOT ASSIGNED on ${dayKey} (eligible: ${candidateEligible}, strictConflict: ${candidateStrictConflict})`);
                                 }
                             } else {
                                 // For semi and normal days, assign if eligible and no conflicts
                                 if (candidateEligible && !candidateConflict) {
+                                    if (candidatePerson === 'ΑΝΘΣΓΟΣ ΒΑΒΒΑΣ ΔΗΜΗΤΡΙΟΣ' && dayTypeCategory === 'weekend') {
+                                        console.log(`[DEBUG ΒΑΒΒΑΣ Weekend] ✓ ASSIGNED on ${dayKey} (eligible, no conflict)`);
+                                    }
                                     assignedPerson = candidatePerson;
                                     break;
+                                } else if (candidatePerson === 'ΑΝΘΣΓΟΣ ΒΑΒΒΑΣ ΔΗΜΗΤΡΙΟΣ' && dayTypeCategory === 'weekend') {
+                                    console.log(`[DEBUG ΒΑΒΒΑΣ Weekend] ✗ NOT ASSIGNED on ${dayKey} (eligible: ${candidateEligible}, conflict: ${candidateConflict})`);
                                 }
                             }
                         }
