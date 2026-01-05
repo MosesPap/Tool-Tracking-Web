@@ -4309,8 +4309,7 @@
                 currentTypeCategory = 'weekend';
             }
             
-            // ONLY check day before (day after may not be calculated yet during assignment process)
-            // The day after will be checked when we process that day
+            // Check day before
             const dayBefore = new Date(date);
             dayBefore.setDate(dayBefore.getDate() - 1);
             const dayBeforeKey = formatDateKey(dayBefore);
@@ -4333,8 +4332,32 @@
                 }
             }
             
-            // DO NOT check day after - it may not be calculated yet during assignment process
-            // The day after will be checked when we process that day
+            // IMPORTANT: Also check day after if it's already been assigned
+            // This handles cases where higher priority day types (semi, weekend, special) are assigned before lower priority (normal)
+            // For example: Friday (semi-normal, Priority 3) is assigned before Thursday (normal, Priority 4)
+            // When processing Thursday, we need to check if person already has duty on Friday
+            const dayAfter = new Date(date);
+            dayAfter.setDate(dayAfter.getDate() + 1);
+            const dayAfterKey = formatDateKey(dayAfter);
+            
+            // Only check day after if it's already assigned (exists in dutyAssignments)
+            // This means it was processed earlier due to higher priority
+            if (dutyAssignments[dayAfterKey] && hasDutyOnDay(dayAfterKey, person, groupNum)) {
+                const afterDayType = getDayType(dayAfter);
+                let afterTypeCategory = 'normal';
+                if (afterDayType === 'special-holiday') {
+                    afterTypeCategory = 'special';
+                } else if (afterDayType === 'semi-normal-day') {
+                    afterTypeCategory = 'semi';
+                } else if (afterDayType === 'weekend-holiday') {
+                    afterTypeCategory = 'weekend';
+                }
+                
+                // Only flag if different day type OR if either day is a special holiday
+                if (currentTypeCategory !== afterTypeCategory || currentDayType === 'special-holiday' || afterDayType === 'special-holiday') {
+                    return true;
+                }
+            }
             
             return false;
         }
