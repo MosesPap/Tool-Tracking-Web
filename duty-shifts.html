@@ -1130,10 +1130,114 @@
         };
         let holidays = [];
         let specialHolidays = []; // User-defined special holidays
+        // Separate assignments by day type
+        let normalDayAssignments = {};
+        let semiNormalAssignments = {};
+        let weekendAssignments = {};
+        let specialHolidayAssignments = {};
+        // Legacy: Keep dutyAssignments for backward compatibility during migration
         let dutyAssignments = {};
         // Track critical assignments from last duties - these must NEVER be deleted
         // Format: { "2025-12-25": ["Person Name (Ομάδα 1)", ...], ... }
         let criticalAssignments = {};
+        
+        // Helper functions to get/set assignments based on day type
+        function getAssignmentsForDayType(dayTypeCategory) {
+            if (dayTypeCategory === 'special') {
+                return specialHolidayAssignments;
+            } else if (dayTypeCategory === 'weekend') {
+                return weekendAssignments;
+            } else if (dayTypeCategory === 'semi') {
+                return semiNormalAssignments;
+            } else { // normal
+                return normalDayAssignments;
+            }
+        }
+        
+        // Get assignment for a specific date (checks correct document based on day type)
+        function getAssignmentForDate(dateKey) {
+            try {
+                const date = new Date(dateKey + 'T00:00:00');
+                if (isNaN(date.getTime())) return null;
+                
+                const dayType = getDayType(date);
+                if (dayType === 'special-holiday') {
+                    return specialHolidayAssignments[dateKey] || null;
+                } else if (dayType === 'weekend-holiday') {
+                    return weekendAssignments[dateKey] || null;
+                } else if (dayType === 'semi-normal-day') {
+                    return semiNormalAssignments[dateKey] || null;
+                } else if (dayType === 'normal-day') {
+                    return normalDayAssignments[dateKey] || null;
+                }
+            } catch (error) {
+                console.error(`Error getting assignment for ${dateKey}:`, error);
+            }
+            // Fallback to legacy dutyAssignments
+            return dutyAssignments[dateKey] || null;
+        }
+        
+        // Set assignment for a specific date (saves to correct document based on day type)
+        function setAssignmentForDate(dateKey, assignmentValue) {
+            try {
+                const date = new Date(dateKey + 'T00:00:00');
+                if (isNaN(date.getTime())) {
+                    console.error(`Invalid date key: ${dateKey}`);
+                    return;
+                }
+                
+                const dayType = getDayType(date);
+                if (dayType === 'special-holiday') {
+                    specialHolidayAssignments[dateKey] = assignmentValue;
+                } else if (dayType === 'weekend-holiday') {
+                    weekendAssignments[dateKey] = assignmentValue;
+                } else if (dayType === 'semi-normal-day') {
+                    semiNormalAssignments[dateKey] = assignmentValue;
+                } else if (dayType === 'normal-day') {
+                    normalDayAssignments[dateKey] = assignmentValue;
+                }
+                
+                // Also update legacy dutyAssignments for backward compatibility
+                dutyAssignments[dateKey] = assignmentValue;
+            } catch (error) {
+                console.error(`Error setting assignment for ${dateKey}:`, error);
+            }
+        }
+        
+        // Delete assignment for a specific date
+        function deleteAssignmentForDate(dateKey) {
+            try {
+                const date = new Date(dateKey + 'T00:00:00');
+                if (isNaN(date.getTime())) return;
+                
+                const dayType = getDayType(date);
+                if (dayType === 'special-holiday') {
+                    delete specialHolidayAssignments[dateKey];
+                } else if (dayType === 'weekend-holiday') {
+                    delete weekendAssignments[dateKey];
+                } else if (dayType === 'semi-normal-day') {
+                    delete semiNormalAssignments[dateKey];
+                } else if (dayType === 'normal-day') {
+                    delete normalDayAssignments[dateKey];
+                }
+                
+                // Also delete from legacy dutyAssignments
+                delete dutyAssignments[dateKey];
+            } catch (error) {
+                console.error(`Error deleting assignment for ${dateKey}:`, error);
+            }
+        }
+        
+        // Get all assignments (merged from all day types) - for backward compatibility
+        function getAllAssignments() {
+            const all = {};
+            // Merge all day type assignments
+            Object.assign(all, normalDayAssignments);
+            Object.assign(all, semiNormalAssignments);
+            Object.assign(all, weekendAssignments);
+            Object.assign(all, specialHolidayAssignments);
+            return all;
+        }
         // Track intended assignments - when a person should be assigned but was skipped due to conflicts
         // Format: { "2026-02-05": { "1": "Person A", "2": "Person B", ... }, ... }
         // This ensures N-day rotation counts from the intended day, not the actual assignment day
@@ -1293,14 +1397,76 @@
                 // Initialize default special holidays if they don't exist
                 initializeDefaultSpecialHolidays();
                 
-                // Load assignments
+                // Load assignments from separate documents by day type
+                const normalDayDoc = await db.collection('dutyShifts').doc('normalDayAssignments').get();
+                if (normalDayDoc.exists) {
+                    const data = normalDayDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    delete data._migratedFrom;
+                    delete data._migrationDate;
+                    normalDayAssignments = data || {};
+                }
+                
+                const semiNormalDoc = await db.collection('dutyShifts').doc('semiNormalAssignments').get();
+                if (semiNormalDoc.exists) {
+                    const data = semiNormalDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    delete data._migratedFrom;
+                    delete data._migrationDate;
+                    semiNormalAssignments = data || {};
+                }
+                
+                const weekendDoc = await db.collection('dutyShifts').doc('weekendAssignments').get();
+                if (weekendDoc.exists) {
+                    const data = weekendDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    delete data._migratedFrom;
+                    delete data._migrationDate;
+                    weekendAssignments = data || {};
+                }
+                
+                const specialHolidayDoc = await db.collection('dutyShifts').doc('specialHolidayAssignments').get();
+                if (specialHolidayDoc.exists) {
+                    const data = specialHolidayDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    delete data._migratedFrom;
+                    delete data._migrationDate;
+                    specialHolidayAssignments = data || {};
+                }
+                
+                // Also load legacy assignments document for backward compatibility
                 const assignmentsDoc = await db.collection('dutyShifts').doc('assignments').get();
                 if (assignmentsDoc.exists) {
                     const data = assignmentsDoc.data();
-                    // Remove metadata fields
                     delete data.lastUpdated;
                     delete data.updatedBy;
                     dutyAssignments = data || {};
+                    // Merge legacy assignments into day-type-specific documents if they don't exist
+                    for (const dateKey in dutyAssignments) {
+                        if (dateKey === 'lastUpdated' || dateKey === 'updatedBy') continue;
+                        try {
+                            const date = new Date(dateKey + 'T00:00:00');
+                            if (isNaN(date.getTime())) continue;
+                            const dayType = getDayType(date);
+                            const assignmentValue = dutyAssignments[dateKey];
+                            
+                            if (dayType === 'special-holiday' && !specialHolidayAssignments[dateKey]) {
+                                specialHolidayAssignments[dateKey] = assignmentValue;
+                            } else if (dayType === 'weekend-holiday' && !weekendAssignments[dateKey]) {
+                                weekendAssignments[dateKey] = assignmentValue;
+                            } else if (dayType === 'semi-normal-day' && !semiNormalAssignments[dateKey]) {
+                                semiNormalAssignments[dateKey] = assignmentValue;
+                            } else if (dayType === 'normal-day' && !normalDayAssignments[dateKey]) {
+                                normalDayAssignments[dateKey] = assignmentValue;
+                            }
+                        } catch (error) {
+                            console.error(`Error processing legacy assignment ${dateKey}:`, error);
+                        }
+                    }
                 }
                 
                 // Load critical assignments
@@ -1327,20 +1493,21 @@
                         }
                         
                         if (peopleArray.length > 0) {
-                            // Ensure critical assignments are in dutyAssignments
-                            if (!dutyAssignments[dateKey]) {
-                                dutyAssignments[dateKey] = peopleArray.join(', ');
-                                console.log(`Restored critical assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
+                            // Ensure critical assignments are in day-type-specific documents
+                            const existingAssignment = getAssignmentForDate(dateKey);
+                            if (!existingAssignment) {
+                                setAssignmentForDate(dateKey, peopleArray.join(', '));
+                                console.log(`Restored critical assignment for ${dateKey}: ${peopleArray.join(', ')}`);
                             } else {
                                 // Merge critical assignments with existing ones
-                                const existing = dutyAssignments[dateKey].split(', ');
+                                const existing = existingAssignment.split(', ');
                                 peopleArray.forEach(person => {
                                     if (!existing.includes(person)) {
                                         existing.push(person);
                                     }
                                 });
-                                dutyAssignments[dateKey] = existing.join(', ');
-                                console.log(`Merged critical assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
+                                setAssignmentForDate(dateKey, existing.join(', '));
+                                console.log(`Merged critical assignment for ${dateKey}: ${existing.join(', ')}`);
                             }
                         }
                     });
@@ -1412,12 +1579,13 @@
                                         rebuiltCount++;
                                     }
                                     
-                                    // Also ensure it's in dutyAssignments (only if not already there)
-                                    if (!dutyAssignments[dateKey]) {
-                                        dutyAssignments[dateKey] = personGroupStr;
+                                    // Also ensure it's in day-type-specific assignments (only if not already there)
+                                    const existingAssignment = getAssignmentForDate(dateKey);
+                                    if (!existingAssignment) {
+                                        setAssignmentForDate(dateKey, personGroupStr);
                                         updatedCount++;
-                                    } else if (!dutyAssignments[dateKey].includes(personGroupStr)) {
-                                        dutyAssignments[dateKey] += `, ${personGroupStr}`;
+                                    } else if (!existingAssignment.includes(personGroupStr)) {
+                                        setAssignmentForDate(dateKey, existingAssignment + `, ${personGroupStr}`);
                                         updatedCount++;
                                     }
                                 }
@@ -1439,7 +1607,6 @@
         function loadDataFromLocalStorage() {
             const savedGroups = localStorage.getItem('dutyShiftsGroups');
             const savedHolidays = localStorage.getItem('dutyShiftsHolidays');
-            const savedAssignments = localStorage.getItem('dutyShiftsAssignments');
             
             if (savedGroups) {
                 const parsed = JSON.parse(savedGroups);
@@ -1460,8 +1627,53 @@
             // Initialize default special holidays if they don't exist
             initializeDefaultSpecialHolidays();
             
+            // Load separate day-type assignments
+            const savedNormalDayAssignments = localStorage.getItem('dutyShiftsNormalDayAssignments');
+            if (savedNormalDayAssignments) {
+                normalDayAssignments = JSON.parse(savedNormalDayAssignments);
+            }
+            
+            const savedSemiNormalAssignments = localStorage.getItem('dutyShiftsSemiNormalAssignments');
+            if (savedSemiNormalAssignments) {
+                semiNormalAssignments = JSON.parse(savedSemiNormalAssignments);
+            }
+            
+            const savedWeekendAssignments = localStorage.getItem('dutyShiftsWeekendAssignments');
+            if (savedWeekendAssignments) {
+                weekendAssignments = JSON.parse(savedWeekendAssignments);
+            }
+            
+            const savedSpecialHolidayAssignments = localStorage.getItem('dutyShiftsSpecialHolidayAssignments');
+            if (savedSpecialHolidayAssignments) {
+                specialHolidayAssignments = JSON.parse(savedSpecialHolidayAssignments);
+            }
+            
+            // Also load legacy assignments for backward compatibility
+            const savedAssignments = localStorage.getItem('dutyShiftsAssignments');
             if (savedAssignments) {
                 dutyAssignments = JSON.parse(savedAssignments);
+                // Merge legacy assignments into day-type-specific documents if they don't exist
+                for (const dateKey in dutyAssignments) {
+                    if (dateKey === 'lastUpdated' || dateKey === 'updatedBy') continue;
+                    try {
+                        const date = new Date(dateKey + 'T00:00:00');
+                        if (isNaN(date.getTime())) continue;
+                        const dayType = getDayType(date);
+                        const assignmentValue = dutyAssignments[dateKey];
+                        
+                        if (dayType === 'special-holiday' && !specialHolidayAssignments[dateKey]) {
+                            specialHolidayAssignments[dateKey] = assignmentValue;
+                        } else if (dayType === 'weekend-holiday' && !weekendAssignments[dateKey]) {
+                            weekendAssignments[dateKey] = assignmentValue;
+                        } else if (dayType === 'semi-normal-day' && !semiNormalAssignments[dateKey]) {
+                            semiNormalAssignments[dateKey] = assignmentValue;
+                        } else if (dayType === 'normal-day' && !normalDayAssignments[dateKey]) {
+                            normalDayAssignments[dateKey] = assignmentValue;
+                        }
+                    } catch (error) {
+                        console.error(`Error processing legacy assignment ${dateKey}:`, error);
+                    }
+                }
             }
             
             // Load critical assignments
@@ -1469,22 +1681,22 @@
             if (savedCriticalAssignments) {
                 criticalAssignments = JSON.parse(savedCriticalAssignments);
                 
-                // Restore critical assignments to dutyAssignments if they're missing
+                // Restore critical assignments to day-type-specific documents if they're missing
                 Object.keys(criticalAssignments).forEach(dateKey => {
                     const criticalPeople = criticalAssignments[dateKey];
                     if (Array.isArray(criticalPeople) && criticalPeople.length > 0) {
-                        // Ensure critical assignments are in dutyAssignments
-                        if (!dutyAssignments[dateKey]) {
-                            dutyAssignments[dateKey] = criticalPeople.join(', ');
+                        const existingAssignment = getAssignmentForDate(dateKey);
+                        if (!existingAssignment) {
+                            setAssignmentForDate(dateKey, criticalPeople.join(', '));
                         } else {
                             // Merge critical assignments with existing ones
-                            const existing = dutyAssignments[dateKey].split(', ');
+                            const existing = existingAssignment.split(', ');
                             criticalPeople.forEach(person => {
                                 if (!existing.includes(person)) {
                                     existing.push(person);
                                 }
                             });
-                            dutyAssignments[dateKey] = existing.join(', ');
+                            setAssignmentForDate(dateKey, existing.join(', '));
                         }
                     }
                 });
@@ -1534,9 +1746,27 @@
                     updatedBy: user.uid
                 });
                 
-                // Save assignments
-                await db.collection('dutyShifts').doc('assignments').set({
-                    ...dutyAssignments,
+                // Save assignments to separate documents by day type
+                await db.collection('dutyShifts').doc('normalDayAssignments').set({
+                    ...normalDayAssignments,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
+                
+                await db.collection('dutyShifts').doc('semiNormalAssignments').set({
+                    ...semiNormalAssignments,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
+                
+                await db.collection('dutyShifts').doc('weekendAssignments').set({
+                    ...weekendAssignments,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
+                
+                await db.collection('dutyShifts').doc('specialHolidayAssignments').set({
+                    ...specialHolidayAssignments,
                     lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                     updatedBy: user.uid
                 });
@@ -1703,6 +1933,12 @@
             localStorage.setItem('dutyShiftsGroups', JSON.stringify(groups));
             localStorage.setItem('dutyShiftsHolidays', JSON.stringify(holidays));
             localStorage.setItem('dutyShiftsSpecialHolidays', JSON.stringify(specialHolidays));
+            // Save separate day-type assignments
+            localStorage.setItem('dutyShiftsNormalDayAssignments', JSON.stringify(normalDayAssignments));
+            localStorage.setItem('dutyShiftsSemiNormalAssignments', JSON.stringify(semiNormalAssignments));
+            localStorage.setItem('dutyShiftsWeekendAssignments', JSON.stringify(weekendAssignments));
+            localStorage.setItem('dutyShiftsSpecialHolidayAssignments', JSON.stringify(specialHolidayAssignments));
+            // Also save legacy dutyAssignments for backward compatibility
             localStorage.setItem('dutyShiftsAssignments', JSON.stringify(dutyAssignments));
             localStorage.setItem('dutyShiftsCriticalAssignments', JSON.stringify(criticalAssignments));
         }
@@ -2321,7 +2557,7 @@
                         
                         // Always ensure this person's assignment is present for this date
                         // This is a critical baseline assignment that must be preserved
-                        const existingAssignment = dutyAssignments[dateKey];
+                        const existingAssignment = getAssignmentForDate(dateKey);
                         const personGroupStr = `${personKey} (Ομάδα ${currentGroup})`;
                         
                         // Mark this as a critical assignment (from last duty) - NEVER delete these
@@ -2340,20 +2576,20 @@
                             console.error(`[${mode}] ERROR: Failed to add to criticalAssignments for ${dateKey}!`);
                         }
                         
-                        // ALWAYS update dutyAssignments - even if editing, we want the new dates
+                        // ALWAYS update assignments - even if editing, we want the new dates
                         if (existingAssignment) {
                             // Check if this person is already assigned
                             if (!existingAssignment.includes(personGroupStr)) {
                                 // Add this person to existing assignments
-                                dutyAssignments[dateKey] = existingAssignment + `, ${personGroupStr}`;
-                                console.log(`[${mode}] Added to existing assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
+                                setAssignmentForDate(dateKey, existingAssignment + `, ${personGroupStr}`);
+                                console.log(`[${mode}] Added to existing assignment for ${dateKey}: ${existingAssignment + ', ' + personGroupStr}`);
                             } else {
                                 console.log(`[${mode}] Person already in assignment for ${dateKey}`);
                             }
                         } else {
                             // Create new assignment
-                            dutyAssignments[dateKey] = personGroupStr;
-                            console.log(`[${mode}] Created new assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
+                            setAssignmentForDate(dateKey, personGroupStr);
+                            console.log(`[${mode}] Created new assignment for ${dateKey}: ${personGroupStr}`);
                         }
                         
                         // Verify it was added correctly
@@ -4210,19 +4446,20 @@
                 return;
             }
             
-            // CRITICAL: Restore critical assignments to dutyAssignments before rendering
+            // CRITICAL: Restore critical assignments to day-type-specific documents before rendering
             // This ensures manually entered last duty dates are always visible
             Object.keys(criticalAssignments).forEach(dateKey => {
                 const criticalPeople = criticalAssignments[dateKey];
                 if (Array.isArray(criticalPeople) && criticalPeople.length > 0) {
                     const criticalStr = criticalPeople.join(', ');
-                    if (!dutyAssignments[dateKey]) {
+                    const existingAssignment = getAssignmentForDate(dateKey);
+                    if (!existingAssignment) {
                         // No assignment exists, add the critical one
-                        dutyAssignments[dateKey] = criticalStr;
+                        setAssignmentForDate(dateKey, criticalStr);
                         console.log(`Restored critical assignment for ${dateKey}: ${criticalStr}`);
                     } else {
                         // Assignment exists, merge critical people if not already present
-                        const existing = dutyAssignments[dateKey].split(', ');
+                        const existing = existingAssignment.split(', ');
                         let needsUpdate = false;
                         criticalPeople.forEach(person => {
                             if (!existing.includes(person)) {
@@ -4231,8 +4468,8 @@
                             }
                         });
                         if (needsUpdate) {
-                            dutyAssignments[dateKey] = existing.join(', ');
-                            console.log(`Merged critical assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
+                            setAssignmentForDate(dateKey, existing.join(', '));
+                            console.log(`Merged critical assignment for ${dateKey}: ${existing.join(', ')}`);
                         }
                     }
                 }
@@ -4278,7 +4515,8 @@
                 const dayType = getDayType(date);
                 const isToday = date.getTime() === today.getTime();
                 const key = formatDateKey(date);
-                const assignment = dutyAssignments[key];
+                // Get assignment from the correct day-type-specific document
+                const assignment = getAssignmentForDate(key);
                 
                 const dayDiv = document.createElement('div');
                 // dayType is determined by getDayType() which handles:
@@ -4425,7 +4663,28 @@
 
         // Check if a person has duty on a specific day
         function hasDutyOnDay(dayKey, person, groupNum) {
-            const assignment = dutyAssignments[dayKey];
+            // Determine which document to check based on day type
+            const date = new Date(dayKey + 'T00:00:00');
+            if (isNaN(date.getTime())) return false;
+            
+            const dayType = getDayType(date);
+            let assignment = null;
+            
+            if (dayType === 'special-holiday') {
+                assignment = specialHolidayAssignments[dayKey];
+            } else if (dayType === 'weekend-holiday') {
+                assignment = weekendAssignments[dayKey];
+            } else if (dayType === 'semi-normal-day') {
+                assignment = semiNormalAssignments[dayKey];
+            } else if (dayType === 'normal-day') {
+                assignment = normalDayAssignments[dayKey];
+            }
+            
+            // Also check legacy dutyAssignments for backward compatibility
+            if (!assignment) {
+                assignment = dutyAssignments[dayKey];
+            }
+            
             if (!assignment) return false;
             
             const personGroupStr = `${person} (Ομάδα ${groupNum})`;
@@ -4927,18 +5186,23 @@
 
         // Helper function to add/remove person from day assignment
         function assignPersonToDay(dayKey, person, groupNum) {
-            if (dutyAssignments[dayKey]) {
-                if (!dutyAssignments[dayKey].includes(`(Ομάδα ${groupNum})`)) {
-                    dutyAssignments[dayKey] += `, ${person} (Ομάδα ${groupNum})`;
+            const existingAssignment = getAssignmentForDate(dayKey);
+            const personGroupStr = `${person} (Ομάδα ${groupNum})`;
+            
+            if (existingAssignment) {
+                if (!existingAssignment.includes(personGroupStr)) {
+                    // Add to existing assignment
+                    setAssignmentForDate(dayKey, existingAssignment + `, ${personGroupStr}`);
                 } else {
                     // Replace existing assignment for this group
-                    const parts = dutyAssignments[dayKey].split(',').map(p => p.trim()).filter(p => p);
+                    const parts = existingAssignment.split(',').map(p => p.trim()).filter(p => p);
                     const filtered = parts.filter(p => !p.includes(`(Ομάδα ${groupNum})`));
-                    filtered.push(`${person} (Ομάδα ${groupNum})`);
-                    dutyAssignments[dayKey] = filtered.join(', ');
+                    filtered.push(personGroupStr);
+                    setAssignmentForDate(dayKey, filtered.join(', '));
                 }
             } else {
-                dutyAssignments[dayKey] = `${person} (Ομάδα ${groupNum})`;
+                // Create new assignment
+                setAssignmentForDate(dayKey, personGroupStr);
             }
             
             // Clear intended assignment if person is now actually assigned on this day
@@ -4952,9 +5216,10 @@
         }
 
         function removePersonFromDay(dayKey, person, groupNum) {
-            if (!dutyAssignments[dayKey]) return;
+            const existingAssignment = getAssignmentForDate(dayKey);
+            if (!existingAssignment) return;
             
-            const parts = dutyAssignments[dayKey].split(',').map(p => p.trim()).filter(p => p);
+            const parts = existingAssignment.split(',').map(p => p.trim()).filter(p => p);
             const filtered = parts.filter(p => {
                 const match = p.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                 if (match && parseInt(match[2]) === groupNum) {
@@ -4964,9 +5229,9 @@
             });
             
             if (filtered.length === 0) {
-                delete dutyAssignments[dayKey];
+                deleteAssignmentForDate(dayKey);
             } else {
-                dutyAssignments[dayKey] = filtered.join(', ');
+                setAssignmentForDate(dayKey, filtered.join(', '));
             }
         }
 
@@ -5449,7 +5714,7 @@
                         }
                         
                         // Skip if day already has assignment for this group
-                        const existingAssignment = dutyAssignments[dayKey];
+                        const existingAssignment = getAssignmentForDate(dayKey);
                         if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
                             continue;
                         }
@@ -5521,7 +5786,7 @@
                     // Process each day in order
                     days.forEach((dayKey) => {
                         // Skip if day already has assignment for this group (critical assignments)
-                        const existingAssignment = dutyAssignments[dayKey];
+                        const existingAssignment = getAssignmentForDate(dayKey);
                         if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
                             return;
                         }
@@ -5639,15 +5904,9 @@
                             assignedPerson = personEligibility[0].person;
                         }
                         
-                        // Assign person to day
+                        // Assign person to day (uses setAssignmentForDate which saves to correct document)
                         if (assignedPerson) {
-                            if (dutyAssignments[dayKey]) {
-                                if (!dutyAssignments[dayKey].includes(`(Ομάδα ${groupNum})`)) {
-                                    dutyAssignments[dayKey] += `, ${assignedPerson} (Ομάδα ${groupNum})`;
-                                }
-                            } else {
-                                dutyAssignments[dayKey] = `${assignedPerson} (Ομάδα ${groupNum})`;
-                            }
+                            assignPersonToDay(dayKey, assignedPerson, groupNum);
                         }
                         
                         // If person was skipped due to conflict, find next available day for them
@@ -5655,14 +5914,10 @@
                             const nextAvailableDay = findNextAvailableDayForPerson(skippedPerson, groupNum, dayTypeCategory, dayKey, dayTypeLists);
                             if (nextAvailableDay) {
                                 // Check if next available day already has assignment for this group
-                                const nextAssignment = dutyAssignments[nextAvailableDay];
+                                const nextAssignment = getAssignmentForDate(nextAvailableDay);
                                 if (!nextAssignment || !nextAssignment.includes(`(Ομάδα ${groupNum})`)) {
                                     // Assign skipped person to next available day
-                                    if (nextAssignment) {
-                                        dutyAssignments[nextAvailableDay] += `, ${skippedPerson} (Ομάδα ${groupNum})`;
-                                    } else {
-                                        dutyAssignments[nextAvailableDay] = `${skippedPerson} (Ομάδα ${groupNum})`;
-                                    }
+                                    assignPersonToDay(nextAvailableDay, skippedPerson, groupNum);
                                 }
                             }
                         }
@@ -6462,8 +6717,8 @@
                     
                     if (groupPeople.length === 0) continue;
                     
-                    // Get who is actually assigned
-                    const assignment = dutyAssignments[dayKey] || '';
+                    // Get who is actually assigned (from correct day-type document)
+                    const assignment = getAssignmentForDate(dayKey) || '';
                     let assignedPerson = null;
                     if (assignment) {
                         const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
