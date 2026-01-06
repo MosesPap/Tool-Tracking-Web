@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.13 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.14 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -520,7 +520,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.13</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.14</span></h4>
             </div>
         </div>
     </div>
@@ -5449,34 +5449,30 @@
                         const lastDuties = groupData.lastDuties?.[person] || {};
                         const lastSpecialDutyStr = lastDuties.special;
                         
-                        let nextAssignmentIndex;
+                        let startIndex = personIndex; // Default: start from rotation position
                         
                         if (lastSpecialDutyStr) {
-                            // Person has a last duty date
+                            // Person has a last duty date - find where they should start
                             const lastSpecialDuty = new Date(lastSpecialDutyStr + 'T00:00:00');
                             
-                            // Find the index of the special holiday that matches or is closest before their last duty date
+                            // Find the index of the special holiday that matches their last duty date
                             let lastDutyIndex = -1;
                             for (let i = 0; i < allSpecialHolidays.length; i++) {
                                 const holidayDate = allSpecialHolidays[i].date;
-                                if (holidayDate.getTime() === lastSpecialDuty.getTime()) {
-                                    // Exact match
+                                // Check if dates match (same day, month, year)
+                                if (holidayDate.getFullYear() === lastSpecialDuty.getFullYear() &&
+                                    holidayDate.getMonth() === lastSpecialDuty.getMonth() &&
+                                    holidayDate.getDate() === lastSpecialDuty.getDate()) {
                                     lastDutyIndex = i;
-                                    break;
-                                } else if (holidayDate > lastSpecialDuty) {
-                                    // This holiday is after their last duty - use previous one
-                                    if (i > 0) {
-                                        lastDutyIndex = i - 1;
-                                    }
                                     break;
                                 }
                             }
                             
                             if (lastDutyIndex >= 0) {
-                                // Found their last duty in the list - count forward N holidays
-                                nextAssignmentIndex = lastDutyIndex + rotationDays;
+                                // Found their last duty in the list - next assignment is N holidays later
+                                startIndex = lastDutyIndex + rotationDays;
                             } else {
-                                // Last duty is before all holidays in our range
+                                // Last duty is not in our 10-year range
                                 // Count special holidays between last duty and first holiday in range
                                 const firstHolidayDate = allSpecialHolidays[0].date;
                                 let specialHolidaysCount = 0;
@@ -5489,30 +5485,44 @@
                                     tempDate.setDate(tempDate.getDate() + 1);
                                 }
                                 
-                                // Calculate which position in rotation they should be at
-                                // After specialHolidaysCount holidays, they should be at position: (specialHolidaysCount % rotationDays)
-                                // But we want their NEXT assignment, so add rotationDays
-                                const currentRotationPosition = specialHolidaysCount % rotationDays;
-                                const offset = (rotationDays - currentRotationPosition) % rotationDays;
+                                // Calculate starting position: after specialHolidaysCount holidays have passed,
+                                // the next person in rotation should be at position (specialHolidaysCount % rotationDays)
+                                // But we need to find where THIS person should be
+                                const rotationsCompleted = Math.floor(specialHolidaysCount / rotationDays);
+                                const positionInCurrentRotation = specialHolidaysCount % rotationDays;
                                 
-                                // Start from personIndex, but adjust based on how many rotations have passed
-                                nextAssignmentIndex = personIndex + offset;
+                                // This person's position in rotation is personIndex
+                                // If positionInCurrentRotation <= personIndex, they've already had their turn in current rotation
+                                // So their next assignment is in the next rotation
+                                if (positionInCurrentRotation <= personIndex) {
+                                    startIndex = personIndex + (rotationsCompleted + 1) * rotationDays - positionInCurrentRotation;
+                                } else {
+                                    // They haven't had their turn yet in current rotation
+                                    startIndex = personIndex + rotationsCompleted * rotationDays - positionInCurrentRotation;
+                                }
                                 
-                                // Ensure it's at least rotationDays from the start
-                                if (nextAssignmentIndex < rotationDays) {
-                                    nextAssignmentIndex = personIndex + rotationDays;
+                                // Ensure startIndex is valid
+                                if (startIndex < 0) {
+                                    startIndex = personIndex;
                                 }
                             }
-                        } else {
-                            // No last duty - assign based on rotation position (personIndex)
-                            // First person gets 1st, 4th, 7th... (index 0, 3, 6...)
-                            // Second person gets 2nd, 5th, 8th... (index 1, 4, 7...)
-                            nextAssignmentIndex = personIndex;
                         }
                         
-                        // Assign this person to every Nth special holiday starting from nextAssignmentIndex
-                        for (let i = nextAssignmentIndex; i < allSpecialHolidays.length; i += rotationDays) {
-                            groupAssignments[groupNum][i] = person;
+                        // Assign this person to every Nth special holiday starting from startIndex
+                        // Make sure we assign at least one holiday, even if startIndex is beyond the list
+                        if (startIndex < allSpecialHolidays.length) {
+                            for (let i = startIndex; i < allSpecialHolidays.length; i += rotationDays) {
+                                groupAssignments[groupNum][i] = person;
+                            }
+                        } else {
+                            // If startIndex is beyond the list, assign to the last few holidays based on rotation
+                            // This ensures everyone gets at least some assignments
+                            const remainder = startIndex % rotationDays;
+                            for (let i = remainder; i < allSpecialHolidays.length; i += rotationDays) {
+                                if (!groupAssignments[groupNum][i]) {
+                                    groupAssignments[groupNum][i] = person;
+                                }
+                            }
                         }
                     });
                 }
