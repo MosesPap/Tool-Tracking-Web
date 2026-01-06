@@ -669,6 +669,9 @@
                     <button class="btn btn-sm btn-success ms-2" onclick="showExcelPreview()">
                         <i class="fas fa-file-excel me-1"></i>Δημιουργία Excel
                     </button>
+                    <button class="btn btn-sm btn-warning ms-2" onclick="migrateAssignmentsByDayType()">
+                        <i class="fas fa-exchange-alt me-1"></i>Μεταφορά Ανά Τύπο Ημέρας
+                    </button>
                     <button class="btn btn-sm btn-warning ms-2" onclick="analyzeRotationViolations()">
                         <i class="fas fa-exclamation-triangle me-1"></i>Έλεγχος Αναθέσεων Υπηρεσιών
                     </button>
@@ -1557,6 +1560,141 @@
                 console.error('Error saving data to Firebase:', error);
                 // Fallback to localStorage
                 saveDataToLocalStorage();
+            }
+        }
+
+        // Migration function: Split assignments by day type
+        async function migrateAssignmentsByDayType() {
+            try {
+                if (!window.db) {
+                    alert('Firebase not ready');
+                    return;
+                }
+                
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                
+                if (!user) {
+                    alert('User not authenticated');
+                    return;
+                }
+                
+                // Confirm migration
+                if (!confirm('Αυτή η λειτουργία θα διαχωρίσει τις υπηρεσίες σε 4 ξεχωριστά έγγραφα ανά τύπο ημέρας.\n\nΣυνέχεια;')) {
+                    return;
+                }
+                
+                console.log('Starting migration: Splitting assignments by day type...');
+                
+                // Load current assignments
+                const assignmentsDoc = await db.collection('dutyShifts').doc('assignments').get();
+                if (!assignmentsDoc.exists) {
+                    alert('Δεν βρέθηκε έγγραφο assignments');
+                    return;
+                }
+                
+                const data = assignmentsDoc.data();
+                // Remove metadata fields
+                const assignments = { ...data };
+                delete assignments.lastUpdated;
+                delete assignments.updatedBy;
+                
+                // Initialize separate assignment objects
+                const normalDayAssignments = {};
+                const semiNormalAssignments = {};
+                const weekendAssignments = {};
+                const specialHolidayAssignments = {};
+                
+                let processedCount = 0;
+                let errorCount = 0;
+                
+                // Process each date
+                for (const dateKey in assignments) {
+                    if (dateKey === 'lastUpdated' || dateKey === 'updatedBy') continue;
+                    
+                    try {
+                        // Parse date key (format: YYYY-MM-DD)
+                        const date = new Date(dateKey + 'T00:00:00');
+                        if (isNaN(date.getTime())) {
+                            console.warn(`Invalid date key: ${dateKey}`);
+                            errorCount++;
+                            continue;
+                        }
+                        
+                        // Determine day type
+                        const dayType = getDayType(date);
+                        const assignmentValue = assignments[dateKey];
+                        
+                        // Split based on day type
+                        if (dayType === 'special-holiday') {
+                            specialHolidayAssignments[dateKey] = assignmentValue;
+                        } else if (dayType === 'weekend-holiday') {
+                            weekendAssignments[dateKey] = assignmentValue;
+                        } else if (dayType === 'semi-normal-day') {
+                            semiNormalAssignments[dateKey] = assignmentValue;
+                        } else if (dayType === 'normal-day') {
+                            normalDayAssignments[dateKey] = assignmentValue;
+                        } else {
+                            console.warn(`Unknown day type for ${dateKey}: ${dayType}`);
+                            errorCount++;
+                            continue;
+                        }
+                        
+                        processedCount++;
+                    } catch (error) {
+                        console.error(`Error processing ${dateKey}:`, error);
+                        errorCount++;
+                    }
+                }
+                
+                // Save to separate documents
+                console.log('Saving split assignments...');
+                
+                await db.collection('dutyShifts').doc('normalDayAssignments').set({
+                    ...normalDayAssignments,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid,
+                    _migratedFrom: 'assignments',
+                    _migrationDate: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                await db.collection('dutyShifts').doc('semiNormalAssignments').set({
+                    ...semiNormalAssignments,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid,
+                    _migratedFrom: 'assignments',
+                    _migrationDate: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                await db.collection('dutyShifts').doc('weekendAssignments').set({
+                    ...weekendAssignments,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid,
+                    _migratedFrom: 'assignments',
+                    _migrationDate: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                await db.collection('dutyShifts').doc('specialHolidayAssignments').set({
+                    ...specialHolidayAssignments,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid,
+                    _migratedFrom: 'assignments',
+                    _migrationDate: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                console.log('Migration completed!');
+                console.log(`Processed: ${processedCount} dates`);
+                console.log(`Errors: ${errorCount}`);
+                console.log(`Normal days: ${Object.keys(normalDayAssignments).length}`);
+                console.log(`Semi-normal days: ${Object.keys(semiNormalAssignments).length}`);
+                console.log(`Weekend/Holiday days: ${Object.keys(weekendAssignments).length}`);
+                console.log(`Special holidays: ${Object.keys(specialHolidayAssignments).length}`);
+                
+                alert(`Μεταφορά ολοκληρώθηκε!\n\nΕπεξεργάστηκε: ${processedCount} ημερομηνίες\nΣφάλματα: ${errorCount}\n\nΚαθημερινές: ${Object.keys(normalDayAssignments).length}\nΗμιαργίες: ${Object.keys(semiNormalAssignments).length}\nΣαββατοκύριακα/Αργίες: ${Object.keys(weekendAssignments).length}\nΕιδικές Αργίες: ${Object.keys(specialHolidayAssignments).length}`);
+                
+            } catch (error) {
+                console.error('Error during migration:', error);
+                alert('Σφάλμα κατά τη μεταφορά: ' + error.message);
             }
         }
 
