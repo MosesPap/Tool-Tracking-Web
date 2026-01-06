@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.10 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.11 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -520,7 +520,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.10</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.11</span></h4>
             </div>
         </div>
     </div>
@@ -5447,73 +5447,52 @@
                         personAssignments[person] = [];
                     });
                     
-                    // For each special holiday, determine who should be assigned
-                    allSpecialHolidays.forEach((holiday, index) => {
-                        // Find which person should be assigned based on rotation
-                        // Start from each person's last special duty date
-                        const personEligibility = [];
+                    // For each person, calculate their assignments based on N-day rotation
+                    specialPeople.forEach((person, personIndex) => {
+                        const lastDuties = groupData.lastDuties?.[person] || {};
+                        const lastSpecialDutyStr = lastDuties.special;
                         
-                        for (let i = 0; i < specialPeople.length; i++) {
-                            const person = specialPeople[i];
-                            const lastDuties = groupData.lastDuties?.[person] || {};
-                            const lastSpecialDutyStr = lastDuties.special;
-                            
-                            let daysSinceLastDuty = Infinity;
-                            
-                            if (lastSpecialDutyStr) {
-                                // Parse the last special duty date
-                                const lastSpecialDuty = new Date(lastSpecialDutyStr + 'T00:00:00');
-                                
-                                // Count special holidays between last duty and current holiday
-                                let specialHolidaysCount = 0;
-                                const tempDate = new Date(lastSpecialDuty);
-                                tempDate.setDate(tempDate.getDate() + 1);
-                                
-                                while (tempDate < holiday.date) {
-                                    if (isSpecialHoliday(tempDate)) {
-                                        specialHolidaysCount++;
-                                    }
-                                    tempDate.setDate(tempDate.getDate() + 1);
-                                }
-                                
-                                daysSinceLastDuty = specialHolidaysCount;
+                        // Find starting point: last special duty date, or first special holiday if no date
+                        let startDate = null;
+                        if (lastSpecialDutyStr) {
+                            startDate = new Date(lastSpecialDutyStr + 'T00:00:00');
+                        } else {
+                            // If no last duty date, start from first special holiday
+                            if (allSpecialHolidays.length > 0) {
+                                startDate = new Date(allSpecialHolidays[0].date);
                             }
-                            
-                            const isEligible = daysSinceLastDuty >= rotationDays || daysSinceLastDuty === Infinity;
-                            
-                            personEligibility.push({
-                                person: person,
-                                index: i,
-                                daysSinceLastDuty: daysSinceLastDuty,
-                                isEligible: isEligible,
-                                lastSpecialDuty: lastSpecialDutyStr || 'Δεν έχει'
-                            });
                         }
                         
-                        // Sort: eligible first, then by days since last duty, then by rotation order
-                        personEligibility.sort((a, b) => {
-                            if (a.isEligible !== b.isEligible) {
-                                return b.isEligible - a.isEligible;
-                            }
-                            if (a.daysSinceLastDuty !== b.daysSinceLastDuty) {
-                                return b.daysSinceLastDuty - a.daysSinceLastDuty;
-                            }
-                            return a.index - b.index;
-                        });
+                        if (!startDate) return;
                         
-                        // Assign to first eligible person
-                        if (personEligibility.length > 0 && personEligibility[0].isEligible) {
-                            const assignedPerson = personEligibility[0].person;
-                            personAssignments[assignedPerson].push({
+                        // Find the index of the first special holiday on or after start date
+                        let startIndex = 0;
+                        for (let i = 0; i < allSpecialHolidays.length; i++) {
+                            if (allSpecialHolidays[i].date >= startDate) {
+                                startIndex = i;
+                                break;
+                            }
+                        }
+                        
+                        // If person has a last duty date, count forward N special holidays from that date
+                        // If no last duty date, assign based on rotation position
+                        let nextAssignmentIndex;
+                        if (lastSpecialDutyStr) {
+                            // Count forward N special holidays from last duty
+                            nextAssignmentIndex = startIndex + rotationDays;
+                        } else {
+                            // No last duty - assign based on rotation position (personIndex)
+                            // First person gets 1st, 4th, 7th... (index 0, 3, 6...)
+                            // Second person gets 2nd, 5th, 8th... (index 1, 4, 7...)
+                            nextAssignmentIndex = personIndex;
+                        }
+                        
+                        // Assign this person to every Nth special holiday starting from nextAssignmentIndex
+                        for (let i = nextAssignmentIndex; i < allSpecialHolidays.length; i += rotationDays) {
+                            const holiday = allSpecialHolidays[i];
+                            personAssignments[person].push({
                                 holiday: holiday,
-                                daysSince: personEligibility[0].daysSinceLastDuty
-                            });
-                        } else if (personEligibility.length > 0) {
-                            // If no one is eligible, assign to first person in rotation
-                            const assignedPerson = personEligibility[0].person;
-                            personAssignments[assignedPerson].push({
-                                holiday: holiday,
-                                daysSince: personEligibility[0].daysSinceLastDuty
+                                position: i + 1 // 1-based position
                             });
                         }
                     });
@@ -5544,14 +5523,11 @@
                         
                         if (assignments.length > 0) {
                             html += '<details><summary>Προβολή</summary><ul class="list-unstyled mt-2">';
-                            assignments.forEach(({ holiday, daysSince }) => {
+                            assignments.forEach(({ holiday, position }) => {
                                 const dateStr = holiday.date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                 const dayName = getGreekDayName(holiday.date);
                                 html += `<li class="mb-1">`;
                                 html += `<strong>${dateStr}</strong> (${dayName}) - ${holiday.holidayName}`;
-                                if (daysSince !== Infinity) {
-                                    html += ` <small class="text-muted">(${daysSince}/${rotationDays} ημέρες)</small>`;
-                                }
                                 html += `</li>`;
                             });
                             html += '</ul></details>';
