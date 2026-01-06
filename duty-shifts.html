@@ -4995,10 +4995,11 @@
                     // we need to count from the NEXT weekend/holiday day after it (not from the skipped one)
                     if (dayTypeCategory === 'weekend' && i + 1 < daysOfType.length) {
                         // The next day in the daysOfType array is the next weekend/holiday day
-                        // Count from there instead of from the skipped weekend
+                        // Count from the day AFTER that next weekend (start counting tomorrow)
                         const nextWeekendIndex = i + 1;
                         if (nextWeekendIndex < currentIndex) {
-                            return currentIndex - nextWeekendIndex;
+                            // Start counting from the day after the next weekend
+                            return currentIndex - nextWeekendIndex - 1;
                         }
                     }
                     break;
@@ -5008,11 +5009,10 @@
             // Use intended assignment if it's more recent than actual assignment
             // This ensures rotation counts from when person SHOULD have been assigned, not when they actually were
             if (intendedDutyIndex !== -1 && (lastDutyIndex === -1 || intendedDutyIndex > lastDutyIndex)) {
-                // Count from intended assignment
-                // If duty was on index i, we start counting from index i+1 (tomorrow)
-                // So days passed = currentIndex - intendedDutyIndex - 1
-                const daysPassed = currentIndex - intendedDutyIndex - 1;
-                return daysPassed >= 0 ? daysPassed : 0;
+                // Count from the day AFTER the intended assignment (start counting tomorrow)
+                // If intended duty was at index i, we start counting from index i+1
+                // So days passed = currentIndex - (intendedDutyIndex + 1) = currentIndex - intendedDutyIndex - 1
+                return currentIndex - intendedDutyIndex - 1;
             }
             
             // Check lastDuties data first (manually entered last duties)
@@ -5076,11 +5076,12 @@
                     
                     // Only count if it's the same day type category
                     if (checkTypeCategory === dayTypeCategory && hasDutyOnDay(checkKey, person, groupNum)) {
-                        // Found a previous duty - count days of the same type
-                        // Start counting from the day AFTER the last duty (tomorrow)
+                        // Found a previous duty - calculate days between
+                        const daysBetween = Math.floor((currentDate - checkDate) / (1000 * 60 * 60 * 24));
+                        // Count only days of the same type between them
                         let sameTypeDays = 0;
                         const tempDate = new Date(checkDate);
-                        tempDate.setDate(tempDate.getDate() + 1); // Start from tomorrow
+                        tempDate.setDate(tempDate.getDate() + 1);
                         while (tempDate < currentDate) {
                             const tempDayType = getDayType(tempDate);
                             let tempTypeCategory = 'normal';
@@ -5109,10 +5110,9 @@
             }
             
             // Count how many days of this type between last duty and current day
-            // If duty was on index i, we start counting from index i+1 (tomorrow)
-            // So days passed = currentIndex - lastDutyIndex - 1
-            const daysPassed = currentIndex - lastDutyIndex - 1;
-            return daysPassed >= 0 ? daysPassed : 0;
+            // If last duty was at index i, we start counting from index i+1 (tomorrow)
+            // So days passed = currentIndex - (lastDutyIndex + 1) = currentIndex - lastDutyIndex - 1
+            return currentIndex - lastDutyIndex - 1;
         }
 
         // Open calculate duties modal
@@ -5364,9 +5364,7 @@
                                 
                                 const daysSince = countDaysSinceLastDuty(dateKey, person, groupNum, 'special', dayTypeLists, startDate);
                                 const rotationDays = groupPeople.length;
-                                // For special holidays, require 2N days instead of N
-                                const requiredDays = rotationDays * 2;
-                                const isEligible = daysSince >= requiredDays || daysSince === Infinity;
+                                const isEligible = daysSince >= rotationDays || daysSince === Infinity;
                                 
                                 personEligibility.push({
                                     person: person,
@@ -5403,9 +5401,7 @@
                                 // Show days counted in parentheses
                                 if (assignedPersonDaysSince !== null && assignedPersonDaysSince !== Infinity) {
                                     const rotationDays = groupPeople.length;
-                                    // For weekends, show N (normal rotation)
-                                    const requiredDays = rotationDays;
-                                    daysCountInfo = ` <span class="text-info">(${assignedPersonDaysSince}/${requiredDays} ημέρες)</span>`;
+                                    daysCountInfo = ` <span class="text-info">(${assignedPersonDaysSince}/${rotationDays} ημέρες)</span>`;
                                 } else if (assignedPersonDaysSince === Infinity) {
                                     daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
                                 }
@@ -5618,9 +5614,7 @@
                                 // Show days counted in parentheses
                                 if (assignedPersonDaysSince !== null && assignedPersonDaysSince !== Infinity) {
                                     const rotationDays = groupPeople.length;
-                                    // For special holidays, show 2N as required
-                                    const requiredDays = rotationDays * 2;
-                                    daysCountInfo = ` <span class="text-info">(${assignedPersonDaysSince}/${requiredDays} ημέρες)</span>`;
+                                    daysCountInfo = ` <span class="text-info">(${assignedPersonDaysSince}/${rotationDays} ημέρες)</span>`;
                                 } else if (assignedPersonDaysSince === Infinity) {
                                     daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
                                 }
@@ -6283,9 +6277,9 @@
                             }
                             
                             const daysSinceLastDuty = countDaysSinceLastDuty(dayKey, person, groupNum, dayTypeCategory, dayTypeLists, startDate);
-                            // For special holidays, require 2N days instead of N
-                            const requiredDays = dayTypeCategory === 'special' ? rotationDays * 2 : rotationDays;
-                            const isEligible = daysSinceLastDuty >= requiredDays || daysSinceLastDuty === Infinity;
+                            // Assign when N days have passed (counting starts from tomorrow after last duty)
+                            // daysSinceLastDuty counts from the day AFTER last duty, so we assign when it >= N
+                            const isEligible = daysSinceLastDuty >= rotationDays || daysSinceLastDuty === Infinity;
                             
                             personEligibility.push({
                                 person: person,
