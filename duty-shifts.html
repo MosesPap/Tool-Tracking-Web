@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.06 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.08 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -520,7 +520,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.06</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.08</span></h4>
             </div>
         </div>
     </div>
@@ -1568,7 +1568,9 @@
         }
 
         // Fetch latest duty dates from Firebase for each person and duty type
-        async function fetchLatestDutiesFromFirebase() {
+        // beforeDate: Only consider duties from dates before this date (exclusive)
+        // This ensures we only look at previous months when calculating for a specific period
+        async function fetchLatestDutiesFromFirebase(beforeDate = null) {
             try {
                 // Wait for Firebase to be ready
                 if (!window.db && !firebase.firestore) {
@@ -1584,6 +1586,12 @@
                 
                 // Structure: { personName: { groupNum: { dutyType: latestDateKey } } }
                 const latestDuties = {};
+                
+                // Convert beforeDate to date key format for comparison
+                let beforeDateKey = null;
+                if (beforeDate) {
+                    beforeDateKey = formatDateKey(beforeDate);
+                }
                 
                 // Duty type mappings
                 const dutyTypeMappings = {
@@ -1612,6 +1620,12 @@
                         for (const [dateKey, assignmentValue] of Object.entries(assignments)) {
                             if (!assignmentValue) continue;
                             
+                            // CRITICAL: Only consider duties from previous months (before the calculation start date)
+                            // Skip any duties on or after the beforeDate
+                            if (beforeDateKey && dateKey >= beforeDateKey) {
+                                continue;
+                            }
+                            
                             // Parse person names and groups from assignment string
                             // Format: "Person Name (Ομάδα 1), Person Name (Ομάδα 2), ..."
                             const parts = assignmentValue.split(',').map(p => p.trim()).filter(p => p);
@@ -1629,7 +1643,7 @@
                                         latestDuties[personName][groupNum] = {};
                                     }
                                     
-                                    // Update if this is a more recent date
+                                    // Update if this is a more recent date (but still before beforeDate)
                                     const currentLatest = latestDuties[personName][groupNum][dutyType];
                                     if (!currentLatest || dateKey > currentLatest) {
                                         latestDuties[personName][groupNum][dutyType] = dateKey;
@@ -1642,7 +1656,7 @@
                     }
                 }
                 
-                console.log('Fetched latest duties from Firebase:', latestDuties);
+                console.log('Fetched latest duties from Firebase (before', beforeDateKey || 'all dates', '):', latestDuties);
                 return latestDuties;
             } catch (error) {
                 console.error('Error fetching latest duties from Firebase:', error);
@@ -5316,6 +5330,7 @@
                 }
                 
                 // Fetch latest duties from Firebase before calculation
+                // Only consider duties from previous months (before the start date)
                 const loadingAlert = document.createElement('div');
                 loadingAlert.className = 'alert alert-info';
                 loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Ανάκτηση δεδομένων από Firebase...';
@@ -5324,7 +5339,8 @@
                     modalBody.insertBefore(loadingAlert, modalBody.firstChild);
                 }
                 
-                const latestDutiesFromFirebase = await fetchLatestDutiesFromFirebase();
+                // Pass startDate to only fetch duties from previous months
+                const latestDutiesFromFirebase = await fetchLatestDutiesFromFirebase(startDate);
                 
                 // Store in calculationSteps for use in calculation
                 calculationSteps.latestDutiesFromFirebase = latestDutiesFromFirebase;
