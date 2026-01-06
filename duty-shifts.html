@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.08 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.09 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -520,7 +520,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.08</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.09</span></h4>
             </div>
         </div>
     </div>
@@ -6454,6 +6454,10 @@
                     
                     const rotationDays = groupPeople.length;
                     
+                    // Track assignments made during this calculation cycle for proper rotation
+                    // Format: { personName: lastAssignedDayKey }
+                    const currentCycleAssignments = {};
+                    
                     // Process each day in order
                     days.forEach((dayKey) => {
                         // Skip if day already has assignment for this group (critical assignments)
@@ -6480,7 +6484,26 @@
                                 continue;
                             }
                             
-                            const daysSinceLastDuty = countDaysSinceLastDuty(dayKey, person, groupNum, dayTypeCategory, dayTypeLists, startDate);
+                            // Check if person was assigned in current calculation cycle
+                            const lastAssignedInCycle = currentCycleAssignments[person];
+                            let daysSinceLastDuty;
+                            
+                            if (lastAssignedInCycle) {
+                                // Person was assigned earlier in this cycle - calculate days from that assignment
+                                const lastIndex = days.indexOf(lastAssignedInCycle);
+                                const currentIndex = days.indexOf(dayKey);
+                                if (lastIndex !== -1 && currentIndex > lastIndex) {
+                                    // Count days of same type between last assignment and current day
+                                    daysSinceLastDuty = currentIndex - lastIndex - 1;
+                                } else {
+                                    // Fall back to normal calculation
+                                    daysSinceLastDuty = countDaysSinceLastDuty(dayKey, person, groupNum, dayTypeCategory, dayTypeLists, startDate);
+                                }
+                            } else {
+                                // Person not assigned yet in this cycle - use normal calculation
+                                daysSinceLastDuty = countDaysSinceLastDuty(dayKey, person, groupNum, dayTypeCategory, dayTypeLists, startDate);
+                            }
+                            
                             // Assign when N days have passed (counting starts from tomorrow after last duty)
                             // daysSinceLastDuty counts from the day AFTER last duty, so we assign when it >= N
                             const isEligible = daysSinceLastDuty >= rotationDays || daysSinceLastDuty === Infinity;
@@ -6493,14 +6516,34 @@
                             });
                         }
                         
-                        // Sort by eligibility, then by days since last duty, then by rotation order
+                        // Sort by eligibility, then by rotation order (who was assigned last in current cycle), then by days since last duty
                         personEligibility.sort((a, b) => {
                             if (a.isEligible !== b.isEligible) {
                                 return b.isEligible - a.isEligible;
                             }
-                            if (a.daysSinceLastDuty !== b.daysSinceLastDuty) {
-                                return b.daysSinceLastDuty - a.daysSinceLastDuty;
+                            
+                            // If both are eligible, prioritize rotation order based on who was assigned last in current cycle
+                            const aLastAssigned = currentCycleAssignments[a.person];
+                            const bLastAssigned = currentCycleAssignments[b.person];
+                            
+                            // If one was assigned in current cycle and the other wasn't, prioritize the one NOT assigned
+                            if (aLastAssigned && !bLastAssigned) {
+                                return 1; // b comes first (not assigned yet)
                             }
+                            if (!aLastAssigned && bLastAssigned) {
+                                return -1; // a comes first (not assigned yet)
+                            }
+                            
+                            // If both were assigned in current cycle, prioritize the one assigned earlier (longer ago)
+                            if (aLastAssigned && bLastAssigned) {
+                                const aIndex = days.indexOf(aLastAssigned);
+                                const bIndex = days.indexOf(bLastAssigned);
+                                if (aIndex !== bIndex) {
+                                    return aIndex - bIndex; // Earlier assignment comes first
+                                }
+                            }
+                            
+                            // If neither was assigned, or both assigned on same day, use rotation order (index)
                             return a.index - b.index;
                         });
                         
@@ -6629,6 +6672,8 @@
                         // Assign person to day (uses setAssignmentForDate which saves to correct document)
                         if (assignedPerson) {
                             assignPersonToDay(dayKey, assignedPerson, groupNum);
+                            // Track this assignment for rotation in subsequent days
+                            currentCycleAssignments[assignedPerson] = dayKey;
                         }
                         
                         // If person was skipped due to conflict, find next available day for them
