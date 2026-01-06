@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.04 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.05 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -520,7 +520,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.04</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.05</span></h4>
             </div>
         </div>
     </div>
@@ -5380,18 +5380,29 @@
                                 return a.index - b.index;
                             });
                             
+                            let assignedPersonDaysSince = null;
                             if (personEligibility.length > 0) {
                                 assignedPerson = personEligibility[0].person;
+                                assignedPersonDaysSince = personEligibility[0].daysSinceLastDuty;
                             }
                             
                             // Get last duty date for this person
                             let lastDutyInfo = '';
+                            let daysCountInfo = '';
                             if (assignedPerson) {
                                 const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'special', groupPeople.length);
                                 lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
+                                
+                                // Show days counted in parentheses
+                                if (assignedPersonDaysSince !== null && assignedPersonDaysSince !== Infinity) {
+                                    const rotationDays = groupPeople.length;
+                                    daysCountInfo = ` <span class="text-info">(${assignedPersonDaysSince}/${rotationDays} ημέρες)</span>`;
+                                } else if (assignedPersonDaysSince === Infinity) {
+                                    daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
+                                }
                             }
                             
-                            html += `<td>${assignedPerson || '-'}${lastDutyInfo}</td>`;
+                            html += `<td>${assignedPerson || '-'}${daysCountInfo}${lastDutyInfo}</td>`;
                         }
                     }
                     
@@ -5582,18 +5593,29 @@
                                 return a.index - b.index;
                             });
                             
+                            let assignedPersonDaysSince = null;
                             if (personEligibility.length > 0) {
                                 assignedPerson = personEligibility[0].person;
+                                assignedPersonDaysSince = personEligibility[0].daysSinceLastDuty;
                             }
                             
                             // Get last duty date for this person
                             let lastDutyInfo = '';
+                            let daysCountInfo = '';
                             if (assignedPerson) {
                                 const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'weekend', groupPeople.length);
                                 lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
+                                
+                                // Show days counted in parentheses
+                                if (assignedPersonDaysSince !== null && assignedPersonDaysSince !== Infinity) {
+                                    const rotationDays = groupPeople.length;
+                                    daysCountInfo = ` <span class="text-info">(${assignedPersonDaysSince}/${rotationDays} ημέρες)</span>`;
+                                } else if (assignedPersonDaysSince === Infinity) {
+                                    daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
+                                }
                             }
                             
-                            html += `<td>${assignedPerson || '-'}${lastDutyInfo}</td>`;
+                            html += `<td>${assignedPerson || '-'}${daysCountInfo}${lastDutyInfo}</td>`;
                         }
                     }
                     
