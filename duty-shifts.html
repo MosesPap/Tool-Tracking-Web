@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.11 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.12 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -520,7 +520,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.11</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.12</span></h4>
             </div>
         </div>
     </div>
@@ -5429,23 +5429,20 @@
                 html += `Βρέθηκαν <strong>${allSpecialHolidays.length}</strong> ειδικές αργίες για τα επόμενα 10 έτη (${currentYear}-${endYear}).`;
                 html += '</div>';
                 
-                // Process each group
+                // Calculate assignments for all groups first
+                const groupAssignments = {}; // { groupNum: { holidayIndex: person } }
+                
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const groupData = groups[groupNum] || { special: [], lastDuties: {} };
                     const specialPeople = groupData.special || [];
                     
-                    if (specialPeople.length === 0) continue;
+                    if (specialPeople.length === 0) {
+                        groupAssignments[groupNum] = {};
+                        continue;
+                    }
                     
                     const rotationDays = specialPeople.length;
-                    
-                    html += `<div class="mb-4">`;
-                    html += `<h5 class="mb-3">Ομάδα ${groupNum}</h5>`;
-                    
-                    // Create assignments for each person
-                    const personAssignments = {};
-                    specialPeople.forEach(person => {
-                        personAssignments[person] = [];
-                    });
+                    groupAssignments[groupNum] = {};
                     
                     // For each person, calculate their assignments based on N-day rotation
                     specialPeople.forEach((person, personIndex) => {
@@ -5489,61 +5486,79 @@
                         
                         // Assign this person to every Nth special holiday starting from nextAssignmentIndex
                         for (let i = nextAssignmentIndex; i < allSpecialHolidays.length; i += rotationDays) {
-                            const holiday = allSpecialHolidays[i];
-                            personAssignments[person].push({
-                                holiday: holiday,
-                                position: i + 1 // 1-based position
-                            });
+                            groupAssignments[groupNum][i] = person;
                         }
                     });
-                    
-                    // Display results in a table
-                    html += '<div class="table-responsive">';
-                    html += '<table class="table table-bordered table-hover table-sm">';
-                    html += '<thead class="table-warning">';
-                    html += '<tr>';
-                    html += '<th>Όνομα</th>';
-                    html += '<th>Τελευταία Ειδική Αργία</th>';
-                    html += '<th>Αριθμός Ειδικών Αργιών (10 Έτη)</th>';
-                    html += '<th>Λεπτομέρειες</th>';
-                    html += '</tr>';
-                    html += '</thead>';
-                    html += '<tbody>';
-                    
-                    specialPeople.forEach(person => {
-                        const assignments = personAssignments[person] || [];
-                        const lastDuties = groupData.lastDuties?.[person] || {};
-                        const lastSpecialDuty = lastDuties.special || 'Δεν έχει';
-                        
-                        html += '<tr>';
-                        html += `<td><strong>${person}</strong></td>`;
-                        html += `<td>${lastSpecialDuty !== 'Δεν έχει' ? new Date(lastSpecialDuty + 'T00:00:00').toLocaleDateString('el-GR') : 'Δεν έχει'}</td>`;
-                        html += `<td><span class="badge bg-primary">${assignments.length}</span></td>`;
-                        html += '<td>';
-                        
-                        if (assignments.length > 0) {
-                            html += '<details><summary>Προβολή</summary><ul class="list-unstyled mt-2">';
-                            assignments.forEach(({ holiday, position }) => {
-                                const dateStr = holiday.date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                const dayName = getGreekDayName(holiday.date);
-                                html += `<li class="mb-1">`;
-                                html += `<strong>${dateStr}</strong> (${dayName}) - ${holiday.holidayName}`;
-                                html += `</li>`;
-                            });
-                            html += '</ul></details>';
-                        } else {
-                            html += '<span class="text-muted">-</span>';
-                        }
-                        
-                        html += '</td>';
-                        html += '</tr>';
-                    });
-                    
-                    html += '</tbody>';
-                    html += '</table>';
-                    html += '</div>';
-                    html += '</div>';
                 }
+                
+                // Display results in a table - one row per special holiday
+                html += '<div class="table-responsive">';
+                html += '<table class="table table-bordered table-hover table-sm">';
+                html += '<thead class="table-warning">';
+                html += '<tr>';
+                html += '<th>Ημερομηνία</th>';
+                html += '<th>Όνομα Αργίας</th>';
+                html += '<th>Ομάδα 1<br><small>ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</small></th>';
+                html += '<th>Ομάδα 2<br><small>ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</small></th>';
+                html += '<th>Ομάδα 3<br><small>ΤΕΧΝΙΚΟΣ Ε/Π AW139</small></th>';
+                html += '<th>Ομάδα 4<br><small>ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</small></th>';
+                html += '</tr>';
+                html += '</thead>';
+                html += '<tbody>';
+                
+                allSpecialHolidays.forEach((holiday, index) => {
+                    const dateStr = holiday.date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    const dayName = getGreekDayName(holiday.date);
+                    
+                    html += '<tr>';
+                    html += `<td><strong>${dateStr}</strong><br><small class="text-muted">${dayName}</small></td>`;
+                    html += `<td>${holiday.holidayName}</td>`;
+                    
+                    // Show assigned person for each group with last/next duty info
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        const assignedPerson = groupAssignments[groupNum][index];
+                        const groupData = groups[groupNum] || { special: [], lastDuties: {} };
+                        
+                        if (!assignedPerson) {
+                            html += '<td class="text-muted">-</td>';
+                        } else {
+                            const lastDuties = groupData.lastDuties?.[assignedPerson] || {};
+                            const lastSpecialDutyStr = lastDuties.special || 'Δεν έχει';
+                            
+                            // Calculate next duty date
+                            const rotationDays = (groupData.special || []).length;
+                            let nextDutyInfo = '';
+                            
+                            if (rotationDays > 0) {
+                                // Find next special holiday after this one for this person
+                                let nextDutyIndex = index + rotationDays;
+                                if (nextDutyIndex < allSpecialHolidays.length) {
+                                    const nextDuty = allSpecialHolidays[nextDutyIndex];
+                                    const nextDutyStr = nextDuty.date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                    nextDutyInfo = `<br><small class="text-info">Επόμενη: ${nextDutyStr}</small>`;
+                                } else {
+                                    nextDutyInfo = '<br><small class="text-muted">Επόμενη: Δεν έχει</small>';
+                                }
+                            }
+                            
+                            const lastDutyDisplay = lastSpecialDutyStr !== 'Δεν έχει' 
+                                ? new Date(lastSpecialDutyStr + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                : 'Δεν έχει';
+                            
+                            html += '<td>';
+                            html += `<strong>${assignedPerson}</strong>`;
+                            html += `<br><small class="text-muted">Τελευταία: ${lastDutyDisplay}</small>`;
+                            html += nextDutyInfo;
+                            html += '</td>';
+                        }
+                    }
+                    
+                    html += '</tr>';
+                });
+                
+                html += '</tbody>';
+                html += '</table>';
+                html += '</div>';
                 
                 html += '</div>';
                 
