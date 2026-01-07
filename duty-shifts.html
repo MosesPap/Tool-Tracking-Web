@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.27 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.28 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.27</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.28</span></h4>
             </div>
         </div>
     </div>
@@ -5073,10 +5073,24 @@
                             }
                         });
                         
+                        // Check for skip/swap reason
+                        const reason = getAssignmentReason(key, parseInt(group || 0), name);
+                        let indicatorIcon = '';
+                        let indicatorTitle = '';
+                        if (reason) {
+                            if (reason.type === 'skip') {
+                                indicatorIcon = '<i class="fas fa-arrow-right text-warning" title="Παραλείφθηκε"></i> ';
+                                indicatorTitle = reason.reason;
+                            } else if (reason.type === 'swap') {
+                                indicatorIcon = '<i class="fas fa-exchange-alt text-info" title="Αλλαγή"></i> ';
+                                indicatorTitle = reason.reason;
+                            }
+                        }
+                        
                         // Apply red bold styling for critical assignments
                         const styleClass = isCritical ? 'duty-person-critical' : 'duty-person';
-                        // Display only the name, no comma, each on separate line
-                        displayAssignmentHtml += `<div class="${styleClass}">${name}</div>`;
+                        // Display name with indicator icon
+                        displayAssignmentHtml += `<div class="${styleClass}" style="display: flex; align-items: center; gap: 4px;" title="${indicatorTitle || ''}">${indicatorIcon}${name}</div>`;
                     });
                     displayAssignmentHtml += '</div>';
                 }
@@ -7024,9 +7038,12 @@
                                             }
                                         }
                                         
-                                        // If we found a next week swap, ask for permission (in preview mode, we'll just mark it)
-                                        // For now in preview, we'll use same week only
-                                        // In actual calculation, we'll handle permission dialog
+                                        // If we found a next week swap, use it (in preview mode, we'll show it)
+                                        // In actual calculation, we'll ask permission first
+                                        if (!swapDayKey && nextWeekSwapDayKey) {
+                                            swapDayKey = nextWeekSwapDayKey;
+                                            swapDayIndex = nextWeekSwapDayIndex;
+                                        }
                                     }
                                     
                                     // If found swap day, find which person would be assigned to that day
@@ -7870,6 +7887,9 @@
                                 // For weekends: track that this person was skipped in this month
                                 if (dayTypeCategory === 'weekend') {
                                     skippedInMonth[monthKey].add(expectedPerson);
+                                    // Store skip reason
+                                    const reason = `Παράλειψη λόγω ειδικής αργίας στον ίδιο μήνα`;
+                                    storeAssignmentReason(dayKey, groupNum, skippedPerson, 'skip', reason);
                                 }
                                 
                                 // For normal days: swap with person who has same day of week (Monday↔Wednesday, Tuesday↔Thursday)
@@ -7898,22 +7918,23 @@
                                     let swapDayIndex = null;
                                     
                                     if (targetDayOfWeek !== null) {
-                                        // Look for next normal day with target day of week
+                                        // FIRST: Look for swap day in the SAME WEEK (prioritize same week)
+                                        // Look for next normal day with target day of week in same week
                                         for (let i = dayIndex + 1; i < days.length; i++) {
                                             const checkDayKey = days[i];
                                             const checkDate = new Date(checkDayKey + 'T00:00:00');
                                             const checkDayOfWeek = checkDate.getDay();
                                             const checkDayType = getDayType(checkDate);
                                             
-                                            // Must be a normal day
-                                            if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek) {
+                                            // Must be a normal day and in same week
+                                            if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameWeek(dayDate, checkDate)) {
                                                 swapDayKey = checkDayKey;
                                                 swapDayIndex = i;
                                                 break;
                                             }
                                         }
                                         
-                                        // If not found, try alternative day of week
+                                        // If not found in same week, try alternative day of week in same week
                                         if (!swapDayKey && alternativeDayOfWeek !== null) {
                                             for (let i = dayIndex + 1; i < days.length; i++) {
                                                 const checkDayKey = days[i];
@@ -7921,11 +7942,68 @@
                                                 const checkDayOfWeek = checkDate.getDay();
                                                 const checkDayType = getDayType(checkDate);
                                                 
-                                                // Must be a normal day
-                                                if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek) {
+                                                // Must be a normal day and in same week
+                                                if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek && isSameWeek(dayDate, checkDate)) {
                                                     swapDayKey = checkDayKey;
                                                     swapDayIndex = i;
                                                     break;
+                                                }
+                                            }
+                                        }
+                                        
+                                        // SECOND: If not found in same week, look in next week (will ask permission)
+                                        let nextWeekSwapDayKey = null;
+                                        let nextWeekSwapDayIndex = null;
+                                        
+                                        if (!swapDayKey) {
+                                            // Look for next normal day with target day of week in next week
+                                            for (let i = dayIndex + 1; i < days.length; i++) {
+                                                const checkDayKey = days[i];
+                                                const checkDate = new Date(checkDayKey + 'T00:00:00');
+                                                const checkDayOfWeek = checkDate.getDay();
+                                                const checkDayType = getDayType(checkDate);
+                                                
+                                                // Must be a normal day and NOT in same week
+                                                if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && !isSameWeek(dayDate, checkDate)) {
+                                                    nextWeekSwapDayKey = checkDayKey;
+                                                    nextWeekSwapDayIndex = i;
+                                                    break;
+                                                }
+                                            }
+                                            
+                                            // If not found, try alternative day of week in next week
+                                            if (!nextWeekSwapDayKey && alternativeDayOfWeek !== null) {
+                                                for (let i = dayIndex + 1; i < days.length; i++) {
+                                                    const checkDayKey = days[i];
+                                                    const checkDate = new Date(checkDayKey + 'T00:00:00');
+                                                    const checkDayOfWeek = checkDate.getDay();
+                                                    const checkDayType = getDayType(checkDate);
+                                                    
+                                                    // Must be a normal day and NOT in same week
+                                                    if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek && !isSameWeek(dayDate, checkDate)) {
+                                                        nextWeekSwapDayKey = checkDayKey;
+                                                        nextWeekSwapDayIndex = i;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // If found next week swap, ask for permission
+                                            if (nextWeekSwapDayKey && nextWeekSwapDayIndex !== null) {
+                                                const swapDate = new Date(nextWeekSwapDayKey + 'T00:00:00');
+                                                const swapRotationPosition = nextWeekSwapDayIndex % rotationDays;
+                                                const swapPerson = groupPeople[swapRotationPosition];
+                                                
+                                                // Ask user permission
+                                                const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                const swapDateStr = swapDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                const permissionMsg = `Το άτομο ${skippedPerson} έχει σύγκρουση στις ${currentDateStr}.\n\nΒρέθηκε άτομο ${swapPerson} για αλλαγή στις ${swapDateStr} (επόμενη εβδομάδα).\n\nΝα προχωρήσει η αλλαγή;`;
+                                                
+                                                const userApproved = confirm(permissionMsg);
+                                                
+                                                if (userApproved) {
+                                                    swapDayKey = nextWeekSwapDayKey;
+                                                    swapDayIndex = nextWeekSwapDayIndex;
                                                 }
                                             }
                                         }
@@ -7986,6 +8064,15 @@
                                                 assignedPerson = swapPerson;
                                                 // Keep skippedPerson - we'll assign them to swap day in the section below
                                                 if (!skippedPerson) skippedPerson = expectedPerson; // Ensure skippedPerson is set
+                                                
+                                                // Store swap reason
+                                                const swapDate = new Date(swapDayKey + 'T00:00:00');
+                                                const isSameWeekSwap = isSameWeek(dayDate, swapDate);
+                                                const reason = isSameWeekSwap 
+                                                    ? `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδια εβδομάδα)`
+                                                    : `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (επόμενη εβδομάδα)`;
+                                                storeAssignmentReason(dayKey, groupNum, assignedPerson, 'swap', reason, skippedPerson);
+                                                storeAssignmentReason(swapDayKey, groupNum, skippedPerson, 'swap', `Αλλαγή με ${assignedPerson} λόγω συνεχόμενης Ημιαργίας`, assignedPerson);
                                             }
                                         }
                                     }
@@ -8438,11 +8525,25 @@
                     }
                 });
                 
+                // Get skip/swap reason
+                const reason = person.name ? getAssignmentReason(key, person.group, person.name) : null;
+                let reasonBadge = '';
+                if (reason) {
+                    if (reason.type === 'skip') {
+                        reasonBadge = `<span class="badge bg-warning ms-2" title="${reason.reason}"><i class="fas fa-arrow-right me-1"></i>Παραλείφθηκε</span>`;
+                    } else if (reason.type === 'swap') {
+                        reasonBadge = `<span class="badge bg-info ms-2" title="${reason.reason}"><i class="fas fa-exchange-alt me-1"></i>Αλλαγή${reason.swappedWith ? ` με ${reason.swappedWith}` : ''}</span>`;
+                    }
+                }
+                
                 const groupName = person.group ? getGroupName(person.group) : 'Άγνωστη Ομάδα';
                 const criticalClass = isCritical ? 'border-danger bg-light' : '';
                 const criticalLabel = isCritical ? '<span class="badge bg-danger ms-2"><i class="fas fa-lock me-1"></i>Κρίσιμη (Απόβαση)</span>' : '';
                 const disabledAttr = isCritical ? 'disabled' : '';
                 const disabledTitle = isCritical ? 'title="Αυτή η ανάθεση είναι κρίσιμη και δεν μπορεί να αλλάξει"' : '';
+                
+                // Add reason display below the person name
+                const reasonDisplay = reason ? `<div class="mt-1 small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${reason.reason}</div>` : '';
                 
                 // Get all people from this group for dropdown
                 const groupData = groups[person.group] || {};
@@ -8462,7 +8563,7 @@
                 
                 content += `
                     <div class="mb-2 p-2 border rounded ${criticalClass}" ${disabledTitle}>
-                        <label class="form-label small text-muted">Ομάδα ${person.group}: ${groupName}${criticalLabel}</label>
+                        <label class="form-label small text-muted">Ομάδα ${person.group}: ${groupName}${criticalLabel}${reasonBadge}</label>
                         <select class="form-select duty-person-select" 
                                 data-index="${index}" 
                                 data-group="${person.group}" 
@@ -8471,6 +8572,7 @@
                                 ${disabledAttr}>
                             ${peopleOptions}
                         </select>
+                        ${reasonDisplay}
                         ${isCritical ? '<small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i>Αυτή η ανάθεση προέρχεται από τις ημερομηνίες τελευταίας υπηρεσίας και δεν μπορεί να αλλάξει.</small>' : ''}
                     </div>
                 `;
