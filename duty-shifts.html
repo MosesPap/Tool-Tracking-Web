@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.15 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.06 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -520,7 +520,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.15</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.06</span></h4>
             </div>
         </div>
     </div>
@@ -666,9 +666,6 @@
                     <button class="btn btn-sm btn-primary ms-2" onclick="openCalculateDutiesModal()">
                         <i class="fas fa-calculator me-1"></i>Υπολογισμός Υπηρεσιών
                     </button>
-                    <button class="btn btn-sm btn-warning ms-2" onclick="calculateSpecialHolidays10Years()">
-                        <i class="fas fa-calendar-alt me-1"></i>Υπολογισμός Ειδικών Αργιών (10 Έτη)
-                    </button>
                     <button class="btn btn-sm btn-success ms-2" onclick="showExcelPreview()">
                         <i class="fas fa-file-excel me-1"></i>Δημιουργία Excel
                     </button>
@@ -716,6 +713,27 @@
                         <div class="col-md-6 mb-3">
                             <label for="lastNormalDuty" class="form-label">Τελευταία Καθημερινή</label>
                             <input type="date" class="form-control" id="lastNormalDuty">
+                        </div>
+                    </div>
+                    <div class="alert alert-warning mt-3">
+                        <small><i class="fas fa-sort-numeric-up me-1"></i>Προτεραιότητα Σειράς Εναλλαγής (μικρότερος αριθμός = πρώτος στη σειρά)</small>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="prioritySpecial" class="form-label">Προτεραιότητα Ειδικών Αργιών</label>
+                            <input type="number" class="form-control" id="prioritySpecial" min="1" placeholder="1">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="priorityWeekend" class="form-label">Προτεραιότητα Σαββατοκύριακων/Αργιών</label>
+                            <input type="number" class="form-control" id="priorityWeekend" min="1" placeholder="1">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="prioritySemi" class="form-label">Προτεραιότητα Ημιαργιών</label>
+                            <input type="number" class="form-control" id="prioritySemi" min="1" placeholder="1">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="priorityNormal" class="form-label">Προτεραιότητα Καθημερινών</label>
+                            <input type="number" class="form-control" id="priorityNormal" min="1" placeholder="1">
                         </div>
                     </div>
                 </div>
@@ -847,26 +865,6 @@
                     <button type="button" class="btn btn-primary" id="calculateDutiesButton" onclick="calculateDutiesForSelectedMonths()">
                         <i class="fas fa-calculator me-1"></i>Υπολογισμός
                     </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Special Holidays 10 Years Calculation Modal -->
-    <div class="modal fade" id="specialHolidays10YearsModal" tabindex="-1">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header bg-warning">
-                    <h5 class="modal-title">
-                        <i class="fas fa-calendar-alt me-2"></i>Υπολογισμός Ειδικών Αργιών - 10 Έτη
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body" id="specialHolidays10YearsContent" style="max-height: 70vh; overflow-y: auto;">
-                    <!-- Content will be loaded here -->
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
                 </div>
             </div>
         </div>
@@ -1173,12 +1171,12 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Data storage - each group has four order lists: special, weekend, semi, normal
-        // Each person also has last duty dates for each type and missing periods
+        // Each person also has last duty dates for each type, missing periods, and priorities
         let groups = {
-            1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} },
-            2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} },
-            3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} },
-            4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} }
+            1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
+            2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
+            3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
+            4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} }
         };
         let holidays = [];
         let specialHolidays = []; // User-defined special holidays
@@ -1305,8 +1303,7 @@
             startDate: null,
             endDate: null,
             preserveExisting: true,
-            dayTypeLists: null,
-            latestDutiesFromFirebase: null
+            dayTypeLists: null
         };
         
         // Configuration for recurring special holidays
@@ -1590,103 +1587,6 @@
             }
         }
 
-        // Fetch latest duty dates from Firebase for each person and duty type
-        // beforeDate: Only consider duties from dates before this date (exclusive)
-        // This ensures we only look at previous months when calculating for a specific period
-        async function fetchLatestDutiesFromFirebase(beforeDate = null) {
-            try {
-                // Wait for Firebase to be ready
-                if (!window.db && !firebase.firestore) {
-                    console.log('Firebase not ready, waiting...');
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    if (!window.db && !firebase.firestore) {
-                        console.error('Firebase still not ready');
-                        return {};
-                    }
-                }
-                
-                const db = window.db || firebase.firestore();
-                
-                // Structure: { personName: { groupNum: { dutyType: latestDateKey } } }
-                const latestDuties = {};
-                
-                // Convert beforeDate to date key format for comparison
-                let beforeDateKey = null;
-                if (beforeDate) {
-                    beforeDateKey = formatDateKey(beforeDate);
-                }
-                
-                // Duty type mappings
-                const dutyTypeMappings = {
-                    'normal': 'normalDayAssignments',
-                    'semi': 'semiNormalAssignments',
-                    'weekend': 'weekendAssignments',
-                    'special': 'specialHolidayAssignments'
-                };
-                
-                // Fetch each duty type document
-                for (const [dutyType, docName] of Object.entries(dutyTypeMappings)) {
-                    try {
-                        const doc = await db.collection('dutyShifts').doc(docName).get();
-                        if (!doc.exists) continue;
-                        
-                        const data = doc.data();
-                        // Remove metadata fields
-                        const assignments = {};
-                        for (const key in data) {
-                            if (key !== 'lastUpdated' && key !== 'updatedBy' && key !== '_migratedFrom' && key !== '_migrationDate') {
-                                assignments[key] = data[key];
-                            }
-                        }
-                        
-                        // Parse each date and find latest duty for each person
-                        for (const [dateKey, assignmentValue] of Object.entries(assignments)) {
-                            if (!assignmentValue) continue;
-                            
-                            // CRITICAL: Only consider duties from previous months (before the calculation start date)
-                            // Skip any duties on or after the beforeDate
-                            if (beforeDateKey && dateKey >= beforeDateKey) {
-                                continue;
-                            }
-                            
-                            // Parse person names and groups from assignment string
-                            // Format: "Person Name (Ομάδα 1), Person Name (Ομάδα 2), ..."
-                            const parts = assignmentValue.split(',').map(p => p.trim()).filter(p => p);
-                            
-                            for (const part of parts) {
-                                const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
-                                if (match) {
-                                    const personName = match[1].trim();
-                                    const groupNum = parseInt(match[2]);
-                                    
-                                    if (!latestDuties[personName]) {
-                                        latestDuties[personName] = {};
-                                    }
-                                    if (!latestDuties[personName][groupNum]) {
-                                        latestDuties[personName][groupNum] = {};
-                                    }
-                                    
-                                    // Update if this is a more recent date (but still before beforeDate)
-                                    const currentLatest = latestDuties[personName][groupNum][dutyType];
-                                    if (!currentLatest || dateKey > currentLatest) {
-                                        latestDuties[personName][groupNum][dutyType] = dateKey;
-                                    }
-                                }
-                            }
-                        }
-                    } catch (error) {
-                        console.error(`Error fetching ${docName}:`, error);
-                    }
-                }
-                
-                console.log('Fetched latest duties from Firebase (before', beforeDateKey || 'all dates', '):', latestDuties);
-                return latestDuties;
-            } catch (error) {
-                console.error('Error fetching latest duties from Firebase:', error);
-                return {};
-            }
-        }
-
         // Rebuild criticalAssignments from lastDuties
         // This ensures manually entered dates are always protected, even if criticalAssignments wasn't saved
         // IMPORTANT: This function only updates in-memory data. It does NOT save to Firebase.
@@ -1771,6 +1671,26 @@
             if (savedGroups) {
                 const parsed = JSON.parse(savedGroups);
                 groups = migrateGroupsFormat(parsed) || { 1: { regular: [], special: [] }, 2: { regular: [], special: [] }, 3: { regular: [], special: [] }, 4: { regular: [], special: [] } };
+                
+                // Initialize priorities if they don't exist (backward compatibility)
+                for (let i = 1; i <= 4; i++) {
+                    if (!groups[i]) continue;
+                    if (!groups[i].priorities) groups[i].priorities = {};
+                    
+                    // Ensure all people in lists have priority entries
+                    const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                    listTypes.forEach(listType => {
+                        const list = groups[i][listType] || [];
+                        list.forEach(person => {
+                            if (!groups[i].priorities[person]) {
+                                groups[i].priorities[person] = {};
+                            }
+                            if (groups[i].priorities[person][listType] === undefined) {
+                                groups[i].priorities[person][listType] = 999; // Default priority
+                            }
+                        });
+                    });
+                }
             }
             if (savedHolidays) {
                 holidays = JSON.parse(savedHolidays);
@@ -2175,7 +2095,39 @@
                 const container = document.getElementById(`group${i}People`);
                 container.innerHTML = '';
                 
-                const groupData = groups[i] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
+                const groupData = groups[i] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, priorities: {} };
+                
+                // Ensure priorities exist
+                if (!groupData.priorities) groupData.priorities = {};
+                
+                // Sort each list by priority before rendering
+                const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                listTypes.forEach(listType => {
+                    if (groupData[listType]) {
+                        groupData[listType].sort((a, b) => {
+                            // Get priorities (default to 999 if not set)
+                            const priorityA = groupData.priorities[a]?.[listType] ?? 999;
+                            const priorityB = groupData.priorities[b]?.[listType] ?? 999;
+                            
+                            // First sort by priority (lower number = higher priority)
+                            if (priorityA !== priorityB) {
+                                return priorityA - priorityB;
+                            }
+                            
+                            // If priorities are equal, sort by last duty date (most recent first, no date last)
+                            const dateA = groupData.lastDuties?.[a]?.[listType];
+                            const dateB = groupData.lastDuties?.[b]?.[listType];
+                            
+                            if (!dateA && !dateB) return 0; // Both have no date, maintain order
+                            if (!dateA) return 1; // A has no date, put it last
+                            if (!dateB) return -1; // B has no date, put it last
+                            
+                            // Both have dates, sort by date (most recent first)
+                            return new Date(dateB) - new Date(dateA);
+                        });
+                    }
+                });
+                
                 const specialList = groupData.special || [];
                 const weekendList = groupData.weekend || [];
                 const semiList = groupData.semi || [];
@@ -2520,6 +2472,15 @@
                 list.splice(fromIndex, 1);
                 list.splice(toIndex, 0, person);
                 
+                // Update priorities to reflect the new order (priority = index + 1)
+                if (!groups[groupNum].priorities) groups[groupNum].priorities = {};
+                list.forEach((personName, index) => {
+                    if (!groups[groupNum].priorities[personName]) {
+                        groups[groupNum].priorities[personName] = {};
+                    }
+                    groups[groupNum].priorities[personName][listType] = index + 1;
+                });
+                
                 saveData();
                 renderGroups();
             }
@@ -2555,6 +2516,10 @@
             document.getElementById('lastWeekendDuty').value = '';
             document.getElementById('lastSemiDuty').value = '';
             document.getElementById('lastNormalDuty').value = '';
+            document.getElementById('prioritySpecial').value = '';
+            document.getElementById('priorityWeekend').value = '';
+            document.getElementById('prioritySemi').value = '';
+            document.getElementById('priorityNormal').value = '';
             document.getElementById('savePersonButton').textContent = 'Προσθήκη Ατόμου';
             
             const modal = new bootstrap.Modal(document.getElementById('addPersonModal'));
@@ -2567,8 +2532,9 @@
             editingPersonName = personName;
             currentGroup = groupNumber;
             
-            const groupData = groups[groupNumber] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
+            const groupData = groups[groupNumber] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} };
             const lastDuties = groupData.lastDuties?.[personName] || {};
+            const priorities = groupData.priorities?.[personName] || {};
             
             // Debug: Log what we're loading
             console.log(`Edit person: ${personName} in group ${groupNumber}`);
@@ -2583,6 +2549,10 @@
             document.getElementById('lastWeekendDuty').value = lastDuties.weekend || '';
             document.getElementById('lastSemiDuty').value = lastDuties.semi || '';
             document.getElementById('lastNormalDuty').value = lastDuties.normal || '';
+            document.getElementById('prioritySpecial').value = priorities.special || '';
+            document.getElementById('priorityWeekend').value = priorities.weekend || '';
+            document.getElementById('prioritySemi').value = priorities.semi || '';
+            document.getElementById('priorityNormal').value = priorities.normal || '';
             document.getElementById('savePersonButton').textContent = 'Αποθήκευση Αλλαγών';
             
             // Debug: Verify values were set
@@ -2601,7 +2571,7 @@
             }
             
             if (!groups[currentGroup]) {
-                groups[currentGroup] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
+                groups[currentGroup] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, priorities: {} };
             }
             
             // Initialize lists if needed
@@ -2610,12 +2580,19 @@
             if (!groups[currentGroup].semi) groups[currentGroup].semi = [];
             if (!groups[currentGroup].normal) groups[currentGroup].normal = [];
             if (!groups[currentGroup].lastDuties) groups[currentGroup].lastDuties = {};
+            if (!groups[currentGroup].priorities) groups[currentGroup].priorities = {};
             
             // Get last duty dates
             const lastSpecialDuty = document.getElementById('lastSpecialDuty').value;
             const lastWeekendDuty = document.getElementById('lastWeekendDuty').value;
             const lastSemiDuty = document.getElementById('lastSemiDuty').value;
             const lastNormalDuty = document.getElementById('lastNormalDuty').value;
+            
+            // Get priority values
+            const prioritySpecial = document.getElementById('prioritySpecial').value.trim();
+            const priorityWeekend = document.getElementById('priorityWeekend').value.trim();
+            const prioritySemi = document.getElementById('prioritySemi').value.trim();
+            const priorityNormal = document.getElementById('priorityNormal').value.trim();
             
             // Check if name changed when editing
             const nameChanged = isEditingPerson && name !== editingPersonName;
@@ -2657,6 +2634,15 @@
                     console.log(`[EDIT] Renamed missingPeriods key from "${oldName}" to "${name}"`);
                 }
                 
+                // Rename key in priorities
+                if (groups[currentGroup].priorities && groups[currentGroup].priorities[oldName]) {
+                    if (!groups[currentGroup].priorities[name]) {
+                        groups[currentGroup].priorities[name] = groups[currentGroup].priorities[oldName];
+                    }
+                    delete groups[currentGroup].priorities[oldName];
+                    console.log(`[EDIT] Renamed priorities key from "${oldName}" to "${name}"`);
+                }
+                
                 // Update all occurrences in dutyAssignments
                 const oldPersonGroupStr = `${oldName} (Ομάδα ${currentGroup})`;
                 const newPersonGroupStr = `${name} (Ομάδα ${currentGroup})`;
@@ -2686,6 +2672,15 @@
                 weekend: lastWeekendDuty || null,
                 semi: lastSemiDuty || null,
                 normal: lastNormalDuty || null
+            };
+            
+            // Store priorities (using new name as key)
+            // If priority is not provided, use a default value (999 for sorting - puts them at the end)
+            groups[currentGroup].priorities[personKey] = {
+                special: prioritySpecial ? parseInt(prioritySpecial) : 999,
+                weekend: priorityWeekend ? parseInt(priorityWeekend) : 999,
+                semi: prioritySemi ? parseInt(prioritySemi) : 999,
+                normal: priorityNormal ? parseInt(priorityNormal) : 999
             };
             
             // Add last duty dates as critical assignments in the calendar (protected from recalculation)
@@ -2864,22 +2859,33 @@
                         groups[currentGroup][listType].push(name);
                     }
                 });
-                
-                // Sort each list by last duty date (most recent first, no date last)
-                listTypes.forEach(listType => {
-                    groups[currentGroup][listType].sort((a, b) => {
-                        const dateA = groups[currentGroup].lastDuties[a]?.[listType];
-                        const dateB = groups[currentGroup].lastDuties[b]?.[listType];
-                        
-                        if (!dateA && !dateB) return 0; // Both have no date, maintain order
-                        if (!dateA) return 1; // A has no date, put it last
-                        if (!dateB) return -1; // B has no date, put it last
-                        
-                        // Both have dates, sort by date (most recent first)
-                        return new Date(dateB) - new Date(dateA);
-                    });
-                });
             }
+            
+            // Sort each list by priority (lower number = higher priority), then by last duty date
+            const listTypes = ['special', 'weekend', 'semi', 'normal'];
+            listTypes.forEach(listType => {
+                groups[currentGroup][listType].sort((a, b) => {
+                    // Get priorities (default to 999 if not set)
+                    const priorityA = groups[currentGroup].priorities?.[a]?.[listType] ?? 999;
+                    const priorityB = groups[currentGroup].priorities?.[b]?.[listType] ?? 999;
+                    
+                    // First sort by priority (lower number = higher priority)
+                    if (priorityA !== priorityB) {
+                        return priorityA - priorityB;
+                    }
+                    
+                    // If priorities are equal, sort by last duty date (most recent first, no date last)
+                    const dateA = groups[currentGroup].lastDuties[a]?.[listType];
+                    const dateB = groups[currentGroup].lastDuties[b]?.[listType];
+                    
+                    if (!dateA && !dateB) return 0; // Both have no date, maintain order
+                    if (!dateA) return 1; // A has no date, put it last
+                    if (!dateB) return -1; // B has no date, put it last
+                    
+                    // Both have dates, sort by date (most recent first)
+                    return new Date(dateB) - new Date(dateA);
+                });
+            });
             
             // Clear form
             document.getElementById('personName').value = '';
@@ -2888,6 +2894,10 @@
             document.getElementById('lastWeekendDuty').value = '';
             document.getElementById('lastSemiDuty').value = '';
             document.getElementById('lastNormalDuty').value = '';
+            document.getElementById('prioritySpecial').value = '';
+            document.getElementById('priorityWeekend').value = '';
+            document.getElementById('prioritySemi').value = '';
+            document.getElementById('priorityNormal').value = '';
             
             isEditingPerson = false;
             editingPersonName = null;
@@ -5091,50 +5101,6 @@
                 return Infinity; // Current day not in this type
             }
             
-            // FIRST: Check Firebase latest duties if available
-            if (calculationSteps.latestDutiesFromFirebase) {
-                const personLatest = calculationSteps.latestDutiesFromFirebase[person];
-                if (personLatest && personLatest[groupNum]) {
-                    const latestDateKey = personLatest[groupNum][dayTypeCategory];
-                    if (latestDateKey) {
-                        // Check if this latest duty is in the daysOfType array
-                        const latestIndex = daysOfType.indexOf(latestDateKey);
-                        if (latestIndex !== -1 && latestIndex < currentIndex) {
-                            // Count days of same type between latest duty and current day
-                            // Start counting from the day AFTER latest duty
-                            return currentIndex - latestIndex - 1;
-                        } else if (latestIndex === -1) {
-                            // Latest duty is before the date range, count all days from start
-                            const currentDate = new Date(dayKey + 'T00:00:00');
-                            const latestDate = new Date(latestDateKey + 'T00:00:00');
-                            
-                            if (latestDate < currentDate) {
-                                // Count days of same type between latest duty and current day
-                                let sameTypeDays = 0;
-                                const tempDate = new Date(latestDate);
-                                tempDate.setDate(tempDate.getDate() + 1);
-                                while (tempDate < currentDate) {
-                                    const tempDayType = getDayType(tempDate);
-                                    let tempTypeCategory = 'normal';
-                                    if (tempDayType === 'special-holiday') {
-                                        tempTypeCategory = 'special';
-                                    } else if (tempDayType === 'semi-normal-day') {
-                                        tempTypeCategory = 'semi';
-                                    } else if (tempDayType === 'weekend-holiday') {
-                                        tempTypeCategory = 'weekend';
-                                    }
-                                    if (tempTypeCategory === dayTypeCategory) {
-                                        sameTypeDays++;
-                                    }
-                                    tempDate.setDate(tempDate.getDate() + 1);
-                                }
-                                return sameTypeDays;
-                            }
-                        }
-                    }
-                }
-            }
-            
             // Find last duty day for this person in this day type (before current day)
             let lastDutyIndex = -1;
             for (let i = currentIndex - 1; i >= 0; i--) {
@@ -5318,7 +5284,7 @@
         }
 
         // Calculate duties for selected months
-        async function calculateDutiesForSelectedMonths() {
+        function calculateDutiesForSelectedMonths() {
             try {
                 const startMonthInput = document.getElementById('calculateStartMonth');
                 const endMonthInput = document.getElementById('calculateEndMonth');
@@ -5352,26 +5318,6 @@
                     endDate = new Date(startYear, startMonthNum, 0); // Last day of start month
                 }
                 
-                // Fetch latest duties from Firebase before calculation
-                // Only consider duties from previous months (before the start date)
-                const loadingAlert = document.createElement('div');
-                loadingAlert.className = 'alert alert-info';
-                loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Ανάκτηση δεδομένων από Firebase...';
-                const modalBody = document.querySelector('#calculateDutiesModal .modal-body');
-                if (modalBody) {
-                    modalBody.insertBefore(loadingAlert, modalBody.firstChild);
-                }
-                
-                // Pass startDate to only fetch duties from previous months
-                const latestDutiesFromFirebase = await fetchLatestDutiesFromFirebase(startDate);
-                
-                // Store in calculationSteps for use in calculation
-                calculationSteps.latestDutiesFromFirebase = latestDutiesFromFirebase;
-                
-                if (loadingAlert.parentNode) {
-                    loadingAlert.remove();
-                }
-                
                 // Store calculation parameters for step-by-step process
                 calculationSteps.startDate = startDate;
                 calculationSteps.endDate = endDate;
@@ -5388,211 +5334,6 @@
                 showStepByStepCalculation();
             } catch (error) {
                 console.error('Error in calculateDutiesForSelectedMonths:', error);
-                alert('Σφάλμα κατά τον υπολογισμό: ' + error.message);
-            }
-        }
-
-        // Calculate special holidays for next 10 years for each person
-        function calculateSpecialHolidays10Years() {
-            try {
-                const currentYear = new Date().getFullYear();
-                const endYear = currentYear + 10;
-                
-                // Collect all special holidays for the next 10 years
-                const allSpecialHolidays = [];
-                for (let year = currentYear; year <= endYear; year++) {
-                    const dateIterator = new Date(year, 0, 1);
-                    const lastDay = new Date(year, 11, 31);
-                    
-                    while (dateIterator <= lastDay) {
-                        if (isSpecialHoliday(dateIterator)) {
-                            const key = formatDateKey(dateIterator);
-                            const holidayName = getOrthodoxHolidayName(dateIterator) || 'Ειδική Αργία';
-                            const holidayYear = dateIterator.getFullYear();
-                            allSpecialHolidays.push({
-                                date: new Date(dateIterator),
-                                dateKey: key,
-                                holidayName: holidayName,
-                                year: holidayYear
-                            });
-                        }
-                        dateIterator.setDate(dateIterator.getDate() + 1);
-                    }
-                }
-                
-                // Sort by date
-                allSpecialHolidays.sort((a, b) => a.date - b.date);
-                
-                let html = '<div class="special-holidays-calculation">';
-                html += '<div class="alert alert-info mb-3">';
-                html += '<i class="fas fa-info-circle me-2"></i>';
-                html += `Βρέθηκαν <strong>${allSpecialHolidays.length}</strong> ειδικές αργίες για τα επόμενα 10 έτη (${currentYear}-${endYear}).`;
-                html += '</div>';
-                
-                // Calculate assignments for all groups first
-                const groupAssignments = {}; // { groupNum: { holidayIndex: person } }
-                
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupData = groups[groupNum] || { special: [], lastDuties: {} };
-                    const specialPeople = groupData.special || [];
-                    
-                    if (specialPeople.length === 0) {
-                        groupAssignments[groupNum] = {};
-                        continue;
-                    }
-                    
-                    const rotationDays = specialPeople.length;
-                    groupAssignments[groupNum] = {};
-                    
-                    // For each person, calculate their assignments based on N-day rotation
-                    specialPeople.forEach((person, personIndex) => {
-                        const lastDuties = groupData.lastDuties?.[person] || {};
-                        const lastSpecialDutyStr = lastDuties.special; // This is the CRITICAL ASSIGNMENT date
-                        
-                        if (!lastSpecialDutyStr) {
-                            // No critical assignment date - assign based on rotation position
-                            // Person 0 gets holidays 0, N, 2N, 3N...
-                            // Person 1 gets holidays 1, N+1, 2N+1, 3N+1...
-                            for (let i = personIndex; i < allSpecialHolidays.length; i += rotationDays) {
-                                groupAssignments[groupNum][i] = person;
-                            }
-                            return;
-                        }
-                        
-                        // Person HAS a critical assignment date - start from there
-                        const criticalDate = new Date(lastSpecialDutyStr + 'T00:00:00');
-                        const criticalYear = criticalDate.getFullYear();
-                        const criticalMonth = criticalDate.getMonth();
-                        const criticalDay = criticalDate.getDate();
-                        
-                        // Find the index of this critical assignment date in the special holidays list
-                        let criticalIndex = -1;
-                        for (let i = 0; i < allSpecialHolidays.length; i++) {
-                            const h = allSpecialHolidays[i].date;
-                            if (h.getFullYear() === criticalYear && 
-                                h.getMonth() === criticalMonth && 
-                                h.getDate() === criticalDay) {
-                                criticalIndex = i;
-                                break;
-                            }
-                        }
-                        
-                        if (criticalIndex >= 0) {
-                            // Found the critical assignment date in our list
-                            // Count forward N special holidays, then assign every Nth from there
-                            const firstAssignmentIndex = criticalIndex + rotationDays;
-                            
-                            // Assign to every Nth special holiday starting from firstAssignmentIndex
-                            for (let i = firstAssignmentIndex; i < allSpecialHolidays.length; i += rotationDays) {
-                                groupAssignments[groupNum][i] = person;
-                            }
-                        } else {
-                            // Critical assignment date is BEFORE our 10-year range
-                            // Count how many special holidays occurred between critical date and first holiday in range
-                            const firstHolidayDate = allSpecialHolidays[0].date;
-                            let holidaysCounted = 0;
-                            const tempDate = new Date(criticalDate);
-                            tempDate.setDate(tempDate.getDate() + 1);
-                            
-                            while (tempDate < firstHolidayDate) {
-                                if (isSpecialHoliday(tempDate)) {
-                                    holidaysCounted++;
-                                }
-                                tempDate.setDate(tempDate.getDate() + 1);
-                            }
-                            
-                            // After holidaysCounted holidays, count forward N more to get first assignment
-                            const firstAssignmentIndex = holidaysCounted + rotationDays;
-                            
-                            // Assign to every Nth special holiday starting from firstAssignmentIndex
-                            for (let i = firstAssignmentIndex; i < allSpecialHolidays.length; i += rotationDays) {
-                                groupAssignments[groupNum][i] = person;
-                            }
-                        }
-                    });
-                }
-                
-                // Display results in a table - one row per special holiday
-                html += '<div class="table-responsive">';
-                html += '<table class="table table-bordered table-hover table-sm">';
-                html += '<thead class="table-warning">';
-                html += '<tr>';
-                html += '<th>Ημερομηνία</th>';
-                html += '<th>Όνομα Αργίας</th>';
-                html += '<th>Ομάδα 1<br><small>ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</small></th>';
-                html += '<th>Ομάδα 2<br><small>ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</small></th>';
-                html += '<th>Ομάδα 3<br><small>ΤΕΧΝΙΚΟΣ Ε/Π AW139</small></th>';
-                html += '<th>Ομάδα 4<br><small>ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</small></th>';
-                html += '</tr>';
-                html += '</thead>';
-                html += '<tbody>';
-                
-                allSpecialHolidays.forEach((holiday, index) => {
-                    const dateStr = holiday.date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                    const dayName = getGreekDayName(holiday.date);
-                    
-                    html += '<tr>';
-                    html += `<td><strong>${dateStr}</strong><br><small class="text-muted">${dayName}</small></td>`;
-                    html += `<td>${holiday.holidayName}</td>`;
-                    
-                    // Show assigned person for each group with last/next duty info
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const assignedPerson = groupAssignments[groupNum][index];
-                        const groupData = groups[groupNum] || { special: [], lastDuties: {} };
-                        
-                        if (!assignedPerson) {
-                            html += '<td class="text-muted">-</td>';
-                        } else {
-                            const lastDuties = groupData.lastDuties?.[assignedPerson] || {};
-                            const lastSpecialDutyStr = lastDuties.special || 'Δεν έχει';
-                            
-                            // Calculate next duty date
-                            const rotationDays = (groupData.special || []).length;
-                            let nextDutyInfo = '';
-                            
-                            if (rotationDays > 0) {
-                                // Find next special holiday after this one for this person
-                                let nextDutyIndex = index + rotationDays;
-                                if (nextDutyIndex < allSpecialHolidays.length) {
-                                    const nextDuty = allSpecialHolidays[nextDutyIndex];
-                                    const nextDutyStr = nextDuty.date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                    nextDutyInfo = `<br><small class="text-info">Επόμενη: ${nextDutyStr}</small>`;
-                                } else {
-                                    nextDutyInfo = '<br><small class="text-muted">Επόμενη: Δεν έχει</small>';
-                                }
-                            }
-                            
-                            const lastDutyDisplay = lastSpecialDutyStr !== 'Δεν έχει' 
-                                ? new Date(lastSpecialDutyStr + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                                : 'Δεν έχει';
-                            
-                            html += '<td>';
-                            html += `<strong>${assignedPerson}</strong>`;
-                            html += `<br><small class="text-muted">Τελευταία: ${lastDutyDisplay}</small>`;
-                            html += nextDutyInfo;
-                            html += '</td>';
-                        }
-                    }
-                    
-                    html += '</tr>';
-                });
-                
-                html += '</tbody>';
-                html += '</table>';
-                html += '</div>';
-                
-                html += '</div>';
-                
-                // Display in modal
-                const contentDiv = document.getElementById('specialHolidays10YearsContent');
-                if (contentDiv) {
-                    contentDiv.innerHTML = html;
-                }
-                
-                const modal = new bootstrap.Modal(document.getElementById('specialHolidays10YearsModal'));
-                modal.show();
-            } catch (error) {
-                console.error('Error calculating special holidays for 10 years:', error);
                 alert('Σφάλμα κατά τον υπολογισμό: ' + error.message);
             }
         }
@@ -5676,14 +5417,6 @@
             
             let html = '<div class="step-content">';
             html += '<h6 class="mb-3"><i class="fas fa-star text-warning me-2"></i>Βήμα 1: Ειδικές Αργίες</h6>';
-            
-            // Show latest duties info from Firebase
-            if (calculationSteps.latestDutiesFromFirebase) {
-                html += '<div class="alert alert-success mb-3">';
-                html += '<i class="fas fa-database me-2"></i><strong>Τελευταίες Υπηρεσίες από Firebase:</strong>';
-                html += '<small class="d-block mt-2">Οι υπολογισμοί βασίζονται στις τελευταίες υπηρεσίες που βρέθηκαν στη βάση δεδομένων.</small>';
-                html += '</div>';
-            }
             
             if (specialHolidays.length === 0) {
                 html += '<div class="alert alert-info">';
@@ -5789,25 +5522,12 @@
                                 assignedPersonDaysSince = personEligibility[0].daysSinceLastDuty;
                             }
                             
-                            // Get last duty date for this person - check Firebase first
+                            // Get last duty date for this person
                             let lastDutyInfo = '';
                             let daysCountInfo = '';
                             if (assignedPerson) {
-                                // Check Firebase latest duties
-                                let lastDutyDateKey = null;
-                                if (calculationSteps.latestDutiesFromFirebase && 
-                                    calculationSteps.latestDutiesFromFirebase[assignedPerson] &&
-                                    calculationSteps.latestDutiesFromFirebase[assignedPerson][groupNum]) {
-                                    lastDutyDateKey = calculationSteps.latestDutiesFromFirebase[assignedPerson][groupNum]['special'];
-                                }
-                                
-                                if (lastDutyDateKey) {
-                                    const lastDutyDate = new Date(lastDutyDateKey + 'T00:00:00');
-                                    lastDutyInfo = `<br><small class="text-muted">Τελευταία (Firebase): ${lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</small>`;
-                                } else {
-                                    const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'special', groupPeople.length);
-                                    lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
-                                }
+                                const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'special', groupPeople.length);
+                                lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
                                 
                                 // Show days counted in parentheses
                                 if (assignedPersonDaysSince !== null && assignedPersonDaysSince !== Infinity) {
@@ -5818,7 +5538,7 @@
                                 }
                             }
                             
-                            html += `<td>${assignedPerson || '-'}${lastDutyInfo}${daysCountInfo}</td>`;
+                            html += `<td>${assignedPerson || '-'}${daysCountInfo}${lastDutyInfo}</td>`;
                         }
                     }
                     
@@ -5921,14 +5641,6 @@
             let html = '<div class="step-content">';
             html += '<h6 class="mb-3"><i class="fas fa-calendar-weekend text-info me-2"></i>Βήμα 2: Σαββατοκύριακα/Αργίες</h6>';
             
-            // Show latest duties info from Firebase
-            if (calculationSteps.latestDutiesFromFirebase) {
-                html += '<div class="alert alert-success mb-3">';
-                html += '<i class="fas fa-database me-2"></i><strong>Τελευταίες Υπηρεσίες από Firebase:</strong>';
-                html += '<small class="d-block mt-2">Οι υπολογισμοί βασίζονται στις τελευταίες υπηρεσίες που βρέθηκαν στη βάση δεδομένων.</small>';
-                html += '</div>';
-            }
-            
             if (weekendHolidays.length === 0) {
                 html += '<div class="alert alert-info">';
                 html += '<i class="fas fa-info-circle me-2"></i>';
@@ -6023,25 +5735,12 @@
                                 assignedPersonDaysSince = personEligibility[0].daysSinceLastDuty;
                             }
                             
-                            // Get last duty date for this person - check Firebase first
+                            // Get last duty date for this person
                             let lastDutyInfo = '';
                             let daysCountInfo = '';
                             if (assignedPerson) {
-                                // Check Firebase latest duties
-                                let lastDutyDateKey = null;
-                                if (calculationSteps.latestDutiesFromFirebase && 
-                                    calculationSteps.latestDutiesFromFirebase[assignedPerson] &&
-                                    calculationSteps.latestDutiesFromFirebase[assignedPerson][groupNum]) {
-                                    lastDutyDateKey = calculationSteps.latestDutiesFromFirebase[assignedPerson][groupNum]['weekend'];
-                                }
-                                
-                                if (lastDutyDateKey) {
-                                    const lastDutyDate = new Date(lastDutyDateKey + 'T00:00:00');
-                                    lastDutyInfo = `<br><small class="text-muted">Τελευταία (Firebase): ${lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</small>`;
-                                } else {
-                                    const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'weekend', groupPeople.length);
-                                    lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
-                                }
+                                const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'weekend', groupPeople.length);
+                                lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
                                 
                                 // Show days counted in parentheses
                                 if (assignedPersonDaysSince !== null && assignedPersonDaysSince !== Infinity) {
@@ -6052,7 +5751,7 @@
                                 }
                             }
                             
-                            html += `<td>${assignedPerson || '-'}${lastDutyInfo}${daysCountInfo}</td>`;
+                            html += `<td>${assignedPerson || '-'}${daysCountInfo}${lastDutyInfo}</td>`;
                         }
                     }
                     
