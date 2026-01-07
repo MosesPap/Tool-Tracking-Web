@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.07 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.08 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.07</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.08</span></h4>
             </div>
         </div>
     </div>
@@ -1520,7 +1520,35 @@
                     // Migrate old format to new format if needed
                     groups = migrateGroupsFormat(data) || { 1: { regular: [], special: [] }, 2: { regular: [], special: [] }, 3: { regular: [], special: [] }, 4: { regular: [], special: [] } };
                     
-                    // Debug: Log lastDuties to verify they're loaded
+                    // CRITICAL: Always ensure priorities object exists and is properly initialized
+                    for (let i = 1; i <= 4; i++) {
+                        if (!groups[i]) {
+                            groups[i] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} };
+                        }
+                        if (!groups[i].priorities) {
+                            groups[i].priorities = {};
+                        }
+                        
+                        // Ensure all people in lists have priority entries (only if they don't already exist)
+                        const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                        listTypes.forEach(listType => {
+                            const list = groups[i][listType] || [];
+                            list.forEach(person => {
+                                if (!groups[i].priorities[person]) {
+                                    groups[i].priorities[person] = {};
+                                }
+                                // Only set default if priority doesn't exist (preserve existing priorities)
+                                if (groups[i].priorities[person][listType] === undefined) {
+                                    groups[i].priorities[person][listType] = 999; // Default priority
+                                }
+                            });
+                        });
+                    }
+                    
+                    // Save immediately to ensure priorities are persisted
+                    saveData();
+                    
+                    // Debug: Log lastDuties and priorities to verify they're loaded
                     console.log('Loaded groups from Firestore');
                     for (let g = 1; g <= 4; g++) {
                         if (groups[g] && groups[g].lastDuties) {
@@ -1530,6 +1558,12 @@
                                 // Log sample lastDuties
                                 const samplePerson = Object.keys(groups[g].lastDuties)[0];
                                 console.log(`Sample lastDuties for ${samplePerson}:`, groups[g].lastDuties[samplePerson]);
+                            }
+                        }
+                        if (groups[g] && groups[g].priorities) {
+                            const prioritiesCount = Object.keys(groups[g].priorities).length;
+                            if (prioritiesCount > 0) {
+                                console.log(`Group ${g} has ${prioritiesCount} people with priorities:`, Object.keys(groups[g].priorities));
                             }
                         }
                     }
@@ -2137,10 +2171,10 @@
             if (!data) return null;
             
             const migrated = {
-                1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} },
-                2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} },
-                3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} },
-                4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} }
+                1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
+                2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
+                3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
+                4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} }
             };
             
             for (let i = 1; i <= 4; i++) {
@@ -2151,13 +2185,15 @@
                     migrated[i].weekend = [...people];
                     migrated[i].semi = [...people];
                     migrated[i].normal = [...people];
-                    // Preserve lastDuties and missingPeriods if they exist (shouldn't in old format, but just in case)
+                    // Preserve lastDuties, missingPeriods, and priorities if they exist (shouldn't in old format, but just in case)
                     if (data[i].lastDuties) migrated[i].lastDuties = data[i].lastDuties;
                     if (data[i].missingPeriods) migrated[i].missingPeriods = data[i].missingPeriods;
+                    if (data[i].priorities) migrated[i].priorities = data[i].priorities;
                 } else if (data[i] && typeof data[i] === 'object') {
-                    // ALWAYS preserve lastDuties and missingPeriods if they exist
+                    // ALWAYS preserve lastDuties, missingPeriods, and priorities if they exist
                     if (data[i].lastDuties) migrated[i].lastDuties = data[i].lastDuties;
                     if (data[i].missingPeriods) migrated[i].missingPeriods = data[i].missingPeriods;
+                    if (data[i].priorities) migrated[i].priorities = data[i].priorities;
                     
                     // Check if old format (regular/special) or new format
                     if (data[i].regular || data[i].special) {
@@ -2181,6 +2217,10 @@
                         migrated[i].semi = [...people];
                         migrated[i].normal = [...people];
                     }
+                    // Preserve lastDuties, missingPeriods, and priorities if they exist (for all cases)
+                    if (data[i].lastDuties) migrated[i].lastDuties = data[i].lastDuties;
+                    if (data[i].missingPeriods) migrated[i].missingPeriods = data[i].missingPeriods;
+                    if (data[i].priorities) migrated[i].priorities = data[i].priorities;
                 }
             }
             
