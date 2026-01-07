@@ -2216,8 +2216,61 @@
             return migrated;
         }
 
+        // Helper function to track which lists are currently open
+        function getOpenLists() {
+            const openLists = [];
+            for (let i = 1; i <= 4; i++) {
+                const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                listTypes.forEach(lt => {
+                    const listId = `${lt}List_${i}`;
+                    const listElement = document.getElementById(listId);
+                    if (listElement && listElement.classList.contains('show')) {
+                        openLists.push(listId);
+                    }
+                });
+            }
+            return openLists;
+        }
+
+        // Helper function to restore open lists after renderGroups
+        function restoreOpenLists(openLists) {
+            if (!openLists || openLists.length === 0) return;
+            
+            setTimeout(() => {
+                openLists.forEach(listId => {
+                    const listElement = document.getElementById(listId);
+                    if (listElement) {
+                        const bsCollapse = new bootstrap.Collapse(listElement, {
+                            toggle: false
+                        });
+                        bsCollapse.show();
+                        // Update chevron
+                        const chevronId = listId.replace('List_', 'Chevron_');
+                        const chevronElement = document.getElementById(chevronId);
+                        if (chevronElement) {
+                            chevronElement.classList.remove('fa-chevron-down');
+                            chevronElement.classList.add('fa-chevron-up');
+                        }
+                    }
+                });
+            }, 50);
+        }
+
         // Render groups - shows 4 separate order lists per group
-        function renderGroups() {
+        // preserveOpenLists: if true, preserves currently open lists
+        // forceOpenLists: array of list IDs that should be opened after render
+        function renderGroups(preserveOpenLists = true, forceOpenLists = []) {
+            // Track open lists before rendering if preserveOpenLists is true
+            const openLists = preserveOpenLists ? getOpenLists() : [];
+            
+            // Add any forced open lists to the list
+            if (forceOpenLists && forceOpenLists.length > 0) {
+                forceOpenLists.forEach(listId => {
+                    if (!openLists.includes(listId)) {
+                        openLists.push(listId);
+                    }
+                });
+            }
             for (let i = 1; i <= 4; i++) {
                 const container = document.getElementById(`group${i}People`);
                 container.innerHTML = '';
@@ -2336,6 +2389,11 @@
                 
                 const rotationSpan = document.getElementById(`group${i}Rotation`);
                 rotationSpan.textContent = allPeople.size > 0 ? allPeople.size : '-';
+            }
+            
+            // Restore open lists if preserveOpenLists is true
+            if (preserveOpenLists && openLists.length > 0) {
+                restoreOpenLists(openLists);
             }
         }
 
@@ -2650,19 +2708,6 @@
                 const fromIndex = parseInt(draggedElement.dataset.index);
                 const toIndex = parseInt(this.dataset.index);
                 
-                // Track which lists are currently open before re-rendering
-                const openLists = [];
-                for (let i = 1; i <= 4; i++) {
-                    const listTypes = ['special', 'weekend', 'semi', 'normal'];
-                    listTypes.forEach(lt => {
-                        const listId = `${lt}List_${i}`;
-                        const listElement = document.getElementById(listId);
-                        if (listElement && listElement.classList.contains('show')) {
-                            openLists.push(listId);
-                        }
-                    });
-                }
-                
                 const list = groups[groupNum][listType];
                 const person = list[fromIndex];
                 list.splice(fromIndex, 1);
@@ -2678,43 +2723,10 @@
                 });
                 
                 saveData();
-                renderGroups();
                 
-                // Restore open lists and ensure the list we just modified is open
-                setTimeout(() => {
-                    openLists.forEach(listId => {
-                        const listElement = document.getElementById(listId);
-                        if (listElement) {
-                            const bsCollapse = new bootstrap.Collapse(listElement, {
-                                toggle: false
-                            });
-                            bsCollapse.show();
-                            // Update chevron
-                            const chevronId = listId.replace('List_', 'Chevron_');
-                            const chevronElement = document.getElementById(chevronId);
-                            if (chevronElement) {
-                                chevronElement.classList.remove('fa-chevron-down');
-                                chevronElement.classList.add('fa-chevron-up');
-                            }
-                        }
-                    });
-                    
-                    // Ensure the list we just modified is open
-                    const modifiedListId = `${listType}List_${groupNum}`;
-                    const modifiedListElement = document.getElementById(modifiedListId);
-                    if (modifiedListElement && !modifiedListElement.classList.contains('show')) {
-                        const bsCollapse = new bootstrap.Collapse(modifiedListElement, {
-                            toggle: false
-                        });
-                        bsCollapse.show();
-                        const chevronId = modifiedListId.replace('List_', 'Chevron_');
-                        const chevronElement = document.getElementById(chevronId);
-                        if (chevronElement) {
-                            chevronElement.classList.remove('fa-chevron-down');
-                            chevronElement.classList.add('fa-chevron-up');
-                        }
-                    }
-                }, 50);
+                // Ensure the list we just modified is open
+                const modifiedListId = `${listType}List_${groupNum}`;
+                renderGroups(true, [modifiedListId]);
             }
             
             dragOverElement = null;
