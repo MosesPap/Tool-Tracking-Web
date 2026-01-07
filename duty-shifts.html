@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.35 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.36 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.35</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.36</span></h4>
             </div>
         </div>
     </div>
@@ -7948,9 +7948,10 @@
                     // This helps us know who to skip when their turn comes again
                     const skippedInMonth = {}; // monthKey -> Set of person names
                     
-                    // Track current rotation position per month (accounts for skips)
-                    // Only for weekends, as they need to skip people with special holidays
-                    const currentRotationPosition = {}; // monthKey -> current position
+                    // Track current rotation position per month (accounts for skips and swaps)
+                    // For weekends: tracks position to skip people with special holidays
+                    // For normal days: tracks position to account for swaps
+                    const currentRotationPosition = {}; // monthKey -> { groupNum -> current position } for normal, monthKey -> current position for weekend
                     
                     // Track days that have been swapped (to skip them in the loop)
                     const swappedDays = {}; // dayKey -> { groupNum -> true }
@@ -7989,7 +7990,7 @@
                             assignedPeople[monthKey][groupNum] = new Set();
                         }
                         
-                        // For weekends, use tracked rotation position; for others, use dayIndex
+                        // For weekends and normal days, use tracked rotation position; for others, use dayIndex
                         let rotationPosition;
                         if (dayTypeCategory === 'weekend') {
                             // Initialize rotation position for this month if needed
@@ -7997,8 +7998,18 @@
                                 currentRotationPosition[monthKey] = 0;
                             }
                             rotationPosition = currentRotationPosition[monthKey] % rotationDays;
+                        } else if (dayTypeCategory === 'normal') {
+                            // For normal days: track rotation position per group to account for swaps
+                            if (!currentRotationPosition[monthKey]) {
+                                currentRotationPosition[monthKey] = {};
+                            }
+                            if (currentRotationPosition[monthKey][groupNum] === undefined) {
+                                // Initialize to the rotation position based on dayIndex
+                                currentRotationPosition[monthKey][groupNum] = dayIndex % rotationDays;
+                            }
+                            rotationPosition = currentRotationPosition[monthKey][groupNum] % rotationDays;
                         } else {
-                            // For special, semi, normal: use simple dayIndex rotation
+                            // For special, semi: use simple dayIndex rotation
                             rotationPosition = dayIndex % rotationDays;
                         }
                         
@@ -8033,8 +8044,13 @@
                             
                             // If no replacement found, skip this day
                             if (!foundReplacement) {
+                                // Still advance rotation position to avoid infinite loop
+                                currentRotationPosition[monthKey][groupNum] = (rotationPosition + 1) % rotationDays;
                                 return;
                             }
+                            
+                            // Update rotation position to the replacement's position (will be advanced after assignment)
+                            currentRotationPosition[monthKey][groupNum] = rotationPosition;
                         }
                         
                         // Check if expected person is missing on this date
@@ -8094,9 +8110,11 @@
                                 if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
                                     assignedPeople[monthKey][groupNum].add(expectedPerson);
                                 }
-                                // For weekends: advance rotation position for next iteration
+                                // Advance rotation position for next iteration
                                 if (dayTypeCategory === 'weekend') {
                                     currentRotationPosition[monthKey] = rotationPosition + 1;
+                                } else if (dayTypeCategory === 'normal') {
+                                    currentRotationPosition[monthKey][groupNum] = rotationPosition + 1;
                                 }
                                 } else {
                                 // Expected person has conflict - mark as skipped and find replacement
@@ -8383,6 +8401,16 @@
                                                     assignedPeople[monthKey][groupNum].add(skippedPerson);
                                                 }
                                                 
+                                                // Track that swap person has been assigned (to prevent duplicate assignment later)
+                                                if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
+                                                    assignedPeople[monthKey][groupNum].add(swapPerson);
+                                                }
+                                                
+                                                // Advance rotation position to swap person's position + 1 (so next iteration continues correctly)
+                                                if (dayTypeCategory === 'normal') {
+                                                    currentRotationPosition[monthKey][groupNum] = swapRotationPosition + 1;
+                                                }
+                                                
                                                 // Store swap reason
                                                 const swapDate = new Date(swapDayKey + 'T00:00:00');
                                                 const isSameWeekSwap = isSameWeek(dayDate, swapDate);
@@ -8459,9 +8487,11 @@
                                         if (!candidateHasConflict) {
                                             assignedPerson = candidate;
                                             foundReplacement = true;
-                                            // For weekends: update rotation position to candidate's index + 1 for next iteration
+                                            // Update rotation position to candidate's index + 1 for next iteration
                                             if (dayTypeCategory === 'weekend') {
                                                 currentRotationPosition[monthKey] = nextIndex + 1;
+                                            } else if (dayTypeCategory === 'normal') {
+                                                currentRotationPosition[monthKey][groupNum] = nextIndex + 1;
                                             }
                                             break;
                                         }
@@ -8471,8 +8501,12 @@
                                     // it means everyone has special holiday in this month - this shouldn't happen,
                                     // but as fallback, we'll try the emergency fallback below
                                     // Still advance rotation position even if no replacement found
-                                    if (!foundReplacement && dayTypeCategory === 'weekend') {
-                                        currentRotationPosition[monthKey] = rotationPosition + 1;
+                                    if (!foundReplacement) {
+                                        if (dayTypeCategory === 'weekend') {
+                                            currentRotationPosition[monthKey] = rotationPosition + 1;
+                                        } else if (dayTypeCategory === 'normal') {
+                                            currentRotationPosition[monthKey][groupNum] = rotationPosition + 1;
+                                        }
                                     }
                                 }
                             }
