@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.11 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.12 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.11</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.12</span></h4>
             </div>
         </div>
     </div>
@@ -5738,7 +5738,7 @@
                 // Sort special holidays by date
                 const sortedSpecial = [...specialHolidays].sort();
                 
-                for (const dateKey of sortedSpecial) {
+                sortedSpecial.forEach((dateKey, specialIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     const dayName = getGreekDayName(date);
@@ -5770,7 +5770,7 @@
                     html += `<td><strong>${dateStr}</strong><br><small class="text-muted">${dayName}</small></td>`;
                     html += `<td>${holidayName || 'Ειδική Αργία'}</td>`;
                     
-                    // Calculate who will be assigned for each group
+                    // Calculate who will be assigned for each group based on rotation order
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
                         const groupPeople = groupData.special || [];
@@ -5778,55 +5778,36 @@
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
                         } else {
-                            // Find who should be assigned based on rotation
-                            let assignedPerson = null;
-                            const personEligibility = [];
+                            // Use rotation order: specialIndex % rotationDays determines which person
+                            const rotationDays = groupPeople.length;
+                            const rotationPosition = specialIndex % rotationDays;
+                            let assignedPerson = groupPeople[rotationPosition];
                             
-                            for (let i = 0; i < groupPeople.length; i++) {
-                                const person = groupPeople[i];
-                                if (isPersonMissingOnDate(person, groupNum, date)) continue;
-                                
-                                const daysSince = countDaysSinceLastDuty(dateKey, person, groupNum, 'special', dayTypeLists, startDate);
-                                const rotationDays = groupPeople.length;
-                                const isEligible = daysSince >= rotationDays || daysSince === Infinity;
-                                
-                                personEligibility.push({
-                                    person: person,
-                                    index: i,
-                                    daysSinceLastDuty: daysSince,
-                                    isEligible: isEligible
-                                });
+                            // Check if assigned person is missing, if so find next in rotation
+                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
+                                // Find next person in rotation who is not missing
+                                for (let offset = 1; offset < rotationDays; offset++) {
+                                    const nextIndex = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[nextIndex];
+                                    if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
+                                        assignedPerson = candidate;
+                                        break;
+                                    }
+                                }
                             }
                             
-                            // Sort: eligible first, then by days since last duty, then by rotation order
-                            personEligibility.sort((a, b) => {
-                                if (a.isEligible !== b.isEligible) {
-                                    return b.isEligible - a.isEligible;
-                                }
-                                if (a.daysSinceLastDuty !== b.daysSinceLastDuty) {
-                                    return b.daysSinceLastDuty - a.daysSinceLastDuty;
-                                }
-                                return a.index - b.index;
-                            });
-                            
-                            let assignedPersonDaysSince = null;
-                            if (personEligibility.length > 0) {
-                                assignedPerson = personEligibility[0].person;
-                                assignedPersonDaysSince = personEligibility[0].daysSinceLastDuty;
-                            }
-                            
-                            // Get last duty date for this person
+                            // Get last duty date and days since for display
                             let lastDutyInfo = '';
                             let daysCountInfo = '';
                             if (assignedPerson) {
+                                const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'special', dayTypeLists, startDate);
                                 const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'special', groupPeople.length);
                                 lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
                                 
                                 // Show days counted in parentheses
-                                if (assignedPersonDaysSince !== null && assignedPersonDaysSince !== Infinity) {
-                                    const rotationDays = groupPeople.length;
-                                    daysCountInfo = ` <span class="text-info">(${assignedPersonDaysSince}/${rotationDays} ημέρες)</span>`;
-                                } else if (assignedPersonDaysSince === Infinity) {
+                                if (daysSince !== null && daysSince !== Infinity) {
+                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} ημέρες)</span>`;
+                                } else if (daysSince === Infinity) {
                                     daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
                                 }
                             }
@@ -5836,7 +5817,7 @@
                     }
                     
                     html += '</tr>';
-                }
+                });
                 
                 html += '</tbody>';
                 html += '</table>';
@@ -6707,7 +6688,7 @@
                     const rotationDays = groupPeople.length;
                     
                     // Process each day in order
-                    days.forEach((dayKey) => {
+                    days.forEach((dayKey, dayIndex) => {
                         // Skip if day already has assignment for this group (critical assignments)
                         const existingAssignment = getAssignmentForDate(dayKey);
                         if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
@@ -6718,65 +6699,140 @@
                         const month = dayDate.getMonth();
                         const year = dayDate.getFullYear();
                         
-                        // Find person who should be assigned (N-day rotation)
+                        // Find person who should be assigned based on rotation order
+                        // Rotation: day 0 → person 0, day 1 → person 1, ..., day N → person 0 (cycle)
+                        const rotationPosition = dayIndex % rotationDays;
                         let assignedPerson = null;
                         let skippedPerson = null;
                         
-                        // Calculate eligibility for all people
-                        const personEligibility = [];
-                        for (let i = 0; i < groupPeople.length; i++) {
-                            const person = groupPeople[i];
+                        // Get the person at this rotation position
+                        const expectedPerson = groupPeople[rotationPosition];
+                        
+                        // Check if expected person is missing on this date
+                        if (expectedPerson && !isPersonMissingOnDate(expectedPerson, groupNum, dayDate)) {
+                            // Check for conflicts based on day type
+                            let hasConflict = false;
                             
-                            // Skip if person is missing on this date
-                            if (isPersonMissingOnDate(person, groupNum, dayDate)) {
-                                continue;
+                            if (dayTypeCategory === 'special') {
+                                // No conflicts to check for special holidays
+                                hasConflict = false;
+                            } else if (dayTypeCategory === 'weekend') {
+                                // Check if person has special holiday duty in the same month
+                                if (hasSpecialHolidayDutyInMonth(expectedPerson, groupNum, month, year)) {
+                                    hasConflict = true;
+                                }
+                            } else if (dayTypeCategory === 'semi') {
+                                // Check consecutive day with weekend/holiday
+                                const dayBefore = new Date(dayDate);
+                                dayBefore.setDate(dayBefore.getDate() - 1);
+                                const dayAfter = new Date(dayDate);
+                                dayAfter.setDate(dayAfter.getDate() + 1);
+                                
+                                const beforeType = getDayType(dayBefore);
+                                const afterType = getDayType(dayAfter);
+                                
+                                if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), expectedPerson, groupNum)) {
+                                    hasConflict = true;
+                                }
+                                if ((afterType === 'weekend-holiday' || afterType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayAfter), expectedPerson, groupNum)) {
+                                    hasConflict = true;
+                                }
+                            } else if (dayTypeCategory === 'normal') {
+                                // Check consecutive day with semi-normal
+                                const dayBefore = new Date(dayDate);
+                                dayBefore.setDate(dayBefore.getDate() - 1);
+                                const dayAfter = new Date(dayDate);
+                                dayAfter.setDate(dayAfter.getDate() + 1);
+                                
+                                const beforeType = getDayType(dayBefore);
+                                const afterType = getDayType(dayAfter);
+                                
+                                if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), expectedPerson, groupNum)) {
+                                    hasConflict = true;
+                                }
+                                if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), expectedPerson, groupNum)) {
+                                    hasConflict = true;
+                                }
                             }
                             
-                            const daysSinceLastDuty = countDaysSinceLastDuty(dayKey, person, groupNum, dayTypeCategory, dayTypeLists, startDate);
-                            // Assign when N days have passed (counting starts from tomorrow after last duty)
-                            // daysSinceLastDuty counts from the day AFTER last duty, so we assign when it >= N
-                            const isEligible = daysSinceLastDuty >= rotationDays || daysSinceLastDuty === Infinity;
-                            
-                            personEligibility.push({
-                                person: person,
-                                index: i,
-                                daysSinceLastDuty: daysSinceLastDuty,
-                                isEligible: isEligible
-                            });
+                            // If expected person has NO conflicts, assign them
+                            if (!hasConflict) {
+                                assignedPerson = expectedPerson;
+                            } else {
+                                // Expected person has conflict - mark as skipped and find replacement
+                                skippedPerson = expectedPerson;
+                                
+                                // Find next person in rotation order without conflicts
+                                for (let offset = 1; offset < rotationDays; offset++) {
+                                    const nextIndex = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[nextIndex];
+                                    
+                                    if (!candidate || isPersonMissingOnDate(candidate, groupNum, dayDate)) {
+                                        continue;
+                                    }
+                                    
+                                    let candidateHasConflict = false;
+                                    
+                                    // Check conflicts for candidate
+                                    if (dayTypeCategory === 'weekend') {
+                                        if (hasSpecialHolidayDutyInMonth(candidate, groupNum, month, year)) {
+                                            candidateHasConflict = true;
+                                        }
+                                    } else if (dayTypeCategory === 'semi') {
+                                        const dayBefore = new Date(dayDate);
+                                        dayBefore.setDate(dayBefore.getDate() - 1);
+                                        const dayAfter = new Date(dayDate);
+                                        dayAfter.setDate(dayAfter.getDate() + 1);
+                                        
+                                        const beforeType = getDayType(dayBefore);
+                                        const afterType = getDayType(dayAfter);
+                                        
+                                        if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
+                                            candidateHasConflict = true;
+                                        }
+                                        if ((afterType === 'weekend-holiday' || afterType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayAfter), candidate, groupNum)) {
+                                            candidateHasConflict = true;
+                                        }
+                                    } else if (dayTypeCategory === 'normal') {
+                                        const dayBefore = new Date(dayDate);
+                                        dayBefore.setDate(dayBefore.getDate() - 1);
+                                        const dayAfter = new Date(dayDate);
+                                        dayAfter.setDate(dayAfter.getDate() + 1);
+                                        
+                                        const beforeType = getDayType(dayBefore);
+                                        const afterType = getDayType(dayAfter);
+                                        
+                                        if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
+                                            candidateHasConflict = true;
+                                        }
+                                        if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), candidate, groupNum)) {
+                                            candidateHasConflict = true;
+                                        }
+                                    }
+                                    
+                                    if (!candidateHasConflict) {
+                                        assignedPerson = candidate;
+                                        break;
+                                    }
+                                }
+                            }
                         }
                         
-                        // Sort by eligibility, then by days since last duty, then by rotation order
-                        personEligibility.sort((a, b) => {
-                            if (a.isEligible !== b.isEligible) {
-                                return b.isEligible - a.isEligible;
-                            }
-                            if (a.daysSinceLastDuty !== b.daysSinceLastDuty) {
-                                return b.daysSinceLastDuty - a.daysSinceLastDuty;
-                            }
-                            return a.index - b.index;
-                        });
-                        
-                        // CRITICAL: Always check the first person in rotation first
-                        // Only skip them if they have a detected conflict
-                        // This ensures strict rotation order when there are no conflicts
-                        if (personEligibility.length > 0) {
-                            const firstPerson = personEligibility[0];
-                            
-                            // Check if first person is eligible
-                            if (firstPerson.isEligible) {
-                                let hasConflict = false;
+                        // Emergency fallback: if still no assignment, try all people in order
+                        if (!assignedPerson) {
+                            for (let i = 0; i < groupPeople.length; i++) {
+                                const candidate = groupPeople[i];
+                                if (!candidate || isPersonMissingOnDate(candidate, groupNum, dayDate)) {
+                                    continue;
+                                }
                                 
-                                // Check conflicts based on day type
-                                if (dayTypeCategory === 'special') {
-                                    // No conflicts to check for special holidays
-                                    hasConflict = false;
-                                } else if (dayTypeCategory === 'weekend') {
-                                    // Check if person has special holiday duty in the same month
-                                    if (hasSpecialHolidayDutyInMonth(firstPerson.person, groupNum, month, year)) {
-                                        hasConflict = true;
+                                let candidateHasConflict = false;
+                                
+                                if (dayTypeCategory === 'weekend') {
+                                    if (hasSpecialHolidayDutyInMonth(candidate, groupNum, month, year)) {
+                                        candidateHasConflict = true;
                                     }
                                 } else if (dayTypeCategory === 'semi') {
-                                    // Check consecutive day with weekend/holiday
                                     const dayBefore = new Date(dayDate);
                                     dayBefore.setDate(dayBefore.getDate() - 1);
                                     const dayAfter = new Date(dayDate);
@@ -6785,14 +6841,13 @@
                                     const beforeType = getDayType(dayBefore);
                                     const afterType = getDayType(dayAfter);
                                     
-                                    if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), firstPerson.person, groupNum)) {
-                                        hasConflict = true;
+                                    if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
+                                        candidateHasConflict = true;
                                     }
-                                    if ((afterType === 'weekend-holiday' || afterType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayAfter), firstPerson.person, groupNum)) {
-                                        hasConflict = true;
+                                    if ((afterType === 'weekend-holiday' || afterType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayAfter), candidate, groupNum)) {
+                                        candidateHasConflict = true;
                                     }
                                 } else if (dayTypeCategory === 'normal') {
-                                    // Check consecutive day with semi-normal
                                     const dayBefore = new Date(dayDate);
                                     dayBefore.setDate(dayBefore.getDate() - 1);
                                     const dayAfter = new Date(dayDate);
@@ -6801,81 +6856,19 @@
                                     const beforeType = getDayType(dayBefore);
                                     const afterType = getDayType(dayAfter);
                                     
-                                    if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), firstPerson.person, groupNum)) {
-                                        hasConflict = true;
+                                    if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
+                                        candidateHasConflict = true;
                                     }
-                                    if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), firstPerson.person, groupNum)) {
-                                        hasConflict = true;
+                                    if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), candidate, groupNum)) {
+                                        candidateHasConflict = true;
                                     }
                                 }
                                 
-                                // If first person is eligible and has NO conflicts, assign them
-                                if (!hasConflict) {
-                                    assignedPerson = firstPerson.person;
-                                } else {
-                                    // First person has conflict - mark as skipped and find replacement
-                                    skippedPerson = firstPerson.person;
-                                    
-                                    // Find next eligible person without conflicts
-                                    for (let i = 1; i < personEligibility.length; i++) {
-                                        const candidate = personEligibility[i];
-                                        if (!candidate.isEligible) continue;
-                                        
-                                        let candidateHasConflict = false;
-                                        
-                                        // Check conflicts for candidate
-                                        if (dayTypeCategory === 'weekend') {
-                                            if (hasSpecialHolidayDutyInMonth(candidate.person, groupNum, month, year)) {
-                                                candidateHasConflict = true;
-                                            }
-                                        } else if (dayTypeCategory === 'semi') {
-                                            const dayBefore = new Date(dayDate);
-                                            dayBefore.setDate(dayBefore.getDate() - 1);
-                                            const dayAfter = new Date(dayDate);
-                                            dayAfter.setDate(dayAfter.getDate() + 1);
-                                            
-                                            const beforeType = getDayType(dayBefore);
-                                            const afterType = getDayType(dayAfter);
-                                            
-                                            if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), candidate.person, groupNum)) {
-                                                candidateHasConflict = true;
-                                            }
-                                            if ((afterType === 'weekend-holiday' || afterType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayAfter), candidate.person, groupNum)) {
-                                                candidateHasConflict = true;
-                                            }
-                                        } else if (dayTypeCategory === 'normal') {
-                                            const dayBefore = new Date(dayDate);
-                                            dayBefore.setDate(dayBefore.getDate() - 1);
-                                            const dayAfter = new Date(dayDate);
-                                            dayAfter.setDate(dayAfter.getDate() + 1);
-                                            
-                                            const beforeType = getDayType(dayBefore);
-                                            const afterType = getDayType(dayAfter);
-                                            
-                                            if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), candidate.person, groupNum)) {
-                                                candidateHasConflict = true;
-                                            }
-                                            if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), candidate.person, groupNum)) {
-                                                candidateHasConflict = true;
-                                            }
-                                        }
-                                        
-                                        if (!candidateHasConflict) {
-                                            assignedPerson = candidate.person;
-                                            break;
-                                        }
-                                    }
+                                if (!candidateHasConflict) {
+                                    assignedPerson = candidate;
+                                    break;
                                 }
-                            } else {
-                                // First person is not eligible yet - assign them anyway to maintain rotation order
-                                // This ensures we follow strict rotation even if they haven't waited N days
-                                assignedPerson = firstPerson.person;
                             }
-                        }
-                        
-                        // Emergency fallback: if still no assignment, assign first person in rotation
-                        if (!assignedPerson && personEligibility.length > 0) {
-                            assignedPerson = personEligibility[0].person;
                         }
                         
                         // Assign person to day (uses setAssignmentForDate which saves to correct document)
