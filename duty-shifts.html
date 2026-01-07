@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.37 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.34 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.37</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.34</span></h4>
             </div>
         </div>
     </div>
@@ -6038,11 +6038,6 @@
                 }
                 
                 alert('Ο υπολογισμός ολοκληρώθηκε και αποθηκεύτηκε επιτυχώς!');
-                
-                // Force page refresh to ensure everything is active
-                setTimeout(() => {
-                    location.reload();
-                }, 500);
             } catch (error) {
                 console.error('Error in executeCalculation:', error);
                 
@@ -6633,7 +6628,6 @@
             
             // First, simulate Step 1 (special holidays)
             const simulatedSpecialAssignments = {}; // monthKey -> { groupNum -> Set of person names }
-            const simulatedNormalAssignments = {}; // dateKey -> { groupNum -> person name } - for tracking normal day assignments
             const sortedSpecial = [...specialHolidays].sort();
             
             sortedSpecial.forEach((dateKey, specialIndex) => {
@@ -6897,10 +6891,8 @@
                 const currentNormalRotationPosition = {}; // monthKey -> { groupNum -> current position }
                 // Track pending swaps: when Person A is swapped, Person B should be assigned to Person A's next normal day
                 const pendingNormalSwaps = {}; // monthKey -> { groupNum -> { skippedPerson, swapToPosition } }
-                // Track assigned people per month (to prevent duplicate assignments after swaps)
-                const assignedPeopleInMonthPreview = {}; // monthKey -> Set of person names
-                // Track days that have been swapped (to skip them in the loop)
-                const swappedDaysPreview = {}; // dayKey -> { groupNum -> true }
+                // Track which people have been assigned to which days (to prevent duplicate assignments after swaps)
+                const assignedPeoplePreview = {}; // monthKey -> { groupNum -> Set of person names }
                 
                 sortedNormal.forEach((dateKey, normalIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
@@ -6915,6 +6907,9 @@
                     }
                     if (!pendingNormalSwaps[monthKey]) {
                         pendingNormalSwaps[monthKey] = {};
+                    }
+                    if (!assignedPeoplePreview[monthKey]) {
+                        assignedPeoplePreview[monthKey] = {};
                     }
                     
                     html += '<tr>';
@@ -6937,68 +6932,50 @@
                             let rotationPosition = currentNormalRotationPosition[monthKey][groupNum] % rotationDays;
                             let assignedPerson = groupPeople[rotationPosition];
                             
-                            // Check if this day was already assigned due to a swap
-                            if (swappedDaysPreview[dateKey] && swappedDaysPreview[dateKey][groupNum]) {
-                                // This day was swapped, get the assigned person from simulatedNormalAssignments
-                                assignedPerson = simulatedNormalAssignments[dateKey]?.[groupNum] || assignedPerson;
-                            } else {
-                                // Check if expected person was already assigned this month (due to swap)
-                                if (assignedPeopleInMonthPreview[monthKey] && assignedPeopleInMonthPreview[monthKey].has(assignedPerson)) {
-                                    // This person was already assigned, find next in rotation
-                                    let foundReplacement = false;
-                                    for (let offset = 1; offset < rotationDays && !foundReplacement; offset++) {
-                                        const nextIndex = (rotationPosition + offset) % rotationDays;
-                                        const candidate = groupPeople[nextIndex];
-                                        
-                                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) {
-                                            continue;
-                                        }
-                                        
-                                        // Check if candidate was already assigned this month
-                                        if (assignedPeopleInMonthPreview[monthKey].has(candidate)) {
-                                            continue;
-                                        }
-                                        
-                                        // Check for conflicts
-                                        const dayAfter = new Date(date);
-                                        dayAfter.setDate(dayAfter.getDate() + 1);
-                                        const dayAfterKey = formatDateKey(dayAfter);
-                                        const afterType = getDayType(dayAfter);
-                                        
-                                        let candidateHasConflict = false;
-                                        if (afterType === 'semi-normal-day') {
-                                            const candidateAfter = simulatedSemiAssignments[dayAfterKey]?.[groupNum];
-                                            if (candidateAfter === candidate) {
-                                                candidateHasConflict = true;
-                                            }
-                                        }
-                                        
-                                        if (!candidateHasConflict) {
-                                            assignedPerson = candidate;
-                                            foundReplacement = true;
-                                            assignedPeopleInMonthPreview[monthKey].add(candidate);
-                                            currentNormalRotationPosition[monthKey][groupNum] = nextIndex + 1;
-                                        }
+                            // Initialize assigned people set for this group if needed
+                            if (!assignedPeoplePreview[monthKey][groupNum]) {
+                                assignedPeoplePreview[monthKey][groupNum] = new Set();
+                            }
+                            
+                            // If assigned person was already assigned this month (due to swap), skip to next person
+                            if (assignedPerson && assignedPeoplePreview[monthKey][groupNum].has(assignedPerson)) {
+                                // This person was already assigned (swapped), find next available person in rotation
+                                let foundReplacement = false;
+                                for (let offset = 1; offset < rotationDays && !foundReplacement; offset++) {
+                                    const nextIndex = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[nextIndex];
+                                    
+                                    if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) {
+                                        continue;
                                     }
                                     
-                                    if (!foundReplacement) {
-                                        assignedPerson = null; // No replacement found
+                                    // Check if candidate was already assigned this month
+                                    if (assignedPeoplePreview[monthKey][groupNum].has(candidate)) {
+                                        continue;
                                     }
-                                } else {
-                                    // Track that this person is assigned
-                                    assignedPeopleInMonthPreview[monthKey].add(assignedPerson);
+                                    
+                                    // Found available person
+                                    assignedPerson = candidate;
+                                    rotationPosition = nextIndex;
+                                    foundReplacement = true;
                                 }
                                 
-                                // Check if there's a pending swap for this position (old logic - may not be needed now)
-                                if (pendingNormalSwaps[monthKey][groupNum] && pendingNormalSwaps[monthKey][groupNum].swapToPosition === rotationPosition) {
-                                    // This is the position where the skipped person should be assigned
-                                    assignedPerson = pendingNormalSwaps[monthKey][groupNum].skippedPerson;
-                                    delete pendingNormalSwaps[monthKey][groupNum];
-                                    currentNormalRotationPosition[monthKey][groupNum] = rotationPosition + 1;
-                                } else {
-                                    // Normal assignment logic
-                                    
-                                    // Check for consecutive conflicts with semi-normal day
+                                // If no replacement found, skip this day
+                                if (!foundReplacement) {
+                                    assignedPerson = null;
+                                }
+                            }
+                            
+                            // Check if there's a pending swap for this position
+                            if (pendingNormalSwaps[monthKey][groupNum] && pendingNormalSwaps[monthKey][groupNum].swapToPosition === rotationPosition) {
+                                // This is the position where the skipped person should be assigned
+                                assignedPerson = pendingNormalSwaps[monthKey][groupNum].skippedPerson;
+                                delete pendingNormalSwaps[monthKey][groupNum];
+                                currentNormalRotationPosition[monthKey][groupNum] = rotationPosition + 1;
+                            } else {
+                                // Normal assignment logic
+                                
+                                // Check for consecutive conflicts with semi-normal day
                                 const dayAfter = new Date(date);
                                 dayAfter.setDate(dayAfter.getDate() + 1);
                                 const dayAfterKey = formatDateKey(dayAfter);
@@ -7237,24 +7214,17 @@
                                                 // Valid swap: swap person gets current day, skipped person gets swap day
                                                 assignedPerson = swapPerson;
                                                 // Ensure skippedPerson is set
-                                                if (!skippedPerson) skippedPerson = expectedPerson;
+                                                if (!skippedPerson) skippedPerson = assignedPerson; // Fallback
                                                 
                                                 // DIRECTLY assign skipped person to swap day in preview (same as actual calculation)
-                                                // Store assignment in simulatedNormalAssignments
-                                                if (!simulatedNormalAssignments[swapDayKey]) {
-                                                    simulatedNormalAssignments[swapDayKey] = {};
+                                                if (!normalAssignments[swapDayKey]) {
+                                                    normalAssignments[swapDayKey] = {};
                                                 }
-                                                simulatedNormalAssignments[swapDayKey][groupNum] = skippedPerson;
+                                                normalAssignments[swapDayKey][groupNum] = skippedPerson;
                                                 
-                                                // Track that skipped person has been assigned (to prevent duplicate assignment)
-                                                if (!assignedPeopleInMonthPreview[monthKey]) {
-                                                    assignedPeopleInMonthPreview[monthKey] = new Set();
-                                                }
-                                                assignedPeopleInMonthPreview[monthKey].add(skippedPerson);
-                                                
-                                                // Mark that swap day is already assigned, so we skip it when we reach it
-                                                if (!swappedDaysPreview[swapDayKey]) swappedDaysPreview[swapDayKey] = {};
-                                                swappedDaysPreview[swapDayKey][groupNum] = true;
+                                                // Track that both people have been assigned (to prevent duplicate assignment later)
+                                                assignedPeoplePreview[monthKey][groupNum].add(swapPerson);
+                                                assignedPeoplePreview[monthKey][groupNum].add(skippedPerson);
                                                 
                                                 // Advance rotation to swap person's position
                                                 currentNormalRotationPosition[monthKey][groupNum] = swapRotationPosition;
@@ -7284,8 +7254,7 @@
                                     // No conflict, assign normally and advance rotation
                                     currentNormalRotationPosition[monthKey][groupNum] = rotationPosition + 1;
                                 }
-                                } // Close the else block for "Normal assignment logic"
-                            } // Close the else block for "Check if there's a pending swap"
+                            }
                             
                             // Store assignment
                             if (!normalAssignments[dateKey]) {
@@ -7293,12 +7262,9 @@
                             }
                             normalAssignments[dateKey][groupNum] = assignedPerson;
                             
-                            // Also store in simulatedNormalAssignments for conflict checking in future iterations
-                            if (assignedPerson) {
-                                if (!simulatedNormalAssignments[dateKey]) {
-                                    simulatedNormalAssignments[dateKey] = {};
-                                }
-                                simulatedNormalAssignments[dateKey][groupNum] = assignedPerson;
+                            // Track that this person has been assigned (to prevent duplicate assignment later)
+                            if (assignedPerson && assignedPeoplePreview[monthKey] && assignedPeoplePreview[monthKey][groupNum]) {
+                                assignedPeoplePreview[monthKey][groupNum].add(assignedPerson);
                             }
                             
                             // Get last duty date and days since for display
@@ -7961,11 +7927,11 @@
                     // Only for weekends, as they need to skip people with special holidays
                     const currentRotationPosition = {}; // monthKey -> current position
                     
-                    // Track assigned people per month for normal days (to prevent duplicate assignments after swaps)
-                    const assignedPeopleInMonth = {}; // monthKey -> Set of person names
-                    
                     // Track days that have been swapped (to skip them in the loop)
                     const swappedDays = {}; // dayKey -> { groupNum -> true }
+                    
+                    // Track which people have been assigned to which days (to prevent duplicate assignments after swaps)
+                    const assignedPeople = {}; // monthKey -> { groupNum -> Set of person names }
                     
                     // Process each day in order
                     days.forEach((dayKey, dayIndex) => {
@@ -7991,8 +7957,11 @@
                         }
                         
                         // Initialize assigned people set for this month if needed (for normal days)
-                        if (dayTypeCategory === 'normal' && !assignedPeopleInMonth[monthKey]) {
-                            assignedPeopleInMonth[monthKey] = new Set();
+                        if (dayTypeCategory === 'normal' && !assignedPeople[monthKey]) {
+                            assignedPeople[monthKey] = {};
+                        }
+                        if (dayTypeCategory === 'normal' && !assignedPeople[monthKey][groupNum]) {
+                            assignedPeople[monthKey][groupNum] = new Set();
                         }
                         
                         // For weekends, use tracked rotation position; for others, use dayIndex
@@ -8012,7 +7981,36 @@
                         let skippedPerson = null;
                         
                         // Get the person at this rotation position
-                        const expectedPerson = groupPeople[rotationPosition];
+                        let expectedPerson = groupPeople[rotationPosition];
+                        
+                        // For normal days: if expected person was already assigned this month (due to swap), skip to next person
+                        if (dayTypeCategory === 'normal' && expectedPerson && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum] && assignedPeople[monthKey][groupNum].has(expectedPerson)) {
+                            // This person was already assigned (swapped), find next available person in rotation
+                            let foundReplacement = false;
+                            for (let offset = 1; offset < rotationDays && !foundReplacement; offset++) {
+                                const nextIndex = (rotationPosition + offset) % rotationDays;
+                                const candidate = groupPeople[nextIndex];
+                                
+                                if (!candidate || isPersonMissingOnDate(candidate, groupNum, dayDate)) {
+                                    continue;
+                                }
+                                
+                                // Check if candidate was already assigned this month
+                                if (assignedPeople[monthKey][groupNum].has(candidate)) {
+                                    continue;
+                                }
+                                
+                                // Found available person
+                                expectedPerson = candidate;
+                                rotationPosition = nextIndex;
+                                foundReplacement = true;
+                            }
+                            
+                            // If no replacement found, skip this day
+                            if (!foundReplacement) {
+                                return;
+                            }
+                        }
                         
                         // Check if expected person is missing on this date
                         if (expectedPerson && !isPersonMissingOnDate(expectedPerson, groupNum, dayDate)) {
@@ -8066,61 +8064,11 @@
                                 
                             // If expected person has NO conflicts, assign them
                                 if (!hasConflict) {
-                                // For normal days: check if this person was already assigned this month (due to swap)
-                                if (dayTypeCategory === 'normal' && assignedPeopleInMonth[monthKey] && assignedPeopleInMonth[monthKey].has(expectedPerson)) {
-                                    // This person was already assigned (swapped), skip them and find next in rotation
-                                    // Find next person in rotation who hasn't been assigned this month
-                                    let foundReplacement = false;
-                                    for (let offset = 1; offset < rotationDays && !foundReplacement; offset++) {
-                                        const nextIndex = (rotationPosition + offset) % rotationDays;
-                                        const candidate = groupPeople[nextIndex];
-                                        
-                                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, dayDate)) {
-                                            continue;
-                                        }
-                                        
-                                        // Check if candidate was already assigned this month
-                                        if (assignedPeopleInMonth[monthKey].has(candidate)) {
-                                            continue;
-                                        }
-                                        
-                                        // Check for conflicts
-                                        const dayBefore = new Date(dayDate);
-                                        dayBefore.setDate(dayBefore.getDate() - 1);
-                                        const dayAfter = new Date(dayDate);
-                                        dayAfter.setDate(dayAfter.getDate() + 1);
-                                        
-                                        const beforeType = getDayType(dayBefore);
-                                        const afterType = getDayType(dayAfter);
-                                        
-                                        let candidateHasConflict = false;
-                                        if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
-                                            candidateHasConflict = true;
-                                        }
-                                        if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), candidate, groupNum)) {
-                                            candidateHasConflict = true;
-                                        }
-                                        
-                                        if (!candidateHasConflict) {
-                                            assignedPerson = candidate;
-                                            foundReplacement = true;
-                                            // Track that this person is now assigned
-                                            assignedPeopleInMonth[monthKey].add(candidate);
-                                        }
-                                    }
-                                    
-                                    if (!foundReplacement) {
-                                        // No replacement found, skip this day
-                                        return;
-                                    }
-                                } else {
-                                    assignedPerson = expectedPerson;
-                                    // Track that this person is assigned (for normal days)
-                                    if (dayTypeCategory === 'normal' && assignedPeopleInMonth[monthKey]) {
-                                        assignedPeopleInMonth[monthKey].add(expectedPerson);
-                                    }
+                                assignedPerson = expectedPerson;
+                                // Track that this person is assigned (for normal days)
+                                if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
+                                    assignedPeople[monthKey][groupNum].add(expectedPerson);
                                 }
-                                
                                 // For weekends: advance rotation position for next iteration
                                 if (dayTypeCategory === 'weekend') {
                                     currentRotationPosition[monthKey] = rotationPosition + 1;
@@ -8395,12 +8343,12 @@
                                                 if (!skippedPerson) skippedPerson = expectedPerson;
                                                 
                                                 // DIRECTLY assign skipped person to swap day (don't wait for rotation)
-                                                // This ensures the swap happens immediately: Vavvas goes to 14th, Solomoy goes to 2nd
+                                                // This ensures the swap happens immediately
                                                 assignPersonToDay(swapDayKey, skippedPerson, groupNum);
                                                 
-                                                // Track that skipped person has been assigned this month (to prevent duplicate assignment)
-                                                if (dayTypeCategory === 'normal' && assignedPeopleInMonth[monthKey]) {
-                                                    assignedPeopleInMonth[monthKey].add(skippedPerson);
+                                                // Track that skipped person has been assigned (to prevent duplicate assignment later)
+                                                if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
+                                                    assignedPeople[monthKey][groupNum].add(skippedPerson);
                                                 }
                                                 
                                                 // Store swap reason
