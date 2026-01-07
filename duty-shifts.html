@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.16 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.17 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.16</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.17</span></h4>
             </div>
         </div>
     </div>
@@ -5957,6 +5957,9 @@
                 // Sort weekends/holidays by date
                 const sortedWeekends = [...weekendHolidays].sort();
                 
+                // Track skipped people per month per group (to match calculation logic)
+                const skippedInMonth = {}; // groupNum -> monthKey -> Set of person names
+                
                 sortedWeekends.forEach((dateKey, weekendIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -5989,20 +5992,36 @@
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
                         } else {
+                            // Initialize skipped tracking for this group/month
+                            if (!skippedInMonth[groupNum]) {
+                                skippedInMonth[groupNum] = {};
+                            }
+                            const monthKey = `${year}-${month}`;
+                            if (!skippedInMonth[groupNum][monthKey]) {
+                                skippedInMonth[groupNum][monthKey] = new Set();
+                            }
+                            
                             // Use rotation order: weekendIndex % rotationDays determines which person
                             const rotationDays = groupPeople.length;
                             const rotationPosition = weekendIndex % rotationDays;
                             let assignedPerson = groupPeople[rotationPosition];
+                            let skippedPerson = null;
                             
-                            // Check if assigned person has special holiday in same month, if so skip and find next
+                            // Check if assigned person has special holiday in same month or was already skipped
                             if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                                if (hasSpecialHolidayDutyInMonth(assignedPerson, groupNum, month, year)) {
+                                if (hasSpecialHolidayDutyInMonth(assignedPerson, groupNum, month, year) || 
+                                    skippedInMonth[groupNum][monthKey].has(assignedPerson)) {
                                     // Skip this person, find next in rotation who doesn't have special holiday
+                                    skippedPerson = assignedPerson;
+                                    skippedInMonth[groupNum][monthKey].add(assignedPerson);
+                                    assignedPerson = null;
+                                    
                                     for (let offset = 1; offset < rotationDays; offset++) {
                                         const nextIndex = (rotationPosition + offset) % rotationDays;
                                         const candidate = groupPeople[nextIndex];
                                         if (candidate && !isPersonMissingOnDate(candidate, groupNum, date) && 
-                                            !hasSpecialHolidayDutyInMonth(candidate, groupNum, month, year)) {
+                                            !hasSpecialHolidayDutyInMonth(candidate, groupNum, month, year) &&
+                                            !skippedInMonth[groupNum][monthKey].has(candidate)) {
                                             assignedPerson = candidate;
                                             break;
                                         }
@@ -6014,7 +6033,21 @@
                                     const nextIndex = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[nextIndex];
                                     if (candidate && !isPersonMissingOnDate(candidate, groupNum, date) && 
-                                        !hasSpecialHolidayDutyInMonth(candidate, groupNum, month, year)) {
+                                        !hasSpecialHolidayDutyInMonth(candidate, groupNum, month, year) &&
+                                        !skippedInMonth[groupNum][monthKey].has(candidate)) {
+                                        assignedPerson = candidate;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // Emergency fallback: if still no assignment, try all people in order
+                            if (!assignedPerson) {
+                                for (let i = 0; i < groupPeople.length; i++) {
+                                    const candidate = groupPeople[i];
+                                    if (candidate && !isPersonMissingOnDate(candidate, groupNum, date) && 
+                                        !hasSpecialHolidayDutyInMonth(candidate, groupNum, month, year) &&
+                                        !skippedInMonth[groupNum][monthKey].has(candidate)) {
                                         assignedPerson = candidate;
                                         break;
                                     }
