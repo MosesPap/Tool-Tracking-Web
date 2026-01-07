@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.12 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.13 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.12</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.13</span></h4>
             </div>
         </div>
     </div>
@@ -6718,6 +6718,7 @@
                                 hasConflict = false;
                             } else if (dayTypeCategory === 'weekend') {
                                 // Check if person has special holiday duty in the same month
+                                // If yes, skip them and continue with next person in rotation order
                                 if (hasSpecialHolidayDutyInMonth(expectedPerson, groupNum, month, year)) {
                                     hasConflict = true;
                                 }
@@ -6762,8 +6763,10 @@
                                 // Expected person has conflict - mark as skipped and find replacement
                                 skippedPerson = expectedPerson;
                                 
-                                // Find next person in rotation order without conflicts
-                                for (let offset = 1; offset < rotationDays; offset++) {
+                                // For weekends: find next person in rotation order who doesn't have special holiday in same month
+                                // Continue following rotation order, skipping anyone with special holiday in that month
+                                let foundReplacement = false;
+                                for (let offset = 1; offset < rotationDays && !foundReplacement; offset++) {
                                     const nextIndex = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[nextIndex];
                                     
@@ -6775,8 +6778,11 @@
                                     
                                     // Check conflicts for candidate
                                     if (dayTypeCategory === 'weekend') {
+                                        // Skip if candidate has special holiday duty in the same month
                                         if (hasSpecialHolidayDutyInMonth(candidate, groupNum, month, year)) {
                                             candidateHasConflict = true;
+                                            // Continue to next person in rotation
+                                            continue;
                                         }
                                     } else if (dayTypeCategory === 'semi') {
                                         const dayBefore = new Date(dayDate);
@@ -6812,9 +6818,14 @@
                                     
                                     if (!candidateHasConflict) {
                                         assignedPerson = candidate;
+                                        foundReplacement = true;
                                         break;
                                     }
                                 }
+                                
+                                // If we still haven't found a replacement after checking all people in rotation,
+                                // it means everyone has special holiday in this month - this shouldn't happen,
+                                // but as fallback, we'll try the emergency fallback below
                             }
                         }
                         
@@ -6877,14 +6888,19 @@
                         }
                         
                         // If person was skipped due to conflict, find next available day for them
-                        if (skippedPerson && skippedPerson !== assignedPerson && (dayTypeCategory === 'semi' || dayTypeCategory === 'normal' || dayTypeCategory === 'weekend')) {
-                            const nextAvailableDay = findNextAvailableDayForPerson(skippedPerson, groupNum, dayTypeCategory, dayKey, dayTypeLists);
-                            if (nextAvailableDay) {
-                                // Check if next available day already has assignment for this group
-                                const nextAssignment = getAssignmentForDate(nextAvailableDay);
-                                if (!nextAssignment || !nextAssignment.includes(`(Ομάδα ${groupNum})`)) {
-                                    // Assign skipped person to next available day
-                                    assignPersonToDay(nextAvailableDay, skippedPerson, groupNum);
+                        // Note: For weekends, if skipped due to special holiday in same month, don't reassign
+                        // They will be assigned when their turn comes again in rotation
+                        if (skippedPerson && skippedPerson !== assignedPerson && dayTypeCategory !== 'weekend') {
+                            // Only find next available day for semi and normal (not weekend)
+                            if (dayTypeCategory === 'semi' || dayTypeCategory === 'normal') {
+                                const nextAvailableDay = findNextAvailableDayForPerson(skippedPerson, groupNum, dayTypeCategory, dayKey, dayTypeLists);
+                                if (nextAvailableDay) {
+                                    // Check if next available day already has assignment for this group
+                                    const nextAssignment = getAssignmentForDate(nextAvailableDay);
+                                    if (!nextAssignment || !nextAssignment.includes(`(Ομάδα ${groupNum})`)) {
+                                        // Assign skipped person to next available day
+                                        assignPersonToDay(nextAvailableDay, skippedPerson, groupNum);
+                                    }
                                 }
                             }
                         }
