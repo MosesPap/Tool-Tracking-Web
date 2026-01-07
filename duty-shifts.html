@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.30 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.31 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.30</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.31</span></h4>
             </div>
         </div>
     </div>
@@ -7102,11 +7102,30 @@
                                         
                                         // Check if swap person doesn't have conflict on current day AND swap day (restore full checking)
                                         if (swapPerson && !isPersonMissingOnDate(swapPerson, groupNum, date)) {
-                                            // Check if swap person has conflict on current day (where they would be swapped to)
-                                            const swapPersonAfter = simulatedSemiAssignments[dayAfterKey]?.[groupNum];
-                                            let swapPersonHasConflict = (swapPersonAfter === swapPerson);
+                                            let swapPersonHasConflict = false;
                                             
-                                            // Also check if swap person has conflict on swap day (where they currently would be)
+                                            // FIRST: Check if swap person has conflict on day BEFORE current day (where they would be swapped to)
+                                            const dayBefore = new Date(date);
+                                            dayBefore.setDate(dayBefore.getDate() - 1);
+                                            const dayBeforeKey = formatDateKey(dayBefore);
+                                            const beforeType = getDayType(dayBefore);
+                                            
+                                            if (beforeType === 'semi-normal-day') {
+                                                const swapPersonBefore = simulatedSemiAssignments[dayBeforeKey]?.[groupNum];
+                                                if (swapPersonBefore === swapPerson) {
+                                                    swapPersonHasConflict = true;
+                                                }
+                                            }
+                                            
+                                            // SECOND: Check if swap person has conflict on current day (where they would be swapped to) - check day AFTER
+                                            if (!swapPersonHasConflict) {
+                                                const swapPersonAfter = simulatedSemiAssignments[dayAfterKey]?.[groupNum];
+                                                if (swapPersonAfter === swapPerson) {
+                                                    swapPersonHasConflict = true;
+                                                }
+                                            }
+                                            
+                                            // THIRD: Check if swap person has conflict on swap day (where they currently would be) - check day AFTER swap day
                                             if (!swapPersonHasConflict) {
                                                 const swapDate = new Date(swapDayKey + 'T00:00:00');
                                                 const swapDayAfter = new Date(swapDate);
@@ -7122,7 +7141,7 @@
                                                 }
                                             }
                                             
-                                            // Also check if skipped person has conflict on swap day (where they would go)
+                                            // FOURTH: Check if skipped person has conflict on swap day (where they would go) - check day AFTER swap day
                                             let skippedPersonHasConflict = false;
                                             if (!swapPersonHasConflict) {
                                                 const swapDate = new Date(swapDayKey + 'T00:00:00');
@@ -7986,18 +8005,31 @@
                                                 return false;
                                             }
                                             
-                                            // Check if swap person has conflict on current day (where they would be swapped to)
-                                            const dayAfter = new Date(dayDate);
-                                            dayAfter.setDate(dayAfter.getDate() + 1);
-                                            const dayAfterKey = formatDateKey(dayAfter);
-                                            const afterType = getDayType(dayAfter);
-                                            
                                             let swapPersonHasConflict = false;
-                                            if (afterType === 'semi-normal-day' && hasDutyOnDay(dayAfterKey, swapPerson, groupNum)) {
+                                            
+                                            // FIRST: Check if swap person has conflict on day BEFORE current day (where they would be swapped to)
+                                            const dayBefore = new Date(dayDate);
+                                            dayBefore.setDate(dayBefore.getDate() - 1);
+                                            const dayBeforeKey = formatDateKey(dayBefore);
+                                            const beforeType = getDayType(dayBefore);
+                                            
+                                            if (beforeType === 'semi-normal-day' && hasDutyOnDay(dayBeforeKey, swapPerson, groupNum)) {
                                                 swapPersonHasConflict = true;
                                             }
                                             
-                                            // Also check if swap person has conflict on swap day (where they currently would be)
+                                            // SECOND: Check if swap person has conflict on current day (where they would be swapped to) - check day AFTER
+                                            if (!swapPersonHasConflict) {
+                                                const dayAfter = new Date(dayDate);
+                                                dayAfter.setDate(dayAfter.getDate() + 1);
+                                                const dayAfterKey = formatDateKey(dayAfter);
+                                                const afterType = getDayType(dayAfter);
+                                                
+                                                if (afterType === 'semi-normal-day' && hasDutyOnDay(dayAfterKey, swapPerson, groupNum)) {
+                                                    swapPersonHasConflict = true;
+                                                }
+                                            }
+                                            
+                                            // THIRD: Check if swap person has conflict on swap day (where they currently would be) - check day AFTER swap day
                                             if (!swapPersonHasConflict) {
                                                 const swapDate = new Date(candidateDayKey + 'T00:00:00');
                                                 if (!isPersonMissingOnDate(swapPerson, groupNum, swapDate)) {
@@ -8012,7 +8044,7 @@
                                                 }
                                             }
                                             
-                                            // Also check if skipped person has conflict on swap day (where they would go)
+                                            // FOURTH: Check if skipped person has conflict on swap day (where they would go) - check day AFTER swap day
                                             let skippedPersonHasConflict = false;
                                             if (!swapPersonHasConflict && skippedPerson) {
                                                 const swapDate = new Date(candidateDayKey + 'T00:00:00');
@@ -8132,18 +8164,31 @@
                                         
                                         // Check if swap person doesn't have conflict on current day AND swap day
                                         if (swapPerson && !isPersonMissingOnDate(swapPerson, groupNum, dayDate)) {
-                                            const dayAfter = new Date(dayDate);
-                                            dayAfter.setDate(dayAfter.getDate() + 1);
-                                            const dayAfterKey = formatDateKey(dayAfter);
-                                            const afterType = getDayType(dayAfter);
-                                            
                                             let swapPersonHasConflict = false;
-                                            // Check if swap person has conflict on current day (where they would be swapped to)
-                                            if (afterType === 'semi-normal-day' && hasDutyOnDay(dayAfterKey, swapPerson, groupNum)) {
+                                            
+                                            // FIRST: Check if swap person has conflict on day BEFORE current day (where they would be swapped to)
+                                            const dayBefore = new Date(dayDate);
+                                            dayBefore.setDate(dayBefore.getDate() - 1);
+                                            const dayBeforeKey = formatDateKey(dayBefore);
+                                            const beforeType = getDayType(dayBefore);
+                                            
+                                            if (beforeType === 'semi-normal-day' && hasDutyOnDay(dayBeforeKey, swapPerson, groupNum)) {
                                                 swapPersonHasConflict = true;
                                             }
                                             
-                                            // Also check if swap person has conflict on swap day (where they currently would be)
+                                            // SECOND: Check if swap person has conflict on current day (where they would be swapped to) - check day AFTER
+                                            if (!swapPersonHasConflict) {
+                                                const dayAfter = new Date(dayDate);
+                                                dayAfter.setDate(dayAfter.getDate() + 1);
+                                                const dayAfterKey = formatDateKey(dayAfter);
+                                                const afterType = getDayType(dayAfter);
+                                                
+                                                if (afterType === 'semi-normal-day' && hasDutyOnDay(dayAfterKey, swapPerson, groupNum)) {
+                                                    swapPersonHasConflict = true;
+                                                }
+                                            }
+                                            
+                                            // THIRD: Check if swap person has conflict on swap day (where they currently would be) - check day AFTER swap day
                                             if (!swapPersonHasConflict) {
                                                 const swapDate = new Date(swapDayKey + 'T00:00:00');
                                                 if (!isPersonMissingOnDate(swapPerson, groupNum, swapDate)) {
@@ -8158,7 +8203,7 @@
                                                 }
                                             }
                                             
-                                            // Also check if skipped person (expectedPerson) has conflict on swap day (where they would go)
+                                            // FOURTH: Check if skipped person (expectedPerson) has conflict on swap day (where they would go) - check day AFTER swap day
                                             let skippedPersonHasConflict = false;
                                             if (!swapPersonHasConflict && skippedPerson) {
                                                 const swapDate = new Date(swapDayKey + 'T00:00:00');
