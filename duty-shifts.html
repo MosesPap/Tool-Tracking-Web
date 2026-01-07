@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.09 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.10 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.09</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.10</span></h4>
             </div>
         </div>
     </div>
@@ -2408,7 +2408,7 @@
             }
         }
 
-        // Helper function to get last duty date and calculate next duty date (simple count, no logic)
+        // Helper function to get last duty date and calculate next duty date based on rotation order
         function getLastAndNextDutyDates(person, groupNum, listType, listArrayLength) {
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
             const lastDuties = groupData.lastDuties?.[person] || {};
@@ -2503,36 +2503,29 @@
                 }
             }
             
-            // Calculate next duty date by counting forward N days of the same type (simple count, no logic)
+            // Calculate next duty date based on rotation order (not person's last duty)
             let nextDutyFormatted = 'Δεν έχει';
-            // CRITICAL: Only calculate if we have a valid lastDutyDate
-            if (lastDutyDate && !isNaN(lastDutyDate.getTime()) && listArrayLength > 0) {
-                // CRITICAL: Create a completely new Date object from lastDutyDate to avoid any reference issues
-                // Get the timestamp and create a new date from it
-                const lastDutyTimestamp = lastDutyDate.getTime();
-                const currentDate = new Date(lastDutyTimestamp);
-                currentDate.setHours(0, 0, 0, 0);
+            
+            if (listArrayLength > 0) {
+                // Get the person's index in the list (their rotation position)
+                const list = groups[groupNum]?.[listType] || [];
+                const personIndex = list.indexOf(person);
                 
-                // Verify we have a valid date before starting
-                if (isNaN(currentDate.getTime())) {
+                if (personIndex === -1) {
                     return { lastDuty: lastDutyFormatted, nextDuty: 'Δεν έχει' };
                 }
                 
-                // Start counting from the day after last duty
-                currentDate.setDate(currentDate.getDate() + 1);
+                // Find all upcoming days of this type starting from today
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
                 
-                let daysCounted = 0;
-                const targetDays = listArrayLength;
-                const maxDaysAhead = 3650; // 10 years limit to avoid infinite loops
+                const upcomingDays = [];
+                const checkDate = new Date(today);
+                const maxDaysAhead = 3650; // 10 years limit
                 let daysChecked = 0;
                 
-                // Count forward N days of the same type
-                while (daysCounted < targetDays && daysChecked < maxDaysAhead) {
-                    // CRITICAL: Create a fresh copy for checking day type to avoid any date modification issues
-                    const checkDate = new Date(currentDate.getTime());
-                    checkDate.setHours(0, 0, 0, 0);
-                    
-                    // Use the EXACT same logic as when finding the last duty date
+                // Collect all upcoming days of the matching type
+                while (daysChecked < maxDaysAhead && upcomingDays.length < listArrayLength * 3) {
                     // Check for special holidays FIRST using isSpecialHoliday() directly
                     let dayTypeCategory = 'normal';
                     const isSpecial = isSpecialHoliday(checkDate);
@@ -2549,27 +2542,28 @@
                         // else remains 'normal'
                     }
                     
-                    // If this day matches the list type, count it
+                    // If this day matches the list type, add it
                     if (dayTypeCategory === listType) {
-                        daysCounted++;
+                        upcomingDays.push(new Date(checkDate));
                     }
                     
-                    // Move to next day - create a new date from currentDate's timestamp
-                    const nextDayTimestamp = currentDate.getTime();
-                    currentDate.setTime(nextDayTimestamp);
-                    currentDate.setDate(currentDate.getDate() + 1);
+                    // Move to next day
+                    checkDate.setDate(checkDate.getDate() + 1);
                     daysChecked++;
-                    
-                    // Stop if we've counted enough
-                    if (daysCounted >= targetDays) {
-                        // Go back one day to get the actual next duty date
-                        currentDate.setDate(currentDate.getDate() - 1);
-                        nextDutyFormatted = currentDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                }
+                
+                // Find the next day that matches this person's rotation position
+                // Person at index 0 gets days: 0, listLength, 2*listLength, ...
+                // Person at index 1 gets days: 1, listLength+1, 2*listLength+1, ...
+                // Person at index 2 gets days: 2, listLength+2, 2*listLength+2, ...
+                for (let i = 0; i < upcomingDays.length; i++) {
+                    if (i % listArrayLength === personIndex) {
+                        nextDutyFormatted = upcomingDays[i].toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                         break;
                     }
                 }
                 
-                if (daysCounted < targetDays) {
+                if (nextDutyFormatted === 'Δεν έχει' && upcomingDays.length > 0) {
                     nextDutyFormatted = 'Δεν βρέθηκε';
                 }
             }
