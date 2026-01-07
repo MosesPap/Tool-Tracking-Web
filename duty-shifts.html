@@ -1285,6 +1285,10 @@
         let specialHolidayAssignments = {};
         // Legacy: Keep dutyAssignments for backward compatibility during migration
         let dutyAssignments = {};
+        
+        // Track skip/swap reasons for each assignment
+        // Structure: assignmentReasons[dateKey][groupNum][personName] = { type: 'skip'|'swap', reason: '...', swappedWith: '...' }
+        let assignmentReasons = {};
         // Track critical assignments from last duties - these must NEVER be deleted
         // Format: { "2025-12-25": ["Person Name (Ομάδα 1)", ...], ... }
         let criticalAssignments = {};
@@ -5111,6 +5115,58 @@
                 default: return '';
             }
         }
+        
+        // Helper function to check if two dates are in the same week
+        // Week starts on Monday (ISO 8601 standard)
+        function isSameWeek(date1, date2) {
+            const d1 = new Date(date1);
+            const d2 = new Date(date2);
+            
+            // Get Monday of the week for each date
+            const monday1 = new Date(d1);
+            const dayOfWeek1 = d1.getDay();
+            const diff1 = dayOfWeek1 === 0 ? -6 : 1 - dayOfWeek1; // If Sunday, go back 6 days, else go to Monday
+            monday1.setDate(d1.getDate() + diff1);
+            monday1.setHours(0, 0, 0, 0);
+            
+            const monday2 = new Date(d2);
+            const dayOfWeek2 = d2.getDay();
+            const diff2 = dayOfWeek2 === 0 ? -6 : 1 - dayOfWeek2;
+            monday2.setDate(d2.getDate() + diff2);
+            monday2.setHours(0, 0, 0, 0);
+            
+            return monday1.getTime() === monday2.getTime();
+        }
+        
+        // Helper function to get week start (Monday) for a date
+        function getWeekStart(date) {
+            const d = new Date(date);
+            const dayOfWeek = d.getDay();
+            const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            d.setDate(d.getDate() + diff);
+            d.setHours(0, 0, 0, 0);
+            return d;
+        }
+        
+        // Helper function to store assignment reason
+        function storeAssignmentReason(dateKey, groupNum, personName, type, reason, swappedWith = null) {
+            if (!assignmentReasons[dateKey]) {
+                assignmentReasons[dateKey] = {};
+            }
+            if (!assignmentReasons[dateKey][groupNum]) {
+                assignmentReasons[dateKey][groupNum] = {};
+            }
+            assignmentReasons[dateKey][groupNum][personName] = {
+                type: type, // 'skip' or 'swap'
+                reason: reason,
+                swappedWith: swappedWith
+            };
+        }
+        
+        // Helper function to get assignment reason
+        function getAssignmentReason(dateKey, groupNum, personName) {
+            return assignmentReasons[dateKey]?.[groupNum]?.[personName] || null;
+        }
 
         // Previous month
         function previousMonth() {
@@ -6898,35 +6954,79 @@
                                     let swapDayIndex = null;
                                     
                                     if (targetDayOfWeek !== null) {
-                                        // Look for next normal day with target day of week
+                                        // FIRST: Look for swap day in the SAME WEEK (prioritize same week)
+                                        const currentWeekStart = getWeekStart(date);
+                                        
+                                        // Look for next normal day with target day of week in same week
                                         for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
                                             const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
                                             const checkDayOfWeek = checkDate.getDay();
                                             const checkDayType = getDayType(checkDate);
                                             
-                                            // Must be a normal day
-                                            if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek) {
+                                            // Must be a normal day and in same week
+                                            if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameWeek(date, checkDate)) {
                                                 swapDayKey = sortedNormal[i];
                                                 swapDayIndex = i;
                                                 break;
                                             }
                                         }
                                         
-                                        // If not found, try alternative day of week
+                                        // If not found in same week, try alternative day of week in same week
                                         if (!swapDayKey && alternativeDayOfWeek !== null) {
                                             for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
                                                 const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
                                                 const checkDayOfWeek = checkDate.getDay();
                                                 const checkDayType = getDayType(checkDate);
                                                 
-                                                // Must be a normal day
-                                                if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek) {
+                                                // Must be a normal day and in same week
+                                                if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek && isSameWeek(date, checkDate)) {
                                                     swapDayKey = sortedNormal[i];
                                                     swapDayIndex = i;
                                                     break;
                                                 }
                                             }
                                         }
+                                        
+                                        // SECOND: If not found in same week, look in next week (will ask permission later)
+                                        // Store this for permission check
+                                        let nextWeekSwapDayKey = null;
+                                        let nextWeekSwapDayIndex = null;
+                                        
+                                        if (!swapDayKey) {
+                                            // Look for next normal day with target day of week in next week
+                                            for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
+                                                const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
+                                                const checkDayOfWeek = checkDate.getDay();
+                                                const checkDayType = getDayType(checkDate);
+                                                
+                                                // Must be a normal day and NOT in same week
+                                                if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && !isSameWeek(date, checkDate)) {
+                                                    nextWeekSwapDayKey = sortedNormal[i];
+                                                    nextWeekSwapDayIndex = i;
+                                                    break;
+                                                }
+                                            }
+                                            
+                                            // If not found, try alternative day of week in next week
+                                            if (!nextWeekSwapDayKey && alternativeDayOfWeek !== null) {
+                                                for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
+                                                    const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
+                                                    const checkDayOfWeek = checkDate.getDay();
+                                                    const checkDayType = getDayType(checkDate);
+                                                    
+                                                    // Must be a normal day and NOT in same week
+                                                    if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek && !isSameWeek(date, checkDate)) {
+                                                        nextWeekSwapDayKey = sortedNormal[i];
+                                                        nextWeekSwapDayIndex = i;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
+                                        // If we found a next week swap, ask for permission (in preview mode, we'll just mark it)
+                                        // For now in preview, we'll use same week only
+                                        // In actual calculation, we'll handle permission dialog
                                     }
                                     
                                     // If found swap day, find which person would be assigned to that day
