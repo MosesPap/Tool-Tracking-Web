@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.10 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.11 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.10</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.11</span></h4>
             </div>
         </div>
     </div>
@@ -6538,7 +6538,39 @@
             
             // Process each group
             for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
+                const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} };
+                
+                // Ensure priorities exist
+                if (!groupData.priorities) groupData.priorities = {};
+                
+                // Sort each list by priority before calculating (to ensure correct rotation order)
+                const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                listTypes.forEach(listType => {
+                    if (groupData[listType] && groupData[listType].length > 0) {
+                        groupData[listType].sort((a, b) => {
+                            // Get priorities (default to 999 if not set)
+                            const priorityA = groupData.priorities[a]?.[listType] ?? 999;
+                            const priorityB = groupData.priorities[b]?.[listType] ?? 999;
+                            
+                            // First sort by priority (lower number = higher priority)
+                            if (priorityA !== priorityB) {
+                                return priorityA - priorityB;
+                            }
+                            
+                            // If priorities are equal, sort by last duty date (most recent first, no date last)
+                            const dateA = groupData.lastDuties?.[a]?.[listType];
+                            const dateB = groupData.lastDuties?.[b]?.[listType];
+                            
+                            if (!dateA && !dateB) return 0; // Both have no date, maintain order
+                            if (!dateA) return 1; // A has no date, put it last
+                            if (!dateB) return -1; // B has no date, put it last
+                            
+                            // Both have dates, sort by date (most recent first)
+                            return new Date(dateB) - new Date(dateA);
+                        });
+                    }
+                });
+                
                 const specialPeople = groupData.special || [];
                 const weekendPeople = groupData.weekend || [];
                 const semiPeople = groupData.semi || [];
