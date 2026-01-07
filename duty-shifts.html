@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.06 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.07 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -121,6 +121,113 @@
 
         .drop-indicator.show {
             opacity: 1;
+        }
+
+        /* 3D Interactive Priority Number */
+        .priority-badge-3d {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            box-shadow: 
+                0 8px 16px rgba(102, 126, 234, 0.4),
+                0 4px 8px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+            transform: perspective(500px) rotateX(5deg) translateZ(0);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            position: relative;
+            margin-right: 0.75rem;
+            user-select: none;
+        }
+
+        .priority-badge-3d::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border-radius: 10px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        .priority-badge-3d:hover {
+            transform: perspective(500px) rotateX(0deg) translateZ(10px) scale(1.1);
+            box-shadow: 
+                0 12px 24px rgba(102, 126, 234, 0.5),
+                0 6px 12px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        }
+
+        .priority-badge-3d:active {
+            transform: perspective(500px) rotateX(-5deg) translateZ(5px) scale(0.95);
+            box-shadow: 
+                0 4px 8px rgba(102, 126, 234, 0.3),
+                0 2px 4px rgba(0, 0, 0, 0.2),
+                inset 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Different colors for different priority ranges */
+        .priority-badge-3d.priority-high {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            box-shadow: 
+                0 8px 16px rgba(245, 87, 108, 0.4),
+                0 4px 8px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        }
+
+        .priority-badge-3d.priority-high:hover {
+            box-shadow: 
+                0 12px 24px rgba(245, 87, 108, 0.5),
+                0 6px 12px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        }
+
+        .priority-badge-3d.priority-medium {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            box-shadow: 
+                0 8px 16px rgba(79, 172, 254, 0.4),
+                0 4px 8px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        }
+
+        .priority-badge-3d.priority-medium:hover {
+            box-shadow: 
+                0 12px 24px rgba(79, 172, 254, 0.5),
+                0 6px 12px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        }
+
+        .priority-badge-3d.priority-low {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            color: #333;
+            box-shadow: 
+                0 8px 16px rgba(168, 237, 234, 0.4),
+                0 4px 8px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        }
+
+        .priority-badge-3d.priority-low:hover {
+            box-shadow: 
+                0 12px 24px rgba(168, 237, 234, 0.5),
+                0 6px 12px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.4),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.2);
         }
 
         .person-name {
@@ -540,7 +647,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.06</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.07</span></h4>
             </div>
         </div>
     </div>
@@ -2425,11 +2532,32 @@
             // Get last duty date and calculate next duty date
             const dutyDates = getLastAndNextDutyDates(person, groupNum, listType, listArray.length);
             
+            // Get priority number for this person in this list type
+            const priority = groupData.priorities?.[person]?.[listType] ?? 999;
+            
+            // Determine priority class based on value (1-3 = high, 4-6 = medium, 7+ = low)
+            let priorityClass = 'priority-low';
+            if (priority <= 3) {
+                priorityClass = 'priority-high';
+            } else if (priority <= 6) {
+                priorityClass = 'priority-medium';
+            }
+            
+            // Create 3D priority badge
+            const priorityBadge = priority < 999 ? 
+                `<div class="priority-badge-3d ${priorityClass}" onclick="event.stopPropagation(); editPerson(${groupNum}, '${person.replace(/'/g, "\\'")}')" title="Προτεραιότητα: ${priority} - Κάντε κλικ για επεξεργασία">
+                    ${priority}
+                </div>` : 
+                `<div class="priority-badge-3d priority-low" onclick="event.stopPropagation(); editPerson(${groupNum}, '${person.replace(/'/g, "\\'")}')" title="Δεν έχει οριστεί προτεραιότητα - Κάντε κλικ για επεξεργασία" style="opacity: 0.6;">
+                    ?
+                </div>`;
+            
             personDiv.innerHTML = `
                 <div class="person-name-card" onclick="openPersonActionsModal(${groupNum}, '${person.replace(/'/g, "\\'")}', ${index}, '${listType}')">
                     <div style="display: flex; flex-direction: column;">
                         <div style="display: flex; align-items: center;">
                             <i class="fas fa-grip-vertical text-muted me-2" style="cursor: move;"></i>
+                            ${priorityBadge}
                             <span>${person}${missingBadge}</span>
                         </div>
                         <div style="font-size: 0.75rem; color: #666; margin-top: 0.25rem; margin-left: 1.5rem;">
