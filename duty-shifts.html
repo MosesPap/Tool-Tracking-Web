@@ -103,6 +103,26 @@
             opacity: 0.5;
         }
 
+        .person-item.drag-over {
+            border-top: 3px dashed #007bff !important;
+            background-color: #e7f3ff !important;
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+        }
+
+        .drop-indicator {
+            height: 3px;
+            background-color: #007bff;
+            margin: 0.25rem 0;
+            border-radius: 2px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .drop-indicator.show {
+            opacity: 1;
+        }
+
         .person-name {
             flex: 1;
             font-size: 1rem;
@@ -2432,6 +2452,8 @@
             
             // Add drag and drop handlers
             personDiv.addEventListener('dragstart', handleDragStart);
+            personDiv.addEventListener('dragenter', handleDragEnter);
+            personDiv.addEventListener('dragleave', handleDragLeave);
             personDiv.addEventListener('dragover', handleDragOver);
             personDiv.addEventListener('drop', handleDrop);
             personDiv.addEventListener('dragend', handleDragEnd);
@@ -2441,11 +2463,30 @@
 
         // Drag and drop handlers
         let draggedElement = null;
+        let dragOverElement = null;
         
         function handleDragStart(e) {
             draggedElement = this;
             this.style.opacity = '0.5';
+            this.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'move';
+        }
+        
+        function handleDragEnter(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            if (draggedElement && draggedElement !== this) {
+                this.classList.add('drag-over');
+                dragOverElement = this;
+            }
+        }
+        
+        function handleDragLeave(e) {
+            this.classList.remove('drag-over');
+            if (dragOverElement === this) {
+                dragOverElement = null;
+            }
         }
         
         function handleDragOver(e) {
@@ -2453,6 +2494,15 @@
                 e.preventDefault();
             }
             e.dataTransfer.dropEffect = 'move';
+            
+            // Show drop indicator
+            if (draggedElement && draggedElement !== this) {
+                if (!this.classList.contains('drag-over')) {
+                    this.classList.add('drag-over');
+                }
+                dragOverElement = this;
+            }
+            
             return false;
         }
         
@@ -2461,11 +2511,29 @@
                 e.stopPropagation();
             }
             
+            // Remove all drag-over classes
+            document.querySelectorAll('.person-item.drag-over').forEach(el => {
+                el.classList.remove('drag-over');
+            });
+            
             if (draggedElement !== this) {
                 const groupNum = parseInt(this.dataset.groupNum);
                 const listType = this.dataset.listType;
                 const fromIndex = parseInt(draggedElement.dataset.index);
                 const toIndex = parseInt(this.dataset.index);
+                
+                // Track which lists are currently open before re-rendering
+                const openLists = [];
+                for (let i = 1; i <= 4; i++) {
+                    const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                    listTypes.forEach(lt => {
+                        const listId = `${lt}List_${i}`;
+                        const listElement = document.getElementById(listId);
+                        if (listElement && listElement.classList.contains('show')) {
+                            openLists.push(listId);
+                        }
+                    });
+                }
                 
                 const list = groups[groupNum][listType];
                 const person = list[fromIndex];
@@ -2483,14 +2551,59 @@
                 
                 saveData();
                 renderGroups();
+                
+                // Restore open lists and ensure the list we just modified is open
+                setTimeout(() => {
+                    openLists.forEach(listId => {
+                        const listElement = document.getElementById(listId);
+                        if (listElement) {
+                            const bsCollapse = new bootstrap.Collapse(listElement, {
+                                toggle: false
+                            });
+                            bsCollapse.show();
+                            // Update chevron
+                            const chevronId = listId.replace('List_', 'Chevron_');
+                            const chevronElement = document.getElementById(chevronId);
+                            if (chevronElement) {
+                                chevronElement.classList.remove('fa-chevron-down');
+                                chevronElement.classList.add('fa-chevron-up');
+                            }
+                        }
+                    });
+                    
+                    // Ensure the list we just modified is open
+                    const modifiedListId = `${listType}List_${groupNum}`;
+                    const modifiedListElement = document.getElementById(modifiedListId);
+                    if (modifiedListElement && !modifiedListElement.classList.contains('show')) {
+                        const bsCollapse = new bootstrap.Collapse(modifiedListElement, {
+                            toggle: false
+                        });
+                        bsCollapse.show();
+                        const chevronId = modifiedListId.replace('List_', 'Chevron_');
+                        const chevronElement = document.getElementById(chevronId);
+                        if (chevronElement) {
+                            chevronElement.classList.remove('fa-chevron-down');
+                            chevronElement.classList.add('fa-chevron-up');
+                        }
+                    }
+                }, 50);
             }
             
+            dragOverElement = null;
             return false;
         }
         
         function handleDragEnd(e) {
             this.style.opacity = '1';
+            this.classList.remove('dragging');
+            
+            // Remove all drag-over classes
+            document.querySelectorAll('.person-item.drag-over').forEach(el => {
+                el.classList.remove('drag-over');
+            });
+            
             draggedElement = null;
+            dragOverElement = null;
         }
 
         // Global variable to track if we're editing
