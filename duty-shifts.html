@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.15 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.16 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.15</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.16</span></h4>
             </div>
         </div>
     </div>
@@ -6684,6 +6684,10 @@
                     
                     const rotationDays = groupPeople.length;
                     
+                    // Track which people have been skipped in this month (for weekends only)
+                    // This helps us know who to skip when their turn comes again
+                    const skippedInMonth = {}; // monthKey -> Set of person names
+                    
                     // Process each day in order
                     days.forEach((dayKey, dayIndex) => {
                         // Skip if day already has assignment for this group (critical assignments)
@@ -6695,6 +6699,12 @@
                         const dayDate = new Date(dayKey + 'T00:00:00');
                         const month = dayDate.getMonth();
                         const year = dayDate.getFullYear();
+                        const monthKey = `${year}-${month}`;
+                        
+                        // Initialize skipped set for this month if needed
+                        if (!skippedInMonth[monthKey]) {
+                            skippedInMonth[monthKey] = new Set();
+                        }
                         
                         // Find person who should be assigned based on rotation order
                         // Rotation: day 0 → person 0, day 1 → person 1, ..., day N → person 0 (cycle)
@@ -6715,8 +6725,10 @@
                                 hasConflict = false;
                             } else if (dayTypeCategory === 'weekend') {
                                 // Check if person has special holiday duty in the same month
+                                // OR if they were already skipped in this month (their turn came again)
                                 // If yes, skip them and continue with next person in rotation order
-                                if (hasSpecialHolidayDutyInMonth(expectedPerson, groupNum, month, year)) {
+                                if (hasSpecialHolidayDutyInMonth(expectedPerson, groupNum, month, year) || 
+                                    skippedInMonth[monthKey].has(expectedPerson)) {
                                     hasConflict = true;
                                 }
                             } else if (dayTypeCategory === 'semi') {
@@ -6760,6 +6772,11 @@
                                 // Expected person has conflict - mark as skipped and find replacement
                                 skippedPerson = expectedPerson;
                                 
+                                // For weekends: track that this person was skipped in this month
+                                if (dayTypeCategory === 'weekend') {
+                                    skippedInMonth[monthKey].add(expectedPerson);
+                                }
+                                
                                 // For weekends: find next person in rotation order who doesn't have special holiday in same month
                                 // Continue following rotation order, skipping anyone with special holiday in that month
                                 let foundReplacement = false;
@@ -6776,9 +6793,10 @@
                                     // Check conflicts for candidate
                                     if (dayTypeCategory === 'weekend') {
                                         // Skip if candidate has special holiday duty in the same month
-                                        if (hasSpecialHolidayDutyInMonth(candidate, groupNum, month, year)) {
-                                            candidateHasConflict = true;
-                                            // Continue to next person in rotation
+                                        // OR if they were already skipped in this month
+                                        if (hasSpecialHolidayDutyInMonth(candidate, groupNum, month, year) || 
+                                            skippedInMonth[monthKey].has(candidate)) {
+                                            // Continue to next person in rotation - don't assign this candidate
                                             continue;
                                         }
                                     } else if (dayTypeCategory === 'semi') {
