@@ -5725,7 +5725,8 @@
                         let conflictTitle = '';
                         const hasConflict = hasConsecutiveDuty(key, name, parseInt(group || 0));
                         if (hasConflict) {
-                            conflictIcon = '<i class="fas fa-exclamation-triangle text-danger" style="font-size: 0.9em;" title="Σύγκρουση"></i> ';
+                            // Make conflict icon highly visible - larger, with background color and border
+                            conflictIcon = '<i class="fas fa-exclamation-triangle" style="color: #dc3545; font-size: 1.2em; background-color: #fff3cd; padding: 3px 5px; border-radius: 4px; border: 2px solid #dc3545; display: inline-block; min-width: 20px; text-align: center;" title="Σύγκρουση"></i> ';
                             const date = new Date(key + 'T00:00:00');
                             const dayBefore = new Date(date);
                             dayBefore.setDate(dayBefore.getDate() - 1);
@@ -10402,12 +10403,14 @@
                                     violationReason += ` (${conflictDetails.join('; ')})`;
                                 }
                                 } else if (dayTypeCategory === 'semi') {
-                                    violationReason = 'Αλλαγή λόγω συνεχόμενης Σαββατοκύριακου/Αργίας ή Ειδικής Αργίας';
+                                    const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                    violationReason = `Αλλαγή λόγω συνεχόμενης Σαββατοκύριακου/Αργίας ή Ειδικής Αργίας - Ημερομηνία επηρεασμένη: ${currentDateStr}`;
                                 if (conflictDetails.length > 0) {
                                     violationReason += ` (${conflictDetails.join('; ')})`;
                                 }
                                 } else if (dayTypeCategory === 'normal') {
-                                    violationReason = 'Αλλαγή λόγω συνεχόμενης Ημιαργίας';
+                                    const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                    violationReason = `Αλλαγή λόγω συνεχόμενης Ημιαργίας - Ημερομηνία επηρεασμένη: ${currentDateStr}`;
                                 if (conflictDetails.length > 0) {
                                     violationReason += ` (${conflictDetails.join('; ')})`;
                                 }
@@ -10424,6 +10427,68 @@
                             }
                         }
                         
+                        // Check if there's a swap and get the swap date
+                        const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
+                        let swapDateInfo = '';
+                        if (assignmentReason && assignmentReason.type === 'swap' && assignmentReason.swappedWith) {
+                            // Find the swap date by checking which date has the swapped person (swappedWith)
+                            // Check current month first
+                            const allDatesInMonth = [];
+                            for (let d = 1; d <= daysInMonth; d++) {
+                                allDatesInMonth.push(formatDateKey(new Date(year, month, d)));
+                            }
+                            
+                            let swapDateFound = false;
+                            // Look for the date where swappedWith person is assigned
+                            for (const checkDateKey of allDatesInMonth) {
+                                const checkAssignment = getAssignmentForDate(checkDateKey) || '';
+                                if (checkAssignment.includes(`${assignmentReason.swappedWith} (Ομάδα ${groupNum})`)) {
+                                    const swapDate = new Date(checkDateKey + 'T00:00:00');
+                                    const swapDateStr = swapDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                    swapDateInfo = `, Ημερομηνία αλλαγής: ${swapDateStr}`;
+                                    swapDateFound = true;
+                                    break;
+                                }
+                            }
+                            
+                            // If not found in current month, check previous and next month
+                            if (!swapDateFound) {
+                                const prevMonth = new Date(year, month - 1, 1);
+                                const nextMonth = new Date(year, month + 1, 1);
+                                const lastDayPrev = new Date(year, month, 0);
+                                const lastDayNext = new Date(year, month + 2, 0);
+                                
+                                // Check previous month
+                                for (let d = 1; d <= lastDayPrev.getDate(); d++) {
+                                    const checkDate = new Date(year, month - 1, d);
+                                    const checkDateKey = formatDateKey(checkDate);
+                                    const checkAssignment = getAssignmentForDate(checkDateKey) || '';
+                                    if (checkAssignment.includes(`${assignmentReason.swappedWith} (Ομάδα ${groupNum})`)) {
+                                        const swapDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                        const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                        swapDateInfo = `, Ημερομηνία επηρεασμένη: ${currentDateStr}, Ημερομηνία αλλαγής: ${swapDateStr}`;
+                                        swapDateFound = true;
+                                        break;
+                                    }
+                                }
+                                
+                                // Check next month if still not found
+                                if (!swapDateFound) {
+                                    for (let d = 1; d <= lastDayNext.getDate(); d++) {
+                                        const checkDate = new Date(year, month + 1, d);
+                                        const checkDateKey = formatDateKey(checkDate);
+                                        const checkAssignment = getAssignmentForDate(checkDateKey) || '';
+                                        if (checkAssignment.includes(`${assignmentReason.swappedWith} (Ομάδα ${groupNum})`)) {
+                                            const swapDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                            swapDateInfo = `, Ημερομηνία αλλαγής: ${swapDateStr}`;
+                                            swapDateFound = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
                         violations.push({
                             date: dayKey,
                             dateFormatted: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
@@ -10431,7 +10496,7 @@
                             groupName: getGroupName(groupNum),
                             assignedPerson: assignedPerson,
                             expectedPerson: expectedPerson,
-                            reason: violationReason,
+                            reason: violationReason + swapDateInfo,
                             dayType: getDayTypeLabel(dayType)
                         });
                     }
