@@ -7052,12 +7052,12 @@
                                     
                                     if (!candidateHasSpecial && !candidateWasSkipped) {
                                         assignedPerson = candidate;
-                                        currentRotationPosition[monthKey][groupNum] = nextIndex + 1;
+                                        globalWeekendRotationPosition[groupNum] = nextIndex + 1;
                                         break;
                                     }
                                 }
                             } else {
-                                currentRotationPosition[monthKey][groupNum] = rotationPosition + 1;
+                                globalWeekendRotationPosition[groupNum] = rotationPosition + 1;
                             }
                         }
                         
@@ -7103,7 +7103,7 @@
                 
                 // Track assignments for swapping logic
                 const semiAssignments = {}; // dateKey -> { groupNum -> person name }
-                const currentSemiRotationPosition = {}; // monthKey -> { groupNum -> current position }
+                const globalSemiRotationPosition = {}; // groupNum -> global position (continues across months)
                 // Track pending swaps: when Person A is swapped, Person B should be assigned to Person A's next day
                 const pendingSwaps = {}; // monthKey -> { groupNum -> { skippedPerson, swapToPosition } }
                 
@@ -7115,9 +7115,6 @@
                     const year = date.getFullYear();
                     const monthKey = `${year}-${month}`;
                     
-                    if (!currentSemiRotationPosition[monthKey]) {
-                        currentSemiRotationPosition[monthKey] = {};
-                    }
                     if (!pendingSwaps[monthKey]) {
                         pendingSwaps[monthKey] = {};
                     }
@@ -7134,12 +7131,14 @@
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
                         } else {
-                            if (currentSemiRotationPosition[monthKey][groupNum] === undefined) {
-                                currentSemiRotationPosition[monthKey][groupNum] = 0;
+                            const rotationDays = groupPeople.length;
+                            if (globalSemiRotationPosition[groupNum] === undefined) {
+                                // Initialize based on rotation count from February 2026 (first time only)
+                                const daysSinceStart = getRotationPosition(date, 'semi', groupNum);
+                                globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
                             }
                             
-                            const rotationDays = groupPeople.length;
-                            let rotationPosition = currentSemiRotationPosition[monthKey][groupNum] % rotationDays;
+                            let rotationPosition = globalSemiRotationPosition[groupNum] % rotationDays;
                             let assignedPerson = groupPeople[rotationPosition];
                             
                             // Check if there's a pending swap for this position
@@ -7148,7 +7147,7 @@
                                 assignedPerson = pendingSwaps[monthKey][groupNum].skippedPerson;
                                 delete pendingSwaps[monthKey][groupNum];
                                 // Advance rotation normally from this position
-                                currentSemiRotationPosition[monthKey][groupNum] = rotationPosition + 1;
+                                globalSemiRotationPosition[groupNum] = rotationPosition + 1;
                             } else {
                                 // Normal assignment logic
                                 
@@ -7229,18 +7228,18 @@
                                                 swapToPosition: nextIndex
                                             };
                                             // Advance rotation to candidate's position + 1 (so next iteration will be nextIndex)
-                                            currentSemiRotationPosition[monthKey][groupNum] = nextIndex;
+                                            globalSemiRotationPosition[groupNum] = nextIndex;
                                             break;
                                         }
                                     }
                                     
                                     // If no swap found, still assign original person (they'll have conflict but it's unavoidable)
                                     if (!swappedPerson) {
-                                        currentSemiRotationPosition[monthKey][groupNum] = rotationPosition + 1;
+                                        globalSemiRotationPosition[groupNum] = rotationPosition + 1;
                                     }
                                 } else {
                                     // No conflict, assign normally and advance rotation
-                                    currentSemiRotationPosition[monthKey][groupNum] = rotationPosition + 1;
+                                    globalSemiRotationPosition[groupNum] = rotationPosition + 1;
                                 }
                             }
                             
@@ -7380,12 +7379,12 @@
                                     
                                     if (!candidateHasSpecial && !candidateWasSkipped) {
                                         assignedPerson = candidate;
-                                        currentRotationPosition[monthKey][groupNum] = nextIndex + 1;
+                                        globalWeekendRotationPosition[groupNum] = nextIndex + 1;
                                         break;
                                     }
                                 }
                             } else {
-                                currentRotationPosition[monthKey][groupNum] = rotationPosition + 1;
+                                globalWeekendRotationPosition[groupNum] = rotationPosition + 1;
                             }
                         }
                         
@@ -7401,7 +7400,7 @@
             
             // Third, simulate Step 3 (semi-normal days) - including swap logic
             const simulatedSemiAssignments = {}; // dateKey -> { groupNum -> person name }
-            const currentSemiRotationPosition = {}; // monthKey -> { groupNum -> current position }
+            const globalSemiRotationPosition = {}; // groupNum -> global position (continues across months)
             const pendingSemiSwaps = {}; // monthKey -> { groupNum -> { skippedPerson, swapToPosition } }
             const sortedSemi = [...semiNormalDays].sort();
             
@@ -7411,9 +7410,6 @@
                 const year = date.getFullYear();
                 const monthKey = `${year}-${month}`;
                 
-                if (!currentSemiRotationPosition[monthKey]) {
-                    currentSemiRotationPosition[monthKey] = {};
-                }
                 if (!pendingSemiSwaps[monthKey]) {
                     pendingSemiSwaps[monthKey] = {};
                 }
@@ -7423,22 +7419,21 @@
                     const groupPeople = groupData.semi || [];
                     
                     if (groupPeople.length > 0) {
-                        if (currentSemiRotationPosition[monthKey][groupNum] === undefined) {
-                            // Initialize based on rotation count from February 2026
+                        const rotationDays = groupPeople.length;
+                        if (globalSemiRotationPosition[groupNum] === undefined) {
+                            // Initialize based on rotation count from February 2026 (first time only)
                             const daysSinceStart = getRotationPosition(date, 'semi', groupNum);
-                            const rotationDays = groupPeople.length;
-                            currentSemiRotationPosition[monthKey][groupNum] = daysSinceStart % rotationDays;
+                            globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
                         }
                         
-                        const rotationDays = groupPeople.length;
-                        let rotationPosition = currentSemiRotationPosition[monthKey][groupNum] % rotationDays;
+                        let rotationPosition = globalSemiRotationPosition[groupNum] % rotationDays;
                         let assignedPerson = groupPeople[rotationPosition];
                         
                         // Check if there's a pending swap for this position
                         if (pendingSemiSwaps[monthKey][groupNum] && pendingSemiSwaps[monthKey][groupNum].swapToPosition === rotationPosition) {
                             assignedPerson = pendingSemiSwaps[monthKey][groupNum].skippedPerson;
                             delete pendingSemiSwaps[monthKey][groupNum];
-                            currentSemiRotationPosition[monthKey][groupNum] = rotationPosition + 1;
+                            globalSemiRotationPosition[groupNum] = rotationPosition + 1;
                         } else {
                             // Check for consecutive conflicts with weekend or special holiday
                             const dayBefore = new Date(date);
@@ -7502,16 +7497,16 @@
                                             skippedPerson: skippedPerson,
                                             swapToPosition: nextIndex
                                         };
-                                        currentSemiRotationPosition[monthKey][groupNum] = nextIndex;
+                                        globalSemiRotationPosition[groupNum] = nextIndex;
                                         break;
                                     }
                                 }
                                 
                                 if (!assignedPerson || assignedPerson === skippedPerson) {
-                                    currentSemiRotationPosition[monthKey][groupNum] = rotationPosition + 1;
+                                    globalSemiRotationPosition[groupNum] = rotationPosition + 1;
                                 }
                             } else {
-                                currentSemiRotationPosition[monthKey][groupNum] = rotationPosition + 1;
+                                globalSemiRotationPosition[groupNum] = rotationPosition + 1;
                             }
                         }
                         
