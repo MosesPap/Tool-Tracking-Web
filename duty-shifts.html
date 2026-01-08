@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.39 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.40 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,12 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.39</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.40</span></h4>
+            </div>
+            <div>
+                <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
+                    <i class="fas fa-sort-numeric-down me-1"></i>Ιεραρχία
+                </button>
             </div>
         </div>
     </div>
@@ -1133,6 +1138,44 @@
     </div>
 
 
+    <!-- Rankings Management Modal -->
+    <div class="modal fade" id="rankingsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info">
+                    <h5 class="modal-title"><i class="fas fa-sort-numeric-down me-2"></i>Διαχείριση Ιεραρχίας Οργανισμού</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Η ιεραρχία είναι ξεχωριστή από την προτεραιότητα και δεν επηρεάζει τη σειρά των λιστών.
+                    </p>
+                    <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark sticky-top">
+                                <tr>
+                                    <th style="width: 10%;">Ιεραρχία</th>
+                                    <th style="width: 70%;">Όνομα</th>
+                                    <th style="width: 20%;">Ομάδα</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rankingsTableBody">
+                                <!-- Rankings will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="saveRankings()">
+                        <i class="fas fa-save me-1"></i>Αποθήκευση
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Day Details Modal -->
     <div class="modal fade" id="dayDetailsModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -1276,6 +1319,8 @@
             3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
             4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} }
         };
+        // Organizational rankings - separate from priority, doesn't affect list order
+        let rankings = {}; // Format: { "Person Name": rankNumber }
         let holidays = [];
         let specialHolidays = []; // User-defined special holidays
         // Separate assignments by day type
@@ -1676,6 +1721,18 @@
                     
                     console.log('Loaded criticalAssignments from Firestore:', Object.keys(criticalAssignments).length, 'dates');
                     console.log('Sample criticalAssignments:', Object.entries(criticalAssignments).slice(0, 3));
+                }
+                
+                // Load rankings
+                const rankingsDoc = await db.collection('dutyShifts').doc('rankings').get();
+                if (rankingsDoc.exists) {
+                    const data = rankingsDoc.data();
+                    // Remove metadata fields
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    rankings = data || {};
+                    console.log('Loaded rankings from Firestore:', Object.keys(rankings).length, 'people');
+                }
                     
                     // Restore critical assignments to dutyAssignments if they're missing
                     Object.keys(criticalAssignments).forEach(dateKey => {
@@ -1918,6 +1975,12 @@
                 });
             }
             
+            // Load rankings
+            const savedRankings = localStorage.getItem('dutyShiftsRankings');
+            if (savedRankings) {
+                rankings = JSON.parse(savedRankings);
+            }
+            
             // After loading from localStorage, rebuild criticalAssignments from lastDuties
             rebuildCriticalAssignmentsFromLastDuties();
         }
@@ -1994,6 +2057,13 @@
                 }
                 await db.collection('dutyShifts').doc('criticalAssignments').set({
                     ...criticalAssignments,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
+                
+                // Save rankings
+                await db.collection('dutyShifts').doc('rankings').set({
+                    ...rankings,
                     lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                     updatedBy: user.uid
                 });
@@ -2157,6 +2227,7 @@
             // Also save legacy dutyAssignments for backward compatibility
             localStorage.setItem('dutyShiftsAssignments', JSON.stringify(dutyAssignments));
             localStorage.setItem('dutyShiftsCriticalAssignments', JSON.stringify(criticalAssignments));
+            localStorage.setItem('dutyShiftsRankings', JSON.stringify(rankings));
         }
 
         // Get group name by number
@@ -3486,6 +3557,101 @@
                 renderCalendar();
                 updateStatistics();
             }
+        }
+
+        // Get all unique people across all groups
+        function getAllPeople() {
+            const allPeople = new Set();
+            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                const group = groups[groupNum];
+                if (group) {
+                    ['special', 'weekend', 'semi', 'normal'].forEach(listType => {
+                        if (Array.isArray(group[listType])) {
+                            group[listType].forEach(person => allPeople.add(person));
+                        }
+                    });
+                }
+            }
+            return Array.from(allPeople).sort();
+        }
+
+        // Get group number for a person (returns first group found)
+        function getPersonGroup(personName) {
+            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                const group = groups[groupNum];
+                if (group) {
+                    const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                    for (const listType of listTypes) {
+                        if (Array.isArray(group[listType]) && group[listType].includes(personName)) {
+                            return groupNum;
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Open rankings management modal
+        function openRankingsModal() {
+            const allPeople = getAllPeople();
+            const tbody = document.getElementById('rankingsTableBody');
+            tbody.innerHTML = '';
+            
+            if (allPeople.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Δεν υπάρχουν άτομα στο σύστημα</td></tr>';
+                const modal = new bootstrap.Modal(document.getElementById('rankingsModal'));
+                modal.show();
+                return;
+            }
+            
+            // Create rows for each person
+            allPeople.forEach((person, index) => {
+                const row = document.createElement('tr');
+                const currentRanking = rankings[person] || '';
+                const groupNum = getPersonGroup(person);
+                const groupName = groupNum ? getGroupName(groupNum) : 'Άγνωστη';
+                
+                row.innerHTML = `
+                    <td>
+                        <input type="number" class="form-control form-control-sm" 
+                               id="ranking_${index}" 
+                               value="${currentRanking}" 
+                               min="1" 
+                               placeholder="-" 
+                               style="width: 80px;">
+                    </td>
+                    <td>${person}</td>
+                    <td>${groupName}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            const modal = new bootstrap.Modal(document.getElementById('rankingsModal'));
+            modal.show();
+        }
+
+        // Save rankings
+        function saveRankings() {
+            const allPeople = getAllPeople();
+            const newRankings = {};
+            
+            allPeople.forEach((person, index) => {
+                const input = document.getElementById(`ranking_${index}`);
+                if (input && input.value.trim() !== '') {
+                    const ranking = parseInt(input.value);
+                    if (!isNaN(ranking) && ranking > 0) {
+                        newRankings[person] = ranking;
+                    }
+                }
+            });
+            
+            rankings = newRankings;
+            saveData();
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('rankingsModal'));
+            modal.hide();
+            
+            alert('Η ιεραρχία αποθηκεύτηκε επιτυχώς!');
         }
 
         // Remove person from specific list
