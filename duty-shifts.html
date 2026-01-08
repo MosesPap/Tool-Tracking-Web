@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.45 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.46 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.45</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.46</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -1218,7 +1218,7 @@
                 <div class="modal-body">
                     <p class="text-muted mb-3">
                         <i class="fas fa-info-circle me-1"></i>
-                        Σύρετε και αφήστε τα άτομα για να αλλάξετε τη σειρά ιεραρχίας, ή κάντε κλικ στο όνομα για να εισάγετε την ιεραρχία χειροκίνητα. Η ιεραρχία είναι ξεχωριστή από την προτεραιότητα και δεν επηρεάζει τη σειρά των λιστών.
+                        Σύρετε και αφήστε τα άτομα για να αλλάξετε τη σειρά ιεραρχίας, ή κάντε κλικ στο όνομα για να εισάγετε την ιεραρχία χειροκίνητα. <strong>Οι αλλαγές είναι προσωρινές μέχρι να πατήσετε "Αποθήκευση".</strong> Η ιεραρχία είναι ξεχωριστή από την προτεραιότητα και δεν επηρεάζει τη σειρά των λιστών.
                     </p>
                     <div id="rankingsListContainer" style="max-height: 500px; overflow-y: auto; position: relative;">
                         <div id="rankingsListBody">
@@ -1228,9 +1228,9 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-primary" onclick="saveRankings()">
-                        <i class="fas fa-save me-1"></i>Αποθήκευση
+                        <i class="fas fa-save me-1"></i>Αποθήκευση στο Firestore
                     </button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
+                    <button type="button" class="btn btn-secondary" onclick="cancelRankingsEdit()" data-bs-dismiss="modal">Ακύρωση</button>
                 </div>
             </div>
         </div>
@@ -1381,6 +1381,8 @@
         };
         // Organizational rankings - separate from priority, doesn't affect list order
         let rankings = {}; // Format: { "Person Name": rankNumber }
+        let originalRankingsBackup = {}; // Backup of rankings when modal opens (for cancel/discard)
+        let rankingsSaved = false; // Flag to track if rankings were saved
         let holidays = [];
         let specialHolidays = []; // User-defined special holidays
         // Separate assignments by day type
@@ -3663,6 +3665,10 @@
             const container = document.getElementById('rankingsListBody');
             container.innerHTML = '';
             
+            // Create backup of original rankings from Firestore (for cancel/discard)
+            originalRankingsBackup = JSON.parse(JSON.stringify(rankings));
+            rankingsSaved = false; // Reset save flag
+            
             if (allPeople.length === 0) {
                 container.innerHTML = '<div class="text-center text-muted p-4">Δεν υπάρχουν άτομα στο σύστημα</div>';
                 const modal = new bootstrap.Modal(document.getElementById('rankingsModal'));
@@ -3726,6 +3732,21 @@
             });
             
             const modal = new bootstrap.Modal(document.getElementById('rankingsModal'));
+            
+            // Handle modal close events - restore original rankings if closed without saving
+            const modalElement = document.getElementById('rankingsModal');
+            const handleModalClose = function() {
+                // If modal was closed without saving, restore original rankings
+                if (!rankingsSaved) {
+                    rankings = JSON.parse(JSON.stringify(originalRankingsBackup));
+                }
+                rankingsSaved = false; // Reset for next time
+            };
+            
+            // Remove any existing listeners and add new one
+            modalElement.removeEventListener('hidden.bs.modal', handleModalClose);
+            modalElement.addEventListener('hidden.bs.modal', handleModalClose);
+            
             modal.show();
         }
 
@@ -3943,13 +3964,24 @@
             });
         }
 
+        // Cancel rankings edit - restore original rankings
+        function cancelRankingsEdit() {
+            // Restore original rankings from backup (changes are discarded)
+            rankings = JSON.parse(JSON.stringify(originalRankingsBackup));
+            rankingsSaved = true; // Prevent modal close handler from restoring again
+            const modal = bootstrap.Modal.getInstance(document.getElementById('rankingsModal'));
+            if (modal) {
+                modal.hide();
+            }
+        }
+
         // Save rankings to Firestore
         function saveRankings() {
             const container = document.getElementById('rankingsListBody');
             const items = container.querySelectorAll('.ranking-item');
             const newRankings = {};
             
-            // Collect all rankings from the current list order
+            // Collect all rankings from the current list order (temporary changes in UI)
             items.forEach((item, index) => {
                 const person = item.dataset.person;
                 const ranking = parseInt(item.dataset.ranking) || (index + 1);
@@ -3963,6 +3995,10 @@
             
             // Save to Firestore (saveData() saves rankings to Firestore)
             saveData();
+            
+            // Update backup to match saved state
+            originalRankingsBackup = JSON.parse(JSON.stringify(rankings));
+            rankingsSaved = true; // Mark as saved to prevent restore on close
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('rankingsModal'));
             modal.hide();
