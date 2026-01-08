@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.42 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.43 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -682,7 +682,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.42</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.43</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -1811,15 +1811,20 @@
                     console.log('No criticalAssignments document found in Firestore');
                 }
                 
-                // Load rankings
+                // Load rankings from Firestore
                 const rankingsDoc = await db.collection('dutyShifts').doc('rankings').get();
                 if (rankingsDoc.exists) {
                     const data = rankingsDoc.data();
                     // Remove metadata fields
                     delete data.lastUpdated;
                     delete data.updatedBy;
+                    // Store rankings from Firestore: { "Person Name": rankNumber }
                     rankings = data || {};
                     console.log('Loaded rankings from Firestore:', Object.keys(rankings).length, 'people');
+                    console.log('Sample rankings:', Object.entries(rankings).slice(0, 5));
+                } else {
+                    console.log('No rankings document found in Firestore, starting with empty rankings');
+                    rankings = {};
                 }
                 
                 // After loading all data, rebuild criticalAssignments from lastDuties if they're missing
@@ -2115,12 +2120,14 @@
                     updatedBy: user.uid
                 });
                 
-                // Save rankings
+                // Save rankings to Firestore
+                console.log('Saving rankings to Firestore:', Object.keys(rankings).length, 'people');
                 await db.collection('dutyShifts').doc('rankings').set({
                     ...rankings,
                     lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                     updatedBy: user.uid
                 });
+                console.log('Rankings saved to Firestore successfully');
                 
                 console.log('Data saved to Firebase');
                 
@@ -3658,11 +3665,13 @@
                 return;
             }
             
-            // Sort people by ranking (ranked first, then unranked)
+            // Sort people by ranking from Firestore (rankings loaded from Firestore in loadData)
+            // Rankings are stored in the global 'rankings' object: { "Person Name": rankNumber }
             const sortedPeople = [...allPeople].sort((a, b) => {
-                const rankA = rankings[a] || 9999;
+                // Get ranking from Firestore data (rankings object)
+                const rankA = rankings[a] || 9999;  // Use 9999 for unranked people (put them at end)
                 const rankB = rankings[b] || 9999;
-                return rankA - rankB;
+                return rankA - rankB;  // Sort ascending: 1, 2, 3, ... 9999
             });
             
             // Find the highest ranking to assign sequential numbers to unranked people
@@ -3802,11 +3811,15 @@
             const container = document.getElementById('rankingsListBody');
             const allItems = Array.from(container.querySelectorAll('.ranking-item'));
             
-            // Determine the new ranking for the moved person
+            // Determine the new ranking for the moved person (1-based position)
             const newRanking = toIndex + 1;
             const oldRanking = parseInt(draggedRankingItem.dataset.ranking) || (fromIndex + 1);
             
-            // Update rankings for all people
+            // Update rankings for all people according to the shift logic:
+            // Example: Person A at rank 50 moves to 40
+            // - Person B (was 40) becomes 41
+            // - People from 41-49 become 42-50
+            // - Person A becomes 40
             allItems.forEach((item, index) => {
                 const person = item.dataset.person;
                 const currentItemRanking = parseInt(item.dataset.ranking) || (index + 1);
@@ -3816,14 +3829,16 @@
                     // The moved person gets the new ranking
                     newItemRanking = newRanking;
                 } else if (fromIndex < toIndex) {
-                    // Moving down: shift people from old position + 1 to new position up by 1
+                    // Moving DOWN (e.g., 50 → 40): shift people from oldRanking+1 to newRanking UP by 1
+                    // People at positions 41-50 (oldRanking+1 to newRanking) move to 40-49
                     if (currentItemRanking > oldRanking && currentItemRanking <= newRanking) {
                         newItemRanking = currentItemRanking - 1;
                     } else {
                         newItemRanking = currentItemRanking;
                     }
                 } else {
-                    // Moving up: shift people from new position to old position - 1 down by 1
+                    // Moving UP (e.g., 40 → 50): shift people from newRanking to oldRanking-1 DOWN by 1
+                    // People at positions 40-49 (newRanking to oldRanking-1) move to 41-50
                     if (currentItemRanking >= newRanking && currentItemRanking < oldRanking) {
                         newItemRanking = currentItemRanking + 1;
                     } else {
@@ -3873,12 +3888,13 @@
             }
         }
 
-        // Save rankings
+        // Save rankings to Firestore
         function saveRankings() {
             const container = document.getElementById('rankingsListBody');
             const items = container.querySelectorAll('.ranking-item');
             const newRankings = {};
             
+            // Collect all rankings from the current list order
             items.forEach((item, index) => {
                 const person = item.dataset.person;
                 const ranking = parseInt(item.dataset.ranking) || (index + 1);
@@ -3887,13 +3903,16 @@
                 }
             });
             
+            // Update global rankings object (will be saved to Firestore)
             rankings = newRankings;
+            
+            // Save to Firestore (saveData() saves rankings to Firestore)
             saveData();
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('rankingsModal'));
             modal.hide();
             
-            alert('Η ιεραρχία αποθηκεύτηκε επιτυχώς!');
+            alert('Η ιεραρχία αποθηκεύτηκε επιτυχώς στο Firestore!');
         }
 
         // Remove person from specific list
