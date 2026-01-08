@@ -1218,7 +1218,7 @@
                 <div class="modal-body">
                     <p class="text-muted mb-3">
                         <i class="fas fa-info-circle me-1"></i>
-                        Σύρετε και αφήστε τα άτομα για να αλλάξετε τη σειρά ιεραρχίας, ή κάντε κλικ στο όνομα για να εισάγετε την ιεραρχία χειροκίνητα. <strong>Οι αλλαγές είναι προσωρινές μέχρι να πατήσετε "Αποθήκευση".</strong> Η ιεραρχία είναι ξεχωριστή από την προτεραιότητα και δεν επηρεάζει τη σειρά των λιστών.
+                        Σύρετε και αφήστε τα άτομα για να αλλάξετε τη σειρά ιεραρχίας, ή κάντε κλικ στο όνομα για να εισάγετε την ιεραρχία χειροκίνητα. <strong>Οι αλλαγές είναι προσωρινές μέχρι να πατήσετε "Αποθήκευση"</strong>. Η ιεραρχία είναι ξεχωριστή από την προτεραιότητα και δεν επηρεάζει τη σειρά των λιστών.
                     </p>
                     <div id="rankingsListContainer" style="max-height: 500px; overflow-y: auto; position: relative;">
                         <div id="rankingsListBody">
@@ -1228,9 +1228,9 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-primary" onclick="saveRankings()">
-                        <i class="fas fa-save me-1"></i>Αποθήκευση στο Firestore
+                        <i class="fas fa-save me-1"></i>Αποθήκευση
                     </button>
-                    <button type="button" class="btn btn-secondary" onclick="cancelRankingsEdit()" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
                 </div>
             </div>
         </div>
@@ -1381,8 +1381,6 @@
         };
         // Organizational rankings - separate from priority, doesn't affect list order
         let rankings = {}; // Format: { "Person Name": rankNumber }
-        let originalRankingsBackup = {}; // Backup of rankings when modal opens (for cancel/discard)
-        let rankingsSaved = false; // Flag to track if rankings were saved
         let holidays = [];
         let specialHolidays = []; // User-defined special holidays
         // Separate assignments by day type
@@ -3665,10 +3663,6 @@
             const container = document.getElementById('rankingsListBody');
             container.innerHTML = '';
             
-            // Create backup of original rankings from Firestore (for cancel/discard)
-            originalRankingsBackup = JSON.parse(JSON.stringify(rankings));
-            rankingsSaved = false; // Reset save flag
-            
             if (allPeople.length === 0) {
                 container.innerHTML = '<div class="text-center text-muted p-4">Δεν υπάρχουν άτομα στο σύστημα</div>';
                 const modal = new bootstrap.Modal(document.getElementById('rankingsModal'));
@@ -3732,21 +3726,6 @@
             });
             
             const modal = new bootstrap.Modal(document.getElementById('rankingsModal'));
-            
-            // Handle modal close events - restore original rankings if closed without saving
-            const modalElement = document.getElementById('rankingsModal');
-            const handleModalClose = function() {
-                // If modal was closed without saving, restore original rankings
-                if (!rankingsSaved) {
-                    rankings = JSON.parse(JSON.stringify(originalRankingsBackup));
-                }
-                rankingsSaved = false; // Reset for next time
-            };
-            
-            // Remove any existing listeners and add new one
-            modalElement.removeEventListener('hidden.bs.modal', handleModalClose);
-            modalElement.addEventListener('hidden.bs.modal', handleModalClose);
-            
             modal.show();
         }
 
@@ -3814,6 +3793,7 @@
                 
                 // After DOM update, reassign rankings sequentially (1, 2, 3, ...) based on new order
                 // This ensures continuity with no gaps or duplicates
+                // Note: Changes are temporary until "Save" is clicked
                 updateRankingsAfterMove();
             }
             
@@ -3947,12 +3927,12 @@
                     }
                 }
                 
-                // Update the ranking display
+                // Update the ranking display (temporary - not saved to Firestore yet)
                 rankingNumberEl.textContent = newRanking;
                 item.dataset.ranking = newRanking;
                 
-                // Ensure continuity: reassign all rankings sequentially based on new order
-                updateRankingsAfterMove();
+                // Don't reassign all rankings - just update this one
+                // All changes are temporary until "Save" is clicked
             };
             
             input.addEventListener('blur', finishEdit);
@@ -3964,24 +3944,26 @@
             });
         }
 
-        // Cancel rankings edit - restore original rankings
-        function cancelRankingsEdit() {
-            // Restore original rankings from backup (changes are discarded)
-            rankings = JSON.parse(JSON.stringify(originalRankingsBackup));
-            rankingsSaved = true; // Prevent modal close handler from restoring again
-            const modal = bootstrap.Modal.getInstance(document.getElementById('rankingsModal'));
-            if (modal) {
-                modal.hide();
-            }
-        }
-
         // Save rankings to Firestore
         function saveRankings() {
             const container = document.getElementById('rankingsListBody');
-            const items = container.querySelectorAll('.ranking-item');
-            const newRankings = {};
+            const items = Array.from(container.querySelectorAll('.ranking-item'));
             
-            // Collect all rankings from the current list order (temporary changes in UI)
+            // First, ensure continuity: reassign rankings sequentially based on current order
+            // This ensures no gaps or duplicates before saving
+            items.forEach((item, index) => {
+                const newRanking = index + 1; // Sequential ranking: 1, 2, 3, ...
+                
+                // Update the ranking number display
+                const rankingNumberEl = item.querySelector('.ranking-number');
+                if (rankingNumberEl) {
+                    rankingNumberEl.textContent = newRanking;
+                }
+                item.dataset.ranking = newRanking;
+            });
+            
+            // Collect all rankings from the current list order (now sequential)
+            const newRankings = {};
             items.forEach((item, index) => {
                 const person = item.dataset.person;
                 const ranking = parseInt(item.dataset.ranking) || (index + 1);
@@ -3995,10 +3977,6 @@
             
             // Save to Firestore (saveData() saves rankings to Firestore)
             saveData();
-            
-            // Update backup to match saved state
-            originalRankingsBackup = JSON.parse(JSON.stringify(rankings));
-            rankingsSaved = true; // Mark as saved to prevent restore on close
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('rankingsModal'));
             modal.hide();
