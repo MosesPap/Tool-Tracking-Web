@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.49 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.50 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.49</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.50</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -6899,11 +6899,61 @@
                             
                             // Check if assigned person has special holiday in same month (from simulated assignments)
                             // OR if they were already skipped in this month
+                            // OR if they have consecutive duty (e.g., normal day the day before or after)
                             const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(assignedPerson) || false;
                             const wasSkipped = skippedInMonth[monthKey][groupNum].has(assignedPerson);
+                            // Check for consecutive duty using simulated assignments
+                            let hasConsecutive = false;
+                            if (assignedPerson) {
+                                const dayBefore = new Date(date);
+                                dayBefore.setDate(dayBefore.getDate() - 1);
+                                const dayAfter = new Date(date);
+                                dayAfter.setDate(dayAfter.getDate() + 1);
+                                const dayBeforeKey = formatDateKey(dayBefore);
+                                const dayAfterKey = formatDateKey(dayAfter);
+                                
+                                // Check if person has duty on day before (from any simulated assignment)
+                                const hasDutyBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] === assignedPerson ||
+                                                      simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(assignedPerson) ||
+                                                      simulatedSemiAssignments[dayBeforeKey]?.[groupNum] === assignedPerson ||
+                                                      normalAssignments[dayBeforeKey]?.[groupNum] === assignedPerson;
+                                
+                                // Check if person has duty on day after (from any simulated assignment)
+                                const hasDutyAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] === assignedPerson ||
+                                                     simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(assignedPerson) ||
+                                                     simulatedSemiAssignments[dayAfterKey]?.[groupNum] === assignedPerson ||
+                                                     normalAssignments[dayAfterKey]?.[groupNum] === assignedPerson;
+                                
+                                if (hasDutyBefore || hasDutyAfter) {
+                                    const beforeType = getDayType(dayBefore);
+                                    const afterType = getDayType(dayAfter);
+                                    const currentType = getDayType(date);
+                                    
+                                    let beforeTypeCategory = 'normal';
+                                    if (beforeType === 'special-holiday') beforeTypeCategory = 'special';
+                                    else if (beforeType === 'semi-normal-day') beforeTypeCategory = 'semi';
+                                    else if (beforeType === 'weekend-holiday') beforeTypeCategory = 'weekend';
+                                    
+                                    let afterTypeCategory = 'normal';
+                                    if (afterType === 'special-holiday') afterTypeCategory = 'special';
+                                    else if (afterType === 'semi-normal-day') afterTypeCategory = 'semi';
+                                    else if (afterType === 'weekend-holiday') afterTypeCategory = 'weekend';
+                                    
+                                    let currentTypeCategory = 'normal';
+                                    if (currentType === 'special-holiday') currentTypeCategory = 'special';
+                                    else if (currentType === 'semi-normal-day') currentTypeCategory = 'semi';
+                                    else if (currentType === 'weekend-holiday') currentTypeCategory = 'weekend';
+                                    
+                                    // Conflict if different day types OR if either day is special holiday
+                                    if ((hasDutyBefore && (currentTypeCategory !== beforeTypeCategory || currentType === 'special-holiday' || beforeType === 'special-holiday')) ||
+                                        (hasDutyAfter && (currentTypeCategory !== afterTypeCategory || currentType === 'special-holiday' || afterType === 'special-holiday'))) {
+                                        hasConsecutive = true;
+                                    }
+                                }
+                            }
                             
                             if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                                if (hasSpecialHoliday || wasSkipped) {
+                                if (hasSpecialHoliday || wasSkipped || hasConsecutive) {
                                     // Mark as skipped
                                     skippedInMonth[monthKey][groupNum].add(assignedPerson);
                                     
@@ -7363,6 +7413,8 @@
             const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
             const globalWeekendRotationPosition = {}; // groupNum -> global position (continues across months)
             const sortedWeekends = [...weekendHolidays].sort();
+            // Initialize normalAssignments for consecutive check (will be populated later in Step 4)
+            const normalAssignments = {}; // dateKey -> { groupNum -> person name }
             
             sortedWeekends.forEach((dateKey, weekendIndex) => {
                 const date = new Date(dateKey + 'T00:00:00');
@@ -7394,9 +7446,58 @@
                         
                         const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(assignedPerson) || false;
                         const wasSkipped = skippedInMonth[monthKey][groupNum].has(assignedPerson);
+                        // Check for consecutive duty using simulated assignments
+                        let hasConsecutive = false;
+                        if (assignedPerson) {
+                            const dayBefore = new Date(date);
+                            dayBefore.setDate(dayBefore.getDate() - 1);
+                            const dayAfter = new Date(date);
+                            dayAfter.setDate(dayAfter.getDate() + 1);
+                            const dayBeforeKey = formatDateKey(dayBefore);
+                            const dayAfterKey = formatDateKey(dayAfter);
+                            
+                            // Check if person has duty on day before (from any simulated assignment)
+                            const hasDutyBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] === assignedPerson ||
+                                                  simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(assignedPerson) ||
+                                                  simulatedSemiAssignments[dayBeforeKey]?.[groupNum] === assignedPerson ||
+                                                  normalAssignments[dayBeforeKey]?.[groupNum] === assignedPerson;
+                            
+                            // Check if person has duty on day after (from any simulated assignment)
+                            const hasDutyAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] === assignedPerson ||
+                                                 simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(assignedPerson) ||
+                                                 simulatedSemiAssignments[dayAfterKey]?.[groupNum] === assignedPerson ||
+                                                 normalAssignments[dayAfterKey]?.[groupNum] === assignedPerson;
+                            
+                            if (hasDutyBefore || hasDutyAfter) {
+                                const beforeType = getDayType(dayBefore);
+                                const afterType = getDayType(dayAfter);
+                                const currentType = getDayType(date);
+                                
+                                let beforeTypeCategory = 'normal';
+                                if (beforeType === 'special-holiday') beforeTypeCategory = 'special';
+                                else if (beforeType === 'semi-normal-day') beforeTypeCategory = 'semi';
+                                else if (beforeType === 'weekend-holiday') beforeTypeCategory = 'weekend';
+                                
+                                let afterTypeCategory = 'normal';
+                                if (afterType === 'special-holiday') afterTypeCategory = 'special';
+                                else if (afterType === 'semi-normal-day') afterTypeCategory = 'semi';
+                                else if (afterType === 'weekend-holiday') afterTypeCategory = 'weekend';
+                                
+                                let currentTypeCategory = 'normal';
+                                if (currentType === 'special-holiday') currentTypeCategory = 'special';
+                                else if (currentType === 'semi-normal-day') currentTypeCategory = 'semi';
+                                else if (currentType === 'weekend-holiday') currentTypeCategory = 'weekend';
+                                
+                                // Conflict if different day types OR if either day is special holiday
+                                if ((hasDutyBefore && (currentTypeCategory !== beforeTypeCategory || currentType === 'special-holiday' || beforeType === 'special-holiday')) ||
+                                    (hasDutyAfter && (currentTypeCategory !== afterTypeCategory || currentType === 'special-holiday' || afterType === 'special-holiday'))) {
+                                    hasConsecutive = true;
+                                }
+                            }
+                        }
                         
                         if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                            if (hasSpecialHoliday || wasSkipped) {
+                            if (hasSpecialHoliday || wasSkipped || hasConsecutive) {
                                 skippedInMonth[monthKey][groupNum].add(assignedPerson);
                                 
                                 for (let offset = 1; offset < rotationDays; offset++) {
@@ -7410,7 +7511,54 @@
                                     const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
                                     const candidateWasSkipped = skippedInMonth[monthKey][groupNum].has(candidate);
                                     
-                                    if (!candidateHasSpecial && !candidateWasSkipped) {
+                                    // Also check candidate for consecutive duty
+                                    let candidateHasConsecutive = false;
+                                    if (candidate) {
+                                        const dayBefore = new Date(date);
+                                        dayBefore.setDate(dayBefore.getDate() - 1);
+                                        const dayAfter = new Date(date);
+                                        dayAfter.setDate(dayAfter.getDate() + 1);
+                                        const dayBeforeKey = formatDateKey(dayBefore);
+                                        const dayAfterKey = formatDateKey(dayAfter);
+                                        
+                                        const candidateHasDutyBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] === candidate ||
+                                                                       simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(candidate) ||
+                                                                       simulatedSemiAssignments[dayBeforeKey]?.[groupNum] === candidate ||
+                                                                       normalAssignments[dayBeforeKey]?.[groupNum] === candidate;
+                                        
+                                        const candidateHasDutyAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] === candidate ||
+                                                                      simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(candidate) ||
+                                                                      simulatedSemiAssignments[dayAfterKey]?.[groupNum] === candidate ||
+                                                                      normalAssignments[dayAfterKey]?.[groupNum] === candidate;
+                                        
+                                        if (candidateHasDutyBefore || candidateHasDutyAfter) {
+                                            const beforeType = getDayType(dayBefore);
+                                            const afterType = getDayType(dayAfter);
+                                            const currentType = getDayType(date);
+                                            
+                                            let beforeTypeCategory = 'normal';
+                                            if (beforeType === 'special-holiday') beforeTypeCategory = 'special';
+                                            else if (beforeType === 'semi-normal-day') beforeTypeCategory = 'semi';
+                                            else if (beforeType === 'weekend-holiday') beforeTypeCategory = 'weekend';
+                                            
+                                            let afterTypeCategory = 'normal';
+                                            if (afterType === 'special-holiday') afterTypeCategory = 'special';
+                                            else if (afterType === 'semi-normal-day') afterTypeCategory = 'semi';
+                                            else if (afterType === 'weekend-holiday') afterTypeCategory = 'weekend';
+                                            
+                                            let currentTypeCategory = 'normal';
+                                            if (currentType === 'special-holiday') currentTypeCategory = 'special';
+                                            else if (currentType === 'semi-normal-day') currentTypeCategory = 'semi';
+                                            else if (currentType === 'weekend-holiday') currentTypeCategory = 'weekend';
+                                            
+                                            if ((candidateHasDutyBefore && (currentTypeCategory !== beforeTypeCategory || currentType === 'special-holiday' || beforeType === 'special-holiday')) ||
+                                                (candidateHasDutyAfter && (currentTypeCategory !== afterTypeCategory || currentType === 'special-holiday' || afterType === 'special-holiday'))) {
+                                                candidateHasConsecutive = true;
+                                            }
+                                        }
+                                    }
+                                    
+                                    if (!candidateHasSpecial && !candidateWasSkipped && !candidateHasConsecutive) {
                                         assignedPerson = candidate;
                                         globalWeekendRotationPosition[groupNum] = nextIndex + 1;
                                         break;
@@ -7685,17 +7833,59 @@
                             } else {
                                 // Normal assignment logic
                                 
-                                // Check for consecutive conflicts with semi-normal day
-                                const dayAfter = new Date(date);
-                                dayAfter.setDate(dayAfter.getDate() + 1);
-                                const dayAfterKey = formatDateKey(dayAfter);
-                                const afterType = getDayType(dayAfter);
-                                
-                                // Check if assigned person has consecutive semi-normal day
+                                // Check for consecutive conflicts using hasConsecutiveDuty logic
+                                // This checks for any consecutive duty (semi-normal, weekend, etc.)
                                 let hasConsecutiveConflict = false;
                                 if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                                    // Check day after (normal day before semi-normal)
-                                    if (afterType === 'semi-normal-day') {
+                                    // Check day before and day after for any consecutive duty
+                                    const dayBefore = new Date(date);
+                                    dayBefore.setDate(dayBefore.getDate() - 1);
+                                    const dayAfter = new Date(date);
+                                    dayAfter.setDate(dayAfter.getDate() + 1);
+                                    const dayBeforeKey = formatDateKey(dayBefore);
+                                    const dayAfterKey = formatDateKey(dayAfter);
+                                    
+                                    const beforeType = getDayType(dayBefore);
+                                    const afterType = getDayType(dayAfter);
+                                    const currentType = getDayType(date);
+                                    
+                                    // Check if person has duty on day before (from any simulated assignment)
+                                    const hasDutyBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] === assignedPerson ||
+                                                          simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(assignedPerson) ||
+                                                          simulatedSemiAssignments[dayBeforeKey]?.[groupNum] === assignedPerson ||
+                                                          normalAssignments[dayBeforeKey]?.[groupNum] === assignedPerson;
+                                    
+                                    // Check if person has duty on day after (from any simulated assignment)
+                                    const hasDutyAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] === assignedPerson ||
+                                                         simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(assignedPerson) ||
+                                                         simulatedSemiAssignments[dayAfterKey]?.[groupNum] === assignedPerson ||
+                                                         normalAssignments[dayAfterKey]?.[groupNum] === assignedPerson;
+                                    
+                                    if (hasDutyBefore || hasDutyAfter) {
+                                        let beforeTypeCategory = 'normal';
+                                        if (beforeType === 'special-holiday') beforeTypeCategory = 'special';
+                                        else if (beforeType === 'semi-normal-day') beforeTypeCategory = 'semi';
+                                        else if (beforeType === 'weekend-holiday') beforeTypeCategory = 'weekend';
+                                        
+                                        let afterTypeCategory = 'normal';
+                                        if (afterType === 'special-holiday') afterTypeCategory = 'special';
+                                        else if (afterType === 'semi-normal-day') afterTypeCategory = 'semi';
+                                        else if (afterType === 'weekend-holiday') afterTypeCategory = 'weekend';
+                                        
+                                        let currentTypeCategory = 'normal';
+                                        if (currentType === 'special-holiday') currentTypeCategory = 'special';
+                                        else if (currentType === 'semi-normal-day') currentTypeCategory = 'semi';
+                                        else if (currentType === 'weekend-holiday') currentTypeCategory = 'weekend';
+                                        
+                                        // Conflict if different day types OR if either day is special holiday
+                                        if ((hasDutyBefore && (currentTypeCategory !== beforeTypeCategory || currentType === 'special-holiday' || beforeType === 'special-holiday')) ||
+                                            (hasDutyAfter && (currentTypeCategory !== afterTypeCategory || currentType === 'special-holiday' || afterType === 'special-holiday'))) {
+                                            hasConsecutiveConflict = true;
+                                        }
+                                    }
+                                    
+                                    // Legacy check for semi-normal (keep for backward compatibility)
+                                    if (!hasConsecutiveConflict && afterType === 'semi-normal-day') {
                                         const personAfter = simulatedSemiAssignments[dayAfterKey]?.[groupNum];
                                         if (personAfter === assignedPerson) {
                                             hasConsecutiveConflict = true;
@@ -8768,9 +8958,11 @@
                                 } else if (dayTypeCategory === 'weekend') {
                                     // Check if person has special holiday duty in the same month
                                 // OR if they were already skipped in this month (their turn came again)
+                                // OR if they have consecutive duty (e.g., normal day the day before or after)
                                 // If yes, skip them and continue with next person in rotation order
                                 if (hasSpecialHolidayDutyInMonth(expectedPerson, groupNum, month, year) || 
-                                    skippedInMonth[monthKey].has(expectedPerson)) {
+                                    skippedInMonth[monthKey].has(expectedPerson) ||
+                                    hasConsecutiveDuty(dayKey, expectedPerson, groupNum)) {
                                         hasConflict = true;
                                     }
                                 } else if (dayTypeCategory === 'semi') {
@@ -8790,19 +8982,9 @@
                                         hasConflict = true;
                                     }
                                 } else if (dayTypeCategory === 'normal') {
-                                    // Check consecutive day with semi-normal
-                                    const dayBefore = new Date(dayDate);
-                                    dayBefore.setDate(dayBefore.getDate() - 1);
-                                    const dayAfter = new Date(dayDate);
-                                    dayAfter.setDate(dayAfter.getDate() + 1);
-                                    
-                                    const beforeType = getDayType(dayBefore);
-                                    const afterType = getDayType(dayAfter);
-                                    
-                                if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), expectedPerson, groupNum)) {
-                                        hasConflict = true;
-                                    }
-                                if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), expectedPerson, groupNum)) {
+                                    // Check consecutive day with semi-normal OR any other consecutive duty
+                                    // Use hasConsecutiveDuty to catch all consecutive conflicts (semi-normal, weekend, etc.)
+                                    if (hasConsecutiveDuty(dayKey, expectedPerson, groupNum)) {
                                         hasConflict = true;
                                     }
                                 }
