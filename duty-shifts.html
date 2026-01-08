@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.46 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.47 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.46</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.47</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -3915,24 +3915,29 @@
                 // Move the item to the target position in the DOM
                 if (currentIndex !== targetIndex) {
                     if (currentIndex < targetIndex) {
-                        // Moving down
-                        if (targetIndex < allItems.length - 1) {
-                            container.insertBefore(item, allItems[targetIndex + 1]);
+                        // Moving down (e.g., position 6 → 9)
+                        // Need to get fresh items list after potential DOM changes
+                        const freshItems = Array.from(container.querySelectorAll('.ranking-item'));
+                        if (targetIndex < freshItems.length - 1) {
+                            container.insertBefore(item, freshItems[targetIndex + 1]);
                         } else {
                             container.appendChild(item);
                         }
                     } else {
-                        // Moving up
-                        container.insertBefore(item, allItems[targetIndex]);
+                        // Moving up (e.g., position 9 → 6)
+                        const freshItems = Array.from(container.querySelectorAll('.ranking-item'));
+                        container.insertBefore(item, freshItems[targetIndex]);
                     }
                 }
                 
-                // Update the ranking display (temporary - not saved to Firestore yet)
-                rankingNumberEl.textContent = newRanking;
-                item.dataset.ranking = newRanking;
-                
-                // Don't reassign all rankings - just update this one
-                // All changes are temporary until "Save" is clicked
+                // After moving, reassign all rankings sequentially based on new order
+                // This ensures continuity: 1, 2, 3, ... with no gaps or duplicates
+                // Example: Moving person from 6 to 9:
+                // - Person at 7 becomes 6
+                // - Person at 8 becomes 7
+                // - Person at 9 becomes 8
+                // - Moved person becomes 9
+                updateRankingsAfterMove();
             };
             
             input.addEventListener('blur', finishEdit);
