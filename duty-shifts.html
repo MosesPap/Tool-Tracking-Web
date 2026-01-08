@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.38 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.39 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.38</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.39</span></h4>
             </div>
         </div>
     </div>
@@ -3026,6 +3026,63 @@
                                      groups[currentGroup].priorities[person][listType] < 999);
                                 if (hadValidPriority || person === oldName) {
                                     groups[currentGroup].priorities[person][listType] = newPos;
+                                }
+                            });
+                        }
+                    }
+                });
+            }
+            
+            // Handle priority position shifts when adding a new person (to avoid duplicates)
+            if (!isEditingPerson) {
+                const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                const priorityInputs = {
+                    special: prioritySpecial ? parseInt(prioritySpecial) : null,
+                    weekend: priorityWeekend ? parseInt(priorityWeekend) : null,
+                    semi: prioritySemi ? parseInt(prioritySemi) : null,
+                    normal: priorityNormal ? parseInt(priorityNormal) : null
+                };
+                
+                listTypes.forEach(listType => {
+                    const newPriority = priorityInputs[listType];
+                    
+                    // Only process if a priority is provided (not null and not 999 default)
+                    if (newPriority !== null && newPriority < 999) {
+                        // Get current sorted list to find if anyone already has this priority
+                        const sortedList = [...(groups[currentGroup][listType] || [])].sort((a, b) => {
+                            const priorityA = groups[currentGroup].priorities?.[a]?.[listType] ?? 999;
+                            const priorityB = groups[currentGroup].priorities?.[b]?.[listType] ?? 999;
+                            if (priorityA !== priorityB) return priorityA - priorityB;
+                            // If priorities equal, sort by last duty date
+                            const dateA = groups[currentGroup].lastDuties[a]?.[listType];
+                            const dateB = groups[currentGroup].lastDuties[b]?.[listType];
+                            if (!dateA && !dateB) return 0;
+                            if (!dateA) return 1;
+                            if (!dateB) return -1;
+                            return new Date(dateB) - new Date(dateA);
+                        });
+                        
+                        // Check if anyone already has this priority
+                        const hasConflict = sortedList.some(person => {
+                            const personPriority = groups[currentGroup].priorities?.[person]?.[listType] ?? 999;
+                            return personPriority === newPriority;
+                        });
+                        
+                        // If there's a conflict, shift everyone at this priority and below down by 1
+                        if (hasConflict) {
+                            // Initialize priorities for all people if needed
+                            sortedList.forEach(person => {
+                                if (!groups[currentGroup].priorities[person]) {
+                                    groups[currentGroup].priorities[person] = {};
+                                }
+                            });
+                            
+                            // Shift people at priority newPriority and below down by 1
+                            sortedList.forEach(person => {
+                                const personPriority = groups[currentGroup].priorities[person]?.[listType] ?? 999;
+                                // Shift anyone at the target priority or below (but not default 999)
+                                if (personPriority >= newPriority && personPriority < 999) {
+                                    groups[currentGroup].priorities[person][listType] = personPriority + 1;
                                 }
                             });
                         }
