@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.54 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.55 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.54</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.55</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -5811,6 +5811,25 @@
             return diffInWeeks === 2;
         }
         
+        // Helper function to ask user permission for conflicts, swaps, or skips
+        function askPermissionForConflict(type, personName, dateStr, reason, swapPerson = null, swapDateStr = null) {
+            let message = '';
+            
+            if (type === 'skip') {
+                message = `Το άτομο ${personName} έχει σύγκρουση στις ${dateStr}.\n\nΛόγος: ${reason}\n\nΝα παραλειφθεί αυτό το άτομο;`;
+            } else if (type === 'swap') {
+                if (swapPerson && swapDateStr) {
+                    message = `Το άτομο ${personName} έχει σύγκρουση στις ${dateStr}.\n\nΛόγος: ${reason}\n\nΒρέθηκε άτομο ${swapPerson} για αλλαγή στις ${swapDateStr}.\n\nΝα προχωρήσει η αλλαγή;`;
+                } else {
+                    message = `Το άτομο ${personName} έχει σύγκρουση στις ${dateStr}.\n\nΛόγος: ${reason}\n\nΝα προχωρήσει η αλλαγή;`;
+                }
+            } else if (type === 'conflict') {
+                message = `Το άτομο ${personName} έχει σύγκρουση στις ${dateStr}.\n\nΛόγος: ${reason}\n\nΝα προχωρήσει η ανάθεση παρά τη σύγκρουση;`;
+            }
+            
+            return confirm(message);
+        }
+        
         function isSameWeek(date1, date2) {
             const d1 = new Date(date1);
             const d2 = new Date(date2);
@@ -9118,10 +9137,25 @@
                                 
                                 // For weekends: track that this person was skipped in this month
                                 if (dayTypeCategory === 'weekend') {
-                                    skippedInMonth[monthKey].add(expectedPerson);
-                                    // Store skip reason
+                                    const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                     const reason = `Παράλειψη λόγω ειδικής αργίας στον ίδιο μήνα`;
-                                    storeAssignmentReason(dayKey, groupNum, skippedPerson, 'skip', reason);
+                                    
+                                    // Ask for permission before skipping
+                                    const userApproved = askPermissionForConflict('skip', skippedPerson, currentDateStr, reason);
+                                    
+                                    if (userApproved) {
+                                        skippedInMonth[monthKey].add(expectedPerson);
+                                        storeAssignmentReason(dayKey, groupNum, skippedPerson, 'skip', reason);
+                                        // Person will be skipped, so assignedPerson remains null and replacement will be found
+                                    } else {
+                                        // User rejected skip - assign the person anyway (they'll have conflict but user approved)
+                                        assignedPerson = expectedPerson;
+                                        if (dayTypeCategory === 'weekend') {
+                                            globalWeekendRotationPosition[groupNum] = rotationPosition + 1;
+                                        }
+                                        // Store that person was assigned despite conflict
+                                        storeAssignmentReason(dayKey, groupNum, assignedPerson, 'conflict', reason);
+                                    }
                                 }
                                 
                                 // For normal days: swap with person who has same day of week (Monday↔Wednesday, Tuesday↔Thursday)
@@ -9231,16 +9265,28 @@
                                             const checkDayOfWeek = checkDate.getDay();
                                             const checkDayType = getDayType(checkDate);
                                             
-                                            // Must be a normal day and in same week
-                                            if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameWeek(dayDate, checkDate)) {
-                                                // Check conflicts BEFORE accepting
-                                                if (checkSwapCandidate(checkDayKey, i)) {
-                                                    swapDayKey = checkDayKey;
-                                                    swapDayIndex = i;
-                                                    break;
+                                                // Must be a normal day and in same week
+                                                if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameWeek(dayDate, checkDate)) {
+                                                    // Check conflicts BEFORE accepting
+                                                    if (checkSwapCandidate(checkDayKey, i)) {
+                                                        // Ask for permission before same-week swap
+                                                        const swapRotationPosition = i % rotationDays;
+                                                        const swapPerson = groupPeople[swapRotationPosition];
+                                                        const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                        const swapDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                        const reason = 'Συνεχόμενη Ημιαργία (ίδια εβδομάδα)';
+                                                        
+                                                        const userApproved = askPermissionForConflict('swap', skippedPerson, currentDateStr, reason, swapPerson, swapDateStr);
+                                                        
+                                                        if (userApproved) {
+                                                            swapDayKey = checkDayKey;
+                                                            swapDayIndex = i;
+                                                            break;
+                                                        }
+                                                        // If user rejected, continue to next option
+                                                    }
+                                                    // If has conflicts, continue to next option (Thursday)
                                                 }
-                                                // If has conflicts, continue to next option (Thursday)
-                                            }
                                         }
                                         
                                         // SECOND: If Tuesday in same week not found or has conflicts, try Thursday in same week
@@ -9255,9 +9301,21 @@
                                                 if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek && isSameWeek(dayDate, checkDate)) {
                                                     // Check conflicts BEFORE accepting
                                                     if (checkSwapCandidate(checkDayKey, i)) {
-                                                        swapDayKey = checkDayKey;
-                                                        swapDayIndex = i;
-                                                        break;
+                                                        // Ask for permission before same-week swap
+                                                        const swapRotationPosition = i % rotationDays;
+                                                        const swapPerson = groupPeople[swapRotationPosition];
+                                                        const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                        const swapDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                        const reason = 'Συνεχόμενη Ημιαργία (ίδια εβδομάδα)';
+                                                        
+                                                        const userApproved = askPermissionForConflict('swap', skippedPerson, currentDateStr, reason, swapPerson, swapDateStr);
+                                                        
+                                                        if (userApproved) {
+                                                            swapDayKey = checkDayKey;
+                                                            swapDayIndex = i;
+                                                            break;
+                                                        }
+                                                        // If user rejected, continue to next week options
                                                     }
                                                     // If has conflicts, continue to next week options
                                                 }
@@ -9305,9 +9363,8 @@
                                                 // Ask user permission
                                                 const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                                 const swapDateStr = swapDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                                const permissionMsg = `Το άτομο ${skippedPerson} έχει σύγκρουση στις ${currentDateStr}.\n\nΒρέθηκε άτομο ${swapPerson} για αλλαγή στις ${swapDateStr} (εβδομάδα μετά την επόμενη).\n\nΝα προχωρήσει η αλλαγή;`;
-                                                
-                                                const userApproved = confirm(permissionMsg);
+                                                const reason = 'Συνεχόμενη Ημιαργία (εβδομάδα μετά την επόμενη)';
+                                                const userApproved = askPermissionForConflict('swap', skippedPerson, currentDateStr, reason, swapPerson, swapDateStr);
                                                 
                                                 if (userApproved) {
                                                     swapDayKey = earliestCandidate.dayKey;
@@ -9383,42 +9440,62 @@
                                             }
                                             
                                             if (!swapPersonHasConflict && !skippedPersonHasConflict) {
-                                                // Valid swap: swap person gets current day, skipped person gets swap day
-                                                assignedPerson = swapPerson;
-                                                // Ensure skippedPerson is set
-                                                if (!skippedPerson) skippedPerson = expectedPerson;
-                                                
-                                                // DIRECTLY assign skipped person to swap day (don't wait for rotation)
-                                                // This ensures the swap happens immediately
-                                                assignPersonToDay(swapDayKey, skippedPerson, groupNum);
-                                                
-                                                // Track that skipped person has been assigned (to prevent duplicate assignment later)
-                                                if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
-                                                    assignedPeople[monthKey][groupNum].add(skippedPerson);
-                                                }
-                                                
-                                                // Track that swap person has been assigned (to prevent duplicate assignment later)
-                                                if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
-                                                    assignedPeople[monthKey][groupNum].add(swapPerson);
-                                                }
-                                                
-                                                // Advance rotation position to swap person's position + 1 (so next iteration continues correctly)
-                                                if (dayTypeCategory === 'normal') {
-                                                    globalNormalRotationPosition[groupNum] = swapRotationPosition + 1;
-                                                }
-                                                
-                                                // Store swap reason
+                                                // Ask for permission before performing swap (if not already asked)
                                                 const swapDate = new Date(swapDayKey + 'T00:00:00');
                                                 const isSameWeekSwap = isSameWeek(dayDate, swapDate);
-                                            const reason = isSameWeekSwap 
-                                                ? `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδια εβδομάδα)`
-                                                : `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (εβδομάδα μετά την επόμενη)`;
-                                                storeAssignmentReason(dayKey, groupNum, assignedPerson, 'swap', reason, skippedPerson);
-                                                storeAssignmentReason(swapDayKey, groupNum, skippedPerson, 'swap', `Αλλαγή με ${assignedPerson} λόγω συνεχόμενης Ημιαργίας`, assignedPerson);
+                                                const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                const swapDateStr = swapDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                const reason = isSameWeekSwap 
+                                                    ? 'Συνεχόμενη Ημιαργία (ίδια εβδομάδα)'
+                                                    : 'Συνεχόμενη Ημιαργία (εβδομάδα μετά την επόμενη)';
                                                 
-                                                // Mark that swap day is already assigned, so we skip it when we reach it in the loop
-                                                if (!swappedDays[swapDayKey]) swappedDays[swapDayKey] = {};
-                                                swappedDays[swapDayKey][groupNum] = true;
+                                                // Only ask if permission wasn't already asked (for same-week swaps, permission was asked when finding swap day)
+                                                let userApproved = true;
+                                                if (!isSameWeekSwap) {
+                                                    // For week-after-next, permission was already asked, so we proceed
+                                                    userApproved = true;
+                                                }
+                                                
+                                                if (userApproved) {
+                                                    // Valid swap: swap person gets current day, skipped person gets swap day
+                                                    assignedPerson = swapPerson;
+                                                    // Ensure skippedPerson is set
+                                                    if (!skippedPerson) skippedPerson = expectedPerson;
+                                                    
+                                                    // DIRECTLY assign skipped person to swap day (don't wait for rotation)
+                                                    // This ensures the swap happens immediately
+                                                    assignPersonToDay(swapDayKey, skippedPerson, groupNum);
+                                                    
+                                                    // Track that skipped person has been assigned (to prevent duplicate assignment later)
+                                                    if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
+                                                        assignedPeople[monthKey][groupNum].add(skippedPerson);
+                                                    }
+                                                    
+                                                    // Track that swap person has been assigned (to prevent duplicate assignment later)
+                                                    if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
+                                                        assignedPeople[monthKey][groupNum].add(swapPerson);
+                                                    }
+                                                    
+                                                    // Advance rotation position to swap person's position + 1 (so next iteration continues correctly)
+                                                    if (dayTypeCategory === 'normal') {
+                                                        globalNormalRotationPosition[groupNum] = swapRotationPosition + 1;
+                                                    }
+                                                    
+                                                    // Store swap reason
+                                                    const swapReason = isSameWeekSwap 
+                                                        ? `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδια εβδομάδα)`
+                                                        : `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (εβδομάδα μετά την επόμενη)`;
+                                                    storeAssignmentReason(dayKey, groupNum, assignedPerson, 'swap', swapReason, skippedPerson);
+                                                    storeAssignmentReason(swapDayKey, groupNum, skippedPerson, 'swap', `Αλλαγή με ${assignedPerson} λόγω συνεχόμενης Ημιαργίας`, assignedPerson);
+                                                    
+                                                    // Mark that swap day is already assigned, so we skip it when we reach it in the loop
+                                                    if (!swappedDays[swapDayKey]) swappedDays[swapDayKey] = {};
+                                                    swappedDays[swapDayKey][groupNum] = true;
+                                                } else {
+                                                    // User rejected swap - clear swap and try to find replacement
+                                                    swapDayKey = null;
+                                                    swapDayIndex = null;
+                                                }
                                             }
                                         }
                                     }
