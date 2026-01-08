@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.36 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.37 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.36</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.37</span></h4>
             </div>
         </div>
     </div>
@@ -3170,16 +3170,16 @@
                         return new Date(dateB) - new Date(dateA);
                     });
                 
-                // After sorting, reassign priorities sequentially (1, 2, 3, ...) to prevent duplicates
+                // Preserve user-entered priority values - do not reassign sequentially
+                // This allows users to set priorities like 10 even if there are only 3 people
                 const list = groups[currentGroup][listType];
-                list.forEach((person, index) => {
+                list.forEach((person) => {
                     if (!groups[currentGroup].priorities[person]) {
                         groups[currentGroup].priorities[person] = {};
                     }
-                    // Only update if the person had a valid priority (not 999)
-                    const currentPriority = groups[currentGroup].priorities[person][listType];
-                    if (currentPriority !== undefined && currentPriority < 999) {
-                        groups[currentGroup].priorities[person][listType] = index + 1;
+                    // Only set default priority (999) if no priority was set
+                    if (groups[currentGroup].priorities[person][listType] === undefined) {
+                        groups[currentGroup].priorities[person][listType] = 999;
                     }
                 });
             });
