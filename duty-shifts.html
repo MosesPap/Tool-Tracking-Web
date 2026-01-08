@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.49 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.50 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.49</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.50</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -5720,10 +5720,52 @@
                             }
                         }
                         
+                        // Check if person has conflict on this date
+                        const hasConflict = hasConflictOnDate(key, name, parseInt(group || 0));
+                        let conflictIcon = '';
+                        let conflictTitle = '';
+                        if (hasConflict) {
+                            // Get conflict details
+                            const date = new Date(key + 'T00:00:00');
+                            const dayType = getDayType(date);
+                            let conflictDetails = [];
+                            
+                            // Check day before
+                            const dayBefore = new Date(date);
+                            dayBefore.setDate(dayBefore.getDate() - 1);
+                            const dayBeforeKey = formatDateKey(dayBefore);
+                            const beforeType = getDayType(dayBefore);
+                            
+                            if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday' || beforeType === 'semi-normal-day') && hasDutyOnDay(dayBeforeKey, name, parseInt(group || 0))) {
+                                const beforeDateStr = dayBefore.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                conflictDetails.push(`${currentDateStr} & ${beforeDateStr}`);
+                            }
+                            
+                            // Check day after
+                            const dayAfter = new Date(date);
+                            dayAfter.setDate(dayAfter.getDate() + 1);
+                            const dayAfterKey = formatDateKey(dayAfter);
+                            const afterType = getDayType(dayAfter);
+                            
+                            if ((afterType === 'weekend-holiday' || afterType === 'special-holiday' || afterType === 'semi-normal-day') && hasDutyOnDay(dayAfterKey, name, parseInt(group || 0))) {
+                                const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                conflictDetails.push(`${currentDateStr} & ${afterDateStr}`);
+                            }
+                            
+                            if (conflictDetails.length > 0) {
+                                conflictIcon = '<i class="fas fa-exclamation-triangle text-danger" title="Σύγκρουση"></i> ';
+                                conflictTitle = `Σύγκρουση: ${conflictDetails.join('; ')}`;
+                            }
+                        }
+                        
                         // Apply red bold styling for critical assignments
                         const styleClass = isCritical ? 'duty-person-critical' : 'duty-person';
-                        // Display name with indicator icon
-                        displayAssignmentHtml += `<div class="${styleClass}" style="display: flex; align-items: center; gap: 4px;" title="${indicatorTitle || ''}">${indicatorIcon}${name}</div>`;
+                        // Display name with indicator icon and conflict icon
+                        const allIcons = indicatorIcon + conflictIcon;
+                        const allTitles = [indicatorTitle, conflictTitle].filter(t => t).join(' | ');
+                        displayAssignmentHtml += `<div class="${styleClass}" style="display: flex; align-items: center; gap: 4px;" title="${allTitles || ''}">${allIcons}${name}</div>`;
                     });
                     displayAssignmentHtml += '</div>';
                 }
@@ -5906,6 +5948,69 @@
             return assignment.includes(personGroupStr);
         }
 
+        // Helper function to check if a person has a conflict on a specific date
+        function hasConflictOnDate(dayKey, person, groupNum) {
+            const date = new Date(dayKey + 'T00:00:00');
+            const dayType = getDayType(date);
+            let dayTypeCategory = 'normal';
+            if (dayType === 'special-holiday') {
+                dayTypeCategory = 'special';
+            } else if (dayType === 'semi-normal-day') {
+                dayTypeCategory = 'semi';
+            } else if (dayType === 'weekend-holiday') {
+                dayTypeCategory = 'weekend';
+            }
+            
+            // Check if person is missing
+            if (isPersonMissingOnDate(person, groupNum, date)) {
+                return true;
+            }
+            
+            // Check conflicts based on day type
+            if (dayTypeCategory === 'weekend') {
+                // Check if person has special holiday in the same month
+                const month = date.getMonth();
+                const year = date.getFullYear();
+                if (hasSpecialHolidayDutyInMonth(person, groupNum, month, year)) {
+                    return true;
+                }
+            } else if (dayTypeCategory === 'semi') {
+                // Check consecutive day with weekend or special holiday
+                const dayBefore = new Date(date);
+                dayBefore.setDate(dayBefore.getDate() - 1);
+                const dayAfter = new Date(date);
+                dayAfter.setDate(dayAfter.getDate() + 1);
+                
+                const beforeType = getDayType(dayBefore);
+                const afterType = getDayType(dayAfter);
+                
+                if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), person, groupNum)) {
+                    return true;
+                }
+                if ((afterType === 'weekend-holiday' || afterType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayAfter), person, groupNum)) {
+                    return true;
+                }
+            } else if (dayTypeCategory === 'normal') {
+                // Check consecutive day with semi-normal
+                const dayBefore = new Date(date);
+                dayBefore.setDate(dayBefore.getDate() - 1);
+                const dayAfter = new Date(date);
+                dayAfter.setDate(dayAfter.getDate() + 1);
+                
+                const beforeType = getDayType(dayBefore);
+                const afterType = getDayType(dayAfter);
+                
+                if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), person, groupNum)) {
+                    return true;
+                }
+                if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), person, groupNum)) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+        
         // Check if a person has duty on consecutive days (day before or day after)
         function hasConsecutiveDuty(dayKey, person, groupNum) {
             const date = new Date(dayKey + 'T00:00:00');
@@ -10285,9 +10390,10 @@
                                 if (beforeType === 'weekend-holiday' || beforeType === 'special-holiday') {
                                     if (hasDutyOnDay(dayBeforeKey, expectedPerson, groupNum)) {
                                         hasLegitimateConflict = true;
-                                        const beforeDateStr = dayBefore.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit' });
+                                        const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                        const beforeDateStr = dayBefore.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                         const beforeTypeName = beforeType === 'special-holiday' ? 'Ειδική Αργία' : 'Σαββατοκύριακο/Αργία';
-                                        conflictDetails.push(`Συνεχόμενη ${beforeTypeName}: ${beforeDateStr}`);
+                                        conflictDetails.push(`Συνεχόμενη ${beforeTypeName}: ${currentDateStr} & ${beforeDateStr}`);
                                     }
                                 }
                                 
@@ -10295,9 +10401,10 @@
                                 if (afterType === 'weekend-holiday' || afterType === 'special-holiday') {
                                     if (hasDutyOnDay(dayAfterKey, expectedPerson, groupNum)) {
                                         hasLegitimateConflict = true;
-                                        const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit' });
+                                        const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                        const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                         const afterTypeName = afterType === 'special-holiday' ? 'Ειδική Αργία' : 'Σαββατοκύριακο/Αργία';
-                                        conflictDetails.push(`Συνεχόμενη ${afterTypeName}: ${afterDateStr}`);
+                                        conflictDetails.push(`Συνεχόμενη ${afterTypeName}: ${currentDateStr} & ${afterDateStr}`);
                                     }
                                 }
                                 
@@ -10307,17 +10414,19 @@
                                         if (hasDutyOnDay(dayBeforeKey, assignedPerson, groupNum)) {
                                             // Assigned person has conflict, so they were swapped
                                             hasLegitimateConflict = true;
-                                            const beforeDateStr = dayBefore.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit' });
+                                            const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                            const beforeDateStr = dayBefore.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             const beforeTypeName = beforeType === 'special-holiday' ? 'Ειδική Αργία' : 'Σαββατοκύριακο/Αργία';
-                                            conflictDetails.push(`Το ανέθετο άτομο έχει συνεχόμενη ${beforeTypeName}: ${beforeDateStr}`);
+                                            conflictDetails.push(`Το ανέθετο άτομο έχει συνεχόμενη ${beforeTypeName}: ${currentDateStr} & ${beforeDateStr}`);
                                         }
                                     }
                                     if (afterType === 'weekend-holiday' || afterType === 'special-holiday') {
                                         if (hasDutyOnDay(dayAfterKey, assignedPerson, groupNum)) {
                                             hasLegitimateConflict = true;
-                                            const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit' });
+                                            const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                            const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             const afterTypeName = afterType === 'special-holiday' ? 'Ειδική Αργία' : 'Σαββατοκύριακο/Αργία';
-                                            conflictDetails.push(`Το ανέθετο άτομο έχει συνεχόμενη ${afterTypeName}: ${afterDateStr}`);
+                                            conflictDetails.push(`Το ανέθετο άτομο έχει συνεχόμενη ${afterTypeName}: ${currentDateStr} & ${afterDateStr}`);
                                         }
                                     }
                                 }
@@ -10332,8 +10441,9 @@
                                 if (afterType === 'semi-normal-day') {
                                     if (hasDutyOnDay(dayAfterKey, expectedPerson, groupNum)) {
                                         hasLegitimateConflict = true;
-                                        const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit' });
-                                        conflictDetails.push(`Συνεχόμενη Ημιαργία: ${afterDateStr}`);
+                                        const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                        const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                        conflictDetails.push(`Συνεχόμενη Ημιαργία: ${currentDateStr} & ${afterDateStr}`);
                                     }
                                 }
                                 
@@ -10343,8 +10453,9 @@
                                         if (hasDutyOnDay(dayAfterKey, assignedPerson, groupNum)) {
                                             // Assigned person has conflict, so they were swapped
                                             hasLegitimateConflict = true;
-                                            const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit' });
-                                            conflictDetails.push(`Το ανέθετο άτομο έχει συνεχόμενη Ημιαργία: ${afterDateStr}`);
+                                            const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                            const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                            conflictDetails.push(`Το ανέθετο άτομο έχει συνεχόμενη Ημιαργία: ${currentDateStr} & ${afterDateStr}`);
                                         }
                                     }
                                 }
