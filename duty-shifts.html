@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.41 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.42 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -121,6 +121,70 @@
 
         .drop-indicator.show {
             opacity: 1;
+        }
+
+        /* Rankings list item styles */
+        .ranking-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            margin: 4px 0;
+            background-color: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            cursor: move;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .ranking-item:hover {
+            background-color: #f8f9fa;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .ranking-item.dragging {
+            opacity: 0.5;
+            background-color: #e9ecef;
+        }
+
+        .ranking-item.drag-over {
+            border-top: 3px solid #0d6efd;
+            background-color: #e7f3ff;
+            margin-top: 8px;
+        }
+
+        .ranking-number {
+            width: 60px;
+            font-weight: bold;
+            font-size: 1.1em;
+            color: #0d6efd;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .ranking-name {
+            flex: 1;
+            padding: 0 15px;
+            font-size: 1em;
+        }
+
+        .ranking-group {
+            width: 200px;
+            color: #6c757d;
+            font-size: 0.9em;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .ranking-drag-handle {
+            width: 30px;
+            color: #adb5bd;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .ranking-drag-handle:hover {
+            color: #0d6efd;
         }
 
         /* 3D Interactive Priority Number */
@@ -618,7 +682,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.41</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.42</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -1149,21 +1213,12 @@
                 <div class="modal-body">
                     <p class="text-muted mb-3">
                         <i class="fas fa-info-circle me-1"></i>
-                        Η ιεραρχία είναι ξεχωριστή από την προτεραιότητα και δεν επηρεάζει τη σειρά των λιστών.
+                        Σύρετε και αφήστε τα άτομα για να αλλάξετε τη σειρά ιεραρχίας. Η ιεραρχία είναι ξεχωριστή από την προτεραιότητα και δεν επηρεάζει τη σειρά των λιστών.
                     </p>
-                    <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
-                        <table class="table table-striped table-hover">
-                            <thead class="table-dark sticky-top">
-                                <tr>
-                                    <th style="width: 10%;">Ιεραρχία</th>
-                                    <th style="width: 70%;">Όνομα</th>
-                                    <th style="width: 20%;">Ομάδα</th>
-                                </tr>
-                            </thead>
-                            <tbody id="rankingsTableBody">
-                                <!-- Rankings will be populated here -->
-                            </tbody>
-                        </table>
+                    <div id="rankingsListContainer" style="max-height: 500px; overflow-y: auto; position: relative;">
+                        <div id="rankingsListBody">
+                            <!-- Rankings will be populated here -->
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -3593,54 +3648,242 @@
         // Open rankings management modal
         function openRankingsModal() {
             const allPeople = getAllPeople();
-            const tbody = document.getElementById('rankingsTableBody');
-            tbody.innerHTML = '';
+            const container = document.getElementById('rankingsListBody');
+            container.innerHTML = '';
             
             if (allPeople.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Δεν υπάρχουν άτομα στο σύστημα</td></tr>';
+                container.innerHTML = '<div class="text-center text-muted p-4">Δεν υπάρχουν άτομα στο σύστημα</div>';
                 const modal = new bootstrap.Modal(document.getElementById('rankingsModal'));
                 modal.show();
                 return;
             }
             
-            // Create rows for each person
-            allPeople.forEach((person, index) => {
-                const row = document.createElement('tr');
-                const currentRanking = rankings[person] || '';
+            // Sort people by ranking (ranked first, then unranked)
+            const sortedPeople = [...allPeople].sort((a, b) => {
+                const rankA = rankings[a] || 9999;
+                const rankB = rankings[b] || 9999;
+                return rankA - rankB;
+            });
+            
+            // Find the highest ranking to assign sequential numbers to unranked people
+            const rankedPeople = sortedPeople.filter(p => rankings[p] && rankings[p] > 0);
+            const unrankedPeople = sortedPeople.filter(p => !rankings[p] || rankings[p] <= 0);
+            const maxRanking = rankedPeople.length > 0 
+                ? Math.max(...rankedPeople.map(p => rankings[p]))
+                : 0;
+            
+            // Create draggable items for each person
+            sortedPeople.forEach((person, index) => {
+                let currentRanking;
+                if (rankings[person] && rankings[person] > 0) {
+                    currentRanking = rankings[person];
+                } else {
+                    // Assign sequential ranking starting from maxRanking + 1
+                    const unrankedIndex = unrankedPeople.indexOf(person);
+                    currentRanking = maxRanking + unrankedIndex + 1;
+                }
                 const groupNum = getPersonGroup(person);
                 const groupName = groupNum ? getGroupName(groupNum) : 'Άγνωστη';
                 
-                row.innerHTML = `
-                    <td>
-                        <input type="number" class="form-control form-control-sm" 
-                               id="ranking_${index}" 
-                               value="${currentRanking}" 
-                               min="1" 
-                               placeholder="-" 
-                               style="width: 80px;">
-                    </td>
-                    <td>${person}</td>
-                    <td>${groupName}</td>
+                const item = document.createElement('div');
+                item.className = 'ranking-item';
+                item.draggable = true;
+                item.dataset.person = person;
+                item.dataset.ranking = currentRanking;
+                
+                item.innerHTML = `
+                    <div class="ranking-drag-handle">
+                        <i class="fas fa-grip-vertical"></i>
+                    </div>
+                    <div class="ranking-number">${currentRanking}</div>
+                    <div class="ranking-name">${person}</div>
+                    <div class="ranking-group">${groupName}</div>
                 `;
-                tbody.appendChild(row);
+                
+                // Add drag event listeners
+                item.addEventListener('dragstart', handleRankingDragStart);
+                item.addEventListener('dragover', handleRankingDragOver);
+                item.addEventListener('drop', handleRankingDrop);
+                item.addEventListener('dragend', handleRankingDragEnd);
+                item.addEventListener('dragenter', handleRankingDragEnter);
+                item.addEventListener('dragleave', handleRankingDragLeave);
+                
+                container.appendChild(item);
             });
             
             const modal = new bootstrap.Modal(document.getElementById('rankingsModal'));
             modal.show();
         }
 
+        // Drag and drop variables for rankings
+        let draggedRankingItem = null;
+        let rankingScrollInterval = null;
+        let currentMouseY = 0;
+
+        function handleRankingDragStart(e) {
+            draggedRankingItem = this;
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', this.innerHTML);
+            
+            // Track mouse position
+            document.addEventListener('dragover', trackRankingMousePosition);
+            
+            // Start auto-scrolling
+            startRankingAutoScroll();
+        }
+
+        function trackRankingMousePosition(e) {
+            currentMouseY = e.clientY;
+        }
+
+        function handleRankingDragOver(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            
+            if (draggedRankingItem !== this) {
+                this.classList.add('drag-over');
+            }
+            
+            return false;
+        }
+
+        function handleRankingDragEnter(e) {
+            if (draggedRankingItem !== this) {
+                this.classList.add('drag-over');
+            }
+        }
+
+        function handleRankingDragLeave(e) {
+            this.classList.remove('drag-over');
+        }
+
+        function handleRankingDrop(e) {
+            if (e.stopPropagation) {
+                e.stopPropagation();
+            }
+            
+            if (draggedRankingItem !== this) {
+                const container = document.getElementById('rankingsListBody');
+                const items = Array.from(container.querySelectorAll('.ranking-item'));
+                const fromIndex = items.indexOf(draggedRankingItem);
+                const toIndex = items.indexOf(this);
+                
+                // Move the item in the DOM
+                if (fromIndex < toIndex) {
+                    container.insertBefore(draggedRankingItem, this.nextSibling);
+                } else {
+                    container.insertBefore(draggedRankingItem, this);
+                }
+                
+                // Update rankings for all affected items
+                updateRankingsAfterMove(items, fromIndex, toIndex);
+            }
+            
+            this.classList.remove('drag-over');
+            return false;
+        }
+
+        function handleRankingDragEnd(e) {
+            this.classList.remove('dragging');
+            const items = document.querySelectorAll('.ranking-item');
+            items.forEach(item => item.classList.remove('drag-over'));
+            draggedRankingItem = null;
+            
+            // Remove mouse tracking
+            document.removeEventListener('dragover', trackRankingMousePosition);
+            
+            // Stop auto-scrolling
+            stopRankingAutoScroll();
+        }
+
+        function updateRankingsAfterMove(items, fromIndex, toIndex) {
+            const container = document.getElementById('rankingsListBody');
+            const allItems = Array.from(container.querySelectorAll('.ranking-item'));
+            
+            // Determine the new ranking for the moved person
+            const newRanking = toIndex + 1;
+            const oldRanking = parseInt(draggedRankingItem.dataset.ranking) || (fromIndex + 1);
+            
+            // Update rankings for all people
+            allItems.forEach((item, index) => {
+                const person = item.dataset.person;
+                const currentItemRanking = parseInt(item.dataset.ranking) || (index + 1);
+                let newItemRanking;
+                
+                if (item === draggedRankingItem) {
+                    // The moved person gets the new ranking
+                    newItemRanking = newRanking;
+                } else if (fromIndex < toIndex) {
+                    // Moving down: shift people from old position + 1 to new position up by 1
+                    if (currentItemRanking > oldRanking && currentItemRanking <= newRanking) {
+                        newItemRanking = currentItemRanking - 1;
+                    } else {
+                        newItemRanking = currentItemRanking;
+                    }
+                } else {
+                    // Moving up: shift people from new position to old position - 1 down by 1
+                    if (currentItemRanking >= newRanking && currentItemRanking < oldRanking) {
+                        newItemRanking = currentItemRanking + 1;
+                    } else {
+                        newItemRanking = currentItemRanking;
+                    }
+                }
+                
+                // Update the ranking number display
+                const rankingNumberEl = item.querySelector('.ranking-number');
+                if (rankingNumberEl) {
+                    rankingNumberEl.textContent = newItemRanking;
+                }
+                item.dataset.ranking = newItemRanking;
+            });
+        }
+
+        function startRankingAutoScroll() {
+            const container = document.getElementById('rankingsListContainer');
+            if (!container) return;
+            
+            rankingScrollInterval = setInterval(() => {
+                if (!draggedRankingItem) {
+                    stopRankingAutoScroll();
+                    return;
+                }
+                
+                const rect = container.getBoundingClientRect();
+                
+                // Scroll up if near top
+                if (currentMouseY < rect.top + 50) {
+                    container.scrollTop = Math.max(0, container.scrollTop - 15);
+                }
+                // Scroll down if near bottom
+                else if (currentMouseY > rect.bottom - 50) {
+                    container.scrollTop = Math.min(
+                        container.scrollHeight - container.clientHeight,
+                        container.scrollTop + 15
+                    );
+                }
+            }, 50);
+        }
+
+        function stopRankingAutoScroll() {
+            if (rankingScrollInterval) {
+                clearInterval(rankingScrollInterval);
+                rankingScrollInterval = null;
+            }
+        }
+
         // Save rankings
         function saveRankings() {
-            const allPeople = getAllPeople();
+            const container = document.getElementById('rankingsListBody');
+            const items = container.querySelectorAll('.ranking-item');
             const newRankings = {};
             
-            allPeople.forEach((person, index) => {
-                const input = document.getElementById(`ranking_${index}`);
-                if (input && input.value.trim() !== '') {
-                    const ranking = parseInt(input.value);
-                    if (!isNaN(ranking) && ranking > 0) {
-                        newRankings[person] = ranking;
-                    }
+            items.forEach((item, index) => {
+                const person = item.dataset.person;
+                const ranking = parseInt(item.dataset.ranking) || (index + 1);
+                if (person && ranking > 0) {
+                    newRankings[person] = ranking;
                 }
             });
             
