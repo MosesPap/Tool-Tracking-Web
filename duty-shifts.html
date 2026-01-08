@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.37 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.38 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -618,7 +618,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.37</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.38</span></h4>
             </div>
         </div>
     </div>
@@ -2957,6 +2957,81 @@
                 semi: lastSemiDuty || null,
                 normal: lastNormalDuty || null
             };
+            
+            // Handle priority position shifts when editing
+            if (isEditingPerson) {
+                // Get old priorities before updating
+                const oldPriorities = groups[currentGroup].priorities[oldName] || {};
+                const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                const priorityInputs = {
+                    special: prioritySpecial ? parseInt(prioritySpecial) : null,
+                    weekend: priorityWeekend ? parseInt(priorityWeekend) : null,
+                    semi: prioritySemi ? parseInt(prioritySemi) : null,
+                    normal: priorityNormal ? parseInt(priorityNormal) : null
+                };
+                
+                listTypes.forEach(listType => {
+                    const oldPriority = oldPriorities[listType];
+                    const newPriority = priorityInputs[listType];
+                    
+                    // Only process if priority actually changed and new priority is provided
+                    if (newPriority !== null && oldPriority !== undefined && oldPriority !== newPriority) {
+                        // Get current sorted list to find positions
+                        const sortedList = [...groups[currentGroup][listType]].sort((a, b) => {
+                            const priorityA = groups[currentGroup].priorities?.[a]?.[listType] ?? 999;
+                            const priorityB = groups[currentGroup].priorities?.[b]?.[listType] ?? 999;
+                            if (priorityA !== priorityB) return priorityA - priorityB;
+                            // If priorities equal, sort by last duty date
+                            const dateA = groups[currentGroup].lastDuties[a]?.[listType];
+                            const dateB = groups[currentGroup].lastDuties[b]?.[listType];
+                            if (!dateA && !dateB) return 0;
+                            if (!dateA) return 1;
+                            if (!dateB) return -1;
+                            return new Date(dateB) - new Date(dateA);
+                        });
+                        
+                        // Find current position (1-based) of the person being edited in the sorted list
+                        const currentPos = sortedList.indexOf(oldName) + 1;
+                        const targetPos = newPriority;
+                        
+                        // Only shift if positions are different and target is valid
+                        if (currentPos !== targetPos && targetPos >= 1) {
+                            // Initialize priorities for all people if needed
+                            sortedList.forEach(person => {
+                                if (!groups[currentGroup].priorities[person]) {
+                                    groups[currentGroup].priorities[person] = {};
+                                }
+                            });
+                            
+                            // Create new list order with edited person at target position
+                            // Remove the person being edited from the list
+                            const listWithoutEdited = sortedList.filter(p => p !== oldName);
+                            
+                            // Insert edited person at target position (1-based, so insert at index targetPos - 1)
+                            const newList = [...listWithoutEdited];
+                            const insertIndex = Math.min(targetPos - 1, newList.length);
+                            newList.splice(insertIndex, 0, oldName);
+                            
+                            // Reassign priorities sequentially (1, 2, 3, ...) based on new order
+                            // This implements the "bump" behavior: everyone shifts to make room
+                            newList.forEach((person, index) => {
+                                const newPos = index + 1;
+                                if (!groups[currentGroup].priorities[person]) {
+                                    groups[currentGroup].priorities[person] = {};
+                                }
+                                // Update priority to reflect new position
+                                // Only update if person had a valid priority before (not 999 default) or is the person being edited
+                                const hadValidPriority = person === oldName || 
+                                    (groups[currentGroup].priorities[person][listType] !== undefined && 
+                                     groups[currentGroup].priorities[person][listType] < 999);
+                                if (hadValidPriority || person === oldName) {
+                                    groups[currentGroup].priorities[person][listType] = newPos;
+                                }
+                            });
+                        }
+                    }
+                });
+            }
             
             // Store priorities (using new name as key)
             // If priority is not provided, use a default value (999 for sorting - puts them at the end)
