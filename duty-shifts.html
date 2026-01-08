@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.51 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.52 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.51</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.52</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -7990,8 +7990,34 @@
                                             }
                                             
                                             // Check if swap person has conflict on current day (where they would be swapped to)
-                                            const swapPersonAfter = simulatedSemiAssignments[dayAfterKey]?.[groupNum];
-                                            let swapPersonHasConflict = (swapPersonAfter === swapPerson);
+                                            // Calculate day after current day
+                                            const currentDayAfter = new Date(date);
+                                            currentDayAfter.setDate(currentDayAfter.getDate() + 1);
+                                            const currentDayAfterKey = formatDateKey(currentDayAfter);
+                                            const currentAfterType = getDayType(currentDayAfter);
+                                            
+                                            let swapPersonHasConflict = false;
+                                            
+                                            // Check if swap person has conflict on day after current day
+                                            if (currentAfterType === 'semi-normal-day') {
+                                                const swapPersonAfter = simulatedSemiAssignments[currentDayAfterKey]?.[groupNum];
+                                                if (swapPersonAfter === swapPerson) {
+                                                    swapPersonHasConflict = true;
+                                                }
+                                            }
+                                            
+                                            // Also check day before current day
+                                            const currentDayBefore = new Date(date);
+                                            currentDayBefore.setDate(currentDayBefore.getDate() - 1);
+                                            const currentDayBeforeKey = formatDateKey(currentDayBefore);
+                                            const currentBeforeType = getDayType(currentDayBefore);
+                                            
+                                            if (!swapPersonHasConflict && currentBeforeType === 'semi-normal-day') {
+                                                const swapPersonBefore = simulatedSemiAssignments[currentDayBeforeKey]?.[groupNum];
+                                                if (swapPersonBefore === swapPerson) {
+                                                    swapPersonHasConflict = true;
+                                                }
+                                            }
                                             
                                             // Also check if swap person has conflict on swap day (where they currently would be)
                                             if (!swapPersonHasConflict) {
