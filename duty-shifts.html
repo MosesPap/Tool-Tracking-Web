@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.64 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.65 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.64</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.65</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -2052,6 +2052,51 @@
             rebuildCriticalAssignmentsFromLastDuties();
         }
 
+        // Helper function to sanitize data for Firestore (remove undefined, functions, etc.)
+        function sanitizeForFirestore(obj) {
+            if (obj === null || obj === undefined) {
+                return null;
+            }
+            
+            // Handle arrays
+            if (Array.isArray(obj)) {
+                return obj.map(item => sanitizeForFirestore(item)).filter(item => item !== undefined);
+            }
+            
+            // Handle Date objects - convert to ISO string
+            if (obj instanceof Date) {
+                return obj.toISOString();
+            }
+            
+            // Handle functions - skip them
+            if (typeof obj === 'function') {
+                return undefined;
+            }
+            
+            // Handle primitives
+            if (typeof obj !== 'object') {
+                return obj;
+            }
+            
+            // Handle objects
+            const sanitized = {};
+            for (const key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    // Skip Firestore metadata fields that will be added separately
+                    if (key === 'lastUpdated' || key === 'updatedBy' || key === '_migratedFrom' || key === '_migrationDate') {
+                        continue;
+                    }
+                    
+                    const value = sanitizeForFirestore(obj[key]);
+                    // Only add if value is not undefined
+                    if (value !== undefined) {
+                        sanitized[key] = value;
+                    }
+                }
+            }
+            return sanitized;
+        }
+        
         // Save data to Firebase Firestore
         async function saveData() {
             try {
@@ -2072,61 +2117,99 @@
                 }
                 
                 // Save groups
-                await db.collection('dutyShifts').doc('groups').set({
-                    ...groups,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid
-                });
+                try {
+                    const sanitizedGroups = sanitizeForFirestore(groups);
+                    await db.collection('dutyShifts').doc('groups').set({
+                        ...sanitizedGroups,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                } catch (error) {
+                    console.error('Error saving groups to Firestore:', error);
+                }
                 
                 // Save holidays
-                await db.collection('dutyShifts').doc('holidays').set({
-                    list: holidays,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid
-                });
+                try {
+                    await db.collection('dutyShifts').doc('holidays').set({
+                        list: Array.isArray(holidays) ? holidays : [],
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                } catch (error) {
+                    console.error('Error saving holidays to Firestore:', error);
+                }
                 
                 // Save special holidays
-                await db.collection('dutyShifts').doc('specialHolidays').set({
-                    list: specialHolidays,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid
-                });
+                try {
+                    await db.collection('dutyShifts').doc('specialHolidays').set({
+                        list: Array.isArray(specialHolidays) ? specialHolidays : [],
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                } catch (error) {
+                    console.error('Error saving specialHolidays to Firestore:', error);
+                }
                 
                 // Save assignments to separate documents by day type
-                await db.collection('dutyShifts').doc('normalDayAssignments').set({
-                    ...normalDayAssignments,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid
-                });
+                try {
+                    const sanitizedNormal = sanitizeForFirestore(normalDayAssignments);
+                    await db.collection('dutyShifts').doc('normalDayAssignments').set({
+                        ...sanitizedNormal,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                } catch (error) {
+                    console.error('Error saving normalDayAssignments to Firestore:', error);
+                }
                 
-                await db.collection('dutyShifts').doc('semiNormalAssignments').set({
-                    ...semiNormalAssignments,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid
-                });
+                try {
+                    const sanitizedSemi = sanitizeForFirestore(semiNormalAssignments);
+                    await db.collection('dutyShifts').doc('semiNormalAssignments').set({
+                        ...sanitizedSemi,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                } catch (error) {
+                    console.error('Error saving semiNormalAssignments to Firestore:', error);
+                }
                 
-                await db.collection('dutyShifts').doc('weekendAssignments').set({
-                    ...weekendAssignments,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid
-                });
+                try {
+                    const sanitizedWeekend = sanitizeForFirestore(weekendAssignments);
+                    await db.collection('dutyShifts').doc('weekendAssignments').set({
+                        ...sanitizedWeekend,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                } catch (error) {
+                    console.error('Error saving weekendAssignments to Firestore:', error);
+                }
                 
-                await db.collection('dutyShifts').doc('specialHolidayAssignments').set({
-                    ...specialHolidayAssignments,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid
-                });
+                try {
+                    const sanitizedSpecial = sanitizeForFirestore(specialHolidayAssignments);
+                    await db.collection('dutyShifts').doc('specialHolidayAssignments').set({
+                        ...sanitizedSpecial,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                } catch (error) {
+                    console.error('Error saving specialHolidayAssignments to Firestore:', error);
+                }
                 
                 // Save critical assignments separately
-                console.log('Saving criticalAssignments to Firestore:', Object.keys(criticalAssignments).length, 'dates');
-                if (Object.keys(criticalAssignments).length > 0) {
-                    console.log('Sample criticalAssignments being saved:', Object.entries(criticalAssignments).slice(0, 3));
+                try {
+                    console.log('Saving criticalAssignments to Firestore:', Object.keys(criticalAssignments).length, 'dates');
+                    if (Object.keys(criticalAssignments).length > 0) {
+                        console.log('Sample criticalAssignments being saved:', Object.entries(criticalAssignments).slice(0, 3));
+                    }
+                    const sanitizedCritical = sanitizeForFirestore(criticalAssignments);
+                    await db.collection('dutyShifts').doc('criticalAssignments').set({
+                        ...sanitizedCritical,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                } catch (error) {
+                    console.error('Error saving criticalAssignments to Firestore:', error);
                 }
-                await db.collection('dutyShifts').doc('criticalAssignments').set({
-                    ...criticalAssignments,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid
-                });
                 
                 // Save rankings to Firestore (only if rankings have data to prevent overwriting with empty object)
                 // Check if rankings object has any actual ranking data (not just metadata)
@@ -2136,13 +2219,18 @@
                 const hasRankingsData = Object.keys(rankingsData).length > 0;
                 
                 if (hasRankingsData) {
-                    console.log('Saving rankings to Firestore:', Object.keys(rankingsData).length, 'people');
-                    await db.collection('dutyShifts').doc('rankings').set({
-                        ...rankingsData,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
-                    console.log('Rankings saved to Firestore successfully');
+                    try {
+                        console.log('Saving rankings to Firestore:', Object.keys(rankingsData).length, 'people');
+                        const sanitizedRankings = sanitizeForFirestore(rankingsData);
+                        await db.collection('dutyShifts').doc('rankings').set({
+                            ...sanitizedRankings,
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedBy: user.uid
+                        });
+                        console.log('Rankings saved to Firestore successfully');
+                    } catch (error) {
+                        console.error('Error saving rankings to Firestore:', error);
+                    }
                 } else {
                     console.log('Skipping rankings save - no rankings data to save (preventing overwrite of existing rankings)');
                 }
@@ -2153,6 +2241,7 @@
                 saveDataToLocalStorage();
             } catch (error) {
                 console.error('Error saving data to Firebase:', error);
+                console.error('Error details:', error.message, error.stack);
                 // Fallback to localStorage
                 saveDataToLocalStorage();
             }
