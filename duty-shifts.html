@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.60 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.61 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.60</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.61</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -8153,26 +8153,8 @@
                                             return !swapPersonHasConflict && !skippedPersonHasConflict;
                                         };
                                         
-                                        // STEP 1: Try NEXT SAME day of week in SAME MONTH (e.g., Monday 12/01/26 with Monday 19/01/26)
-                                        for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
-                                            const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
-                                            const checkDayOfWeek = checkDate.getDay();
-                                            const checkDayType = getDayType(checkDate);
-                                            
-                                            // Must be a normal day, same day of week, and in same month
-                                            if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameMonth(date, checkDate)) {
-                                                // Check conflicts BEFORE accepting
-                                                if (checkSwapCandidatePreview(sortedNormal[i], i)) {
-                                                    swapDayKey = sortedNormal[i];
-                                                    swapDayIndex = i;
-                                                    break;
-                                                }
-                                                // If has conflicts, continue to Step 2
-                                            }
-                                        }
-                                        
-                                        // STEP 2: If Step 1 not possible, try alternative day in same week
-                                        if (!swapDayKey && alternativeDayOfWeek !== null) {
+                                        // STEP 1: Try alternative day in same week (e.g., Monday 12/01/26 → Wednesday 14/01/26)
+                                        if (alternativeDayOfWeek !== null) {
                                             for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
                                                 const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
                                                 const checkDayOfWeek = checkDate.getDay();
@@ -8186,34 +8168,51 @@
                                                         swapDayIndex = i;
                                                         break;
                                                     }
-                                                    // If has conflicts, continue to Step 3
+                                                    // If has conflicts, continue to Step 2
                                                 }
                                             }
                                         }
                                         
-                                        // STEP 3: If Step 2 not possible, look in week AFTER next (for preview, just mark it)
-                                        // Collect ALL week-after-next candidates and pick the EARLIEST valid one
+                                        // STEP 2: If Step 1 not possible, try NEXT SAME day of week in SAME MONTH (e.g., Monday 12/01/26 → Monday 19/01/26)
                                         if (!swapDayKey) {
-                                            const weekAfterNextCandidates = [];
-                                            
-                                            // Collect all week-after-next candidates (both targetDayOfWeek and alternativeDayOfWeek)
                                             for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
                                                 const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
                                                 const checkDayOfWeek = checkDate.getDay();
                                                 const checkDayType = getDayType(checkDate);
                                                 
-                                                // Must be a normal day and in week AFTER next (not same week, not next week)
-                                                if (checkDayType === 'normal-day' && !isSameWeek(date, checkDate) && isWeekAfterNext(date, checkDate)) {
-                                                    // Check if it's either targetDayOfWeek or alternativeDayOfWeek
-                                                    if (checkDayOfWeek === targetDayOfWeek || (alternativeDayOfWeek !== null && checkDayOfWeek === alternativeDayOfWeek)) {
-                                                        // Check conflicts BEFORE adding to candidates
-                                                        if (checkSwapCandidatePreview(sortedNormal[i], i)) {
-                                                            weekAfterNextCandidates.push({
-                                                                dayKey: sortedNormal[i],
-                                                                dayIndex: i,
-                                                                date: checkDate
-                                                            });
-                                                        }
+                                                // Must be a normal day, same day of week, and in same month
+                                                if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameMonth(date, checkDate)) {
+                                                    // Check conflicts BEFORE accepting
+                                                    if (checkSwapCandidatePreview(sortedNormal[i], i)) {
+                                                        swapDayKey = sortedNormal[i];
+                                                        swapDayIndex = i;
+                                                        break;
+                                                    }
+                                                    // If has conflicts, continue to Step 3
+                                                }
+                                            }
+                                        }
+                                        
+                                        // STEP 3: If Step 2 not possible, try alternative day in week AFTER next (e.g., Monday 12/01/26 → Wednesday 21/01/26)
+                                        // Collect ALL week-after-next candidates for alternative day and pick the EARLIEST valid one
+                                        if (!swapDayKey && alternativeDayOfWeek !== null) {
+                                            const weekAfterNextCandidates = [];
+                                            
+                                            // Collect all week-after-next candidates for alternative day only
+                                            for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
+                                                const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
+                                                const checkDayOfWeek = checkDate.getDay();
+                                                const checkDayType = getDayType(checkDate);
+                                                
+                                                // Must be a normal day, alternative day of week, and in week AFTER next (not same week, not next week)
+                                                if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek && !isSameWeek(date, checkDate) && isWeekAfterNext(date, checkDate)) {
+                                                    // Check conflicts BEFORE adding to candidates
+                                                    if (checkSwapCandidatePreview(sortedNormal[i], i)) {
+                                                        weekAfterNextCandidates.push({
+                                                            dayKey: sortedNormal[i],
+                                                            dayIndex: i,
+                                                            date: checkDate
+                                                        });
                                                     }
                                                 }
                                             }
@@ -9314,39 +9313,8 @@
                                             return !swapPersonHasConflict && !skippedPersonHasConflict;
                                         };
                                         
-                                        // STEP 1: Try NEXT SAME day of week in SAME MONTH (e.g., Monday 12/01/26 with Monday 19/01/26)
-                                        for (let i = dayIndex + 1; i < days.length; i++) {
-                                            const checkDayKey = days[i];
-                                            const checkDate = new Date(checkDayKey + 'T00:00:00');
-                                            const checkDayOfWeek = checkDate.getDay();
-                                            const checkDayType = getDayType(checkDate);
-                                            
-                                            // Must be a normal day, same day of week, and in same month
-                                            if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameMonth(dayDate, checkDate)) {
-                                                // Check conflicts BEFORE accepting
-                                                if (checkSwapCandidate(checkDayKey, i)) {
-                                                    // Ask for permission before same-month swap
-                                                    const swapRotationPosition = i % rotationDays;
-                                                    const swapPerson = groupPeople[swapRotationPosition];
-                                                    const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                                    const swapDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                                    const reason = 'Συνεχόμενη Ημιαργία (ίδιος μήνας)';
-                                                    
-                                                    const userApproved = askPermissionForConflict('swap', skippedPerson, currentDateStr, reason, swapPerson, swapDateStr);
-                                                    
-                                                    if (userApproved) {
-                                                        swapDayKey = checkDayKey;
-                                                        swapDayIndex = i;
-                                                        break;
-                                                    }
-                                                    // If user rejected, continue to Step 2
-                                                }
-                                                // If has conflicts, continue to Step 2
-                                            }
-                                        }
-                                        
-                                        // STEP 2: If Step 1 not possible, try alternative day in same week
-                                        if (!swapDayKey && alternativeDayOfWeek !== null) {
+                                        // STEP 1: Try alternative day in same week (e.g., Monday 12/01/26 → Wednesday 14/01/26)
+                                        if (alternativeDayOfWeek !== null) {
                                             for (let i = dayIndex + 1; i < days.length; i++) {
                                                 const checkDayKey = days[i];
                                                 const checkDate = new Date(checkDayKey + 'T00:00:00');
@@ -9371,6 +9339,39 @@
                                                             swapDayIndex = i;
                                                             break;
                                                         }
+                                                        // If user rejected, continue to Step 2
+                                                    }
+                                                    // If has conflicts, continue to Step 2
+                                                }
+                                            }
+                                        }
+                                        
+                                        // STEP 2: If Step 1 not possible, try NEXT SAME day of week in SAME MONTH (e.g., Monday 12/01/26 → Monday 19/01/26)
+                                        if (!swapDayKey) {
+                                            for (let i = dayIndex + 1; i < days.length; i++) {
+                                                const checkDayKey = days[i];
+                                                const checkDate = new Date(checkDayKey + 'T00:00:00');
+                                                const checkDayOfWeek = checkDate.getDay();
+                                                const checkDayType = getDayType(checkDate);
+                                                
+                                                // Must be a normal day, same day of week, and in same month
+                                                if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameMonth(dayDate, checkDate)) {
+                                                    // Check conflicts BEFORE accepting
+                                                    if (checkSwapCandidate(checkDayKey, i)) {
+                                                        // Ask for permission before same-month swap
+                                                        const swapRotationPosition = i % rotationDays;
+                                                        const swapPerson = groupPeople[swapRotationPosition];
+                                                        const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                        const swapDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                        const reason = 'Συνεχόμενη Ημιαργία (ίδιος μήνας)';
+                                                        
+                                                        const userApproved = askPermissionForConflict('swap', skippedPerson, currentDateStr, reason, swapPerson, swapDateStr);
+                                                        
+                                                        if (userApproved) {
+                                                            swapDayKey = checkDayKey;
+                                                            swapDayIndex = i;
+                                                            break;
+                                                        }
                                                         // If user rejected, continue to Step 3
                                                     }
                                                     // If has conflicts, continue to Step 3
@@ -9378,7 +9379,7 @@
                                             }
                                         }
                                         
-                                        // STEP 3: If Step 2 not possible, look in week AFTER next (will ask permission)
+                                        // STEP 3: If Step 2 not possible, try alternative day in week AFTER next (e.g., Monday 12/01/26 → Wednesday 21/01/26)
                                         // Collect ALL week-after-next candidates and pick the EARLIEST valid one
                                         let weekAfterNextCandidates = [];
                                         
