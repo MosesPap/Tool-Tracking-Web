@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.68</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.69</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -9580,13 +9580,28 @@
                                                 // This ensures the swap happens immediately
                                                 assignPersonToDay(swapDayKey, skippedPerson, groupNum);
                                                 
-                                                // Track that skipped person has been assigned (to prevent duplicate assignment later)
-                                                if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
+                                                // Track that skipped person has been assigned in BOTH months (current day's month AND swap day's month)
+                                                // This prevents them from being assigned again on the next Monday or any other day in either month
+                                                if (dayTypeCategory === 'normal') {
+                                                    // Add to current day's month
+                                                    if (!assignedPeople[monthKey]) assignedPeople[monthKey] = {};
+                                                    if (!assignedPeople[monthKey][groupNum]) assignedPeople[monthKey][groupNum] = new Set();
                                                     assignedPeople[monthKey][groupNum].add(skippedPerson);
+                                                    
+                                                    // Also add to swap day's month (in case swap day is in a different month)
+                                                    const swapDate = new Date(swapDayKey + 'T00:00:00');
+                                                    const swapMonth = swapDate.getMonth();
+                                                    const swapYear = swapDate.getFullYear();
+                                                    const swapMonthKey = `${swapYear}-${swapMonth}`;
+                                                    if (!assignedPeople[swapMonthKey]) assignedPeople[swapMonthKey] = {};
+                                                    if (!assignedPeople[swapMonthKey][groupNum]) assignedPeople[swapMonthKey][groupNum] = new Set();
+                                                    assignedPeople[swapMonthKey][groupNum].add(skippedPerson);
                                                 }
                                                 
                                                 // Track that swap person has been assigned (to prevent duplicate assignment later)
-                                                if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
+                                                if (dayTypeCategory === 'normal') {
+                                                    if (!assignedPeople[monthKey]) assignedPeople[monthKey] = {};
+                                                    if (!assignedPeople[monthKey][groupNum]) assignedPeople[monthKey][groupNum] = new Set();
                                                     assignedPeople[monthKey][groupNum].add(swapPerson);
                                                 }
                                                 
