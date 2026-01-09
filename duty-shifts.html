@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.63 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.64 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.63</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.64</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -9054,15 +9054,43 @@
                     
                     // Process each day in order
                     days.forEach((dayKey, dayIndex) => {
-                        // Skip if day already has assignment for this group (critical assignments or swapped days)
-                        const existingAssignment = getAssignmentForDate(dayKey);
-                        if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
-                            return;
-                        }
-                        
-                        // Skip if this day was already assigned due to a swap
-                        if (swappedDays[dayKey] && swappedDays[dayKey][groupNum]) {
-                            return;
+                        // For special holidays: always recalculate (don't skip existing assignments unless critical)
+                        // This ensures rotation matches the preview simulation
+                        // For other day types: skip if day already has assignment (critical assignments or swapped days)
+                        if (dayTypeCategory === 'special') {
+                            // For special holidays: only skip if it's a critical assignment
+                            const existingAssignment = getAssignmentForDate(dayKey);
+                            if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
+                                // Check if this is a critical assignment
+                                const isCritical = criticalAssignments[dayKey] && 
+                                    criticalAssignments[dayKey].some(a => a.includes(`(Ομάδα ${groupNum})`));
+                                if (isCritical) {
+                                    return; // Skip critical assignments only
+                                }
+                                // Otherwise, clear existing assignment for this group and recalculate
+                                // Extract all people from existing assignment, remove this group's person, then reassign
+                                const allPeople = extractAllPersonNames(existingAssignment);
+                                const otherGroupPeople = allPeople.filter(p => p.group !== groupNum);
+                                if (otherGroupPeople.length > 0) {
+                                    // Keep other groups' assignments
+                                    const otherGroupsStr = otherGroupPeople.map(p => `${p.name} (Ομάδα ${p.group})`).join(', ');
+                                    setAssignmentForDate(dayKey, otherGroupsStr);
+                                } else {
+                                    // No other groups, clear the assignment
+                                    deleteAssignmentForDate(dayKey);
+                                }
+                            }
+                        } else {
+                            // For other day types: skip if day already has assignment (critical assignments or swapped days)
+                            const existingAssignment = getAssignmentForDate(dayKey);
+                            if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
+                                return;
+                            }
+                            
+                            // Skip if this day was already assigned due to a swap
+                            if (swappedDays[dayKey] && swappedDays[dayKey][groupNum]) {
+                                return;
+                            }
                         }
                         
                         const dayDate = new Date(dayKey + 'T00:00:00');
