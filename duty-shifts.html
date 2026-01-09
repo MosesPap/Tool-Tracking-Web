@@ -9251,18 +9251,29 @@
                         
                         // Check if expected person is missing on this date
                         if (expectedPerson && !isPersonMissingOnDate(expectedPerson, groupNum, dayDate)) {
-                            // If this person was already swapped, skip conflict check and assign them normally
-                            // This prevents swapping the same person multiple times
+                            // If this person was already swapped, check if they're already assigned before assigning them
+                            // This prevents assigning them again to the next Monday or any other day
                             if (dayTypeCategory === 'normal' && swappedPeople.has(expectedPerson)) {
-                                // Person was already swapped - assign them without checking for conflicts
-                                assignedPerson = expectedPerson;
-                                // Track that this person is assigned (for normal days)
-                                if (assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
-                                    assignedPeople[monthKey][groupNum].add(expectedPerson);
-                                }
-                                // Advance rotation position for next iteration
-                                if (dayTypeCategory === 'normal') {
-                                    globalNormalRotationPosition[groupNum] = rotationPosition + 1;
+                                // Person was already swapped - check if they're already assigned
+                                const isAlreadyAssigned = assignedPeople[monthKey] && 
+                                                          assignedPeople[monthKey][groupNum] && 
+                                                          assignedPeople[monthKey][groupNum].has(expectedPerson);
+                                
+                                if (isAlreadyAssigned) {
+                                    // Person was already assigned (e.g., swapped to Wednesday), skip them and find replacement
+                                    // Don't assign them again - find next available person
+                                    assignedPerson = null; // Will trigger replacement logic below
+                                } else {
+                                    // Person was swapped but not yet assigned in this month - assign them normally
+                                    assignedPerson = expectedPerson;
+                                    // Track that this person is assigned (for normal days)
+                                    if (assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
+                                        assignedPeople[monthKey][groupNum].add(expectedPerson);
+                                    }
+                                    // Advance rotation position for next iteration
+                                    if (dayTypeCategory === 'normal') {
+                                        globalNormalRotationPosition[groupNum] = rotationPosition + 1;
+                                    }
                                 }
                             } else {
                                 // Check for conflicts based on day type
@@ -9688,6 +9699,11 @@
                                                 candidateHasConflict = true;
                                             }
                                         } else if (dayTypeCategory === 'normal') {
+                                            // Check if candidate was already assigned this month (due to swap)
+                                            if (assignedPeople[monthKey] && assignedPeople[monthKey][groupNum] && assignedPeople[monthKey][groupNum].has(candidate)) {
+                                                continue; // Skip this candidate - already assigned
+                                            }
+                                            
                                             const dayBefore = new Date(dayDate);
                                             dayBefore.setDate(dayBefore.getDate() - 1);
                                             const dayAfter = new Date(dayDate);
@@ -9762,6 +9778,11 @@
                                                 candidateHasConflict = true;
                                             }
                                         } else if (dayTypeCategory === 'normal') {
+                                            // Check if candidate was already assigned this month (due to swap)
+                                            if (assignedPeople[monthKey] && assignedPeople[monthKey][groupNum] && assignedPeople[monthKey][groupNum].has(candidate)) {
+                                                continue; // Skip this candidate - already assigned
+                                            }
+                                            
                                             const dayBefore = new Date(dayDate);
                                             dayBefore.setDate(dayBefore.getDate() - 1);
                                             const dayAfter = new Date(dayDate);
