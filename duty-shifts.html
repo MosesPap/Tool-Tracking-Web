@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.65 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.66 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.65</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.66</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -8265,8 +8265,8 @@
                                         }
                                         
                                         // STEP 2: If Step 1 not possible (no swap found), try NEXT SAME day of week in SAME MONTH (e.g., Monday 12/01/26 → Monday 19/01/26)
-                                        // Only proceed if Step 1 did NOT find a valid swap (swapDayKey is still null)
-                                        if (!swapDayKey && swapDayIndex === null) {
+                                        // Only proceed if Step 1 did NOT find a valid swap (both swapDayKey and swapDayIndex must be null/unset)
+                                        if (swapDayKey === null && swapDayIndex === null) {
                                             for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
                                                 const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
                                                 const checkDayOfWeek = checkDate.getDay();
@@ -8287,7 +8287,8 @@
                                         
                                         // STEP 3: If Step 2 not possible, try alternative day in week AFTER next (e.g., Monday 12/01/26 → Wednesday 21/01/26)
                                         // Collect ALL week-after-next candidates for alternative day and pick the EARLIEST valid one
-                                        if (!swapDayKey && alternativeDayOfWeek !== null) {
+                                        // Only proceed if Step 1 and Step 2 did NOT find a valid swap
+                                        if (swapDayKey === null && swapDayIndex === null && alternativeDayOfWeek !== null) {
                                             const weekAfterNextCandidates = [];
                                             
                                             // Collect all week-after-next candidates for alternative day only
@@ -8322,7 +8323,7 @@
                                     }
                                     
                                     // If found swap day, verify conflicts one more time (restore duplicate checking for safety)
-                                    if (swapDayKey && swapDayIndex !== null) {
+                                    if (swapDayKey !== null && swapDayIndex !== null) {
                                         // Calculate rotation position for swap day
                                         const swapRotationPosition = swapDayIndex % rotationDays;
                                         const swapPerson = groupPeople[swapRotationPosition];
@@ -9439,8 +9440,8 @@
                                         }
                                         
                                         // STEP 2: If Step 1 not possible (no swap found), try NEXT SAME day of week in SAME MONTH (e.g., Monday 12/01/26 → Monday 19/01/26)
-                                        // Only proceed if Step 1 did NOT find a valid swap (swapDayKey is still null)
-                                        if (!swapDayKey && swapDayIndex === null) {
+                                        // Only proceed if Step 1 did NOT find a valid swap (both swapDayKey and swapDayIndex must be null/unset)
+                                        if (swapDayKey === null && swapDayIndex === null) {
                                             for (let i = dayIndex + 1; i < days.length; i++) {
                                                 const checkDayKey = days[i];
                                                 const checkDate = new Date(checkDayKey + 'T00:00:00');
@@ -9474,9 +9475,10 @@
                                         
                                         // STEP 3: If Step 2 not possible, try alternative day in week AFTER next (e.g., Monday 12/01/26 → Wednesday 21/01/26)
                                         // Collect ALL week-after-next candidates and pick the EARLIEST valid one
+                                        // Only proceed if Step 1 and Step 2 did NOT find a valid swap
                                         let weekAfterNextCandidates = [];
                                         
-                                        if (!swapDayKey) {
+                                        if (swapDayKey === null && swapDayIndex === null) {
                                             // Collect all week-after-next candidates (both targetDayOfWeek and alternativeDayOfWeek)
                                             for (let i = dayIndex + 1; i < days.length; i++) {
                                                 const checkDayKey = days[i];
@@ -9526,7 +9528,7 @@
                                     
                                     // If found swap day, find which person would be assigned to that day
                                     // NOTE: Conflict checks were already done in checkSwapCandidate, so we can proceed directly
-                                    if (swapDayKey && swapDayIndex !== null) {
+                                    if (swapDayKey !== null && swapDayIndex !== null) {
                                         // Calculate rotation position for swap day
                                         const swapRotationPosition = swapDayIndex % rotationDays;
                                         const swapPerson = groupPeople[swapRotationPosition];
