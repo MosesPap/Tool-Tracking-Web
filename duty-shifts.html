@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.70 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.71 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.70</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.71</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -6879,14 +6879,186 @@
                 }
             }
             
-                // Execute calculation (this will populate normalDayAssignments, semiNormalAssignments, etc.)
-            calculateDutiesForDateRange(startDate, endDate, preserveExisting);
+            // Load temp assignments from Firestore (use preview logic results)
+            let tempAssignments = calculationSteps.tempAssignments;
+            if (!tempAssignments) {
+                // Try to load from Firestore if not in memory
+                if (loadingAlert && loadingAlert.parentNode) {
+                    loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Φόρτωση προσωρινών υπολογισμών...';
+                }
+                try {
+                    const db = window.db || firebase.firestore();
+                    const tempDoc = await db.collection('dutyShifts').doc('tempAssignments').get();
+                    if (tempDoc.exists) {
+                        tempAssignments = tempDoc.data();
+                        // Remove metadata
+                        delete tempAssignments.lastUpdated;
+                        delete tempAssignments.updatedBy;
+                    }
+                } catch (error) {
+                    console.error('Error loading temp assignments:', error);
+                }
+            }
+            
+            if (tempAssignments) {
+                // Convert temp assignments to permanent format
+                // Special holidays: monthKey -> { groupNum -> [person names] }
+                // Recalculate assignments per date using the same logic as preview
+                const dateIterator = new Date(startDate);
+                while (dateIterator <= endDate) {
+                    const dateKey = formatDateKey(dateIterator);
+                    if (getDayType(dateIterator) === 'special-holiday') {
+                        const month = dateIterator.getMonth();
+                        const year = dateIterator.getFullYear();
+                        const monthKey = `${year}-${month}`;
+                        
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            const groupData = groups[groupNum] || { special: [] };
+                            const groupPeople = groupData.special || [];
+                            
+                            if (groupPeople.length > 0) {
+                                // Check if this person is in the temp assignments for this month/group
+                                const tempPeople = tempAssignments.special?.[monthKey]?.[groupNum] || [];
+                                
+                                // Use rotation to determine which person (same logic as preview)
+                                const rotationDays = groupPeople.length;
+                                const rotationPosition = getRotationPosition(dateIterator, 'special', groupNum) % rotationDays;
+                                let assignedPerson = groupPeople[rotationPosition];
+                                
+                                // Check if assigned person is missing, if so find next in rotation
+                                if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, dateIterator)) {
+                                    for (let offset = 1; offset < rotationDays; offset++) {
+                                        const nextIndex = (rotationPosition + offset) % rotationDays;
+                                        const candidate = groupPeople[nextIndex];
+                                        if (candidate && !isPersonMissingOnDate(candidate, groupNum, dateIterator)) {
+                                            assignedPerson = candidate;
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                // Only assign if person is in temp assignments (was calculated in preview)
+                                if (assignedPerson && tempPeople.includes(assignedPerson)) {
+                                    if (!specialHolidayAssignments[dateKey]) {
+                                        specialHolidayAssignments[dateKey] = '';
+                                    }
+                                    const assignment = `${assignedPerson} (Ομάδα ${groupNum})`;
+                                    if (!specialHolidayAssignments[dateKey].includes(assignment)) {
+                                        specialHolidayAssignments[dateKey] = specialHolidayAssignments[dateKey] 
+                                            ? `${specialHolidayAssignments[dateKey]}, ${assignment}`
+                                            : assignment;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    dateIterator.setDate(dateIterator.getDate() + 1);
+                }
+                
+                // Weekend assignments: dateKey -> { groupNum -> person }
+                for (const dateKey in tempAssignments.weekend || {}) {
+                    for (const groupNum in tempAssignments.weekend[dateKey] || {}) {
+                        const person = tempAssignments.weekend[dateKey][groupNum];
+                        if (person) {
+                            if (!weekendAssignments[dateKey]) {
+                                weekendAssignments[dateKey] = '';
+                            }
+                            const assignment = `${person} (Ομάδα ${groupNum})`;
+                            if (!weekendAssignments[dateKey].includes(assignment)) {
+                                weekendAssignments[dateKey] = weekendAssignments[dateKey]
+                                    ? `${weekendAssignments[dateKey]}, ${assignment}`
+                                    : assignment;
+                            }
+                        }
+                    }
+                }
+                
+                // Semi-normal assignments: dateKey -> { groupNum -> person }
+                for (const dateKey in tempAssignments.semi || {}) {
+                    for (const groupNum in tempAssignments.semi[dateKey] || {}) {
+                        const person = tempAssignments.semi[dateKey][groupNum];
+                        if (person) {
+                            if (!semiNormalAssignments[dateKey]) {
+                                semiNormalAssignments[dateKey] = '';
+                            }
+                            const assignment = `${person} (Ομάδα ${groupNum})`;
+                            if (!semiNormalAssignments[dateKey].includes(assignment)) {
+                                semiNormalAssignments[dateKey] = semiNormalAssignments[dateKey]
+                                    ? `${semiNormalAssignments[dateKey]}, ${assignment}`
+                                    : assignment;
+                            }
+                        }
+                    }
+                }
+                
+                // Normal day assignments: dateKey -> { groupNum -> person }
+                for (const dateKey in tempAssignments.normal || {}) {
+                    for (const groupNum in tempAssignments.normal[dateKey] || {}) {
+                        const person = tempAssignments.normal[dateKey][groupNum];
+                        if (person) {
+                            if (!normalDayAssignments[dateKey]) {
+                                normalDayAssignments[dateKey] = '';
+                            }
+                            const assignment = `${person} (Ομάδα ${groupNum})`;
+                            if (!normalDayAssignments[dateKey].includes(assignment)) {
+                                normalDayAssignments[dateKey] = normalDayAssignments[dateKey]
+                                    ? `${normalDayAssignments[dateKey]}, ${assignment}`
+                                    : assignment;
+                            }
+                        }
+                    }
+                }
+                
+                // Also update legacy dutyAssignments for backward compatibility
+                for (const dateKey in normalDayAssignments) {
+                    dutyAssignments[dateKey] = normalDayAssignments[dateKey];
+                }
+                for (const dateKey in semiNormalAssignments) {
+                    if (dutyAssignments[dateKey]) {
+                        dutyAssignments[dateKey] = `${dutyAssignments[dateKey]}, ${semiNormalAssignments[dateKey]}`;
+                    } else {
+                        dutyAssignments[dateKey] = semiNormalAssignments[dateKey];
+                    }
+                }
+                for (const dateKey in weekendAssignments) {
+                    if (dutyAssignments[dateKey]) {
+                        dutyAssignments[dateKey] = `${dutyAssignments[dateKey]}, ${weekendAssignments[dateKey]}`;
+                    } else {
+                        dutyAssignments[dateKey] = weekendAssignments[dateKey];
+                    }
+                }
+                for (const dateKey in specialHolidayAssignments) {
+                    if (dutyAssignments[dateKey]) {
+                        dutyAssignments[dateKey] = `${dutyAssignments[dateKey]}, ${specialHolidayAssignments[dateKey]}`;
+                    } else {
+                        dutyAssignments[dateKey] = specialHolidayAssignments[dateKey];
+                    }
+                }
+                
+                console.log('Converted temp assignments to permanent format');
+            } else {
+                // Fallback: use old calculation method if no temp assignments found
+                console.warn('No temp assignments found, using old calculation method');
+                calculateDutiesForDateRange(startDate, endDate, preserveExisting);
+            }
             
                 // Save all assignments to Firebase
                 if (loadingAlert && loadingAlert.parentNode) {
                     loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Αποθήκευση στο Firebase...';
                 }
                 await saveData();
+                
+                // Delete temporary assignments document after saving permanently
+                try {
+                    const db = window.db || firebase.firestore();
+                    await db.collection('dutyShifts').doc('tempAssignments').delete();
+                    console.log('Temp assignments deleted from Firestore');
+                } catch (error) {
+                    console.error('Error deleting temp assignments:', error);
+                }
+                
+                // Clear temp assignments from memory
+                calculationSteps.tempAssignments = null;
                 
                 // Reload data from Firebase to refresh the display
                 if (loadingAlert && loadingAlert.parentNode) {
@@ -8522,6 +8694,59 @@
             
             html += '</div>';
             stepContent.innerHTML = html;
+            
+            // Store preview assignments and save them temporarily to Firestore
+            // Convert Sets to arrays for serialization
+            const tempSpecialAssignments = {};
+            for (const monthKey in simulatedSpecialAssignments) {
+                tempSpecialAssignments[monthKey] = {};
+                for (const groupNum in simulatedSpecialAssignments[monthKey]) {
+                    tempSpecialAssignments[monthKey][groupNum] = Array.from(simulatedSpecialAssignments[monthKey][groupNum]);
+                }
+            }
+            
+            // Store all preview assignments in calculationSteps for later use
+            calculationSteps.tempAssignments = {
+                special: tempSpecialAssignments,
+                weekend: simulatedWeekendAssignments,
+                semi: simulatedSemiAssignments,
+                normal: normalAssignments,
+                startDate: startDate.toISOString(),
+                endDate: endDate.toISOString()
+            };
+            
+            // Save temporarily to Firestore (async, don't wait)
+            saveTempAssignmentsToFirestore(calculationSteps.tempAssignments).catch(error => {
+                console.error('Error saving temp assignments to Firestore:', error);
+            });
+        }
+        
+        // Function to save temporary assignments to Firestore
+        async function saveTempAssignmentsToFirestore(tempAssignments) {
+            try {
+                if (!window.db) {
+                    console.log('Firebase not ready, skipping temp save');
+                    return;
+                }
+                
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                
+                if (!user) {
+                    console.log('User not authenticated, skipping temp save');
+                    return;
+                }
+                
+                const sanitized = sanitizeForFirestore(tempAssignments);
+                await db.collection('dutyShifts').doc('tempAssignments').set({
+                    ...sanitized,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
+                console.log('Temp assignments saved to Firestore');
+            } catch (error) {
+                console.error('Error saving temp assignments:', error);
+            }
         }
         
         // Expose to window for compatibility
