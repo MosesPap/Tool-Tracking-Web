@@ -9213,6 +9213,10 @@
                         
                         // For normal days: if expected person was already assigned this month (due to swap), skip to next person
                         if (dayTypeCategory === 'normal' && expectedPerson && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum] && assignedPeople[monthKey][groupNum].has(expectedPerson)) {
+                            // DEBUG: Log that person was already assigned
+                            console.log(`[ASSIGNMENT DEBUG] Person ${expectedPerson} was already assigned this month (likely swapped). Day: ${dayKey} (${dayDate.toLocaleDateString('el-GR')}), Rotation Position: ${rotationPosition}`);
+                            console.log(`[ASSIGNMENT DEBUG] assignedPeople[${monthKey}][${groupNum}] contains:`, Array.from(assignedPeople[monthKey][groupNum]));
+                            
                             // This person was already assigned (swapped), find next available person in rotation
                             let foundReplacement = false;
                             for (let offset = 1; offset < rotationDays && !foundReplacement; offset++) {
@@ -9251,29 +9255,18 @@
                         
                         // Check if expected person is missing on this date
                         if (expectedPerson && !isPersonMissingOnDate(expectedPerson, groupNum, dayDate)) {
-                            // If this person was already swapped, check if they're already assigned before assigning them
-                            // This prevents assigning them again to the next Monday or any other day
+                            // If this person was already swapped, skip conflict check and assign them normally
+                            // This prevents swapping the same person multiple times
                             if (dayTypeCategory === 'normal' && swappedPeople.has(expectedPerson)) {
-                                // Person was already swapped - check if they're already assigned
-                                const isAlreadyAssigned = assignedPeople[monthKey] && 
-                                                          assignedPeople[monthKey][groupNum] && 
-                                                          assignedPeople[monthKey][groupNum].has(expectedPerson);
-                                
-                                if (isAlreadyAssigned) {
-                                    // Person was already assigned (e.g., swapped to Wednesday), skip them and find replacement
-                                    // Don't assign them again - find next available person
-                                    assignedPerson = null; // Will trigger replacement logic below
-                                } else {
-                                    // Person was swapped but not yet assigned in this month - assign them normally
-                                    assignedPerson = expectedPerson;
-                                    // Track that this person is assigned (for normal days)
-                                    if (assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
-                                        assignedPeople[monthKey][groupNum].add(expectedPerson);
-                                    }
-                                    // Advance rotation position for next iteration
-                                    if (dayTypeCategory === 'normal') {
-                                        globalNormalRotationPosition[groupNum] = rotationPosition + 1;
-                                    }
+                                // Person was already swapped - assign them without checking for conflicts
+                                assignedPerson = expectedPerson;
+                                // Track that this person is assigned (for normal days)
+                                if (assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
+                                    assignedPeople[monthKey][groupNum].add(expectedPerson);
+                                }
+                                // Advance rotation position for next iteration
+                                if (dayTypeCategory === 'normal') {
+                                    globalNormalRotationPosition[groupNum] = rotationPosition + 1;
                                 }
                             } else {
                                 // Check for conflicts based on day type
@@ -9313,6 +9306,8 @@
                                     // Use hasConsecutiveDuty to catch all consecutive conflicts (semi-normal, weekend, etc.)
                                     if (hasConsecutiveDuty(dayKey, expectedPerson, groupNum)) {
                                         hasConflict = true;
+                                        // DEBUG: Log conflict detection
+                                        console.log(`[CONFLICT DEBUG] Person ${expectedPerson} has conflict on ${dayKey} (${dayDate.toLocaleDateString('el-GR')}), Day of Week: ${dayDate.getDay()} (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayDate.getDay()]})`);
                                     }
                                 }
                                 
@@ -9322,6 +9317,9 @@
                                 // Track that this person is assigned (for normal days)
                                 if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
                                     assignedPeople[monthKey][groupNum].add(expectedPerson);
+                                    // DEBUG: Log normal assignment
+                                    console.log(`[ASSIGNMENT DEBUG] Assigned ${expectedPerson} to ${dayKey} (${dayDate.toLocaleDateString('el-GR')}), Rotation Position: ${rotationPosition}`);
+                                    console.log(`[ASSIGNMENT DEBUG] assignedPeople[${monthKey}][${groupNum}] now contains:`, Array.from(assignedPeople[monthKey][groupNum]));
                                 }
                                 // Advance rotation position for next iteration
                                 if (dayTypeCategory === 'weekend') {
@@ -9360,6 +9358,8 @@
                                 // BUT: Only attempt swap if the skipped person hasn't already been swapped before
                                 // This prevents the same person from being swapped multiple times
                                 if (dayTypeCategory === 'normal' && skippedPerson && !swappedPeople.has(skippedPerson)) {
+                                    // DEBUG: Log swap attempt
+                                    console.log(`[SWAP ATTEMPT DEBUG] Attempting to swap ${skippedPerson} from ${dayKey} (${dayDate.toLocaleDateString('el-GR')}), Day of Week: ${dayDate.getDay()} (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayDate.getDay()]})`);
                                     const currentDayOfWeek = dayDate.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                                     
                                     // Determine swap day pairs: Monday↔Wednesday (1↔3), Tuesday↔Thursday (2↔4)
@@ -9699,11 +9699,6 @@
                                                 candidateHasConflict = true;
                                             }
                                         } else if (dayTypeCategory === 'normal') {
-                                            // Check if candidate was already assigned this month (due to swap)
-                                            if (assignedPeople[monthKey] && assignedPeople[monthKey][groupNum] && assignedPeople[monthKey][groupNum].has(candidate)) {
-                                                continue; // Skip this candidate - already assigned
-                                            }
-                                            
                                             const dayBefore = new Date(dayDate);
                                             dayBefore.setDate(dayBefore.getDate() - 1);
                                             const dayAfter = new Date(dayDate);
@@ -9778,11 +9773,6 @@
                                                 candidateHasConflict = true;
                                             }
                                         } else if (dayTypeCategory === 'normal') {
-                                            // Check if candidate was already assigned this month (due to swap)
-                                            if (assignedPeople[monthKey] && assignedPeople[monthKey][groupNum] && assignedPeople[monthKey][groupNum].has(candidate)) {
-                                                continue; // Skip this candidate - already assigned
-                                            }
-                                            
                                             const dayBefore = new Date(dayDate);
                                             dayBefore.setDate(dayBefore.getDate() - 1);
                                             const dayAfter = new Date(dayDate);
@@ -9885,11 +9875,16 @@
                                     }
                                 }
                                 
-                                // If found swap day, find which person would be assigned to that day and swap
+                                    // If found swap day, find which person would be assigned to that day and swap
                                 if (swapDayKey && swapDayIndex !== null) {
+                                    // DEBUG: Log swap day found
+                                    const swapDate = new Date(swapDayKey + 'T00:00:00');
+                                    console.log(`[SWAP ATTEMPT DEBUG] Found swap day: ${swapDayKey} (${swapDate.toLocaleDateString('el-GR')}), Day of Week: ${swapDate.getDay()} (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][swapDate.getDay()]})`);
+                                    
                                     // Calculate rotation position for swap day
                                     const swapRotationPosition = swapDayIndex % rotationDays;
                                     const swapPerson = groupPeople[swapRotationPosition];
+                                    console.log(`[SWAP ATTEMPT DEBUG] Swap person at rotation position ${swapRotationPosition}: ${swapPerson}`);
                                     
                                     // Check if swap day already has assignment
                                     const swapAssignment = getAssignmentForDate(swapDayKey);
@@ -9933,6 +9928,26 @@
                                         if (!swapPersonHasConflict && !skippedPersonHasConflict) {
                                             // Valid swap: assign skipped person to swap day
                                             assignPersonToDay(swapDayKey, skippedPerson, groupNum);
+                                            
+                                            // CRITICAL: Track that skipped person was assigned to swap day
+                                            // This prevents them from being assigned again on their original rotation position (next Monday)
+                                            const swapDate = new Date(swapDayKey + 'T00:00:00');
+                                            const swapMonth = swapDate.getMonth();
+                                            const swapYear = swapDate.getFullYear();
+                                            const swapMonthKey = `${swapYear}-${swapMonth}`;
+                                            
+                                            if (!assignedPeople[swapMonthKey]) {
+                                                assignedPeople[swapMonthKey] = {};
+                                            }
+                                            if (!assignedPeople[swapMonthKey][groupNum]) {
+                                                assignedPeople[swapMonthKey][groupNum] = new Set();
+                                            }
+                                            assignedPeople[swapMonthKey][groupNum].add(skippedPerson);
+                                            
+                                            // DEBUG: Log the swap
+                                            console.log(`[SWAP DEBUG] Person ${skippedPerson} swapped from ${dayKey} (${dayDate.toLocaleDateString('el-GR')}) to ${swapDayKey} (${swapDate.toLocaleDateString('el-GR')})`);
+                                            console.log(`[SWAP DEBUG] Added ${skippedPerson} to assignedPeople[${swapMonthKey}][${groupNum}]`);
+                                            console.log(`[SWAP DEBUG] assignedPeople[${swapMonthKey}][${groupNum}] now contains:`, Array.from(assignedPeople[swapMonthKey][groupNum]));
                                             
                                             // Mark both people as swapped to prevent swapping them again on subsequent days
                                             swappedPeople.add(skippedPerson);
