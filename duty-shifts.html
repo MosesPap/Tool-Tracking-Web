@@ -9838,39 +9838,42 @@
                                 }
                                 
                                 // Find next normal day with same day of week (or alternative)
+                                // PRIORITY: Try alternative day FIRST (e.g., Wednesday for Monday), then next same day (e.g., next Monday)
                                 let swapDayKey = null;
                                 let swapDayIndex = null;
                                 
-                                if (targetDayOfWeek !== null) {
-                                    // Look for next normal day with target day of week
+                                // STEP 1: Try alternative day of week FIRST (e.g., Monday → Wednesday in same week or soon after)
+                                if (alternativeDayOfWeek !== null) {
                                     for (let i = dayIndex + 1; i < days.length; i++) {
                                         const checkDayKey = days[i];
                                         const checkDate = new Date(checkDayKey + 'T00:00:00');
                                         const checkDayOfWeek = checkDate.getDay();
                                         const checkDayType = getDayType(checkDate);
                                         
-                                        // Must be a normal day
-                                        if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek) {
+                                        // Must be a normal day with alternative day of week
+                                        if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek) {
                                             swapDayKey = checkDayKey;
                                             swapDayIndex = i;
+                                            console.log(`[SWAP ATTEMPT DEBUG] Found alternative day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][alternativeDayOfWeek]}): ${swapDayKey} (${checkDate.toLocaleDateString('el-GR')})`);
                                             break;
                                         }
                                     }
-                                    
-                                    // If not found, try alternative day of week
-                                    if (!swapDayKey && alternativeDayOfWeek !== null) {
-                                        for (let i = dayIndex + 1; i < days.length; i++) {
-                                            const checkDayKey = days[i];
-                                            const checkDate = new Date(checkDayKey + 'T00:00:00');
-                                            const checkDayOfWeek = checkDate.getDay();
-                                            const checkDayType = getDayType(checkDate);
-                                            
-                                            // Must be a normal day
-                                            if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek) {
-                                                swapDayKey = checkDayKey;
-                                                swapDayIndex = i;
-                                                break;
-                                            }
+                                }
+                                
+                                // STEP 2: If alternative day not found, try next same day of week (e.g., Monday → next Monday)
+                                if (!swapDayKey && targetDayOfWeek !== null) {
+                                    for (let i = dayIndex + 1; i < days.length; i++) {
+                                        const checkDayKey = days[i];
+                                        const checkDate = new Date(checkDayKey + 'T00:00:00');
+                                        const checkDayOfWeek = checkDate.getDay();
+                                        const checkDayType = getDayType(checkDate);
+                                        
+                                        // Must be a normal day with target day of week
+                                        if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek) {
+                                            swapDayKey = checkDayKey;
+                                            swapDayIndex = i;
+                                            console.log(`[SWAP ATTEMPT DEBUG] Found next same day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][targetDayOfWeek]}): ${swapDayKey} (${checkDate.toLocaleDateString('el-GR')})`);
+                                            break;
                                         }
                                     }
                                 }
@@ -9878,21 +9881,106 @@
                                     // If found swap day, find which person would be assigned to that day and swap
                                 if (swapDayKey && swapDayIndex !== null) {
                                     // DEBUG: Log swap day found
-                                    const swapDate = new Date(swapDayKey + 'T00:00:00');
+                                    let swapDate = new Date(swapDayKey + 'T00:00:00');
                                     console.log(`[SWAP ATTEMPT DEBUG] Found swap day: ${swapDayKey} (${swapDate.toLocaleDateString('el-GR')}), Day of Week: ${swapDate.getDay()} (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][swapDate.getDay()]})`);
                                     
                                     // Calculate rotation position for swap day
-                                    const swapRotationPosition = swapDayIndex % rotationDays;
-                                    const swapPerson = groupPeople[swapRotationPosition];
+                                    let swapRotationPosition = swapDayIndex % rotationDays;
+                                    let swapPerson = groupPeople[swapRotationPosition];
                                     console.log(`[SWAP ATTEMPT DEBUG] Swap person at rotation position ${swapRotationPosition}: ${swapPerson}`);
                                     
                                     // Check if swap day already has assignment
                                     const swapAssignment = getAssignmentForDate(swapDayKey);
                                     const swapDayAlreadyAssigned = swapAssignment && swapAssignment.includes(`(Ομάδα ${groupNum})`);
                                     
-                                    if (!swapDayAlreadyAssigned && swapPerson && !isPersonMissingOnDate(swapPerson, groupNum, new Date(swapDayKey + 'T00:00:00'))) {
+                                    // Check if swap person was already assigned this month (due to previous swap)
+                                    const swapMonth = swapDate.getMonth();
+                                    const swapYear = swapDate.getFullYear();
+                                    const swapMonthKey = `${swapYear}-${swapMonth}`;
+                                    const swapPersonAlreadyAssigned = assignedPeople[swapMonthKey] && assignedPeople[swapMonthKey][groupNum] && assignedPeople[swapMonthKey][groupNum].has(swapPerson);
+                                    
+                                    console.log(`[SWAP ATTEMPT DEBUG] Swap day already assigned: ${swapDayAlreadyAssigned}, Swap person: ${swapPerson}, Swap person missing: ${swapPerson ? isPersonMissingOnDate(swapPerson, groupNum, swapDate) : 'N/A'}, Swap person already assigned this month: ${swapPersonAlreadyAssigned}`);
+                                    
+                                    // If swap person was already assigned, this swap day is not valid - need to find another
+                                    if (swapPersonAlreadyAssigned) {
+                                        console.log(`[SWAP ATTEMPT DEBUG] Cannot use swap day ${swapDayKey} - swap person ${swapPerson} was already assigned this month. Need to find another swap day.`);
+                                        swapDayKey = null;
+                                        swapDayIndex = null;
+                                        
+                                        // Try to find next available swap day (continue searching)
+                                        // Look for next alternative day or next same day
+                                        if (alternativeDayOfWeek !== null) {
+                                            for (let i = dayIndex + 1; i < days.length; i++) {
+                                                const checkDayKey = days[i];
+                                                const checkDate = new Date(checkDayKey + 'T00:00:00');
+                                                const checkDayOfWeek = checkDate.getDay();
+                                                const checkDayType = getDayType(checkDate);
+                                                
+                                                if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek) {
+                                                    const checkSwapRotationPosition = i % rotationDays;
+                                                    const checkSwapPerson = groupPeople[checkSwapRotationPosition];
+                                                    const checkSwapMonth = checkDate.getMonth();
+                                                    const checkSwapYear = checkDate.getFullYear();
+                                                    const checkSwapMonthKey = `${checkSwapYear}-${checkSwapMonth}`;
+                                                    const checkSwapPersonAssigned = assignedPeople[checkSwapMonthKey] && assignedPeople[checkSwapMonthKey][groupNum] && assignedPeople[checkSwapMonthKey][groupNum].has(checkSwapPerson);
+                                                    
+                                                    if (!checkSwapPersonAssigned) {
+                                                        swapDayKey = checkDayKey;
+                                                        swapDayIndex = i;
+                                                        console.log(`[SWAP ATTEMPT DEBUG] Found alternative swap day: ${swapDayKey} (${checkDate.toLocaleDateString('el-GR')}) with available person ${checkSwapPerson}`);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
+                                        // If still no swap day, try next same day
+                                        if (!swapDayKey && targetDayOfWeek !== null) {
+                                            for (let i = dayIndex + 1; i < days.length; i++) {
+                                                const checkDayKey = days[i];
+                                                const checkDate = new Date(checkDayKey + 'T00:00:00');
+                                                const checkDayOfWeek = checkDate.getDay();
+                                                const checkDayType = getDayType(checkDate);
+                                                
+                                                if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek) {
+                                                    const checkSwapRotationPosition = i % rotationDays;
+                                                    const checkSwapPerson = groupPeople[checkSwapRotationPosition];
+                                                    const checkSwapMonth = checkDate.getMonth();
+                                                    const checkSwapYear = checkDate.getFullYear();
+                                                    const checkSwapMonthKey = `${checkSwapYear}-${checkSwapMonth}`;
+                                                    const checkSwapPersonAssigned = assignedPeople[checkSwapMonthKey] && assignedPeople[checkSwapMonthKey][groupNum] && assignedPeople[checkSwapMonthKey][groupNum].has(checkSwapPerson);
+                                                    
+                                                    if (!checkSwapPersonAssigned) {
+                                                        swapDayKey = checkDayKey;
+                                                        swapDayIndex = i;
+                                                        console.log(`[SWAP ATTEMPT DEBUG] Found next same day swap: ${swapDayKey} (${checkDate.toLocaleDateString('el-GR')}) with available person ${checkSwapPerson}`);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
+                                        // Recalculate swap person if we found a new swap day
+                                        if (swapDayKey && swapDayIndex !== null) {
+                                            const newSwapRotationPosition = swapDayIndex % rotationDays;
+                                            const newSwapPerson = groupPeople[newSwapRotationPosition];
+                                            const newSwapDate = new Date(swapDayKey + 'T00:00:00');
+                                            const newSwapMonth = newSwapDate.getMonth();
+                                            const newSwapYear = newSwapDate.getFullYear();
+                                            const newSwapMonthKey = `${newSwapYear}-${newSwapMonth}`;
+                                            const newSwapPersonAssigned = assignedPeople[newSwapMonthKey] && assignedPeople[newSwapMonthKey][groupNum] && assignedPeople[newSwapMonthKey][groupNum].has(newSwapPerson);
+                                            
+                                            // Update swap person and date
+                                            swapPerson = newSwapPerson;
+                                            swapDate = newSwapDate;
+                                            swapPersonAlreadyAssigned = newSwapPersonAssigned;
+                                            
+                                            console.log(`[SWAP ATTEMPT DEBUG] Recalculated swap person: ${swapPerson} for swap day ${swapDayKey} (${swapDate.toLocaleDateString('el-GR')}), Already assigned: ${swapPersonAlreadyAssigned}`);
+                                        }
+                                    }
+                                    
+                                    if (swapDayKey && swapDayIndex !== null && !swapDayAlreadyAssigned && swapPerson && !isPersonMissingOnDate(swapPerson, groupNum, swapDate) && !swapPersonAlreadyAssigned) {
                                         // Check if swap person has conflict on swap day (where they currently would be)
-                                        const swapDate = new Date(swapDayKey + 'T00:00:00');
                                         const swapDayAfter = new Date(swapDate);
                                         swapDayAfter.setDate(swapDayAfter.getDate() + 1);
                                         const swapDayAfterKey = formatDateKey(swapDayAfter);
@@ -9931,9 +10019,10 @@
                                             
                                             // CRITICAL: Track that skipped person was assigned to swap day
                                             // This prevents them from being assigned again on their original rotation position (next Monday)
-                                            const swapDate = new Date(swapDayKey + 'T00:00:00');
-                                            const swapMonth = swapDate.getMonth();
-                                            const swapYear = swapDate.getFullYear();
+                                            // swapDate is already defined above in the outer scope
+                                            const finalSwapDate = new Date(swapDayKey + 'T00:00:00');
+                                            const swapMonth = finalSwapDate.getMonth();
+                                            const swapYear = finalSwapDate.getFullYear();
                                             const swapMonthKey = `${swapYear}-${swapMonth}`;
                                             
                                             if (!assignedPeople[swapMonthKey]) {
