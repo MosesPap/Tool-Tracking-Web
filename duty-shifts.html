@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.66 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.70 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.69</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.70</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -1384,6 +1384,7 @@
         };
         // Organizational rankings - separate from priority, doesn't affect list order
         let rankings = {}; // Format: { "Person Name": rankNumber }
+        let rankingsModified = false; // Track if rankings have been modified (only save when true)
         let holidays = [];
         let specialHolidays = []; // User-defined special holidays
         // Separate assignments by day type
@@ -1835,6 +1836,9 @@
                     rankings = {};
                 }
                 
+                // Reset rankingsModified flag after loading (rankings haven't been modified yet)
+                rankingsModified = false;
+                
                 // After loading all data, rebuild criticalAssignments from lastDuties if they're missing
                 // This ensures manually entered dates are always protected
                 rebuildCriticalAssignmentsFromLastDuties();
@@ -2048,6 +2052,9 @@
                 rankings = JSON.parse(savedRankings);
             }
             
+            // Reset rankingsModified flag after loading from localStorage
+            rankingsModified = false;
+            
             // After loading from localStorage, rebuild criticalAssignments from lastDuties
             rebuildCriticalAssignmentsFromLastDuties();
         }
@@ -2211,28 +2218,37 @@
                     console.error('Error saving criticalAssignments to Firestore:', error);
                 }
                 
-                // Save rankings to Firestore (only if rankings have data to prevent overwriting with empty object)
-                // Check if rankings object has any actual ranking data (not just metadata)
-                const rankingsData = { ...rankings };
-                delete rankingsData.lastUpdated;
-                delete rankingsData.updatedBy;
-                const hasRankingsData = Object.keys(rankingsData).length > 0;
-                
-                if (hasRankingsData) {
-                    try {
-                        console.log('Saving rankings to Firestore:', Object.keys(rankingsData).length, 'people');
-                        const sanitizedRankings = sanitizeForFirestore(rankingsData);
-                        await db.collection('dutyShifts').doc('rankings').set({
-                            ...sanitizedRankings,
-                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                            updatedBy: user.uid
-                        });
-                        console.log('Rankings saved to Firestore successfully');
-                    } catch (error) {
-                        console.error('Error saving rankings to Firestore:', error);
+                // Save rankings to Firestore ONLY if they have been modified
+                // This prevents saving rankings on every page refresh or when other data is saved
+                if (rankingsModified) {
+                    // Check if rankings object has any actual ranking data (not just metadata)
+                    const rankingsData = { ...rankings };
+                    delete rankingsData.lastUpdated;
+                    delete rankingsData.updatedBy;
+                    const hasRankingsData = Object.keys(rankingsData).length > 0;
+                    
+                    if (hasRankingsData) {
+                        try {
+                            console.log('Saving rankings to Firestore (rankings were modified):', Object.keys(rankingsData).length, 'people');
+                            const sanitizedRankings = sanitizeForFirestore(rankingsData);
+                            await db.collection('dutyShifts').doc('rankings').set({
+                                ...sanitizedRankings,
+                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                updatedBy: user.uid
+                            });
+                            console.log('Rankings saved to Firestore successfully');
+                            
+                            // Reset flag after successful save
+                            rankingsModified = false;
+                        } catch (error) {
+                            console.error('Error saving rankings to Firestore:', error);
+                        }
+                    } else {
+                        console.log('Skipping rankings save - no rankings data to save (preventing overwrite of existing rankings)');
+                        rankingsModified = false;
                     }
                 } else {
-                    console.log('Skipping rankings save - no rankings data to save (preventing overwrite of existing rankings)');
+                    console.log('Skipping rankings save - rankings have not been modified since last load');
                 }
                 
                 console.log('Data saved to Firebase');
@@ -4081,6 +4097,9 @@
             
             // Update global rankings object (will be saved to Firestore)
             rankings = newRankings;
+            
+            // Mark rankings as modified so they'll be saved
+            rankingsModified = true;
             
             // Save to Firestore (saveData() saves rankings to Firestore)
             saveData();
@@ -9894,10 +9913,10 @@
                                     const swapDayAlreadyAssigned = swapAssignment && swapAssignment.includes(`(Ομάδα ${groupNum})`);
                                     
                                     // Check if swap person was already assigned this month (due to previous swap)
-                                    const swapMonth = swapDate.getMonth();
-                                    const swapYear = swapDate.getFullYear();
-                                    const swapMonthKey = `${swapYear}-${swapMonth}`;
-                                    const swapPersonAlreadyAssigned = assignedPeople[swapMonthKey] && assignedPeople[swapMonthKey][groupNum] && assignedPeople[swapMonthKey][groupNum].has(swapPerson);
+                                    let swapMonth = swapDate.getMonth();
+                                    let swapYear = swapDate.getFullYear();
+                                    let swapMonthKey = `${swapYear}-${swapMonth}`;
+                                    let swapPersonAlreadyAssigned = assignedPeople[swapMonthKey] && assignedPeople[swapMonthKey][groupNum] && assignedPeople[swapMonthKey][groupNum].has(swapPerson);
                                     
                                     console.log(`[SWAP ATTEMPT DEBUG] Swap day already assigned: ${swapDayAlreadyAssigned}, Swap person: ${swapPerson}, Swap person missing: ${swapPerson ? isPersonMissingOnDate(swapPerson, groupNum, swapDate) : 'N/A'}, Swap person already assigned this month: ${swapPersonAlreadyAssigned}`);
                                     
@@ -9965,15 +9984,14 @@
                                             const newSwapRotationPosition = swapDayIndex % rotationDays;
                                             const newSwapPerson = groupPeople[newSwapRotationPosition];
                                             const newSwapDate = new Date(swapDayKey + 'T00:00:00');
-                                            const newSwapMonth = newSwapDate.getMonth();
-                                            const newSwapYear = newSwapDate.getFullYear();
-                                            const newSwapMonthKey = `${newSwapYear}-${newSwapMonth}`;
-                                            const newSwapPersonAssigned = assignedPeople[newSwapMonthKey] && assignedPeople[newSwapMonthKey][groupNum] && assignedPeople[newSwapMonthKey][groupNum].has(newSwapPerson);
                                             
-                                            // Update swap person and date
+                                            // Update swap person and date (swapDate is let, so can be reassigned)
                                             swapPerson = newSwapPerson;
                                             swapDate = newSwapDate;
-                                            swapPersonAlreadyAssigned = newSwapPersonAssigned;
+                                            swapMonth = newSwapDate.getMonth();
+                                            swapYear = newSwapDate.getFullYear();
+                                            swapMonthKey = `${swapYear}-${swapMonth}`;
+                                            swapPersonAlreadyAssigned = assignedPeople[swapMonthKey] && assignedPeople[swapMonthKey][groupNum] && assignedPeople[swapMonthKey][groupNum].has(newSwapPerson);
                                             
                                             console.log(`[SWAP ATTEMPT DEBUG] Recalculated swap person: ${swapPerson} for swap day ${swapDayKey} (${swapDate.toLocaleDateString('el-GR')}), Already assigned: ${swapPersonAlreadyAssigned}`);
                                         }
