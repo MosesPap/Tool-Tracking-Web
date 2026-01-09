@@ -7132,7 +7132,7 @@
                                         break;
                                     }
                                 }
-                            } else {
+                                } else {
                                 // No person found, still advance rotation position
                                 globalWeekendRotationPosition[groupNum] = rotationPosition + 1;
                             }
@@ -9054,43 +9054,15 @@
                     
                     // Process each day in order
                     days.forEach((dayKey, dayIndex) => {
-                        // For special holidays: always recalculate (don't skip existing assignments unless critical)
-                        // This ensures rotation matches the preview simulation
-                        // For other day types: skip if day already has assignment (critical assignments or swapped days)
-                        if (dayTypeCategory === 'special') {
-                            // For special holidays: only skip if it's a critical assignment
-                            const existingAssignment = getAssignmentForDate(dayKey);
-                            if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
-                                // Check if this is a critical assignment
-                                const isCritical = criticalAssignments[dayKey] && 
-                                    criticalAssignments[dayKey].some(a => a.includes(`(Ομάδα ${groupNum})`));
-                                if (isCritical) {
-                                    return; // Skip critical assignments only
-                                }
-                                // Otherwise, clear existing assignment for this group and recalculate
-                                // Extract all people from existing assignment, remove this group's person, then reassign
-                                const allPeople = extractAllPersonNames(existingAssignment);
-                                const otherGroupPeople = allPeople.filter(p => p.group !== groupNum);
-                                if (otherGroupPeople.length > 0) {
-                                    // Keep other groups' assignments
-                                    const otherGroupsStr = otherGroupPeople.map(p => `${p.name} (Ομάδα ${p.group})`).join(', ');
-                                    setAssignmentForDate(dayKey, otherGroupsStr);
-                                } else {
-                                    // No other groups, clear the assignment
-                                    deleteAssignmentForDate(dayKey);
-                                }
-                            }
-                        } else {
-                            // For other day types: skip if day already has assignment (critical assignments or swapped days)
-                            const existingAssignment = getAssignmentForDate(dayKey);
-                            if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
-                                return;
-                            }
-                            
-                            // Skip if this day was already assigned due to a swap
-                            if (swappedDays[dayKey] && swappedDays[dayKey][groupNum]) {
-                                return;
-                            }
+                        // Skip if day already has assignment for this group (critical assignments or swapped days)
+                        const existingAssignment = getAssignmentForDate(dayKey);
+                        if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
+                            return;
+                        }
+                        
+                        // Skip if this day was already assigned due to a swap
+                        if (swappedDays[dayKey] && swappedDays[dayKey][groupNum]) {
+                            return;
                         }
                         
                         const dayDate = new Date(dayKey + 'T00:00:00');
@@ -9154,9 +9126,9 @@
                                 const candidate = groupPeople[nextIndex];
                                 
                                 if (!candidate || isPersonMissingOnDate(candidate, groupNum, dayDate)) {
-                                    continue;
-                                }
-                                
+                                continue;
+                            }
+                            
                                 // Check if candidate was already assigned this month
                                 if (assignedPeople[monthKey][groupNum].has(candidate)) {
                                     continue;
@@ -9464,6 +9436,7 @@
                                     }
                                     
                                     // If found swap day, find which person would be assigned to that day
+                                    // NOTE: Conflict checks were already done in checkSwapCandidate, so we can proceed directly
                                     if (swapDayKey && swapDayIndex !== null) {
                                         // Calculate rotation position for swap day
                                         const swapRotationPosition = swapDayIndex % rotationDays;
@@ -9471,107 +9444,86 @@
                                         // Store original rotation position before swap (needed to continue rotation correctly)
                                         const originalRotationPosition = rotationPosition;
                                         
-                                        // Check if swap person doesn't have conflict on current day AND swap day
-                                        // Also check if swap person was already assigned this month (due to previous swap)
+                                        // Verify swap person exists and is not missing (basic checks only)
+                                        // Conflict checks were already done in checkSwapCandidate function
                                         if (swapPerson && !isPersonMissingOnDate(swapPerson, groupNum, dayDate) && 
                                             (!assignedPeople[monthKey] || !assignedPeople[monthKey][groupNum] || !assignedPeople[monthKey][groupNum].has(swapPerson))) {
-                                            // Use enhanced conflict detection for swap person on current day (where they would be swapped to)
-                                            let swapPersonHasConflict = hasConsecutiveDuty(dayKey, swapPerson, groupNum);
-                                            
-                                            // Also check if swap person has conflict on swap day (where they currently would be)
-                                            if (!swapPersonHasConflict) {
-                                                const swapDate = new Date(swapDayKey + 'T00:00:00');
-                                                if (!isPersonMissingOnDate(swapPerson, groupNum, swapDate)) {
-                                                    swapPersonHasConflict = hasConsecutiveDuty(swapDayKey, swapPerson, groupNum);
-                                                }
+                                            // Ask for permission before performing swap (if not already asked)
+                                            const swapDate = new Date(swapDayKey + 'T00:00:00');
+                                            const isSameMonthSwap = isSameMonth(dayDate, swapDate);
+                                            const isSameWeekSwap = isSameWeek(dayDate, swapDate);
+                                            const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                            const swapDateStr = swapDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                            let reason;
+                                            if (isSameMonthSwap) {
+                                                reason = 'Συνεχόμενη Ημιαργία (ίδιος μήνας)';
+                                            } else if (isSameWeekSwap) {
+                                                reason = 'Συνεχόμενη Ημιαργία (ίδια εβδομάδα)';
+                                            } else {
+                                                reason = 'Συνεχόμενη Ημιαργία (εβδομάδα μετά την επόμενη)';
                                             }
                                             
-                                            // Check if skipped person has conflict on swap day (where they would go)
-                                            let skippedPersonHasConflict = false;
-                                            if (!swapPersonHasConflict && skippedPerson) {
-                                                const swapDate = new Date(swapDayKey + 'T00:00:00');
-                                                if (!isPersonMissingOnDate(skippedPerson, groupNum, swapDate)) {
-                                                    skippedPersonHasConflict = hasConsecutiveDuty(swapDayKey, skippedPerson, groupNum);
-                                                }
+                                            // Only ask if permission wasn't already asked (for same-month and same-week swaps, permission was asked when finding swap day)
+                                            let userApproved = true;
+                                            if (!isSameMonthSwap && !isSameWeekSwap) {
+                                                // For week-after-next, permission was already asked, so we proceed
+                                                userApproved = true;
                                             }
                                             
-                                            if (!swapPersonHasConflict && !skippedPersonHasConflict) {
-                                                // Ask for permission before performing swap (if not already asked)
+                                            if (userApproved) {
+                                                // Valid swap: swap person gets current day, skipped person gets swap day
+                                                assignedPerson = swapPerson;
+                                                // Ensure skippedPerson is set
+                                                if (!skippedPerson) skippedPerson = expectedPerson;
+                                                
+                                                // DIRECTLY assign skipped person to swap day (don't wait for rotation)
+                                                // This ensures the swap happens immediately
+                                                assignPersonToDay(swapDayKey, skippedPerson, groupNum);
+                                                
+                                                // Track that skipped person has been assigned (to prevent duplicate assignment later)
+                                                if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
+                                                    assignedPeople[monthKey][groupNum].add(skippedPerson);
+                                                }
+                                                
+                                                // Track that swap person has been assigned (to prevent duplicate assignment later)
+                                                if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
+                                                    assignedPeople[monthKey][groupNum].add(swapPerson);
+                                                }
+                                                
+                                                // Advance rotation position to original expected person's position + 1
+                                                // This ensures rotation continues normally: if Person 5 swaps with Person 2,
+                                                // rotation continues from Person 3 (position 2), not from Person 6 (position 5)
+                                                if (dayTypeCategory === 'normal') {
+                                                    globalNormalRotationPosition[groupNum] = originalRotationPosition + 1;
+                                                }
+                                                
+                                                // Store swap reason
                                                 const swapDate = new Date(swapDayKey + 'T00:00:00');
                                                 const isSameMonthSwap = isSameMonth(dayDate, swapDate);
                                                 const isSameWeekSwap = isSameWeek(dayDate, swapDate);
-                                                const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                                const swapDateStr = swapDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                                let reason;
+                                                let swapReason;
                                                 if (isSameMonthSwap) {
-                                                    reason = 'Συνεχόμενη Ημιαργία (ίδιος μήνας)';
+                                                    swapReason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδιος μήνας)`;
                                                 } else if (isSameWeekSwap) {
-                                                    reason = 'Συνεχόμενη Ημιαργία (ίδια εβδομάδα)';
+                                                    swapReason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδια εβδομάδα)`;
                                                 } else {
-                                                    reason = 'Συνεχόμενη Ημιαργία (εβδομάδα μετά την επόμενη)';
+                                                    swapReason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (εβδομάδα μετά την επόμενη)`;
                                                 }
+                                                storeAssignmentReason(dayKey, groupNum, assignedPerson, 'swap', swapReason, skippedPerson);
+                                                storeAssignmentReason(swapDayKey, groupNum, skippedPerson, 'swap', `Αλλαγή με ${assignedPerson} λόγω συνεχόμενης Ημιαργίας`, assignedPerson);
                                                 
-                                                // Only ask if permission wasn't already asked (for same-month and same-week swaps, permission was asked when finding swap day)
-                                                let userApproved = true;
-                                                if (!isSameMonthSwap && !isSameWeekSwap) {
-                                                    // For week-after-next, permission was already asked, so we proceed
-                                                    userApproved = true;
-                                                }
+                                                // Mark that swap day is already assigned, so we skip it when we reach it in the loop
+                                                if (!swappedDays[swapDayKey]) swappedDays[swapDayKey] = {};
+                                                swappedDays[swapDayKey][groupNum] = true;
                                                 
-                                                if (userApproved) {
-                                                    // Valid swap: swap person gets current day, skipped person gets swap day
-                                                    assignedPerson = swapPerson;
-                                                    // Ensure skippedPerson is set
-                                                    if (!skippedPerson) skippedPerson = expectedPerson;
-                                                    
-                                                    // DIRECTLY assign skipped person to swap day (don't wait for rotation)
-                                                    // This ensures the swap happens immediately
-                                                    assignPersonToDay(swapDayKey, skippedPerson, groupNum);
-                                                    
-                                                    // Track that skipped person has been assigned (to prevent duplicate assignment later)
-                                                    if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
-                                                        assignedPeople[monthKey][groupNum].add(skippedPerson);
-                                                    }
-                                                    
-                                                    // Track that swap person has been assigned (to prevent duplicate assignment later)
-                                                    if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
-                                                        assignedPeople[monthKey][groupNum].add(swapPerson);
-                                                    }
-                                                    
-                                                    // Advance rotation position to original expected person's position + 1
-                                                    // This ensures rotation continues normally: if Person 5 swaps with Person 2,
-                                                    // rotation continues from Person 3 (position 2), not from Person 6 (position 5)
-                                                    if (dayTypeCategory === 'normal') {
-                                                        globalNormalRotationPosition[groupNum] = originalRotationPosition + 1;
-                                                    }
-                                                    
-                                                    // Store swap reason
-                                                    const swapDate = new Date(swapDayKey + 'T00:00:00');
-                                                    const isSameMonthSwap = isSameMonth(dayDate, swapDate);
-                                                    const isSameWeekSwap = isSameWeek(dayDate, swapDate);
-                                                    let swapReason;
-                                                    if (isSameMonthSwap) {
-                                                        swapReason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδιος μήνας)`;
-                                                    } else if (isSameWeekSwap) {
-                                                        swapReason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδια εβδομάδα)`;
-                                                    } else {
-                                                        swapReason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (εβδομάδα μετά την επόμενη)`;
-                                                    }
-                                                    storeAssignmentReason(dayKey, groupNum, assignedPerson, 'swap', swapReason, skippedPerson);
-                                                    storeAssignmentReason(swapDayKey, groupNum, skippedPerson, 'swap', `Αλλαγή με ${assignedPerson} λόγω συνεχόμενης Ημιαργίας`, assignedPerson);
-                                                    
-                                                    // Mark that swap day is already assigned, so we skip it when we reach it in the loop
-                                                    if (!swappedDays[swapDayKey]) swappedDays[swapDayKey] = {};
-                                                    swappedDays[swapDayKey][groupNum] = true;
-                                                    
-                                                    // Mark both people as swapped to prevent swapping them again on subsequent days
-                                                    swappedPeople.add(skippedPerson);
-                                                    swappedPeople.add(swapPerson);
-                                                } else {
-                                                    // User rejected swap - clear swap and try to find replacement
-                                                    swapDayKey = null;
-                                                    swapDayIndex = null;
-                                                }
+                                                // Mark both people as swapped to prevent swapping them again on subsequent days
+                                                swappedPeople.add(skippedPerson);
+                                                swappedPeople.add(swapPerson);
+                                            } else {
+                                                // User rejected swap - clear swap and try to find replacement
+                                                swapDayKey = null;
+                                                swapDayKey = null;
+                                                swapDayIndex = null;
                                             }
                                         }
                                     }
@@ -9604,14 +9556,14 @@
                                                 continue;
                                             }
                                         } else if (dayTypeCategory === 'semi') {
-                                            const dayBefore = new Date(dayDate);
-                                            dayBefore.setDate(dayBefore.getDate() - 1);
-                                            const dayAfter = new Date(dayDate);
-                                            dayAfter.setDate(dayAfter.getDate() + 1);
-                                            
-                                            const beforeType = getDayType(dayBefore);
-                                            const afterType = getDayType(dayAfter);
-                                            
+                                    const dayBefore = new Date(dayDate);
+                                    dayBefore.setDate(dayBefore.getDate() - 1);
+                                    const dayAfter = new Date(dayDate);
+                                    dayAfter.setDate(dayAfter.getDate() + 1);
+                                    
+                                    const beforeType = getDayType(dayBefore);
+                                    const afterType = getDayType(dayAfter);
+                                    
                                             if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
                                                 candidateHasConflict = true;
                                             }
@@ -9670,49 +9622,49 @@
                                 if (!candidate || isPersonMissingOnDate(candidate, groupNum, dayDate)) {
                                     continue;
                                 }
-                                
-                                let candidateHasConflict = false;
-                                
-                                if (dayTypeCategory === 'weekend') {
+                                        
+                                        let candidateHasConflict = false;
+                                        
+                                        if (dayTypeCategory === 'weekend') {
                                     if (hasSpecialHolidayDutyInMonth(candidate, groupNum, month, year)) {
-                                        candidateHasConflict = true;
-                                    }
-                                } else if (dayTypeCategory === 'semi') {
-                                    const dayBefore = new Date(dayDate);
-                                    dayBefore.setDate(dayBefore.getDate() - 1);
-                                    const dayAfter = new Date(dayDate);
-                                    dayAfter.setDate(dayAfter.getDate() + 1);
-                                    
-                                    const beforeType = getDayType(dayBefore);
-                                    const afterType = getDayType(dayAfter);
-                                    
+                                                candidateHasConflict = true;
+                                            }
+                                        } else if (dayTypeCategory === 'semi') {
+                                            const dayBefore = new Date(dayDate);
+                                            dayBefore.setDate(dayBefore.getDate() - 1);
+                                            const dayAfter = new Date(dayDate);
+                                            dayAfter.setDate(dayAfter.getDate() + 1);
+                                            
+                                            const beforeType = getDayType(dayBefore);
+                                            const afterType = getDayType(dayAfter);
+                                            
                                     if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
-                                        candidateHasConflict = true;
-                                    }
+                                                candidateHasConflict = true;
+                                            }
                                     if ((afterType === 'weekend-holiday' || afterType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayAfter), candidate, groupNum)) {
-                                        candidateHasConflict = true;
-                                    }
-                                } else if (dayTypeCategory === 'normal') {
-                                    const dayBefore = new Date(dayDate);
-                                    dayBefore.setDate(dayBefore.getDate() - 1);
-                                    const dayAfter = new Date(dayDate);
-                                    dayAfter.setDate(dayAfter.getDate() + 1);
-                                    
-                                    const beforeType = getDayType(dayBefore);
-                                    const afterType = getDayType(dayAfter);
-                                    
+                                                candidateHasConflict = true;
+                                            }
+                                        } else if (dayTypeCategory === 'normal') {
+                                            const dayBefore = new Date(dayDate);
+                                            dayBefore.setDate(dayBefore.getDate() - 1);
+                                            const dayAfter = new Date(dayDate);
+                                            dayAfter.setDate(dayAfter.getDate() + 1);
+                                            
+                                            const beforeType = getDayType(dayBefore);
+                                            const afterType = getDayType(dayAfter);
+                                            
                                     if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
-                                        candidateHasConflict = true;
-                                    }
+                                                candidateHasConflict = true;
+                                            }
                                     if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), candidate, groupNum)) {
-                                        candidateHasConflict = true;
-                                    }
-                                }
-                                
-                                if (!candidateHasConflict) {
+                                                candidateHasConflict = true;
+                                            }
+                                        }
+                                        
+                                        if (!candidateHasConflict) {
                                     assignedPerson = candidate;
-                                    break;
-                                }
+                                            break;
+                                        }
                             }
                         }
                         
