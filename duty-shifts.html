@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.59 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.60 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.59</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.60</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -5843,6 +5843,13 @@
             return confirm(message);
         }
         
+        // Check if two dates are in the same month
+        function isSameMonth(date1, date2) {
+            const d1 = new Date(date1);
+            const d2 = new Date(date2);
+            return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth();
+        }
+        
         function isSameWeek(date1, date2) {
             const d1 = new Date(date1);
             const d2 = new Date(date2);
@@ -5972,6 +5979,10 @@
         }
 
         // Check if a person has duty on consecutive days (day before or day after)
+        // Conflict rules:
+        // - Normal ↔ Semi-normal (before and after)
+        // - Semi-normal ↔ Weekend/Special Holiday (before and after)
+        // - Weekend/Special Holiday ↔ Normal (before and after)
         function hasConsecutiveDuty(dayKey, person, groupNum) {
             const date = new Date(dayKey + 'T00:00:00');
             const currentDayType = getDayType(date);
@@ -6003,10 +6014,18 @@
                     beforeTypeCategory = 'weekend';
                 }
                 
-                // Only flag if different day type (consecutive days of same type are prevented by N-day rotation)
-                // OR if either day is a special holiday (special holidays have priority)
-                const isConflict = currentTypeCategory !== beforeTypeCategory || currentDayType === 'special-holiday' || beforeDayType === 'special-holiday';
-                if (isConflict) {
+                // Check for conflicts based on specific rules:
+                // 1. Normal ↔ Semi-normal
+                // 2. Semi-normal ↔ Weekend/Special Holiday
+                // 3. Weekend/Special Holiday ↔ Normal
+                const isNormalSemiConflict = (currentTypeCategory === 'normal' && beforeTypeCategory === 'semi') || 
+                                             (currentTypeCategory === 'semi' && beforeTypeCategory === 'normal');
+                const isSemiWeekendSpecialConflict = (currentTypeCategory === 'semi' && (beforeTypeCategory === 'weekend' || beforeTypeCategory === 'special')) ||
+                                                     ((currentTypeCategory === 'weekend' || currentTypeCategory === 'special') && beforeTypeCategory === 'semi');
+                const isWeekendSpecialNormalConflict = ((currentTypeCategory === 'weekend' || currentTypeCategory === 'special') && beforeTypeCategory === 'normal') ||
+                                                        (currentTypeCategory === 'normal' && (beforeTypeCategory === 'weekend' || beforeTypeCategory === 'special'));
+                
+                if (isNormalSemiConflict || isSemiWeekendSpecialConflict || isWeekendSpecialNormalConflict) {
                     return true;
                 }
             }
@@ -6018,10 +6037,16 @@
             const dayAfter = new Date(date);
             dayAfter.setDate(dayAfter.getDate() + 1);
             const dayAfterKey = formatDateKey(dayAfter);
-            const dayAfterAssigned = dutyAssignments[dayAfterKey];
+            
+            // Check all assignment sources for day after
+            const dayAfterAssigned = dutyAssignments[dayAfterKey] || 
+                                     normalDayAssignments[dayAfterKey] ||
+                                     semiNormalAssignments[dayAfterKey] ||
+                                     weekendAssignments[dayAfterKey] ||
+                                     specialHolidayAssignments[dayAfterKey];
             const hasDutyAfter = dayAfterAssigned && hasDutyOnDay(dayAfterKey, person, groupNum);
             
-            // Only check day after if it's already assigned (exists in dutyAssignments)
+            // Only check day after if it's already assigned (exists in any assignment document)
             // This means it was processed earlier due to higher priority
             if (hasDutyAfter) {
                 const afterDayType = getDayType(dayAfter);
@@ -6034,9 +6059,18 @@
                     afterTypeCategory = 'weekend';
                 }
                 
-                // Only flag if different day type OR if either day is a special holiday
-                const isConflict = currentTypeCategory !== afterTypeCategory || currentDayType === 'special-holiday' || afterDayType === 'special-holiday';
-                if (isConflict) {
+                // Check for conflicts based on specific rules:
+                // 1. Normal ↔ Semi-normal
+                // 2. Semi-normal ↔ Weekend/Special Holiday
+                // 3. Weekend/Special Holiday ↔ Normal
+                const isNormalSemiConflict = (currentTypeCategory === 'normal' && afterTypeCategory === 'semi') || 
+                                             (currentTypeCategory === 'semi' && afterTypeCategory === 'normal');
+                const isSemiWeekendSpecialConflict = (currentTypeCategory === 'semi' && (afterTypeCategory === 'weekend' || afterTypeCategory === 'special')) ||
+                                                     ((currentTypeCategory === 'weekend' || currentTypeCategory === 'special') && afterTypeCategory === 'semi');
+                const isWeekendSpecialNormalConflict = ((currentTypeCategory === 'weekend' || currentTypeCategory === 'special') && afterTypeCategory === 'normal') ||
+                                                        (currentTypeCategory === 'normal' && (afterTypeCategory === 'weekend' || afterTypeCategory === 'special'));
+                
+                if (isNormalSemiConflict || isSemiWeekendSpecialConflict || isWeekendSpecialNormalConflict) {
                     return true;
                 }
             }
@@ -8119,25 +8153,25 @@
                                             return !swapPersonHasConflict && !skippedPersonHasConflict;
                                         };
                                         
-                                        // FIRST: Try Tuesday in same week - check conflicts before accepting
+                                        // STEP 1: Try NEXT SAME day of week in SAME MONTH (e.g., Monday 12/01/26 with Monday 19/01/26)
                                         for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
                                             const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
                                             const checkDayOfWeek = checkDate.getDay();
                                             const checkDayType = getDayType(checkDate);
                                             
-                                            // Must be a normal day and in same week
-                                            if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameWeek(date, checkDate)) {
+                                            // Must be a normal day, same day of week, and in same month
+                                            if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameMonth(date, checkDate)) {
                                                 // Check conflicts BEFORE accepting
                                                 if (checkSwapCandidatePreview(sortedNormal[i], i)) {
                                                     swapDayKey = sortedNormal[i];
                                                     swapDayIndex = i;
                                                     break;
                                                 }
-                                                // If has conflicts, continue to next option (Thursday)
+                                                // If has conflicts, continue to Step 2
                                             }
                                         }
                                         
-                                        // SECOND: If Tuesday in same week not found or has conflicts, try Thursday in same week
+                                        // STEP 2: If Step 1 not possible, try alternative day in same week
                                         if (!swapDayKey && alternativeDayOfWeek !== null) {
                                             for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
                                                 const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
@@ -8152,12 +8186,12 @@
                                                         swapDayIndex = i;
                                                         break;
                                                     }
-                                                    // If has conflicts, continue to next week options
+                                                    // If has conflicts, continue to Step 3
                                                 }
                                             }
                                         }
                                         
-                                        // THIRD: If no valid swap in same week, look in week AFTER next (for preview, just mark it)
+                                        // STEP 3: If Step 2 not possible, look in week AFTER next (for preview, just mark it)
                                         // Collect ALL week-after-next candidates and pick the EARLIEST valid one
                                         if (!swapDayKey) {
                                             const weekAfterNextCandidates = [];
@@ -8302,10 +8336,16 @@
                                                 
                                                 // Store swap reason for display
                                                 const swapDate = new Date(swapDayKey + 'T00:00:00');
+                                                const isSameMonthSwap = isSameMonth(date, swapDate);
                                                 const isSameWeekSwap = isSameWeek(date, swapDate);
-                                            const reason = isSameWeekSwap 
-                                                ? `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδια εβδομάδα)`
-                                                : `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (εβδομάδα μετά την επόμενη)`;
+                                                let reason;
+                                                if (isSameMonthSwap) {
+                                                    reason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδιος μήνας)`;
+                                                } else if (isSameWeekSwap) {
+                                                    reason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδια εβδομάδα)`;
+                                                } else {
+                                                    reason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (εβδομάδα μετά την επόμενη)`;
+                                                }
                                                 storeAssignmentReason(dateKey, groupNum, assignedPerson, 'swap', reason, skippedPerson);
                                                 storeAssignmentReason(swapDayKey, groupNum, skippedPerson, 'swap', `Αλλαγή με ${assignedPerson} λόγω συνεχόμενης Ημιαργίας`, assignedPerson);
                                             } else {
@@ -9251,96 +9291,61 @@
                                                 return false;
                                             }
                                             
-                                            let swapPersonHasConflict = false;
+                                            // Use enhanced conflict detection for swap person on current day (where they would be swapped to)
+                                            let swapPersonHasConflict = hasConsecutiveDuty(dayKey, swapPerson, groupNum);
                                             
-                                            // FIRST: Check if swap person has conflict on day BEFORE current day (where they would be swapped to)
-                                            const dayBefore = new Date(dayDate);
-                                            dayBefore.setDate(dayBefore.getDate() - 1);
-                                            const dayBeforeKey = formatDateKey(dayBefore);
-                                            const beforeType = getDayType(dayBefore);
-                                            
-                                            if (beforeType === 'semi-normal-day' && hasDutyOnDay(dayBeforeKey, swapPerson, groupNum)) {
-                                                swapPersonHasConflict = true;
-                                            }
-                                            
-                                            // SECOND: Check if swap person has conflict on current day (where they would be swapped to) - check day AFTER
-                                            if (!swapPersonHasConflict) {
-                                                const dayAfter = new Date(dayDate);
-                                                dayAfter.setDate(dayAfter.getDate() + 1);
-                                                const dayAfterKey = formatDateKey(dayAfter);
-                                                const afterType = getDayType(dayAfter);
-                                                
-                                                if (afterType === 'semi-normal-day' && hasDutyOnDay(dayAfterKey, swapPerson, groupNum)) {
-                                                    swapPersonHasConflict = true;
-                                                }
-                                            }
-                                            
-                                            // THIRD: Check if swap person has conflict on swap day (where they currently would be) - check day AFTER swap day
+                                            // Also check if swap person has conflict on swap day (where they currently would be)
                                             if (!swapPersonHasConflict) {
                                                 const swapDate = new Date(candidateDayKey + 'T00:00:00');
                                                 if (!isPersonMissingOnDate(swapPerson, groupNum, swapDate)) {
-                                                    const swapDayAfter = new Date(swapDate);
-                                                    swapDayAfter.setDate(swapDayAfter.getDate() + 1);
-                                                    const swapDayAfterKey = formatDateKey(swapDayAfter);
-                                                    const swapAfterType = getDayType(swapDayAfter);
-                                                    
-                                                    if (swapAfterType === 'semi-normal-day' && hasDutyOnDay(swapDayAfterKey, swapPerson, groupNum)) {
-                                                        swapPersonHasConflict = true;
-                                                    }
+                                                    swapPersonHasConflict = hasConsecutiveDuty(candidateDayKey, swapPerson, groupNum);
                                                 }
                                             }
                                             
-                                            // FOURTH: Check if skipped person has conflict on swap day (where they would go) - check day AFTER swap day
+                                            // Check if skipped person has conflict on swap day (where they would go)
                                             let skippedPersonHasConflict = false;
                                             if (!swapPersonHasConflict && skippedPerson) {
                                                 const swapDate = new Date(candidateDayKey + 'T00:00:00');
                                                 if (!isPersonMissingOnDate(skippedPerson, groupNum, swapDate)) {
-                                                    const swapDayAfter = new Date(swapDate);
-                                                    swapDayAfter.setDate(swapDayAfter.getDate() + 1);
-                                                    const swapDayAfterKey = formatDateKey(swapDayAfter);
-                                                    const swapAfterType = getDayType(swapDayAfter);
-                                                    
-                                                    if (swapAfterType === 'semi-normal-day' && hasDutyOnDay(swapDayAfterKey, skippedPerson, groupNum)) {
-                                                        skippedPersonHasConflict = true;
-                                                    }
+                                                    skippedPersonHasConflict = hasConsecutiveDuty(candidateDayKey, skippedPerson, groupNum);
                                                 }
                                             }
                                             
                                             return !swapPersonHasConflict && !skippedPersonHasConflict;
                                         };
                                         
-                                        // FIRST: Try Tuesday in same week - check conflicts before accepting
+                                        // STEP 1: Try NEXT SAME day of week in SAME MONTH (e.g., Monday 12/01/26 with Monday 19/01/26)
                                         for (let i = dayIndex + 1; i < days.length; i++) {
                                             const checkDayKey = days[i];
                                             const checkDate = new Date(checkDayKey + 'T00:00:00');
                                             const checkDayOfWeek = checkDate.getDay();
                                             const checkDayType = getDayType(checkDate);
                                             
-                                                // Must be a normal day and in same week
-                                                if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameWeek(dayDate, checkDate)) {
-                                                    // Check conflicts BEFORE accepting
-                                                    if (checkSwapCandidate(checkDayKey, i)) {
-                                                        // Ask for permission before same-week swap
-                                                        const swapRotationPosition = i % rotationDays;
-                                                        const swapPerson = groupPeople[swapRotationPosition];
-                                                        const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                                        const swapDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                                        const reason = 'Συνεχόμενη Ημιαργία (ίδια εβδομάδα)';
-                                                        
-                                                        const userApproved = askPermissionForConflict('swap', skippedPerson, currentDateStr, reason, swapPerson, swapDateStr);
-                                                        
-                                                        if (userApproved) {
-                                                            swapDayKey = checkDayKey;
-                                                            swapDayIndex = i;
-                                                            break;
-                                                        }
-                                                        // If user rejected, continue to next option
+                                            // Must be a normal day, same day of week, and in same month
+                                            if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameMonth(dayDate, checkDate)) {
+                                                // Check conflicts BEFORE accepting
+                                                if (checkSwapCandidate(checkDayKey, i)) {
+                                                    // Ask for permission before same-month swap
+                                                    const swapRotationPosition = i % rotationDays;
+                                                    const swapPerson = groupPeople[swapRotationPosition];
+                                                    const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                    const swapDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                    const reason = 'Συνεχόμενη Ημιαργία (ίδιος μήνας)';
+                                                    
+                                                    const userApproved = askPermissionForConflict('swap', skippedPerson, currentDateStr, reason, swapPerson, swapDateStr);
+                                                    
+                                                    if (userApproved) {
+                                                        swapDayKey = checkDayKey;
+                                                        swapDayIndex = i;
+                                                        break;
                                                     }
-                                                    // If has conflicts, continue to next option (Thursday)
+                                                    // If user rejected, continue to Step 2
                                                 }
+                                                // If has conflicts, continue to Step 2
+                                            }
                                         }
                                         
-                                        // SECOND: If Tuesday in same week not found or has conflicts, try Thursday in same week
+                                        // STEP 2: If Step 1 not possible, try alternative day in same week
                                         if (!swapDayKey && alternativeDayOfWeek !== null) {
                                             for (let i = dayIndex + 1; i < days.length; i++) {
                                                 const checkDayKey = days[i];
@@ -9366,14 +9371,14 @@
                                                             swapDayIndex = i;
                                                             break;
                                                         }
-                                                        // If user rejected, continue to next week options
+                                                        // If user rejected, continue to Step 3
                                                     }
-                                                    // If has conflicts, continue to next week options
+                                                    // If has conflicts, continue to Step 3
                                                 }
                                             }
                                         }
                                         
-                                        // THIRD: If no valid swap in same week, look in week AFTER next (will ask permission)
+                                        // STEP 3: If Step 2 not possible, look in week AFTER next (will ask permission)
                                         // Collect ALL week-after-next candidates and pick the EARLIEST valid one
                                         let weekAfterNextCandidates = [];
                                         
@@ -9437,74 +9442,45 @@
                                         // Also check if swap person was already assigned this month (due to previous swap)
                                         if (swapPerson && !isPersonMissingOnDate(swapPerson, groupNum, dayDate) && 
                                             (!assignedPeople[monthKey] || !assignedPeople[monthKey][groupNum] || !assignedPeople[monthKey][groupNum].has(swapPerson))) {
-                                            let swapPersonHasConflict = false;
+                                            // Use enhanced conflict detection for swap person on current day (where they would be swapped to)
+                                            let swapPersonHasConflict = hasConsecutiveDuty(dayKey, swapPerson, groupNum);
                                             
-                                            // FIRST: Check if swap person has conflict on day BEFORE current day (where they would be swapped to)
-                                            const dayBefore = new Date(dayDate);
-                                            dayBefore.setDate(dayBefore.getDate() - 1);
-                                            const dayBeforeKey = formatDateKey(dayBefore);
-                                            const beforeType = getDayType(dayBefore);
-                                            
-                                            if (beforeType === 'semi-normal-day' && hasDutyOnDay(dayBeforeKey, swapPerson, groupNum)) {
-                                                swapPersonHasConflict = true;
-                                            }
-                                            
-                                            // SECOND: Check if swap person has conflict on current day (where they would be swapped to) - check day AFTER
-                                            if (!swapPersonHasConflict) {
-                                                const dayAfter = new Date(dayDate);
-                                                dayAfter.setDate(dayAfter.getDate() + 1);
-                                                const dayAfterKey = formatDateKey(dayAfter);
-                                                const afterType = getDayType(dayAfter);
-                                                
-                                                if (afterType === 'semi-normal-day' && hasDutyOnDay(dayAfterKey, swapPerson, groupNum)) {
-                                                    swapPersonHasConflict = true;
-                                                }
-                                            }
-                                            
-                                            // THIRD: Check if swap person has conflict on swap day (where they currently would be) - check day AFTER swap day
+                                            // Also check if swap person has conflict on swap day (where they currently would be)
                                             if (!swapPersonHasConflict) {
                                                 const swapDate = new Date(swapDayKey + 'T00:00:00');
                                                 if (!isPersonMissingOnDate(swapPerson, groupNum, swapDate)) {
-                                                    const swapDayAfter = new Date(swapDate);
-                                                    swapDayAfter.setDate(swapDayAfter.getDate() + 1);
-                                                    const swapDayAfterKey = formatDateKey(swapDayAfter);
-                                                    const swapAfterType = getDayType(swapDayAfter);
-                                                    
-                                                    if (swapAfterType === 'semi-normal-day' && hasDutyOnDay(swapDayAfterKey, swapPerson, groupNum)) {
-                                                        swapPersonHasConflict = true;
-                                                    }
+                                                    swapPersonHasConflict = hasConsecutiveDuty(swapDayKey, swapPerson, groupNum);
                                                 }
                                             }
                                             
-                                            // FOURTH: Check if skipped person (expectedPerson) has conflict on swap day (where they would go) - check day AFTER swap day
+                                            // Check if skipped person has conflict on swap day (where they would go)
                                             let skippedPersonHasConflict = false;
                                             if (!swapPersonHasConflict && skippedPerson) {
                                                 const swapDate = new Date(swapDayKey + 'T00:00:00');
                                                 if (!isPersonMissingOnDate(skippedPerson, groupNum, swapDate)) {
-                                                    const swapDayAfter = new Date(swapDate);
-                                                    swapDayAfter.setDate(swapDayAfter.getDate() + 1);
-                                                    const swapDayAfterKey = formatDateKey(swapDayAfter);
-                                                    const swapAfterType = getDayType(swapDayAfter);
-                                                    
-                                                    if (swapAfterType === 'semi-normal-day' && hasDutyOnDay(swapDayAfterKey, skippedPerson, groupNum)) {
-                                                        skippedPersonHasConflict = true;
-                                                    }
+                                                    skippedPersonHasConflict = hasConsecutiveDuty(swapDayKey, skippedPerson, groupNum);
                                                 }
                                             }
                                             
                                             if (!swapPersonHasConflict && !skippedPersonHasConflict) {
                                                 // Ask for permission before performing swap (if not already asked)
                                                 const swapDate = new Date(swapDayKey + 'T00:00:00');
+                                                const isSameMonthSwap = isSameMonth(dayDate, swapDate);
                                                 const isSameWeekSwap = isSameWeek(dayDate, swapDate);
                                                 const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                                 const swapDateStr = swapDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                                const reason = isSameWeekSwap 
-                                                    ? 'Συνεχόμενη Ημιαργία (ίδια εβδομάδα)'
-                                                    : 'Συνεχόμενη Ημιαργία (εβδομάδα μετά την επόμενη)';
+                                                let reason;
+                                                if (isSameMonthSwap) {
+                                                    reason = 'Συνεχόμενη Ημιαργία (ίδιος μήνας)';
+                                                } else if (isSameWeekSwap) {
+                                                    reason = 'Συνεχόμενη Ημιαργία (ίδια εβδομάδα)';
+                                                } else {
+                                                    reason = 'Συνεχόμενη Ημιαργία (εβδομάδα μετά την επόμενη)';
+                                                }
                                                 
-                                                // Only ask if permission wasn't already asked (for same-week swaps, permission was asked when finding swap day)
+                                                // Only ask if permission wasn't already asked (for same-month and same-week swaps, permission was asked when finding swap day)
                                                 let userApproved = true;
-                                                if (!isSameWeekSwap) {
+                                                if (!isSameMonthSwap && !isSameWeekSwap) {
                                                     // For week-after-next, permission was already asked, so we proceed
                                                     userApproved = true;
                                                 }
@@ -9537,9 +9513,17 @@
                                                     }
                                                     
                                                     // Store swap reason
-                                                    const swapReason = isSameWeekSwap 
-                                                        ? `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδια εβδομάδα)`
-                                                        : `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (εβδομάδα μετά την επόμενη)`;
+                                                    const swapDate = new Date(swapDayKey + 'T00:00:00');
+                                                    const isSameMonthSwap = isSameMonth(dayDate, swapDate);
+                                                    const isSameWeekSwap = isSameWeek(dayDate, swapDate);
+                                                    let swapReason;
+                                                    if (isSameMonthSwap) {
+                                                        swapReason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδιος μήνας)`;
+                                                    } else if (isSameWeekSwap) {
+                                                        swapReason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδια εβδομάδα)`;
+                                                    } else {
+                                                        swapReason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (εβδομάδα μετά την επόμενη)`;
+                                                    }
                                                     storeAssignmentReason(dayKey, groupNum, assignedPerson, 'swap', swapReason, skippedPerson);
                                                     storeAssignmentReason(swapDayKey, groupNum, skippedPerson, 'swap', `Αλλαγή με ${assignedPerson} λόγω συνεχόμενης Ημιαργίας`, assignedPerson);
                                                     
