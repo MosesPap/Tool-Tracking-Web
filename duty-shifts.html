@@ -687,7 +687,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.66</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.68</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -8160,6 +8160,7 @@
                                     // Find next normal day with same day of week (or alternative)
                                     let swapDayKey = null;
                                     let swapDayIndex = null;
+                                    let swapFound = false; // Flag to track if a swap was found in any step
                                     
                                     if (targetDayOfWeek !== null) {
                                         // Helper function to check if a swap candidate is valid (no conflicts) - for preview
@@ -8257,6 +8258,7 @@
                                                     if (checkSwapCandidatePreview(sortedNormal[i], i)) {
                                                         swapDayKey = sortedNormal[i];
                                                         swapDayIndex = i;
+                                                        swapFound = true; // Mark that swap was found
                                                         break; // Exit Step 1 loop - swap found, don't proceed to Step 2
                                                     }
                                                     // If has conflicts, continue to Step 2
@@ -8265,8 +8267,8 @@
                                         }
                                         
                                         // STEP 2: If Step 1 not possible (no swap found), try NEXT SAME day of week in SAME MONTH (e.g., Monday 12/01/26 → Monday 19/01/26)
-                                        // Only proceed if Step 1 did NOT find a valid swap (both swapDayKey and swapDayIndex must be null/unset)
-                                        if (swapDayKey === null && swapDayIndex === null) {
+                                        // Only proceed if Step 1 did NOT find a valid swap (both swapDayKey and swapDayIndex must be null/unset, and swapFound must be false)
+                                        if (!swapFound && swapDayKey === null && swapDayIndex === null) {
                                             for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
                                                 const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
                                                 const checkDayOfWeek = checkDate.getDay();
@@ -8278,6 +8280,7 @@
                                                     if (checkSwapCandidatePreview(sortedNormal[i], i)) {
                                                         swapDayKey = sortedNormal[i];
                                                         swapDayIndex = i;
+                                                        swapFound = true; // Mark that swap was found
                                                         break;
                                                     }
                                                     // If has conflicts, continue to Step 3
@@ -8288,7 +8291,7 @@
                                         // STEP 3: If Step 2 not possible, try alternative day in week AFTER next (e.g., Monday 12/01/26 → Wednesday 21/01/26)
                                         // Collect ALL week-after-next candidates for alternative day and pick the EARLIEST valid one
                                         // Only proceed if Step 1 and Step 2 did NOT find a valid swap
-                                        if (swapDayKey === null && swapDayIndex === null && alternativeDayOfWeek !== null) {
+                                        if (!swapFound && swapDayKey === null && swapDayIndex === null && alternativeDayOfWeek !== null) {
                                             const weekAfterNextCandidates = [];
                                             
                                             // Collect all week-after-next candidates for alternative day only
@@ -8318,6 +8321,7 @@
                                                 const earliestCandidate = weekAfterNextCandidates[0];
                                                 swapDayKey = earliestCandidate.dayKey;
                                                 swapDayIndex = earliestCandidate.dayIndex;
+                                                swapFound = true; // Mark that swap was found
                                             }
                                         }
                                     }
@@ -9342,7 +9346,9 @@
                                 }
                                 
                                 // For normal days: swap with person who has same day of week (Monday↔Wednesday, Tuesday↔Thursday)
-                                if (dayTypeCategory === 'normal') {
+                                // BUT: Only attempt swap if the skipped person hasn't already been swapped before
+                                // This prevents the same person from being swapped multiple times
+                                if (dayTypeCategory === 'normal' && skippedPerson && !swappedPeople.has(skippedPerson)) {
                                     const currentDayOfWeek = dayDate.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                                     
                                     // Determine swap day pairs: Monday↔Wednesday (1↔3), Tuesday↔Thursday (2↔4)
@@ -9430,6 +9436,7 @@
                                                         if (userApproved) {
                                                             swapDayKey = checkDayKey;
                                                             swapDayIndex = i;
+                                                            swapFound = true; // Mark that swap was found
                                                             break; // Exit Step 1 loop - swap found, don't proceed to Step 2
                                                         }
                                                         // If user rejected, continue to Step 2
@@ -9464,6 +9471,7 @@
                                                         if (userApproved) {
                                                             swapDayKey = checkDayKey;
                                                             swapDayIndex = i;
+                                                            swapFound = true; // Mark that swap was found
                                                             break;
                                                         }
                                                         // If user rejected, continue to Step 3
@@ -9478,7 +9486,7 @@
                                         // Only proceed if Step 1 and Step 2 did NOT find a valid swap
                                         let weekAfterNextCandidates = [];
                                         
-                                        if (swapDayKey === null && swapDayIndex === null) {
+                                        if (!swapFound && swapDayKey === null && swapDayIndex === null) {
                                             // Collect all week-after-next candidates (both targetDayOfWeek and alternativeDayOfWeek)
                                             for (let i = dayIndex + 1; i < days.length; i++) {
                                                 const checkDayKey = days[i];
@@ -9521,6 +9529,7 @@
                                                 if (userApproved) {
                                                     swapDayKey = earliestCandidate.dayKey;
                                                     swapDayIndex = earliestCandidate.dayIndex;
+                                                    swapFound = true; // Mark that swap was found
                                                 }
                                             }
                                         }
@@ -9613,11 +9622,13 @@
                                             } else {
                                                 // User rejected swap - clear swap and try to find replacement
                                                 swapDayKey = null;
-                                                swapDayKey = null;
                                                 swapDayIndex = null;
                                             }
                                         }
                                     }
+                                } else if (dayTypeCategory === 'normal' && skippedPerson && swappedPeople.has(skippedPerson)) {
+                                    // Person was already swapped - don't attempt another swap, just find a replacement
+                                    // assignedPerson remains null, so replacement logic below will handle it
                                 }
                                 
                                 } // Close else block for conflict check
