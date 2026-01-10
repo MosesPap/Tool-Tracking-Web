@@ -5229,27 +5229,57 @@
                 const currentDayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                 
                 // Determine swap day pairs: Monday↔Wednesday (1↔3), Tuesday↔Thursday (2↔4)
+                // Logic: Tuesday tries next Tuesday first, then nearest Thursday
+                //        Thursday tries next Thursday first, then nearest Tuesday
                 let targetDayOfWeek = null;
                 let alternativeDayOfWeek = null;
+                let tryTargetFirst = false; // Flag to indicate if we should try target day first
+                
                 if (currentDayOfWeek === 1) { // Monday
                     targetDayOfWeek = 1; // Next Monday
                     alternativeDayOfWeek = 3; // Wednesday (preferred for swap)
                 } else if (currentDayOfWeek === 2) { // Tuesday
-                    targetDayOfWeek = 2; // Next Tuesday
-                    alternativeDayOfWeek = 4; // Thursday (preferred for swap)
+                    targetDayOfWeek = 2; // Next Tuesday (try FIRST)
+                    alternativeDayOfWeek = 4; // Thursday (then nearest)
+                    tryTargetFirst = true;
                 } else if (currentDayOfWeek === 3) { // Wednesday
                     targetDayOfWeek = 3; // Next Wednesday
                     alternativeDayOfWeek = 1; // Monday (preferred for swap)
                 } else if (currentDayOfWeek === 4) { // Thursday
-                    targetDayOfWeek = 4; // Next Thursday
-                    alternativeDayOfWeek = 2; // Tuesday (preferred for swap)
+                    targetDayOfWeek = 4; // Next Thursday (try FIRST)
+                    alternativeDayOfWeek = 2; // Tuesday (then nearest)
+                    tryTargetFirst = true;
                 }
                 
                 // Try to find swap day in next month following the swap logic
                 let swapDayInNextMonth = null;
                 
-                if (alternativeDayOfWeek !== null) {
-                    // PRIORITY 1: Try alternative day of week first (e.g., Wednesday for Monday)
+                if (tryTargetFirst && targetDayOfWeek !== null) {
+                    // For Tuesday/Thursday: PRIORITY 1 - Try same day of week first (next Tuesday/Thursday)
+                    const checkDate = new Date(firstDayOfNextMonth);
+                    while (checkDate <= lastDayOfNextMonth) {
+                        const checkDayType = getDayType(checkDate);
+                        if (checkDayType === 'normal-day' && checkDate.getDay() === targetDayOfWeek) {
+                            swapDayInNextMonth = new Date(checkDate);
+                            break;
+                        }
+                        checkDate.setDate(checkDate.getDate() + 1);
+                    }
+                    
+                    // PRIORITY 2: If same day not found, try alternative (nearest Thursday/Tuesday)
+                    if (!swapDayInNextMonth && alternativeDayOfWeek !== null) {
+                        const checkDate = new Date(firstDayOfNextMonth);
+                        while (checkDate <= lastDayOfNextMonth) {
+                            const checkDayType = getDayType(checkDate);
+                            if (checkDayType === 'normal-day' && checkDate.getDay() === alternativeDayOfWeek) {
+                                swapDayInNextMonth = new Date(checkDate);
+                                break;
+                            }
+                            checkDate.setDate(checkDate.getDate() + 1);
+                        }
+                    }
+                } else if (alternativeDayOfWeek !== null) {
+                    // For Monday/Wednesday: PRIORITY 1 - Try alternative day of week first (e.g., Wednesday for Monday)
                     const checkDate = new Date(firstDayOfNextMonth);
                     while (checkDate <= lastDayOfNextMonth) {
                         const checkDayType = getDayType(checkDate);
@@ -5259,18 +5289,18 @@
                         }
                         checkDate.setDate(checkDate.getDate() + 1);
                     }
-                }
-                
-                // PRIORITY 2: If alternative not found, try same day of week (e.g., next Monday for Monday)
-                if (!swapDayInNextMonth && targetDayOfWeek !== null) {
-                    const checkDate = new Date(firstDayOfNextMonth);
-                    while (checkDate <= lastDayOfNextMonth) {
-                        const checkDayType = getDayType(checkDate);
-                        if (checkDayType === 'normal-day' && checkDate.getDay() === targetDayOfWeek) {
-                            swapDayInNextMonth = new Date(checkDate);
-                            break;
+                    
+                    // PRIORITY 2: If alternative not found, try same day of week (e.g., next Monday for Monday)
+                    if (!swapDayInNextMonth && targetDayOfWeek !== null) {
+                        const checkDate = new Date(firstDayOfNextMonth);
+                        while (checkDate <= lastDayOfNextMonth) {
+                            const checkDayType = getDayType(checkDate);
+                            if (checkDayType === 'normal-day' && checkDate.getDay() === targetDayOfWeek) {
+                                swapDayInNextMonth = new Date(checkDate);
+                                break;
+                            }
+                            checkDate.setDate(checkDate.getDate() + 1);
                         }
-                        checkDate.setDate(checkDate.getDate() + 1);
                     }
                 }
                 
@@ -7342,20 +7372,26 @@
                                     const currentDayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                                     
                                     // Determine swap day pairs: Monday↔Wednesday (1↔3), Tuesday↔Thursday (2↔4)
+                                    // Logic: Tuesday tries next Tuesday first, then nearest Thursday
+                                    //        Thursday tries next Thursday first, then nearest Tuesday
                                     let targetDayOfWeek = null;
                                     let alternativeDayOfWeek = null;
+                                    let tryTargetFirst = false; // Flag to indicate if we should try target day first
+                                    
                                     if (currentDayOfWeek === 1) { // Monday
                                         targetDayOfWeek = 1; // Next Monday
-                                        alternativeDayOfWeek = 3; // Wednesday
+                                        alternativeDayOfWeek = 3; // Wednesday (try first)
                                     } else if (currentDayOfWeek === 2) { // Tuesday
-                                        targetDayOfWeek = 2; // Next Tuesday
-                                        alternativeDayOfWeek = 4; // Thursday
+                                        targetDayOfWeek = 2; // Next Tuesday (try FIRST)
+                                        alternativeDayOfWeek = 4; // Thursday (then nearest)
+                                        tryTargetFirst = true;
                                     } else if (currentDayOfWeek === 3) { // Wednesday
                                         targetDayOfWeek = 3; // Next Wednesday
-                                        alternativeDayOfWeek = 1; // Monday
+                                        alternativeDayOfWeek = 1; // Monday (try first)
                                     } else if (currentDayOfWeek === 4) { // Thursday
-                                        targetDayOfWeek = 4; // Next Thursday
-                                        alternativeDayOfWeek = 2; // Tuesday
+                                        targetDayOfWeek = 4; // Next Thursday (try FIRST)
+                                        alternativeDayOfWeek = 2; // Tuesday (then nearest)
+                                        tryTargetFirst = true;
                                     }
                                     
                                     // Find next normal day with same day of week (or alternative)
@@ -7395,30 +7431,8 @@
                                             return !swapPersonHasConflict && !skippedPersonHasConflict;
                                         };
                                         
-                                        // STEP 1: Try alternative day in same week (e.g., Monday 12/01/26 → Wednesday 14/01/26)
-                                        if (alternativeDayOfWeek !== null) {
-                                        for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
-                                            const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
-                                            const checkDayOfWeek = checkDate.getDay();
-                                            const checkDayType = getDayType(checkDate);
-                                            
-                                            // Must be a normal day and in same week
-                                                if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek && isSameWeek(date, checkDate)) {
-                                                // Check conflicts BEFORE accepting
-                                                if (checkSwapCandidatePreview(sortedNormal[i], i)) {
-                                                    swapDayKey = sortedNormal[i];
-                                                    swapDayIndex = i;
-                                                        swapFound = true; // Mark that swap was found
-                                                        break; // Exit Step 1 loop - swap found, don't proceed to Step 2
-                                                }
-                                                    // If has conflicts, continue to Step 2
-                                                }
-                                            }
-                                        }
-                                        
-                                        // STEP 2: If Step 1 not possible (no swap found), try NEXT SAME day of week in SAME MONTH (e.g., Monday 12/01/26 → Monday 19/01/26)
-                                        // Only proceed if Step 1 did NOT find a valid swap (both swapDayKey and swapDayIndex must be null/unset, and swapFound must be false)
-                                        if (!swapFound && swapDayKey === null && swapDayIndex === null) {
+                                        // For Tuesday/Thursday: STEP 1 - Try next same day of week FIRST
+                                        if (tryTargetFirst && targetDayOfWeek !== null) {
                                             for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
                                                 const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
                                                 const checkDayOfWeek = checkDate.getDay();
@@ -7430,21 +7444,81 @@
                                                     if (checkSwapCandidatePreview(sortedNormal[i], i)) {
                                                         swapDayKey = sortedNormal[i];
                                                         swapDayIndex = i;
-                                                        swapFound = true; // Mark that swap was found
+                                                        swapFound = true;
                                                         break;
                                                     }
-                                                    // If has conflicts, continue to Step 3
+                                                }
+                                            }
+                                            
+                                            // STEP 2: If same day not found, try alternative (nearest Thursday/Tuesday)
+                                            if (!swapFound && alternativeDayOfWeek !== null) {
+                                                for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
+                                                    const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
+                                                    const checkDayOfWeek = checkDate.getDay();
+                                                    const checkDayType = getDayType(checkDate);
+                                                    
+                                                    // Must be a normal day with alternative day of week
+                                                    if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek) {
+                                                        // Check conflicts BEFORE accepting
+                                                        if (checkSwapCandidatePreview(sortedNormal[i], i)) {
+                                                            swapDayKey = sortedNormal[i];
+                                                            swapDayIndex = i;
+                                                            swapFound = true;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            // For Monday/Wednesday: STEP 1 - Try alternative day in same week first
+                                            if (alternativeDayOfWeek !== null) {
+                                                for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
+                                                    const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
+                                                    const checkDayOfWeek = checkDate.getDay();
+                                                    const checkDayType = getDayType(checkDate);
+                                                    
+                                                    // Must be a normal day and in same week
+                                                    if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek && isSameWeek(date, checkDate)) {
+                                                        // Check conflicts BEFORE accepting
+                                                        if (checkSwapCandidatePreview(sortedNormal[i], i)) {
+                                                            swapDayKey = sortedNormal[i];
+                                                            swapDayIndex = i;
+                                                            swapFound = true;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // STEP 2: If Step 1 not possible, try NEXT SAME day of week in SAME MONTH
+                                            if (!swapFound && targetDayOfWeek !== null) {
+                                                for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
+                                                    const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
+                                                    const checkDayOfWeek = checkDate.getDay();
+                                                    const checkDayType = getDayType(checkDate);
+                                                    
+                                                    // Must be a normal day, same day of week, and in same month
+                                                    if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameMonth(date, checkDate)) {
+                                                        // Check conflicts BEFORE accepting
+                                                        if (checkSwapCandidatePreview(sortedNormal[i], i)) {
+                                                            swapDayKey = sortedNormal[i];
+                                                            swapDayIndex = i;
+                                                            swapFound = true;
+                                                            break;
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
                                         
-                                        // STEP 3: If Step 2 not possible, try alternative day in week AFTER next (e.g., Monday 12/01/26 → Wednesday 21/01/26)
-                                        // Collect ALL week-after-next candidates for alternative day and pick the EARLIEST valid one
+                                        // STEP 3: If Step 1 and Step 2 not possible, try alternative day in week AFTER next
+                                        // For Tuesday/Thursday: try alternative (Thursday/Tuesday) in week after next
+                                        // For Monday/Wednesday: try alternative (Wednesday/Monday) in week after next
                                         // Only proceed if Step 1 and Step 2 did NOT find a valid swap
                                         if (!swapFound && swapDayKey === null && swapDayIndex === null && alternativeDayOfWeek !== null) {
                                             const weekAfterNextCandidates = [];
                                             
-                                            // Collect all week-after-next candidates for alternative day only
+                                            // Collect all week-after-next candidates for alternative day
                                             for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
                                                 const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
                                                 const checkDayOfWeek = checkDate.getDay();
@@ -7452,13 +7526,13 @@
                                                 
                                                 // Must be a normal day, alternative day of week, and in week AFTER next (not same week, not next week)
                                                 if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek && !isSameWeek(date, checkDate) && isWeekAfterNext(date, checkDate)) {
-                                                        // Check conflicts BEFORE adding to candidates
-                                                        if (checkSwapCandidatePreview(sortedNormal[i], i)) {
-                                                            weekAfterNextCandidates.push({
-                                                                dayKey: sortedNormal[i],
-                                                                dayIndex: i,
-                                                                date: checkDate
-                                                            });
+                                                    // Check conflicts BEFORE adding to candidates
+                                                    if (checkSwapCandidatePreview(sortedNormal[i], i)) {
+                                                        weekAfterNextCandidates.push({
+                                                            dayKey: sortedNormal[i],
+                                                            dayIndex: i,
+                                                            date: checkDate
+                                                        });
                                                     }
                                                 }
                                             }
@@ -8908,59 +8982,100 @@
                                 const currentDayOfWeek = dayDate.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                                 
                                 // Determine swap day pairs: Monday↔Wednesday (1↔3), Tuesday↔Thursday (2↔4)
+                                // Logic: Tuesday tries next Tuesday first, then nearest Thursday
+                                //        Thursday tries next Thursday first, then nearest Tuesday
                                 let targetDayOfWeek = null;
                                 let alternativeDayOfWeek = null;
+                                let tryTargetFirst = false; // Flag to indicate if we should try target day first
+                                
                                 if (currentDayOfWeek === 1) { // Monday
                                     targetDayOfWeek = 1; // Next Monday
-                                    alternativeDayOfWeek = 3; // Wednesday
+                                    alternativeDayOfWeek = 3; // Wednesday (try first)
                                 } else if (currentDayOfWeek === 2) { // Tuesday
-                                    targetDayOfWeek = 2; // Next Tuesday
-                                    alternativeDayOfWeek = 4; // Thursday
+                                    targetDayOfWeek = 2; // Next Tuesday (try FIRST)
+                                    alternativeDayOfWeek = 4; // Thursday (then nearest)
+                                    tryTargetFirst = true;
                                 } else if (currentDayOfWeek === 3) { // Wednesday
                                     targetDayOfWeek = 3; // Next Wednesday
-                                    alternativeDayOfWeek = 1; // Monday
+                                    alternativeDayOfWeek = 1; // Monday (try first)
                                 } else if (currentDayOfWeek === 4) { // Thursday
-                                    targetDayOfWeek = 4; // Next Thursday
-                                    alternativeDayOfWeek = 2; // Tuesday
+                                    targetDayOfWeek = 4; // Next Thursday (try FIRST)
+                                    alternativeDayOfWeek = 2; // Tuesday (then nearest)
+                                    tryTargetFirst = true;
                                 }
                                 
                                 // Find next normal day with same day of week (or alternative)
-                                // PRIORITY: Try alternative day FIRST (e.g., Wednesday for Monday), then next same day (e.g., next Monday)
                                 let swapDayKey = null;
                                 let swapDayIndex = null;
                                 
-                                // STEP 1: Try alternative day of week FIRST (e.g., Monday → Wednesday in same week or soon after)
-                                if (alternativeDayOfWeek !== null) {
+                                // For Tuesday/Thursday: STEP 1 - Try next same day of week FIRST
+                                if (tryTargetFirst && targetDayOfWeek !== null) {
                                     for (let i = dayIndex + 1; i < days.length; i++) {
                                         const checkDayKey = days[i];
                                         const checkDate = new Date(checkDayKey + 'T00:00:00');
                                         const checkDayOfWeek = checkDate.getDay();
                                         const checkDayType = getDayType(checkDate);
                                         
-                                        // Must be a normal day with alternative day of week
-                                        if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek) {
+                                        // Must be a normal day with target day of week
+                                        if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek) {
                                             swapDayKey = checkDayKey;
                                             swapDayIndex = i;
-                                            console.log(`[SWAP ATTEMPT DEBUG] Found alternative day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][alternativeDayOfWeek]}): ${swapDayKey} (${checkDate.toLocaleDateString('el-GR')})`);
+                                            console.log(`[SWAP ATTEMPT DEBUG] Found next same day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][targetDayOfWeek]}): ${swapDayKey} (${checkDate.toLocaleDateString('el-GR')})`);
                                             break;
-                                        }
                                         }
                                     }
                                     
-                                // STEP 2: If alternative day not found, try next same day of week (e.g., Monday → next Monday)
-                                if (!swapDayKey && targetDayOfWeek !== null) {
+                                    // STEP 2: If same day not found, try alternative (nearest Thursday/Tuesday)
+                                    if (!swapDayKey && alternativeDayOfWeek !== null) {
                                         for (let i = dayIndex + 1; i < days.length; i++) {
                                             const checkDayKey = days[i];
                                             const checkDate = new Date(checkDayKey + 'T00:00:00');
                                             const checkDayOfWeek = checkDate.getDay();
                                             const checkDayType = getDayType(checkDate);
                                             
-                                        // Must be a normal day with target day of week
-                                        if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek) {
+                                            // Must be a normal day with alternative day of week
+                                            if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek) {
                                                 swapDayKey = checkDayKey;
                                                 swapDayIndex = i;
-                                            console.log(`[SWAP ATTEMPT DEBUG] Found next same day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][targetDayOfWeek]}): ${swapDayKey} (${checkDate.toLocaleDateString('el-GR')})`);
+                                                console.log(`[SWAP ATTEMPT DEBUG] Found alternative day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][alternativeDayOfWeek]}): ${swapDayKey} (${checkDate.toLocaleDateString('el-GR')})`);
                                                 break;
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // For Monday/Wednesday: STEP 1 - Try alternative day of week FIRST
+                                    if (alternativeDayOfWeek !== null) {
+                                        for (let i = dayIndex + 1; i < days.length; i++) {
+                                            const checkDayKey = days[i];
+                                            const checkDate = new Date(checkDayKey + 'T00:00:00');
+                                            const checkDayOfWeek = checkDate.getDay();
+                                            const checkDayType = getDayType(checkDate);
+                                            
+                                            // Must be a normal day with alternative day of week
+                                            if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek) {
+                                                swapDayKey = checkDayKey;
+                                                swapDayIndex = i;
+                                                console.log(`[SWAP ATTEMPT DEBUG] Found alternative day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][alternativeDayOfWeek]}): ${swapDayKey} (${checkDate.toLocaleDateString('el-GR')})`);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    
+                                    // STEP 2: If alternative day not found, try next same day of week
+                                    if (!swapDayKey && targetDayOfWeek !== null) {
+                                        for (let i = dayIndex + 1; i < days.length; i++) {
+                                            const checkDayKey = days[i];
+                                            const checkDate = new Date(checkDayKey + 'T00:00:00');
+                                            const checkDayOfWeek = checkDate.getDay();
+                                            const checkDayType = getDayType(checkDate);
+                                            
+                                            // Must be a normal day with target day of week
+                                            if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek) {
+                                                swapDayKey = checkDayKey;
+                                                swapDayIndex = i;
+                                                console.log(`[SWAP ATTEMPT DEBUG] Found next same day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][targetDayOfWeek]}): ${swapDayKey} (${checkDate.toLocaleDateString('el-GR')})`);
+                                                break;
+                                            }
                                         }
                                     }
                                 }
