@@ -8502,16 +8502,29 @@
                     const lastRotationForMonth = {}; // monthKey -> { dayTypeCategory -> { groupNum -> { rotationPosition, personName } } }
                     
                     // Process each day in order
+                    console.log(`[CALCULATION START] Processing ${days.length} days for ${dayTypeCategory}, Group ${groupNum}`);
                     days.forEach((dayKey, dayIndex) => {
+                        // Track the person who was actually assigned to this day (for rotation tracking)
+                        let finalAssignedPerson = null;
+                        
+                        if (dayIndex === 0 || dayIndex === days.length - 1) {
+                            console.log(`[DAY PROCESSING] Day ${dayIndex + 1}/${days.length}: ${dayKey} (${dayTypeCategory}, Group ${groupNum})`);
+                        }
+                        
                         // Skip if day already has assignment for this group (critical assignments or swapped days)
                         const existingAssignment = getAssignmentForDate(dayKey);
                         if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
-                            return;
+                            // Extract person name from existing assignment for tracking
+                            const match = existingAssignment.match(/^([^(]+)\s*\(Ομάδα/);
+                            if (match) {
+                                finalAssignedPerson = match[1].trim();
+                            }
+                            // Still track rotation even if assignment exists
                         }
                         
                         // Skip if this day was already assigned due to a swap
                         if (swappedDays[dayKey] && swappedDays[dayKey][groupNum]) {
-                            return;
+                            // Still track rotation even if swapped
                         }
                         
                         const dayDate = new Date(dayKey + 'T00:00:00');
@@ -8729,6 +8742,7 @@
                                 } else {
                                     // No conflict, assign cross-month person directly
                                     assignedPerson = crossMonthPerson;
+                                    finalAssignedPerson = crossMonthPerson; // Track assigned person for rotation tracking
                                     // Track that this person is assigned (for normal days)
                                     if (assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
                                         assignedPeople[monthKey][groupNum].add(crossMonthPerson);
@@ -8736,6 +8750,34 @@
                                     // Advance rotation position for next iteration
                                     if (dayTypeCategory === 'normal') {
                                         globalNormalRotationPosition[groupNum] = rotationPosition + 1;
+                                    }
+                                    // Still track rotation before returning
+                                    const dayDate = new Date(dayKey + 'T00:00:00');
+                                    const month = dayDate.getMonth();
+                                    const year = dayDate.getFullYear();
+                                    const monthKey = `${year}-${month}`;
+                                    if (!lastRotationForMonth[monthKey]) {
+                                        lastRotationForMonth[monthKey] = {};
+                                    }
+                                    if (!lastRotationForMonth[monthKey][dayTypeCategory]) {
+                                        lastRotationForMonth[monthKey][dayTypeCategory] = {};
+                                    }
+                                    let finalRotationPos = null;
+                                    if (dayTypeCategory === 'normal' && globalNormalRotationPosition[groupNum] !== undefined) {
+                                        finalRotationPos = globalNormalRotationPosition[groupNum];
+                                    } else if (dayTypeCategory === 'weekend' && globalWeekendRotationPosition[groupNum] !== undefined) {
+                                        finalRotationPos = globalWeekendRotationPosition[groupNum];
+                                    } else if (dayTypeCategory === 'semi' && globalSemiRotationPosition[groupNum] !== undefined) {
+                                        finalRotationPos = globalSemiRotationPosition[groupNum];
+                                    } else if (dayTypeCategory === 'special' && globalSpecialRotationPosition[groupNum] !== undefined) {
+                                        finalRotationPos = globalSpecialRotationPosition[groupNum];
+                                    }
+                                    if (finalRotationPos !== null && finalRotationPos !== undefined) {
+                                        lastRotationForMonth[monthKey][dayTypeCategory][groupNum] = {
+                                            rotationPosition: finalRotationPos,
+                                            personName: finalAssignedPerson || null
+                                        };
+                                        console.log(`[ROTATION TRACK] Tracking for ${monthKey}, ${dayTypeCategory}, Group ${groupNum}: position=${finalRotationPos}, person=${finalAssignedPerson || 'NONE'}`);
                                     }
                                     // Skip to next day (use return in forEach, not continue)
                                     return;
@@ -8747,6 +8789,7 @@
                             if (dayTypeCategory === 'normal' && swappedPeople.has(expectedPerson)) {
                                 // Person was already swapped - assign them without checking for conflicts
                                 assignedPerson = expectedPerson;
+                                finalAssignedPerson = expectedPerson; // Track assigned person for rotation tracking
                                 // Track that this person is assigned (for normal days)
                                 if (assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
                                     assignedPeople[monthKey][groupNum].add(expectedPerson);
@@ -8798,6 +8841,7 @@
                             // If expected person has NO conflicts, assign them
                                 if (!hasConflict) {
                                 assignedPerson = expectedPerson;
+                                finalAssignedPerson = expectedPerson; // Track assigned person for rotation tracking
                                 // Track that this person is assigned (for normal days)
                                 if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
                                     assignedPeople[monthKey][groupNum].add(expectedPerson);
@@ -8830,6 +8874,7 @@
                                     } else {
                                         // User rejected skip - assign the person anyway (they'll have conflict but user approved)
                                         assignedPerson = expectedPerson;
+                                finalAssignedPerson = expectedPerson; // Track assigned person for rotation tracking
                                         if (dayTypeCategory === 'weekend') {
                                             globalWeekendRotationPosition[groupNum] = rotationPosition + 1;
                                         }
@@ -9068,6 +9113,7 @@
                                             if (userApproved) {
                                                 // Valid swap: swap person gets current day, skipped person gets swap day
                                                 assignedPerson = swapPerson;
+                                                finalAssignedPerson = swapPerson; // Track assigned person for rotation tracking
                                                 // Ensure skippedPerson is set
                                                 if (!skippedPerson) skippedPerson = expectedPerson;
                                                 
@@ -9219,6 +9265,7 @@
                                         
                                         if (!candidateHasConflict) {
                                             assignedPerson = candidate;
+                                            finalAssignedPerson = candidate; // Track assigned person for rotation tracking
                                             foundReplacement = true;
                                             // Update rotation position to candidate's index + 1 for next iteration
                                             if (dayTypeCategory === 'weekend') {
@@ -9240,6 +9287,7 @@
                                         const nextMonthResult = getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, month, year, rotationDays, groupPeople, currentRotPos);
                                         if (nextMonthResult && nextMonthResult.person) {
                                             assignedPerson = nextMonthResult.person;
+                                            finalAssignedPerson = nextMonthResult.person; // Track assigned person for rotation tracking
                                             foundReplacement = true;
                                             console.log(`[END OF MONTH] Assigned ${nextMonthResult.person} from next month for ${dayKey} (rotation position: ${currentRotPos})`);
                                             
@@ -9351,10 +9399,10 @@
                         }
                         
                         // Assign person to day (uses setAssignmentForDate which saves to correct document)
-                        let finalAssignedPerson = null;
                         if (assignedPerson) {
                             assignPersonToDay(dayKey, assignedPerson, groupNum);
                             finalAssignedPerson = assignedPerson;
+                            console.log(`[ASSIGNMENT] Assigned ${assignedPerson} to ${dayKey} (${dayTypeCategory}, Group ${groupNum})`);
                         }
                         
                         // If person was skipped due to conflict, find next available day for them
@@ -9663,21 +9711,21 @@
                         } else if (dayTypeCategory === 'special' && globalSpecialRotationPosition[groupNum] !== undefined) {
                             finalRotationPos = globalSpecialRotationPosition[groupNum];
                         }
-                        // Save both rotation position and person name if we have an assigned person
-                        if (finalRotationPos !== null && finalRotationPos !== undefined && finalAssignedPerson) {
+                        // Save both rotation position and person name if we have rotation position
+                        // Always save if we have a rotation position, even if no person assigned (for debugging)
+                        if (finalRotationPos !== null && finalRotationPos !== undefined) {
                             lastRotationForMonth[monthKey][dayTypeCategory][groupNum] = {
                                 rotationPosition: finalRotationPos,
-                                personName: finalAssignedPerson
+                                personName: finalAssignedPerson || null
                             };
-                            console.log(`[ROTATION TRACK] Tracking for ${monthKey}, ${dayTypeCategory}, Group ${groupNum}: position=${finalRotationPos}, person=${finalAssignedPerson}`);
-                        } else if (finalRotationPos !== null && finalRotationPos !== undefined) {
-                            // Save rotation position even if no person assigned (shouldn't happen, but for safety)
-                            lastRotationForMonth[monthKey][dayTypeCategory][groupNum] = {
-                                rotationPosition: finalRotationPos,
-                                personName: null
-                            };
+                            if (dayIndex === 0 || dayIndex === days.length - 1 || finalAssignedPerson) {
+                                console.log(`[ROTATION TRACK] Day ${dayIndex + 1}/${days.length} - ${monthKey}, ${dayTypeCategory}, Group ${groupNum}: position=${finalRotationPos}, person=${finalAssignedPerson || 'NONE'}`);
+                            }
+                        } else {
+                            console.log(`[ROTATION TRACK WARNING] Day ${dayIndex + 1}/${days.length} - No rotation position for ${monthKey}, ${dayTypeCategory}, Group ${groupNum} (finalRotationPos=${finalRotationPos}, assignedPerson=${finalAssignedPerson})`);
                         }
                     });
+                    console.log(`[CALCULATION END] Finished processing ${days.length} days for ${dayTypeCategory}, Group ${groupNum}`);
                     
                     // After processing all days, save last rotation positions and person names for each month to global variable
                     // This will be saved to Firestore when saveData() is called
