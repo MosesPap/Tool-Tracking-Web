@@ -8921,7 +8921,7 @@
                                                     assignedPeople[monthKey][groupNum].add(skippedPerson);
                                                     
                                                     // Also add to swap day's month (in case swap day is in a different month)
-                                                    const swapDate = new Date(swapDayKey + 'T00:00:00');
+                                                    // Reuse swapDate from above (line 8903)
                                                     const swapMonth = swapDate.getMonth();
                                                     const swapYear = swapDate.getFullYear();
                                                     const swapMonthKey = `${swapYear}-${swapMonth}`;
@@ -8945,7 +8945,7 @@
                                                 }
                                                 
                                                 // Store swap reason
-                                                const swapDate = new Date(swapDayKey + 'T00:00:00');
+                                                // Reuse swapDate from above (line 8903)
                                                 const isSameMonthSwap = isSameMonth(dayDate, swapDate);
                                                 const isSameWeekSwap = isSameWeek(dayDate, swapDate);
                                                 let swapReason;
