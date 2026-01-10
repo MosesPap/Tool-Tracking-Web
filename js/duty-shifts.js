@@ -6499,9 +6499,20 @@
                             }
                             const rotationDays = groupPeople.length;
                             if (globalWeekendRotationPosition[groupNum] === undefined) {
-                                // Initialize based on rotation count from February 2026 (first time only)
-                                const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
-                                globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                // If start date is February 2026, always start from first person (position 0)
+                                const isFebruary2026 = calculationSteps.startDate && 
+                                    calculationSteps.startDate.getFullYear() === 2026 && 
+                                    calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                                
+                                if (isFebruary2026) {
+                                    // Always start from first person for February 2026
+                                    globalWeekendRotationPosition[groupNum] = 0;
+                                    console.log(`[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} weekend - February 2026`);
+                                } else {
+                                    // Initialize based on rotation count from start date
+                                    const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
+                                    globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                }
                             }
                             
                             // Use the current rotation position (which accounts for previous skips)
@@ -6767,9 +6778,20 @@
                         }
                         const rotationDays = groupPeople.length;
                         if (globalWeekendRotationPosition[groupNum] === undefined) {
-                            // Initialize based on rotation count from February 2026 (first time only)
-                            const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
-                            globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                            // If start date is February 2026, always start from first person (position 0)
+                            const isFebruary2026 = calculationSteps.startDate && 
+                                calculationSteps.startDate.getFullYear() === 2026 && 
+                                calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                            
+                            if (isFebruary2026) {
+                                // Always start from first person for February 2026
+                                globalWeekendRotationPosition[groupNum] = 0;
+                                console.log(`[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} weekend - February 2026`);
+                            } else {
+                                // Initialize based on rotation count from start date
+                                const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
+                                globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                            }
                         }
                         
                         let rotationPosition = globalWeekendRotationPosition[groupNum] % rotationDays;
@@ -6876,9 +6898,20 @@
                         } else {
                             const rotationDays = groupPeople.length;
                             if (globalSemiRotationPosition[groupNum] === undefined) {
-                                // Initialize based on rotation count from February 2026 (first time only)
-                                const daysSinceStart = getRotationPosition(date, 'semi', groupNum);
-                                globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                // If start date is February 2026, always start from first person (position 0)
+                                const isFebruary2026 = calculationSteps.startDate && 
+                                    calculationSteps.startDate.getFullYear() === 2026 && 
+                                    calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                                
+                                if (isFebruary2026) {
+                                    // Always start from first person for February 2026
+                                    globalSemiRotationPosition[groupNum] = 0;
+                                    console.log(`[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} semi - February 2026`);
+                                } else {
+                                    // Initialize based on rotation count from start date
+                                    const daysSinceStart = getRotationPosition(date, 'semi', groupNum);
+                                    globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                }
                             }
                             
                             let rotationPosition = globalSemiRotationPosition[groupNum] % rotationDays;
@@ -7100,9 +7133,20 @@
                         }
                         const rotationDays = groupPeople.length;
                         if (globalWeekendRotationPosition[groupNum] === undefined) {
-                            // Initialize based on rotation count from February 2026 (first time only)
-                            const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
-                            globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                            // If start date is February 2026, always start from first person (position 0)
+                            const isFebruary2026 = calculationSteps.startDate && 
+                                calculationSteps.startDate.getFullYear() === 2026 && 
+                                calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                            
+                            if (isFebruary2026) {
+                                // Always start from first person for February 2026
+                                globalWeekendRotationPosition[groupNum] = 0;
+                                console.log(`[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} weekend - February 2026`);
+                            } else {
+                                // Initialize based on rotation count from start date
+                                const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
+                                globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                            }
                         }
                         
                         let rotationPosition = globalWeekendRotationPosition[groupNum] % rotationDays;
@@ -7266,9 +7310,20 @@
                     if (groupPeople.length > 0) {
                         const rotationDays = groupPeople.length;
                         if (globalSemiRotationPosition[groupNum] === undefined) {
-                            // Initialize based on rotation count from February 2026 (first time only)
-                            const daysSinceStart = getRotationPosition(date, 'semi', groupNum);
-                            globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                            // If start date is February 2026, always start from first person (position 0)
+                            const isFebruary2026 = calculationSteps.startDate && 
+                                calculationSteps.startDate.getFullYear() === 2026 && 
+                                calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                            
+                            if (isFebruary2026) {
+                                // Always start from first person for February 2026
+                                globalSemiRotationPosition[groupNum] = 0;
+                                console.log(`[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} semi - February 2026`);
+                            } else {
+                                // Initialize based on rotation count from start date
+                                const daysSinceStart = getRotationPosition(date, 'semi', groupNum);
+                                globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                            }
                         }
                         
                         let rotationPosition = globalSemiRotationPosition[groupNum] % rotationDays;
@@ -7456,12 +7511,20 @@
                             
                             const rotationDays = groupPeople.length;
                             if (globalNormalRotationPosition[groupNum] === undefined) {
-                                // Try to load from lastRotationPositions first
-                                if (lastRotationPositions.normal[groupNum] !== undefined) {
+                                // If start date is February 2026, always start from first person (position 0)
+                                const isFebruary2026 = calculationSteps.startDate && 
+                                    calculationSteps.startDate.getFullYear() === 2026 && 
+                                    calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                                
+                                if (isFebruary2026) {
+                                    // Always start from first person for February 2026
+                                    globalNormalRotationPosition[groupNum] = 0;
+                                    console.log(`[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} - February 2026`);
+                                } else if (lastRotationPositions.normal[groupNum] !== undefined) {
                                     globalNormalRotationPosition[groupNum] = lastRotationPositions.normal[groupNum];
                                     console.log(`[PREVIEW ROTATION] Loaded normal rotation position for group ${groupNum} from Firestore: ${globalNormalRotationPosition[groupNum]}`);
                                 } else {
-                                    // Initialize based on rotation count from February 2026 (first time only)
+                                    // Initialize based on rotation count from start date
                                     const daysSinceStart = getRotationPosition(date, 'normal', groupNum);
                                     globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
                                 }
@@ -8515,12 +8578,19 @@
                         if (dayTypeCategory === 'weekend') {
                             // For weekends: track rotation position per group globally to continue from previous month
                             if (globalWeekendRotationPosition[groupNum] === undefined) {
-                                // Try to load from lastRotationPositions first
-                                if (lastRotationPositions.weekend[groupNum] !== undefined) {
+                                // If start date is February 2026, always start from first person (position 0)
+                                const isFebruary2026 = calculationSteps.startDate && 
+                                    calculationSteps.startDate.getFullYear() === 2026 && 
+                                    calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                                
+                                if (isFebruary2026) {
+                                    globalWeekendRotationPosition[groupNum] = 0;
+                                    console.log(`[ROTATION] Starting from first person (position 0) for group ${groupNum} weekend - February 2026`);
+                                } else if (lastRotationPositions.weekend[groupNum] !== undefined) {
                                     globalWeekendRotationPosition[groupNum] = lastRotationPositions.weekend[groupNum];
                                     console.log(`[ROTATION] Loaded weekend rotation position for group ${groupNum} from Firestore: ${globalWeekendRotationPosition[groupNum]}`);
                                 } else {
-                                    // Initialize based on rotation count from February 2026 (first time only)
+                                    // Initialize based on rotation count from start date
                                     const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
                                     globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
                                 }
@@ -8529,12 +8599,19 @@
                         } else if (dayTypeCategory === 'normal') {
                             // For normal days: track rotation position per group globally to continue from previous month
                             if (globalNormalRotationPosition[groupNum] === undefined) {
-                                // Try to load from lastRotationPositions first
-                                if (lastRotationPositions.normal[groupNum] !== undefined) {
+                                // If start date is February 2026, always start from first person (position 0)
+                                const isFebruary2026 = calculationSteps.startDate && 
+                                    calculationSteps.startDate.getFullYear() === 2026 && 
+                                    calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                                
+                                if (isFebruary2026) {
+                                    globalNormalRotationPosition[groupNum] = 0;
+                                    console.log(`[ROTATION] Starting from first person (position 0) for group ${groupNum} - February 2026`);
+                                } else if (lastRotationPositions.normal[groupNum] !== undefined) {
                                     globalNormalRotationPosition[groupNum] = lastRotationPositions.normal[groupNum];
                                     console.log(`[ROTATION] Loaded normal rotation position for group ${groupNum} from Firestore: ${globalNormalRotationPosition[groupNum]}`);
                                 } else {
-                                    // Initialize based on rotation count from February 2026 (first time only)
+                                    // Initialize based on rotation count from start date
                                     const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
                                     globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
                                 }
@@ -8546,12 +8623,19 @@
                                 globalSemiRotationPosition = {};
                             }
                             if (globalSemiRotationPosition[groupNum] === undefined) {
-                                // Try to load from lastRotationPositions first
-                                if (lastRotationPositions.semi[groupNum] !== undefined) {
+                                // If start date is February 2026, always start from first person (position 0)
+                                const isFebruary2026 = calculationSteps.startDate && 
+                                    calculationSteps.startDate.getFullYear() === 2026 && 
+                                    calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                                
+                                if (isFebruary2026) {
+                                    globalSemiRotationPosition[groupNum] = 0;
+                                    console.log(`[ROTATION] Starting from first person (position 0) for group ${groupNum} semi - February 2026`);
+                                } else if (lastRotationPositions.semi[groupNum] !== undefined) {
                                     globalSemiRotationPosition[groupNum] = lastRotationPositions.semi[groupNum];
                                     console.log(`[ROTATION] Loaded semi rotation position for group ${groupNum} from Firestore: ${globalSemiRotationPosition[groupNum]}`);
                                 } else {
-                                    // Initialize based on rotation count from February 2026 (first time only)
+                                    // Initialize based on rotation count from start date
                                     const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
                                     globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
                                 }
@@ -8563,12 +8647,19 @@
                                 globalSpecialRotationPosition = {};
                             }
                             if (globalSpecialRotationPosition[groupNum] === undefined) {
-                                // Try to load from lastRotationPositions first
-                                if (lastRotationPositions.special[groupNum] !== undefined) {
+                                // If start date is February 2026, always start from first person (position 0)
+                                const isFebruary2026 = calculationSteps.startDate && 
+                                    calculationSteps.startDate.getFullYear() === 2026 && 
+                                    calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                                
+                                if (isFebruary2026) {
+                                    globalSpecialRotationPosition[groupNum] = 0;
+                                    console.log(`[ROTATION] Starting from first person (position 0) for group ${groupNum} special - February 2026`);
+                                } else if (lastRotationPositions.special[groupNum] !== undefined) {
                                     globalSpecialRotationPosition[groupNum] = lastRotationPositions.special[groupNum];
                                     console.log(`[ROTATION] Loaded special rotation position for group ${groupNum} from Firestore: ${globalSpecialRotationPosition[groupNum]}`);
                                 } else {
-                                    // Initialize based on rotation count from February 2026 (first time only)
+                                    // Initialize based on rotation count from start date
                                     const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
                                     globalSpecialRotationPosition[groupNum] = daysSinceStart % rotationDays;
                                 }
