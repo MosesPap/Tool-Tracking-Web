@@ -5203,8 +5203,8 @@
         }
 
         // Helper function to get a person from next month's rotation when conflicts occur at end of month
-        // This temporarily calculates the next month to find a suitable person
-        function getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, currentMonth, currentYear, rotationDays, groupPeople) {
+        // This temporarily calculates the next month to find the correct person according to rotation logic
+        function getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, currentMonth, currentYear, rotationDays, groupPeople, currentRotationPosition = null) {
             // Check if we're in the last 3 days of the month (end of month)
             const date = new Date(dayKey + 'T00:00:00');
             const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
@@ -5250,8 +5250,26 @@
             }
             
             // Calculate rotation position for first day of this type in next month
-            const nextMonthDayKey = formatDateKey(firstDayOfTypeInNextMonth);
-            const nextMonthRotationPosition = getRotationPosition(firstDayOfTypeInNextMonth, dayTypeCategory, groupNum) % rotationDays;
+            // For normal days and weekends, rotation continues globally from current month
+            // For special and semi, use direct rotation calculation
+            let nextMonthRotationPosition;
+            
+            if (dayTypeCategory === 'normal' || dayTypeCategory === 'weekend') {
+                // Rotation continues globally - if we have current rotation position, advance it
+                // Otherwise calculate from start date
+                if (currentRotationPosition !== null && currentRotationPosition !== undefined) {
+                    // Advance rotation position by 1 (for the current day we're processing)
+                    // This gives us the position for the first day in next month
+                    nextMonthRotationPosition = (currentRotationPosition + 1) % rotationDays;
+                } else {
+                    // Fallback: calculate from start date
+                    nextMonthRotationPosition = getRotationPosition(firstDayOfTypeInNextMonth, dayTypeCategory, groupNum) % rotationDays;
+                }
+            } else {
+                // For special and semi, use direct calculation
+                nextMonthRotationPosition = getRotationPosition(firstDayOfTypeInNextMonth, dayTypeCategory, groupNum) % rotationDays;
+            }
+            
             const nextMonthPerson = groupPeople[nextMonthRotationPosition];
             
             // Check if this person from next month has conflicts on the current day
@@ -5265,7 +5283,7 @@
                 }
                 
                 if (!hasConflict && !hasSpecialInCurrentMonth) {
-                    console.log(`[END OF MONTH] Using person from next month: ${nextMonthPerson} for ${dayKey} (end of month conflict resolution)`);
+                    console.log(`[END OF MONTH] Using person from next month: ${nextMonthPerson} for ${dayKey} (rotation position: ${nextMonthRotationPosition}, end of month conflict resolution)`);
                     return nextMonthPerson;
                 }
             }
@@ -7441,12 +7459,14 @@
                                         
                                         // Only try next month if we're in the last 3 days of the month
                                         if (daysUntilEndOfMonth <= 3) {
-                                            const nextMonthPerson = getPersonFromNextMonth(dateKey, 'normal', groupNum, month, year, rotationDays, groupPeople);
+                                            // Pass current rotation position so next month calculation continues from where we are
+                                            const nextMonthPerson = getPersonFromNextMonth(dateKey, 'normal', groupNum, month, year, rotationDays, groupPeople, rotationPosition);
                                             if (nextMonthPerson) {
                                                 assignedPerson = nextMonthPerson;
                                                 // Track assignment
                                                 assignedPeoplePreview[monthKey][groupNum].add(nextMonthPerson);
-                                                console.log(`[PREVIEW END OF MONTH] Assigned ${nextMonthPerson} from next month for ${dateKey}`);
+                                                console.log(`[PREVIEW END OF MONTH] Assigned ${nextMonthPerson} from next month for ${dateKey} (rotation position: ${rotationPosition})`);
+                                                // Advance rotation position for next iteration
                                                 globalNormalRotationPosition[groupNum] = rotationPosition + 1;
                                             } else {
                                                 // No person from next month available, still assign original person (they'll have conflict)
@@ -8161,13 +8181,34 @@
                                 foundReplacement = true;
                             }
                             
-                            // If no replacement found, skip this day
+                            // If no replacement found, try getting person from next month (if at end of month)
                             if (!foundReplacement) {
-                                // Still advance rotation position to avoid infinite loop
-                                if (dayTypeCategory === 'normal') {
-                                    globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                const lastDayOfMonth = new Date(year, month + 1, 0);
+                                const daysUntilEndOfMonth = lastDayOfMonth.getDate() - dayDate.getDate();
+                                
+                                // Only try next month if we're in the last 3 days of the month
+                                if (daysUntilEndOfMonth <= 3) {
+                                    // Pass current rotation position for normal/weekend to continue rotation correctly
+                                    const currentRotPos = (dayTypeCategory === 'normal' || dayTypeCategory === 'weekend') ? 
+                                        (dayTypeCategory === 'normal' ? globalNormalRotationPosition[groupNum] : globalWeekendRotationPosition[groupNum]) : 
+                                        rotationPosition;
+                                    const nextMonthPerson = getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, month, year, rotationDays, groupPeople, currentRotPos);
+                                    if (nextMonthPerson) {
+                                        expectedPerson = nextMonthPerson;
+                                        foundReplacement = true;
+                                        rotationPosition = currentRotPos;
+                                        console.log(`[END OF MONTH] Using person from next month: ${nextMonthPerson} for ${dayKey} (rotation position: ${currentRotPos})`);
+                                    }
                                 }
-                                return;
+                                
+                                // If still no replacement found, skip this day
+                                if (!foundReplacement) {
+                                    // Still advance rotation position to avoid infinite loop
+                                    if (dayTypeCategory === 'normal') {
+                                        globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                    }
+                                    return;
+                                }
                             }
                             
                             // Update rotation position to the replacement's position (will be advanced after assignment)
@@ -8650,11 +8691,15 @@
                                     // If we still haven't found a replacement after checking all people in rotation,
                                     // try getting a person from next month (if we're at end of month)
                                     if (!foundReplacement) {
-                                        const nextMonthPerson = getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, month, year, rotationDays, groupPeople);
+                                        // Pass current rotation position for normal/weekend to continue rotation correctly
+                                        const currentRotPos = (dayTypeCategory === 'normal' || dayTypeCategory === 'weekend') ? 
+                                            (dayTypeCategory === 'normal' ? globalNormalRotationPosition[groupNum] : globalWeekendRotationPosition[groupNum]) : 
+                                            rotationPosition;
+                                        const nextMonthPerson = getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, month, year, rotationDays, groupPeople, currentRotPos);
                                         if (nextMonthPerson) {
                                             assignedPerson = nextMonthPerson;
                                             foundReplacement = true;
-                                            console.log(`[END OF MONTH] Assigned ${nextMonthPerson} from next month for ${dayKey}`);
+                                            console.log(`[END OF MONTH] Assigned ${nextMonthPerson} from next month for ${dayKey} (rotation position: ${currentRotPos})`);
                                         }
                                     }
                                     
@@ -8674,10 +8719,14 @@
                         // Also try next month person if at end of month
                         if (!assignedPerson) {
                             // Try next month person first (if at end of month)
-                            const nextMonthPerson = getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, month, year, rotationDays, groupPeople);
+                            // Pass current rotation position for normal/weekend to continue rotation correctly
+                            const currentRotPos = (dayTypeCategory === 'normal' || dayTypeCategory === 'weekend') ? 
+                                (dayTypeCategory === 'normal' ? globalNormalRotationPosition[groupNum] : globalWeekendRotationPosition[groupNum]) : 
+                                rotationPosition;
+                            const nextMonthPerson = getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, month, year, rotationDays, groupPeople, currentRotPos);
                             if (nextMonthPerson) {
                                 assignedPerson = nextMonthPerson;
-                                console.log(`[END OF MONTH FALLBACK] Assigned ${nextMonthPerson} from next month for ${dayKey}`);
+                                console.log(`[END OF MONTH FALLBACK] Assigned ${nextMonthPerson} from next month for ${dayKey} (rotation position: ${currentRotPos})`);
                             }
                         }
                         
