@@ -6105,6 +6105,305 @@
                 console.error('Error saving Step 1 (Special Holidays) to Firestore:', error);
             }
         }
+        
+        // Save Step 2 (Weekends) assignments to Firestore and run skip logic
+        async function saveStep2_Weekends() {
+            try {
+                if (!window.db) {
+                    console.log('Firebase not ready, skipping Step 2 save');
+                    return;
+                }
+                
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                
+                if (!user) {
+                    console.log('User not authenticated, skipping Step 2 save');
+                    return;
+                }
+                
+                const tempWeekendAssignments = calculationSteps.tempWeekendAssignments || {};
+                const lastWeekendRotationPositions = calculationSteps.lastWeekendRotationPositions || {};
+                
+                // First, save weekend assignments to Firestore (without skip logic)
+                if (Object.keys(tempWeekendAssignments).length > 0) {
+                    // Convert to format: dateKey -> "Person (Ομάδα 1), Person (Ομάδα 2), ..."
+                    const formattedAssignments = {};
+                    for (const dateKey in tempWeekendAssignments) {
+                        const groups = tempWeekendAssignments[dateKey];
+                        const parts = [];
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            if (groups[groupNum]) {
+                                parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
+                            }
+                        }
+                        if (parts.length > 0) {
+                            formattedAssignments[dateKey] = parts.join(', ');
+                        }
+                    }
+                    
+                    // Organize by month
+                    const organizedWeekend = organizeAssignmentsByMonth(formattedAssignments);
+                    const sanitizedWeekend = sanitizeForFirestore(organizedWeekend);
+                    
+                    await db.collection('dutyShifts').doc('weekendAssignments').set({
+                        ...sanitizedWeekend,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    console.log('Saved Step 2 weekend assignments (pre-skip) to Firestore:', Object.keys(tempWeekendAssignments).length, 'dates');
+                    
+                    // Also update local memory
+                    Object.assign(weekendAssignments, formattedAssignments);
+                }
+                
+                // Save last rotation positions for weekends
+                if (Object.keys(lastWeekendRotationPositions).length > 0) {
+                    // Update lastRotationPositions for weekends
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        if (lastWeekendRotationPositions[groupNum] !== undefined) {
+                            lastRotationPositions.weekend[groupNum] = lastWeekendRotationPositions[groupNum];
+                        }
+                    }
+                    
+                    // Save to Firestore
+                    const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                    await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                        ...sanitizedPositions,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    console.log('Saved Step 2 last rotation positions for weekends to Firestore:', lastWeekendRotationPositions);
+                }
+                
+                // Now run skip logic and show popup
+                await runWeekendSkipLogic();
+            } catch (error) {
+                console.error('Error saving Step 2 (Weekends) to Firestore:', error);
+            }
+        }
+        
+        // Run skip logic for weekends and show popup with results
+        async function runWeekendSkipLogic() {
+            try {
+                const dayTypeLists = calculationSteps.dayTypeLists || { weekend: [], special: [] };
+                const weekendHolidays = dayTypeLists.weekend || [];
+                const specialHolidays = dayTypeLists.special || [];
+                
+                // Load special holiday assignments from saved data
+                const simulatedSpecialAssignments = {}; // monthKey -> { groupNum -> Set of person names }
+                const sortedSpecial = [...specialHolidays].sort();
+                
+                sortedSpecial.forEach((dateKey) => {
+                    const date = new Date(dateKey + 'T00:00:00');
+                    const month = date.getMonth();
+                    const year = date.getFullYear();
+                    const monthKey = `${year}-${month}`;
+                    
+                    if (!simulatedSpecialAssignments[monthKey]) {
+                        simulatedSpecialAssignments[monthKey] = {};
+                    }
+                    
+                    const assignment = specialHolidayAssignments[dateKey];
+                    if (assignment) {
+                        const parts = assignment.split(',').map(p => p.trim());
+                        parts.forEach(part => {
+                            const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                            if (match) {
+                                const personName = match[1].trim();
+                                const groupNum = parseInt(match[2]);
+                                if (!simulatedSpecialAssignments[monthKey][groupNum]) {
+                                    simulatedSpecialAssignments[monthKey][groupNum] = new Set();
+                                }
+                                simulatedSpecialAssignments[monthKey][groupNum].add(personName);
+                            }
+                        });
+                    }
+                });
+                
+                // Track skipped people and replacements
+                const skippedPeople = []; // Array of { date, groupNum, skippedPerson, replacementPerson }
+                const sortedWeekends = [...weekendHolidays].sort();
+                const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
+                const updatedAssignments = {}; // dateKey -> { groupNum -> personName }
+                
+                // Load current weekend assignments
+                for (const dateKey in weekendAssignments) {
+                    const assignment = weekendAssignments[dateKey];
+                    const parts = assignment.split(',').map(p => p.trim());
+                    parts.forEach(part => {
+                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                        if (match) {
+                            const personName = match[1].trim();
+                            const groupNum = parseInt(match[2]);
+                            if (!updatedAssignments[dateKey]) {
+                                updatedAssignments[dateKey] = {};
+                            }
+                            updatedAssignments[dateKey][groupNum] = personName;
+                        }
+                    });
+                }
+                
+                // Run skip logic
+                sortedWeekends.forEach((dateKey) => {
+                    const date = new Date(dateKey + 'T00:00:00');
+                    const month = date.getMonth();
+                    const year = date.getFullYear();
+                    const monthKey = `${year}-${month}`;
+                    
+                    if (!skippedInMonth[monthKey]) {
+                        skippedInMonth[monthKey] = {};
+                    }
+                    
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        const groupData = groups[groupNum] || { weekend: [] };
+                        const groupPeople = groupData.weekend || [];
+                        
+                        if (groupPeople.length === 0) continue;
+                        
+                        if (!skippedInMonth[monthKey][groupNum]) {
+                            skippedInMonth[monthKey][groupNum] = new Set();
+                        }
+                        
+                        const currentPerson = updatedAssignments[dateKey]?.[groupNum];
+                        if (!currentPerson) continue;
+                        
+                        // Check if person has special holiday in same month
+                        const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(currentPerson) || false;
+                        const wasSkipped = skippedInMonth[monthKey][groupNum].has(currentPerson);
+                        
+                        if (hasSpecialHoliday || wasSkipped) {
+                            skippedInMonth[monthKey][groupNum].add(currentPerson);
+                            
+                            // Find replacement
+                            const rotationDays = groupPeople.length;
+                            const currentIndex = groupPeople.indexOf(currentPerson);
+                            let replacementPerson = null;
+                            
+                            for (let offset = 1; offset < rotationDays; offset++) {
+                                const nextIndex = (currentIndex + offset) % rotationDays;
+                                const candidate = groupPeople[nextIndex];
+                                
+                                if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) {
+                                    continue;
+                                }
+                                
+                                const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
+                                const candidateWasSkipped = skippedInMonth[monthKey][groupNum].has(candidate);
+                                
+                                if (!candidateHasSpecial && !candidateWasSkipped) {
+                                    replacementPerson = candidate;
+                                    break;
+                                }
+                            }
+                            
+                            if (replacementPerson) {
+                                skippedPeople.push({
+                                    date: dateKey,
+                                    dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                    groupNum: groupNum,
+                                    skippedPerson: currentPerson,
+                                    replacementPerson: replacementPerson
+                                });
+                                
+                                // Update assignment
+                                updatedAssignments[dateKey][groupNum] = replacementPerson;
+                            }
+                        }
+                    }
+                });
+                
+                // Update Firestore with final assignments (after skip logic)
+                if (Object.keys(updatedAssignments).length > 0) {
+                    const db = window.db || firebase.firestore();
+                    const user = window.auth?.currentUser;
+                    
+                    const formattedAssignments = {};
+                    for (const dateKey in updatedAssignments) {
+                        const groups = updatedAssignments[dateKey];
+                        const parts = [];
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            if (groups[groupNum]) {
+                                parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
+                            }
+                        }
+                        if (parts.length > 0) {
+                            formattedAssignments[dateKey] = parts.join(', ');
+                        }
+                    }
+                    
+                    const organizedWeekend = organizeAssignmentsByMonth(formattedAssignments);
+                    const sanitizedWeekend = sanitizeForFirestore(organizedWeekend);
+                    
+                    await db.collection('dutyShifts').doc('weekendAssignments').set({
+                        ...sanitizedWeekend,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    
+                    // Update local memory
+                    Object.assign(weekendAssignments, formattedAssignments);
+                }
+                
+                // Show popup with results
+                showWeekendSkipResults(skippedPeople);
+            } catch (error) {
+                console.error('Error running weekend skip logic:', error);
+            }
+        }
+        
+        // Show popup with weekend skip results
+        function showWeekendSkipResults(skippedPeople) {
+            let message = '';
+            
+            if (skippedPeople.length === 0) {
+                message = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>Κανένας δεν παραλείφθηκε!</strong><br>Όλοι οι άνθρωποι που είχαν ειδική αργία τον ίδιο μήνα παραλείφθηκαν σωστά.</div>';
+            } else {
+                message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Παραλείφθηκαν ' + skippedPeople.length + ' άτομα:</strong><br><br>';
+                message += '<table class="table table-sm table-bordered">';
+                message += '<thead><tr><th>Ημερομηνία</th><th>Ομάδα</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th></tr></thead><tbody>';
+                
+                skippedPeople.forEach(item => {
+                    const groupName = getGroupName(item.groupNum);
+                    message += `<tr><td>${item.dateStr}</td><td>${groupName}</td><td><strong>${item.skippedPerson}</strong></td><td><strong>${item.replacementPerson}</strong></td></tr>`;
+                });
+                
+                message += '</tbody></table></div>';
+            }
+            
+            // Create and show modal
+            const modalHtml = `
+                <div class="modal fade" id="weekendSkipResultsModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Αποτελέσματα Παραλείψεων Σαββατοκύριακων</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                ${message}
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Remove existing modal if any
+            const existingModal = document.getElementById('weekendSkipResultsModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            // Add modal to body
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('weekendSkipResultsModal'));
+            modal.show();
+        }
 
         function goToPreviousStep() {
             if (calculationSteps.currentStep > 1) {
