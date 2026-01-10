@@ -4778,15 +4778,24 @@
             return d;
         }
         
-        // Helper function to calculate rotation position based on days since February 2026
-        // Initial month is February 2026 (month 0)
+        // Helper function to calculate rotation position based on days since start date
+        // Uses calculationSteps.startDate if available, otherwise defaults to February 2026
         // Returns the rotation position (0-based index) for a given date and day type
         function getRotationPosition(date, dayTypeCategory, groupNum) {
-            const initialMonth = new Date(2026, 1, 1); // February 2026 (month 1 = February, 0-indexed)
+            // Use the actual start date from calculationSteps if available, otherwise default to February 2026
+            let initialMonth;
+            if (calculationSteps && calculationSteps.startDate) {
+                initialMonth = new Date(calculationSteps.startDate);
+                initialMonth.setHours(0, 0, 0, 0);
+            } else {
+                initialMonth = new Date(2026, 1, 1); // February 2026 (month 1 = February, 0-indexed)
+            }
+            
             const targetDate = new Date(date);
             targetDate.setHours(0, 0, 0, 0);
             
-            // Count how many days of this type have occurred since February 2026
+            // Count how many days of this type have occurred since the start date
+            // Start counting from 0 so the first day maps to index 0 (first person)
             let count = 0;
             const currentDate = new Date(initialMonth);
             
@@ -4803,6 +4812,8 @@
                 }
                 
                 if (typeCategory === dayTypeCategory) {
+                    // Only increment count after we've found a matching day type
+                    // This ensures the first day of this type gets count = 0 (maps to first person)
                     count++;
                 }
                 
@@ -4810,8 +4821,9 @@
                 currentDate.setDate(currentDate.getDate() + 1);
             }
             
-            // Return the count (will be used with modulo in the calling code)
-            return count;
+            // Subtract 1 from count so the first day maps to 0 (first person), not 1 (second person)
+            // If count is 0 (no matching days found), return 0
+            return Math.max(0, count - 1);
         }
         
         // Helper function to store assignment reason
