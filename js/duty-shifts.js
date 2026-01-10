@@ -30,8 +30,8 @@
         // Example: crossMonthSwaps["2026-03-05"][1] = "Person A" means Person A must be assigned to March 5, Group 1
         let crossMonthSwaps = {};
         // Track last rotation position for each day type per month per group
-        // Structure: lastRotationPositions[monthKey][dayType][groupNum] = rotationPosition
-        // Example: lastRotationPositions["2026-2"]["normal"][1] = 5 means last normal day in Feb 2026, Group 1 was at rotation position 5
+        // Structure: lastRotationPositions[monthKey][dayType][groupNum] = { rotationPosition: number, personName: string }
+        // Example: lastRotationPositions["2026-2"]["normal"][1] = { rotationPosition: 5, personName: "John Doe" }
         let lastRotationPositions = {};
         
         // Helper functions to get/set assignments based on day type
@@ -6708,9 +6708,11 @@
                         if (lastRotationPositions[prevMonthKey] && 
                             lastRotationPositions[prevMonthKey]['special'] && 
                             lastRotationPositions[prevMonthKey]['special'][groupNum] !== undefined) {
-                            // Use saved position from previous month
-                            rotationPosition = lastRotationPositions[prevMonthKey]['special'][groupNum] % rotationDays;
-                            console.log(`[PREVIEW ROTATION] Using saved special rotation position for ${prevMonthKey}, Group ${groupNum}: ${rotationPosition}`);
+                            // Use saved position from previous month (handle both old format (number) and new format (object))
+                            const savedData = lastRotationPositions[prevMonthKey]['special'][groupNum];
+                            const savedPos = typeof savedData === 'object' ? savedData.rotationPosition : savedData;
+                            rotationPosition = savedPos % rotationDays;
+                            console.log(`[PREVIEW ROTATION] Using saved special rotation position for ${prevMonthKey}, Group ${groupNum}: ${rotationPosition} (person: ${typeof savedData === 'object' ? savedData.personName : 'N/A'})`);
                         } else {
                             // Initialize based on rotation count from February 2026 (first time only)
                             rotationPosition = getRotationPosition(date, 'special', groupNum) % rotationDays;
@@ -6759,11 +6761,13 @@
                             const prevYear = month === 0 ? year - 1 : year;
                             const prevMonthKey = `${prevYear}-${prevMonth}`;
                             
-                            if (lastRotationPositions[prevMonthKey] && 
-                                lastRotationPositions[prevMonthKey]['weekend'] && 
+                            if (lastRotationPositions[prevMonthKey] &&
+                                lastRotationPositions[prevMonthKey]['weekend'] &&
                                 lastRotationPositions[prevMonthKey]['weekend'][groupNum] !== undefined) {
-                                // Use saved position from previous month
-                                globalWeekendRotationPosition[groupNum] = lastRotationPositions[prevMonthKey]['weekend'][groupNum];
+                                // Use saved position from previous month (handle both old format (number) and new format (object))
+                                const savedData = lastRotationPositions[prevMonthKey]['weekend'][groupNum];
+                                globalWeekendRotationPosition[groupNum] = typeof savedData === 'object' ? savedData.rotationPosition : savedData;
+                                console.log(`[PREVIEW ROTATION] Using saved weekend rotation position for ${prevMonthKey}, Group ${groupNum}: ${globalWeekendRotationPosition[groupNum]} (person: ${typeof savedData === 'object' ? savedData.personName : 'N/A'})`);
                                 console.log(`[PREVIEW ROTATION] Using saved weekend rotation position for ${prevMonthKey}, Group ${groupNum}: ${globalWeekendRotationPosition[groupNum]}`);
                             } else {
                                 // Initialize based on rotation count from February 2026 (first time only)
@@ -6884,9 +6888,10 @@
                                 if (lastRotationPositions[prevMonthKey] && 
                                     lastRotationPositions[prevMonthKey]['semi'] && 
                                     lastRotationPositions[prevMonthKey]['semi'][groupNum] !== undefined) {
-                                    // Use saved position from previous month
-                                    globalSemiRotationPosition[groupNum] = lastRotationPositions[prevMonthKey]['semi'][groupNum];
-                                    console.log(`[PREVIEW ROTATION] Using saved semi rotation position for ${prevMonthKey}, Group ${groupNum}: ${globalSemiRotationPosition[groupNum]}`);
+                                    // Use saved position from previous month (handle both old format (number) and new format (object))
+                                    const savedData = lastRotationPositions[prevMonthKey]['semi'][groupNum];
+                                    globalSemiRotationPosition[groupNum] = typeof savedData === 'object' ? savedData.rotationPosition : savedData;
+                                    console.log(`[PREVIEW ROTATION] Using saved semi rotation position for ${prevMonthKey}, Group ${groupNum}: ${globalSemiRotationPosition[groupNum]} (person: ${typeof savedData === 'object' ? savedData.personName : 'N/A'})`);
                                 } else {
                                     // Initialize based on rotation count from February 2026 (first time only)
                                     const daysSinceStart = getRotationPosition(date, 'semi', groupNum);
@@ -7480,11 +7485,13 @@
                                 const prevYear = month === 0 ? year - 1 : year;
                                 const prevMonthKey = `${prevYear}-${prevMonth}`;
                                 
-                                if (lastRotationPositions[prevMonthKey] && 
-                                    lastRotationPositions[prevMonthKey]['normal'] && 
+                                if (lastRotationPositions[prevMonthKey] &&
+                                    lastRotationPositions[prevMonthKey]['normal'] &&
                                     lastRotationPositions[prevMonthKey]['normal'][groupNum] !== undefined) {
-                                    // Use saved position from previous month
-                                    globalNormalRotationPosition[groupNum] = lastRotationPositions[prevMonthKey]['normal'][groupNum];
+                                    // Use saved position from previous month (handle both old format (number) and new format (object))
+                                    const savedData = lastRotationPositions[prevMonthKey]['normal'][groupNum];
+                                    globalNormalRotationPosition[groupNum] = typeof savedData === 'object' ? savedData.rotationPosition : savedData;
+                                    console.log(`[PREVIEW ROTATION] Using saved normal rotation position for ${prevMonthKey}, Group ${groupNum}: ${globalNormalRotationPosition[groupNum]} (person: ${typeof savedData === 'object' ? savedData.personName : 'N/A'})`);
                                     console.log(`[PREVIEW ROTATION] Using saved normal rotation position for ${prevMonthKey}, Group ${groupNum}: ${globalNormalRotationPosition[groupNum]}`);
                                 } else {
                                     // Initialize based on rotation count from February 2026 (first time only)
@@ -8490,9 +8497,9 @@
                     // Use global crossMonthSwaps variable (loaded from Firestore/localStorage)
                     // Structure: crossMonthSwaps[dateKey][groupNum] = personName
                     
-                    // Track last rotation position for each month (to save at end of month)
-                    // Structure: lastRotationForMonth[monthKey][dayTypeCategory][groupNum] = rotationPosition
-                    const lastRotationForMonth = {}; // monthKey -> { dayTypeCategory -> { groupNum -> rotationPosition } }
+                    // Track last rotation position and person name for each month (to save at end of month)
+                    // Structure: lastRotationForMonth[monthKey][dayTypeCategory][groupNum] = { rotationPosition: number, personName: string }
+                    const lastRotationForMonth = {}; // monthKey -> { dayTypeCategory -> { groupNum -> { rotationPosition, personName } } }
                     
                     // Process each day in order
                     days.forEach((dayKey, dayIndex) => {
@@ -8535,10 +8542,13 @@
                         const prevYear = month === 0 ? year - 1 : year;
                         const prevMonthKey = `${prevYear}-${prevMonth}`;
                         
-                        if (lastRotationPositions[prevMonthKey] && 
-                            lastRotationPositions[prevMonthKey][dayTypeCategory] && 
-                            lastRotationPositions[prevMonthKey][dayTypeCategory][groupNum] !== undefined) {
-                            savedRotationPosition = lastRotationPositions[prevMonthKey][dayTypeCategory][groupNum];
+                            if (lastRotationPositions[prevMonthKey] &&
+                                lastRotationPositions[prevMonthKey][dayTypeCategory] &&
+                                lastRotationPositions[prevMonthKey][dayTypeCategory][groupNum] !== undefined) {
+                                // Handle both old format (number) and new format (object)
+                                const savedData = lastRotationPositions[prevMonthKey][dayTypeCategory][groupNum];
+                                savedRotationPosition = typeof savedData === 'object' ? savedData.rotationPosition : savedData;
+                                console.log(`[CALCULATION ROTATION] Using saved ${dayTypeCategory} rotation position for ${prevMonthKey}, Group ${groupNum}: ${savedRotationPosition} (person: ${typeof savedData === 'object' ? savedData.personName : 'N/A'})`);
                             console.log(`[ROTATION] Using saved rotation position for ${prevMonthKey}, ${dayTypeCategory}, Group ${groupNum}: ${savedRotationPosition}`);
                         }
                         
@@ -9341,8 +9351,10 @@
                         }
                         
                         // Assign person to day (uses setAssignmentForDate which saves to correct document)
+                        let finalAssignedPerson = null;
                         if (assignedPerson) {
                             assignPersonToDay(dayKey, assignedPerson, groupNum);
+                            finalAssignedPerson = assignedPerson;
                         }
                         
                         // If person was skipped due to conflict, find next available day for them
@@ -9631,9 +9643,9 @@
                             }
                         }
                         
-                        // Track last rotation position for this month at the END of processing this day
-                        // This ensures we capture the rotation position after all advances have occurred
-                        // Save the rotation position (the person who would normally be assigned, even if swapped)
+                        // Track last rotation position and person name for this month at the END of processing this day
+                        // This ensures we capture the rotation position and person name after all advances have occurred
+                        // Save the rotation position AND the person name who was actually assigned (even if swapped)
                         if (!lastRotationForMonth[monthKey]) {
                             lastRotationForMonth[monthKey] = {};
                         }
@@ -9651,13 +9663,23 @@
                         } else if (dayTypeCategory === 'special' && globalSpecialRotationPosition[groupNum] !== undefined) {
                             finalRotationPos = globalSpecialRotationPosition[groupNum];
                         }
-                        // Always save the rotation position if it's defined (even if 0)
-                        if (finalRotationPos !== null && finalRotationPos !== undefined) {
-                            lastRotationForMonth[monthKey][dayTypeCategory][groupNum] = finalRotationPos;
+                        // Save both rotation position and person name if we have an assigned person
+                        if (finalRotationPos !== null && finalRotationPos !== undefined && finalAssignedPerson) {
+                            lastRotationForMonth[monthKey][dayTypeCategory][groupNum] = {
+                                rotationPosition: finalRotationPos,
+                                personName: finalAssignedPerson
+                            };
+                            console.log(`[ROTATION TRACK] Tracking for ${monthKey}, ${dayTypeCategory}, Group ${groupNum}: position=${finalRotationPos}, person=${finalAssignedPerson}`);
+                        } else if (finalRotationPos !== null && finalRotationPos !== undefined) {
+                            // Save rotation position even if no person assigned (shouldn't happen, but for safety)
+                            lastRotationForMonth[monthKey][dayTypeCategory][groupNum] = {
+                                rotationPosition: finalRotationPos,
+                                personName: null
+                            };
                         }
                     });
                     
-                    // After processing all days, save last rotation positions for each month to global variable
+                    // After processing all days, save last rotation positions and person names for each month to global variable
                     // This will be saved to Firestore when saveData() is called
                     console.log(`[ROTATION SAVE] Processing lastRotationForMonth:`, Object.keys(lastRotationForMonth).length, 'months');
                     for (const monthKey in lastRotationForMonth) {
@@ -9669,9 +9691,9 @@
                                 lastRotationPositions[monthKey][dayType] = {};
                             }
                             for (const grpNum in lastRotationForMonth[monthKey][dayType]) {
-                                const rotationPos = lastRotationForMonth[monthKey][dayType][grpNum];
-                                lastRotationPositions[monthKey][dayType][grpNum] = rotationPos;
-                                console.log(`[ROTATION SAVE] Saved last rotation position for ${monthKey}, ${dayType}, Group ${grpNum}: ${rotationPos}`);
+                                const rotationData = lastRotationForMonth[monthKey][dayType][grpNum];
+                                lastRotationPositions[monthKey][dayType][grpNum] = rotationData;
+                                console.log(`[ROTATION SAVE] Saved for ${monthKey}, ${dayType}, Group ${grpNum}: position=${rotationData.rotationPosition}, person=${rotationData.personName}`);
                             }
                         }
                     }
