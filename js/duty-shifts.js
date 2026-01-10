@@ -483,6 +483,21 @@
                     console.log('No criticalAssignments document found in Firestore');
                 }
                 
+                // Load assignment reasons (swap/skip indicators)
+                const assignmentReasonsDoc = await db.collection('dutyShifts').doc('assignmentReasons').get();
+                if (assignmentReasonsDoc.exists) {
+                    const data = assignmentReasonsDoc.data();
+                    // Remove metadata fields
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    assignmentReasons = data || {};
+                    console.log('Loaded assignmentReasons from Firestore:', Object.keys(assignmentReasons).length, 'dates');
+                    console.log('Sample assignmentReasons:', Object.entries(assignmentReasons).slice(0, 3));
+                } else {
+                    console.log('No assignmentReasons document found in Firestore, starting with empty reasons');
+                    assignmentReasons = {};
+                }
+                
                 // Load rankings from Firestore
                 const rankingsDoc = await db.collection('dutyShifts').doc('rankings').get();
                 if (rankingsDoc.exists) {
@@ -709,6 +724,14 @@
                 });
             }
             
+            // Load assignment reasons (swap/skip indicators)
+            const savedAssignmentReasons = localStorage.getItem('dutyShiftsAssignmentReasons');
+            if (savedAssignmentReasons) {
+                assignmentReasons = JSON.parse(savedAssignmentReasons);
+            } else {
+                assignmentReasons = {};
+            }
+            
             // Load rankings
             const savedRankings = localStorage.getItem('dutyShiftsRankings');
             if (savedRankings) {
@@ -887,6 +910,23 @@
                 });
                 } catch (error) {
                     console.error('Error saving criticalAssignments to Firestore:', error);
+                }
+                
+                // Save assignment reasons (swap/skip indicators) separately
+                try {
+                    console.log('Saving assignmentReasons to Firestore:', Object.keys(assignmentReasons).length, 'dates');
+                    if (Object.keys(assignmentReasons).length > 0) {
+                        console.log('Sample assignmentReasons being saved:', Object.entries(assignmentReasons).slice(0, 3));
+                    }
+                    const sanitizedReasons = sanitizeForFirestore(assignmentReasons);
+                    await db.collection('dutyShifts').doc('assignmentReasons').set({
+                        ...sanitizedReasons,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    console.log('Assignment reasons saved to Firestore successfully');
+                } catch (error) {
+                    console.error('Error saving assignmentReasons to Firestore:', error);
                 }
                 
                 // Save rankings to Firestore ONLY if they have been modified
@@ -1082,6 +1122,7 @@
             // Also save legacy dutyAssignments for backward compatibility
             localStorage.setItem('dutyShiftsAssignments', JSON.stringify(dutyAssignments));
             localStorage.setItem('dutyShiftsCriticalAssignments', JSON.stringify(criticalAssignments));
+            localStorage.setItem('dutyShiftsAssignmentReasons', JSON.stringify(assignmentReasons));
             localStorage.setItem('dutyShiftsRankings', JSON.stringify(rankings));
         }
 
