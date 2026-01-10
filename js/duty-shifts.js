@@ -6038,8 +6038,11 @@
                 }
                 
                 // If moving from Step 2 (Weekends), save assignments and run skip logic
+                // NOTE: Step 3 will be rendered after OK is pressed in the modal
                 if (calculationSteps.currentStep === 2) {
                     await saveStep2_Weekends();
+                    // Don't increment step here - it will be done when OK is pressed in modal
+                    return;
                 }
                 
                 calculationSteps.currentStep++;
@@ -6125,7 +6128,7 @@
                 const tempWeekendAssignments = calculationSteps.tempWeekendAssignments || {};
                 const lastWeekendRotationPositions = calculationSteps.lastWeekendRotationPositions || {};
                 
-                // First, save weekend assignments to Firestore (without skip logic)
+                // First, save weekend assignments to assignments document (pre-skip)
                 if (Object.keys(tempWeekendAssignments).length > 0) {
                     // Convert to format: dateKey -> "Person (Ομάδα 1), Person (Ομάδα 2), ..."
                     const formattedAssignments = {};
@@ -6142,16 +6145,16 @@
                         }
                     }
                     
-                    // Organize by month
-                    const organizedWeekend = organizeAssignmentsByMonth(formattedAssignments);
-                    const sanitizedWeekend = sanitizeForFirestore(organizedWeekend);
+                    // Save to assignments document (pre-skip)
+                    const organizedAssignments = organizeAssignmentsByMonth(formattedAssignments);
+                    const sanitizedAssignments = sanitizeForFirestore(organizedAssignments);
                     
-                    await db.collection('dutyShifts').doc('weekendAssignments').set({
-                        ...sanitizedWeekend,
+                    await db.collection('dutyShifts').doc('assignments').set({
+                        ...sanitizedAssignments,
                         lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                         updatedBy: user.uid
                     });
-                    console.log('Saved Step 2 weekend assignments (pre-skip) to Firestore:', Object.keys(tempWeekendAssignments).length, 'dates');
+                    console.log('Saved Step 2 weekend assignments (pre-skip) to assignments document:', Object.keys(tempWeekendAssignments).length, 'dates');
                     
                     // Also update local memory
                     Object.assign(weekendAssignments, formattedAssignments);
@@ -6313,47 +6316,18 @@
                     }
                 });
                 
-                // Update Firestore with final assignments (after skip logic)
-                if (Object.keys(updatedAssignments).length > 0) {
-                    const db = window.db || firebase.firestore();
-                    const user = window.auth?.currentUser;
-                    
-                    const formattedAssignments = {};
-                    for (const dateKey in updatedAssignments) {
-                        const groups = updatedAssignments[dateKey];
-                        const parts = [];
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            if (groups[groupNum]) {
-                                parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
-                            }
-                        }
-                        if (parts.length > 0) {
-                            formattedAssignments[dateKey] = parts.join(', ');
-                        }
-                    }
-                    
-                    const organizedWeekend = organizeAssignmentsByMonth(formattedAssignments);
-                    const sanitizedWeekend = sanitizeForFirestore(organizedWeekend);
-                    
-                    await db.collection('dutyShifts').doc('weekendAssignments').set({
-                        ...sanitizedWeekend,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
-                    
-                    // Update local memory
-                    Object.assign(weekendAssignments, formattedAssignments);
-                }
+                // Store final assignments (after skip logic) for saving when OK is pressed
+                calculationSteps.finalWeekendAssignments = updatedAssignments;
                 
-                // Show popup with results
-                showWeekendSkipResults(skippedPeople);
+                // Show popup with results (will save when OK is pressed)
+                showWeekendSkipResults(skippedPeople, updatedAssignments);
             } catch (error) {
                 console.error('Error running weekend skip logic:', error);
             }
         }
         
         // Show popup with weekend skip results
-        function showWeekendSkipResults(skippedPeople) {
+        function showWeekendSkipResults(skippedPeople, updatedAssignments) {
             let message = '';
             
             if (skippedPeople.length === 0) {
@@ -6384,7 +6358,7 @@
                                 ${message}
                             </div>
                             <div class="modal-footer">
-                                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                                <button type="button" class="btn btn-primary" id="weekendSkipOkButton" data-bs-dismiss="modal">OK</button>
                             </div>
                         </div>
                     </div>
@@ -6403,6 +6377,66 @@
             // Show modal
             const modal = new bootstrap.Modal(document.getElementById('weekendSkipResultsModal'));
             modal.show();
+            
+            // When OK is pressed, save final assignments and proceed to Step 3
+            const okButton = document.getElementById('weekendSkipOkButton');
+            if (okButton) {
+                okButton.addEventListener('click', async function() {
+                    await saveFinalWeekendAssignments(updatedAssignments);
+                    // Proceed to Step 3
+                    calculationSteps.currentStep = 3;
+                    renderCurrentStep();
+                });
+            }
+        }
+        
+        // Save final weekend assignments (after skip logic) to weekendAssignments document
+        async function saveFinalWeekendAssignments(updatedAssignments) {
+            try {
+                if (!window.db) {
+                    console.log('Firebase not ready, skipping final weekend assignments save');
+                    return;
+                }
+                
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                
+                if (!user) {
+                    console.log('User not authenticated, skipping final weekend assignments save');
+                    return;
+                }
+                
+                if (Object.keys(updatedAssignments).length > 0) {
+                    const formattedAssignments = {};
+                    for (const dateKey in updatedAssignments) {
+                        const groups = updatedAssignments[dateKey];
+                        const parts = [];
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            if (groups[groupNum]) {
+                                parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
+                            }
+                        }
+                        if (parts.length > 0) {
+                            formattedAssignments[dateKey] = parts.join(', ');
+                        }
+                    }
+                    
+                    const organizedWeekend = organizeAssignmentsByMonth(formattedAssignments);
+                    const sanitizedWeekend = sanitizeForFirestore(organizedWeekend);
+                    
+                    await db.collection('dutyShifts').doc('weekendAssignments').set({
+                        ...sanitizedWeekend,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    console.log('Saved Step 2 final weekend assignments (after skip logic) to weekendAssignments document');
+                    
+                    // Update local memory
+                    Object.assign(weekendAssignments, formattedAssignments);
+                }
+            } catch (error) {
+                console.error('Error saving final weekend assignments:', error);
+            }
         }
 
         function goToPreviousStep() {
@@ -7211,98 +7245,25 @@
                                 // Advance rotation normally from this position
                                 globalSemiRotationPosition[groupNum] = rotationPosition + 1;
                             } else {
-                                // Normal assignment logic
+                                // PREVIEW MODE: Just show basic rotation WITHOUT consecutive day swap logic
+                                // Swap logic will run when Next is pressed
                                 
-                                // Check for consecutive conflicts with weekend or special holiday
-                                const dayBefore = new Date(date);
-                                dayBefore.setDate(dayBefore.getDate() - 1);
-                                const dayAfter = new Date(date);
-                                dayAfter.setDate(dayAfter.getDate() + 1);
-                                
-                                const dayBeforeKey = formatDateKey(dayBefore);
-                                const dayAfterKey = formatDateKey(dayAfter);
-                                
-                                const beforeType = getDayType(dayBefore);
-                                const afterType = getDayType(dayAfter);
-                                
-                                // Check if assigned person has consecutive weekend or special holiday
-                                let hasConsecutiveConflict = false;
-                                if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                                    // Check day before
-                                    if (beforeType === 'weekend-holiday' || beforeType === 'special-holiday') {
-                                        const personBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] || 
-                                                           (beforeType === 'special-holiday' ? 
-                                                            (simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(assignedPerson) ? assignedPerson : null) : null);
-                                        if (personBefore === assignedPerson) {
-                                            hasConsecutiveConflict = true;
-                                        }
-                                    }
-                                    
-                                    // Check day after
-                                    if (!hasConsecutiveConflict && (afterType === 'weekend-holiday' || afterType === 'special-holiday')) {
-                                        const personAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] || 
-                                                           (afterType === 'special-holiday' ? 
-                                                            (simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(assignedPerson) ? assignedPerson : null) : null);
-                                        if (personAfter === assignedPerson) {
-                                            hasConsecutiveConflict = true;
-                                        }
-                                    }
-                                }
-                                
-                                // If there's a conflict, swap with next person
-                                if (hasConsecutiveConflict && assignedPerson) {
-                                    const skippedPerson = assignedPerson;
-                                    
-                                    // Find next person in rotation who doesn't have conflict
-                                    let swappedPerson = null;
-                                    let swappedIndex = null;
-                                    
+                                // Check if assigned person is missing, if so find next in rotation
+                                if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
+                                    // Find next person in rotation who is not missing
                                     for (let offset = 1; offset < rotationDays; offset++) {
                                         const nextIndex = (rotationPosition + offset) % rotationDays;
                                         const candidate = groupPeople[nextIndex];
-                                        
-                                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) {
-                                            continue;
-                                        }
-                                        
-                                        // Check if candidate has consecutive conflict on THIS day
-                                        let candidateHasConflict = false;
-                                        const candidateBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] || 
-                                                               (beforeType === 'special-holiday' ? 
-                                                                (simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(candidate) ? candidate : null) : null);
-                                        const candidateAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] || 
-                                                              (afterType === 'special-holiday' ? 
-                                                               (simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(candidate) ? candidate : null) : null);
-                                        
-                                        if (candidateBefore === candidate || candidateAfter === candidate) {
-                                            candidateHasConflict = true;
-                                        }
-                                        
-                                        if (!candidateHasConflict) {
-                                            swappedPerson = candidate;
-                                            swappedIndex = nextIndex;
-                                            // Swap: candidate gets this day
+                                        if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
                                             assignedPerson = candidate;
-                                            // Store that skipped person should be assigned to candidate's original position (nextIndex)
-                                            // This will be handled when rotationPosition reaches nextIndex
-                                            pendingSwaps[monthKey][groupNum] = {
-                                                skippedPerson: skippedPerson,
-                                                swapToPosition: nextIndex
-                                            };
-                                            // Advance rotation to candidate's position + 1 (so next iteration will be nextIndex)
-                                            globalSemiRotationPosition[groupNum] = nextIndex;
+                                            rotationPosition = nextIndex;
                                             break;
                                         }
                                     }
-                                    
-                                    // If no swap found, still assign original person (they'll have conflict but it's unavoidable)
-                                    if (!swappedPerson) {
-                                        globalSemiRotationPosition[groupNum] = rotationPosition + 1;
-                                    }
-                                } else {
-                                    // No conflict, assign normally and advance rotation
-                                    globalSemiRotationPosition[groupNum] = rotationPosition + 1;
                                 }
+                                
+                                // Advance rotation position
+                                globalSemiRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                             }
                             
                             // Store assignment for potential future swaps
