@@ -11240,6 +11240,12 @@
                         });
                     }
                 }
+            }
+            
+            // Display violations in modal
+            displayRotationViolations(violations);
+        }
+        
         // Display rotation violations in modal
         function displayRotationViolations(violations) {
             const tableBody = document.getElementById('rotationViolationsTableBody');
