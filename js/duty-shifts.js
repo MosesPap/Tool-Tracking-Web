@@ -5204,6 +5204,7 @@
 
         // Helper function to get a person from next month's rotation when conflicts occur at end of month
         // This temporarily calculates the next month to find the correct person according to rotation logic
+        // For normal days, follows swap logic: Monday↔Wednesday, Tuesday↔Thursday
         function getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, currentMonth, currentYear, rotationDays, groupPeople, currentRotationPosition = null) {
             // Check if we're in the last 3 days of the month (end of month)
             const date = new Date(dayKey + 'T00:00:00');
@@ -5219,10 +5220,109 @@
             const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
             const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
             
-            // Get first day of next month of the same day type
+            // Get first and last day of next month
             const firstDayOfNextMonth = new Date(nextYear, nextMonth, 1);
             const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0);
             
+            // For normal days, follow swap logic: Monday↔Wednesday, Tuesday↔Thursday
+            if (dayTypeCategory === 'normal') {
+                const currentDayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
+                
+                // Determine swap day pairs: Monday↔Wednesday (1↔3), Tuesday↔Thursday (2↔4)
+                let targetDayOfWeek = null;
+                let alternativeDayOfWeek = null;
+                if (currentDayOfWeek === 1) { // Monday
+                    targetDayOfWeek = 1; // Next Monday
+                    alternativeDayOfWeek = 3; // Wednesday (preferred for swap)
+                } else if (currentDayOfWeek === 2) { // Tuesday
+                    targetDayOfWeek = 2; // Next Tuesday
+                    alternativeDayOfWeek = 4; // Thursday (preferred for swap)
+                } else if (currentDayOfWeek === 3) { // Wednesday
+                    targetDayOfWeek = 3; // Next Wednesday
+                    alternativeDayOfWeek = 1; // Monday (preferred for swap)
+                } else if (currentDayOfWeek === 4) { // Thursday
+                    targetDayOfWeek = 4; // Next Thursday
+                    alternativeDayOfWeek = 2; // Tuesday (preferred for swap)
+                }
+                
+                // Try to find swap day in next month following the swap logic
+                let swapDayInNextMonth = null;
+                
+                if (alternativeDayOfWeek !== null) {
+                    // PRIORITY 1: Try alternative day of week first (e.g., Wednesday for Monday)
+                    const checkDate = new Date(firstDayOfNextMonth);
+                    while (checkDate <= lastDayOfNextMonth) {
+                        const checkDayType = getDayType(checkDate);
+                        if (checkDayType === 'normal-day' && checkDate.getDay() === alternativeDayOfWeek) {
+                            swapDayInNextMonth = new Date(checkDate);
+                            break;
+                        }
+                        checkDate.setDate(checkDate.getDate() + 1);
+                    }
+                }
+                
+                // PRIORITY 2: If alternative not found, try same day of week (e.g., next Monday for Monday)
+                if (!swapDayInNextMonth && targetDayOfWeek !== null) {
+                    const checkDate = new Date(firstDayOfNextMonth);
+                    while (checkDate <= lastDayOfNextMonth) {
+                        const checkDayType = getDayType(checkDate);
+                        if (checkDayType === 'normal-day' && checkDate.getDay() === targetDayOfWeek) {
+                            swapDayInNextMonth = new Date(checkDate);
+                            break;
+                        }
+                        checkDate.setDate(checkDate.getDate() + 1);
+                    }
+                }
+                
+                // If no swap day found in next month, fall back to first normal day
+                if (!swapDayInNextMonth) {
+                    const checkDate = new Date(firstDayOfNextMonth);
+                    while (checkDate <= lastDayOfNextMonth) {
+                        const checkDayType = getDayType(checkDate);
+                        if (checkDayType === 'normal-day') {
+                            swapDayInNextMonth = new Date(checkDate);
+                            break;
+                        }
+                        checkDate.setDate(checkDate.getDate() + 1);
+                    }
+                }
+                
+                if (!swapDayInNextMonth) {
+                    return null;
+                }
+                
+                // Calculate rotation position for the swap day in next month
+                // Rotation continues globally from current month
+                let nextMonthRotationPosition;
+                if (currentRotationPosition !== null && currentRotationPosition !== undefined) {
+                    // Count how many normal days are between current day and swap day in next month
+                    // This ensures we get the correct rotation position
+                    const swapDayKey = formatDateKey(swapDayInNextMonth);
+                    const swapRotationPosition = getRotationPosition(swapDayInNextMonth, 'normal', groupNum) % rotationDays;
+                    nextMonthRotationPosition = swapRotationPosition;
+                } else {
+                    // Fallback: calculate from start date
+                    nextMonthRotationPosition = getRotationPosition(swapDayInNextMonth, 'normal', groupNum) % rotationDays;
+                }
+                
+                const nextMonthPerson = groupPeople[nextMonthRotationPosition];
+                
+                // Check if this person from next month has conflicts on the current day
+                if (nextMonthPerson && !isPersonMissingOnDate(nextMonthPerson, groupNum, date)) {
+                    const hasConflict = hasConsecutiveDuty(dayKey, nextMonthPerson, groupNum);
+                    
+                    if (!hasConflict) {
+                        const swapDayKey = formatDateKey(swapDayInNextMonth);
+                        const swapDayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][swapDayInNextMonth.getDay()];
+                        console.log(`[END OF MONTH SWAP] Using person from next month: ${nextMonthPerson} for ${dayKey} (swap day: ${swapDayKey} - ${swapDayName}, rotation position: ${nextMonthRotationPosition})`);
+                        return nextMonthPerson;
+                    }
+                }
+                
+                return null;
+            }
+            
+            // For other day types (weekend, semi, special), use original logic
             // Find first day of this type in next month
             let firstDayOfTypeInNextMonth = null;
             const checkDate = new Date(firstDayOfNextMonth);
@@ -5250,11 +5350,11 @@
             }
             
             // Calculate rotation position for first day of this type in next month
-            // For normal days and weekends, rotation continues globally from current month
+            // For weekends, rotation continues globally from current month
             // For special and semi, use direct rotation calculation
             let nextMonthRotationPosition;
             
-            if (dayTypeCategory === 'normal' || dayTypeCategory === 'weekend') {
+            if (dayTypeCategory === 'weekend') {
                 // Rotation continues globally - if we have current rotation position, advance it
                 // Otherwise calculate from start date
                 if (currentRotationPosition !== null && currentRotationPosition !== undefined) {
