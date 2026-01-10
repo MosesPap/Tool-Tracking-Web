@@ -1046,17 +1046,15 @@
                 // Save last rotation positions for each month and day type
                 try {
                     console.log('Saving lastRotationPositions to Firestore:', Object.keys(lastRotationPositions).length, 'months');
-                    if (Object.keys(lastRotationPositions).length > 0) {
-                        const sanitizedLastRotation = sanitizeForFirestore(lastRotationPositions);
-                        await db.collection('dutyShifts').doc('lastRotationPositions').set({
-                            ...sanitizedLastRotation,
-                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                            updatedBy: user.uid
-                        });
-                        console.log('Saved lastRotationPositions to Firestore successfully');
-                    } else {
-                        console.log('No lastRotationPositions to save');
-                    }
+                    console.log('lastRotationPositions content:', JSON.stringify(lastRotationPositions, null, 2));
+                    // Always save, even if empty (to create the document structure)
+                    const sanitizedLastRotation = sanitizeForFirestore(lastRotationPositions);
+                    await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                        ...sanitizedLastRotation,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    console.log('Saved lastRotationPositions to Firestore successfully');
                 } catch (error) {
                     console.error('Error saving lastRotationPositions to Firestore:', error);
                 }
@@ -9347,30 +9345,6 @@
                             assignPersonToDay(dayKey, assignedPerson, groupNum);
                         }
                         
-                        // Track last rotation position for this month (save the rotation position, not the swapped person)
-                        // This ensures next month continues from where this month left off
-                        if (!lastRotationForMonth[monthKey]) {
-                            lastRotationForMonth[monthKey] = {};
-                        }
-                        if (!lastRotationForMonth[monthKey][dayTypeCategory]) {
-                            lastRotationForMonth[monthKey][dayTypeCategory] = {};
-                        }
-                        // Save the current rotation position (the person who would normally be assigned, even if swapped)
-                        // Use the global rotation position which tracks the normal rotation, ignoring swaps
-                        let currentRotationPos = null;
-                        if (dayTypeCategory === 'normal') {
-                            currentRotationPos = globalNormalRotationPosition[groupNum];
-                        } else if (dayTypeCategory === 'weekend') {
-                            currentRotationPos = globalWeekendRotationPosition[groupNum];
-                        } else if (dayTypeCategory === 'semi') {
-                            currentRotationPos = globalSemiRotationPosition[groupNum];
-                        } else if (dayTypeCategory === 'special') {
-                            currentRotationPos = globalSpecialRotationPosition[groupNum];
-                        }
-                        if (currentRotationPos !== null && currentRotationPos !== undefined) {
-                            lastRotationForMonth[monthKey][dayTypeCategory][groupNum] = currentRotationPos;
-                        }
-                        
                         // If person was skipped due to conflict, find next available day for them
                         // Note: For weekends, if skipped due to special holiday in same month, don't reassign
                         // They will be assigned when their turn comes again in rotation
@@ -9656,10 +9630,36 @@
                                 }
                             }
                         }
+                        
+                        // Track last rotation position for this month at the END of processing this day
+                        // This ensures we capture the rotation position after all advances have occurred
+                        // Save the rotation position (the person who would normally be assigned, even if swapped)
+                        if (!lastRotationForMonth[monthKey]) {
+                            lastRotationForMonth[monthKey] = {};
+                        }
+                        if (!lastRotationForMonth[monthKey][dayTypeCategory]) {
+                            lastRotationForMonth[monthKey][dayTypeCategory] = {};
+                        }
+                        // Get the current rotation position after all processing
+                        let finalRotationPos = null;
+                        if (dayTypeCategory === 'normal' && globalNormalRotationPosition[groupNum] !== undefined) {
+                            finalRotationPos = globalNormalRotationPosition[groupNum];
+                        } else if (dayTypeCategory === 'weekend' && globalWeekendRotationPosition[groupNum] !== undefined) {
+                            finalRotationPos = globalWeekendRotationPosition[groupNum];
+                        } else if (dayTypeCategory === 'semi' && globalSemiRotationPosition[groupNum] !== undefined) {
+                            finalRotationPos = globalSemiRotationPosition[groupNum];
+                        } else if (dayTypeCategory === 'special' && globalSpecialRotationPosition[groupNum] !== undefined) {
+                            finalRotationPos = globalSpecialRotationPosition[groupNum];
+                        }
+                        // Always save the rotation position if it's defined (even if 0)
+                        if (finalRotationPos !== null && finalRotationPos !== undefined) {
+                            lastRotationForMonth[monthKey][dayTypeCategory][groupNum] = finalRotationPos;
+                        }
                     });
                     
                     // After processing all days, save last rotation positions for each month to global variable
                     // This will be saved to Firestore when saveData() is called
+                    console.log(`[ROTATION SAVE] Processing lastRotationForMonth:`, Object.keys(lastRotationForMonth).length, 'months');
                     for (const monthKey in lastRotationForMonth) {
                         if (!lastRotationPositions[monthKey]) {
                             lastRotationPositions[monthKey] = {};
@@ -9669,11 +9669,13 @@
                                 lastRotationPositions[monthKey][dayType] = {};
                             }
                             for (const grpNum in lastRotationForMonth[monthKey][dayType]) {
-                                lastRotationPositions[monthKey][dayType][grpNum] = lastRotationForMonth[monthKey][dayType][grpNum];
-                                console.log(`[ROTATION SAVE] Saved last rotation position for ${monthKey}, ${dayType}, Group ${grpNum}: ${lastRotationForMonth[monthKey][dayType][grpNum]}`);
+                                const rotationPos = lastRotationForMonth[monthKey][dayType][grpNum];
+                                lastRotationPositions[monthKey][dayType][grpNum] = rotationPos;
+                                console.log(`[ROTATION SAVE] Saved last rotation position for ${monthKey}, ${dayType}, Group ${grpNum}: ${rotationPos}`);
                             }
                         }
                     }
+                    console.log(`[ROTATION SAVE] Final lastRotationPositions:`, Object.keys(lastRotationPositions).length, 'months');
         }
 
         // Store current day being edited
