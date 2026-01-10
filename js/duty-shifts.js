@@ -1,4 +1,4 @@
-        // Data storage - each group has four order lists: special, weekend, semi, normal
+﻿        // Data storage - each group has four order lists: special, weekend, semi, normal
         // Each person also has last duty dates for each type, missing periods, and priorities
         let groups = {
             1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
@@ -23,7 +23,7 @@
         // Structure: assignmentReasons[dateKey][groupNum][personName] = { type: 'skip'|'swap', reason: '...', swappedWith: '...' }
         let assignmentReasons = {};
         // Track critical assignments from last duties - these must NEVER be deleted
-        // Format: { "2025-12-25": ["Person Name (ΞΞΌΞ¬Ξ΄Ξ± 1)", ...], ... }
+        // Format: { "2025-12-25": ["Person Name (Ομάδα 1)", ...], ... }
         let criticalAssignments = {};
         
         // Helper functions to get/set assignments based on day type
@@ -144,12 +144,12 @@
         // Configuration for recurring special holidays
         // Format: { month: 1-12, day: 1-31, name: string, type: 'fixed' | 'easter-relative', offset?: number }
         let recurringSpecialHolidays = [
-            { month: 12, day: 24, name: 'Ξ Ξ±ΟΞ±ΞΌΞΏΞ½Ξ® Ξ§ΟΞΉΟƒΟ„ΞΏΟ…Ξ³Ξ­Ξ½Ξ½Ο‰Ξ½', type: 'fixed' },
-            { month: 12, day: 25, name: 'Ξ§ΟΞΉΟƒΟ„ΞΏΟΞ³ΞµΞ½Ξ½Ξ±', type: 'fixed' },
-            { month: 12, day: 31, name: 'Ξ Ξ±ΟΞ±ΞΌΞΏΞ½Ξ® Ξ ΟΟ‰Ο„ΞΏΟ‡ΟΞΏΞ½ΞΉΞ¬Ο‚', type: 'fixed' },
-            { month: 1, day: 1, name: 'Ξ ΟΟ‰Ο„ΞΏΟ‡ΟΞΏΞ½ΞΉΞ¬', type: 'fixed' },
-            { name: 'ΞΞµΞ³Ξ¬Ξ»ΞΏ Ξ£Ξ¬Ξ²Ξ²Ξ±Ο„ΞΏ', type: 'easter-relative', offset: -1 }, // 1 day before Easter
-            { name: 'Ξ Ξ¬ΟƒΟ‡Ξ±', type: 'easter-relative', offset: 0 } // Easter Sunday
+            { month: 12, day: 24, name: 'Παραμονή Χριστουγέννων', type: 'fixed' },
+            { month: 12, day: 25, name: 'Χριστούγεννα', type: 'fixed' },
+            { month: 12, day: 31, name: 'Παραμονή Πρωτοχρονιάς', type: 'fixed' },
+            { month: 1, day: 1, name: 'Πρωτοχρονιά', type: 'fixed' },
+            { name: 'Μεγάλο Σάββατο', type: 'easter-relative', offset: -1 }, // 1 day before Easter
+            { name: 'Πάσχα', type: 'easter-relative', offset: 0 } // Easter Sunday
         ];
 
         // Track data loading to prevent duplicate loads
@@ -489,7 +489,7 @@
                 
                 Object.keys(groupData.lastDuties).forEach(personName => {
                     const lastDuties = groupData.lastDuties[personName];
-                    const personGroupStr = `${personName} (ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`;
+                    const personGroupStr = `${personName} (Ομάδα ${groupNum})`;
                     
                     // Process each last duty date
                     const dutyTypes = ['special', 'weekend', 'semi', 'normal'];
@@ -904,7 +904,7 @@
                 }
                 
                 // Confirm migration
-                if (!confirm('Ξ‘Ο…Ο„Ξ® Ξ· Ξ»ΞµΞΉΟ„ΞΏΟ…ΟΞ³Ξ―Ξ± ΞΈΞ± Ξ΄ΞΉΞ±Ο‡Ο‰ΟΞ―ΟƒΞµΞΉ Ο„ΞΉΟ‚ Ο…Ο€Ξ·ΟΞµΟƒΞ―ΞµΟ‚ ΟƒΞµ 4 ΞΎΞµΟ‡Ο‰ΟΞΉΟƒΟ„Ξ¬ Ξ­Ξ³Ξ³ΟΞ±Ο†Ξ± Ξ±Ξ½Ξ¬ Ο„ΟΟ€ΞΏ Ξ·ΞΌΞ­ΟΞ±Ο‚.\n\nΞ£Ο…Ξ½Ξ­Ο‡ΞµΞΉΞ±;')) {
+                if (!confirm('Αυτή η λειτουργία θα διαχωρίσει τις υπηρεσίες σε 4 ξεχωριστά έγγραφα ανά τύπο ημέρας.\n\nΣυνέχεια;')) {
                     return;
                 }
                 
@@ -913,7 +913,7 @@
                 // Load current assignments
                 const assignmentsDoc = await db.collection('dutyShifts').doc('assignments').get();
                 if (!assignmentsDoc.exists) {
-                    alert('Ξ”ΞµΞ½ Ξ²ΟΞ­ΞΈΞ·ΞΊΞµ Ξ­Ξ³Ξ³ΟΞ±Ο†ΞΏ assignments');
+                    alert('Δεν βρέθηκε έγγραφο assignments');
                     return;
                 }
                 
@@ -1014,11 +1014,11 @@
                 console.log(`Weekend/Holiday days: ${Object.keys(weekendAssignments).length}`);
                 console.log(`Special holidays: ${Object.keys(specialHolidayAssignments).length}`);
                 
-                alert(`ΞΞµΟ„Ξ±Ο†ΞΏΟΞ¬ ΞΏΞ»ΞΏΞΊΞ»Ξ·ΟΟΞΈΞ·ΞΊΞµ!\n\nΞ•Ο€ΞµΞΎΞµΟΞ³Ξ¬ΟƒΟ„Ξ·ΞΊΞµ: ${processedCount} Ξ·ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―ΞµΟ‚\nΞ£Ο†Ξ¬Ξ»ΞΌΞ±Ο„Ξ±: ${errorCount}\n\nΞΞ±ΞΈΞ·ΞΌΞµΟΞΉΞ½Ξ­Ο‚: ${Object.keys(normalDayAssignments).length}\nΞ—ΞΌΞΉΞ±ΟΞ³Ξ―ΞµΟ‚: ${Object.keys(semiNormalAssignments).length}\nΞ£Ξ±Ξ²Ξ²Ξ±Ο„ΞΏΞΊΟΟΞΉΞ±ΞΊΞ±/Ξ‘ΟΞ³Ξ―ΞµΟ‚: ${Object.keys(weekendAssignments).length}\nΞ•ΞΉΞ΄ΞΉΞΊΞ­Ο‚ Ξ‘ΟΞ³Ξ―ΞµΟ‚: ${Object.keys(specialHolidayAssignments).length}`);
+                alert(`Μεταφορά ολοκληρώθηκε!\n\nΕπεξεργάστηκε: ${processedCount} ημερομηνίες\nΣφάλματα: ${errorCount}\n\nΚαθημερινές: ${Object.keys(normalDayAssignments).length}\nΗμιαργίες: ${Object.keys(semiNormalAssignments).length}\nΣαββατοκύριακα/Αργίες: ${Object.keys(weekendAssignments).length}\nΕιδικές Αργίες: ${Object.keys(specialHolidayAssignments).length}`);
                 
             } catch (error) {
                 console.error('Error during migration:', error);
-                alert('Ξ£Ο†Ξ¬Ξ»ΞΌΞ± ΞΊΞ±Ο„Ξ¬ Ο„Ξ· ΞΌΞµΟ„Ξ±Ο†ΞΏΟΞ¬: ' + error.message);
+                alert('Σφάλμα κατά τη μεταφορά: ' + error.message);
             }
         }
 
@@ -1041,12 +1041,12 @@
         // Get group name by number
         function getGroupName(groupNum) {
             const groupNames = {
-                1: 'Ξ•Ξ Ξ™ΞΞ•Ξ¦Ξ‘Ξ›Ξ—Ξ£-Ξ‘Ξ¥Ξ',
-                2: 'ΞΞ—Ξ§Ξ‘ΞΞ™ΞΞΞ£-ΞΞ Ξ›ΞΞ¥Ξ΅Ξ“ΞΞ£-ΞΞ”Ξ—Ξ“ΞΞ£',
-                3: 'Ξ¤Ξ•Ξ§ΞΞ™ΞΞΞ£ Ξ•/Ξ  AW139',
-                4: 'Ξ¤Ξ•Ξ§ΞΞ™ΞΞΞ£ Ξ•Ξ Ξ™Ξ“Ξ•Ξ™Ξ©Ξ ΞΞ•Ξ£Ξ©Ξ'
+                1: 'ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ',
+                2: 'ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ',
+                3: 'ΤΕΧΝΙΚΟΣ Ε/Π AW139',
+                4: 'ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ'
             };
-            return groupNames[groupNum] || `ΞΞΌΞ¬Ξ΄Ξ± ${groupNum}`;
+            return groupNames[groupNum] || `Ομάδα ${groupNum}`;
         }
 
         // Migrate old groups format to new format
@@ -1210,14 +1210,14 @@
                 const allPeople = new Set([...specialList, ...weekendList, ...semiList, ...normalList]);
                 
                 if (allPeople.size === 0) {
-                    container.innerHTML = '<p class="text-muted text-center">Ξ”ΞµΞ½ Ξ­Ο‡ΞΏΟ…Ξ½ Ο€ΟΞΏΟƒΟ„ΞµΞΈΞµΞ― Ξ¬Ο„ΞΏΞΌΞ± Ξ±ΞΊΟΞΌΞ±</p>';
+                    container.innerHTML = '<p class="text-muted text-center">Δεν έχουν προστεθεί άτομα ακόμα</p>';
                 } else {
                     // Special holidays order
                     const specialDiv = document.createElement('div');
                     specialDiv.className = 'mb-3 border rounded p-2';
                     specialDiv.innerHTML = `
                         <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('specialList_${i}', 'specialChevron_${i}')">
-                            <strong class="text-warning"><i class="fas fa-star me-1"></i>Ξ£ΞµΞΉΟΞ¬ Ξ•ΞΉΞ΄ΞΉΞΊΟΞ½ Ξ‘ΟΞ³ΞΉΟΞ½:</strong>
+                            <strong class="text-warning"><i class="fas fa-star me-1"></i>Σειρά Ειδικών Αργιών:</strong>
                             <i id="specialChevron_${i}" class="fas fa-chevron-down"></i>
                         </div>
                         <div id="specialList_${i}" class="collapse"></div>
@@ -1229,31 +1229,31 @@
                     weekendDiv.className = 'mb-3 border rounded p-2';
                     weekendDiv.innerHTML = `
                         <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('weekendList_${i}', 'weekendChevron_${i}')">
-                            <strong class="text-info"><i class="fas fa-calendar-week me-1"></i>Ξ£ΞµΞΉΟΞ¬ Ξ£Ξ±Ξ²Ξ²Ξ±Ο„ΞΏΞΊΟΟΞΉΞ±ΞΊΟ‰Ξ½/Ξ‘ΟΞ³ΞΉΟΞ½:</strong>
+                            <strong class="text-info"><i class="fas fa-calendar-week me-1"></i>Σειρά Σαββατοκύριακων/Αργιών:</strong>
                             <i id="weekendChevron_${i}" class="fas fa-chevron-down"></i>
                         </div>
                         <div id="weekendList_${i}" class="collapse"></div>
                     `;
                     container.appendChild(weekendDiv);
                     
-                    // Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ± order
+                    // Ημιαργία order
                     const semiDiv = document.createElement('div');
                     semiDiv.className = 'mb-3 border rounded p-2';
                     semiDiv.innerHTML = `
                         <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('semiList_${i}', 'semiChevron_${i}')">
-                            <strong class="text-warning"><i class="fas fa-calendar-alt me-1"></i>Ξ£ΞµΞΉΟΞ¬ Ξ—ΞΌΞΉΞ±ΟΞ³ΞΉΟΞ½:</strong>
+                            <strong class="text-warning"><i class="fas fa-calendar-alt me-1"></i>Σειρά Ημιαργιών:</strong>
                             <i id="semiChevron_${i}" class="fas fa-chevron-down"></i>
                         </div>
                         <div id="semiList_${i}" class="collapse"></div>
                     `;
                     container.appendChild(semiDiv);
                     
-                    // ΞΞ±ΞΈΞ·ΞΌΞµΟΞΉΞ½Ξ® order
+                    // Καθημερινή order
                     const normalDiv = document.createElement('div');
                     normalDiv.className = 'mb-3 border rounded p-2';
                     normalDiv.innerHTML = `
                         <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('normalList_${i}', 'normalChevron_${i}')">
-                            <strong class="text-primary"><i class="fas fa-calendar-day me-1"></i>Ξ£ΞµΞΉΟΞ¬ ΞΞ±ΞΈΞ·ΞΌΞµΟΞΉΞ½ΟΞ½:</strong>
+                            <strong class="text-primary"><i class="fas fa-calendar-day me-1"></i>Σειρά Καθημερινών:</strong>
                             <i id="normalChevron_${i}" class="fas fa-chevron-down"></i>
                         </div>
                         <div id="normalList_${i}" class="collapse"></div>
@@ -1271,7 +1271,7 @@
                     lists.forEach(({ type, list, containerId }) => {
                         const listContainer = document.getElementById(containerId);
                         if (list.length === 0) {
-                            listContainer.innerHTML = '<p class="text-muted text-center small">Ξ”ΞµΞ½ Ο…Ο€Ξ¬ΟΟ‡ΞΏΟ…Ξ½ Ξ¬Ο„ΞΏΞΌΞ±</p>';
+                            listContainer.innerHTML = '<p class="text-muted text-center small">Δεν υπάρχουν άτομα</p>';
                         } else {
                             list.forEach((person, index) => {
                                 const personDiv = createPersonItem(i, person, index, type, list);
@@ -1298,7 +1298,7 @@
             const lastDutyDateStr = lastDuties[listType];
             
             let lastDutyDate = null;
-            let lastDutyFormatted = 'Ξ”ΞµΞ½ Ξ­Ο‡ΞµΞΉ';
+            let lastDutyFormatted = 'Δεν έχει';
             
             // First check manually entered last duty date
             if (lastDutyDateStr) {
@@ -1387,7 +1387,7 @@
             }
             
             // Calculate next duty date based on rotation order (not person's last duty)
-            let nextDutyFormatted = 'Ξ”ΞµΞ½ Ξ­Ο‡ΞµΞΉ';
+            let nextDutyFormatted = 'Δεν έχει';
             
             if (listArrayLength > 0) {
                 // Get the person's index in the list (their rotation position)
@@ -1395,7 +1395,7 @@
                 const personIndex = list.indexOf(person);
                 
                 if (personIndex === -1) {
-                    return { lastDuty: lastDutyFormatted, nextDuty: 'Ξ”ΞµΞ½ Ξ­Ο‡ΞµΞΉ' };
+                    return { lastDuty: lastDutyFormatted, nextDuty: 'Δεν έχει' };
                 }
                 
                 // Find all upcoming days of this type starting from today
@@ -1446,8 +1446,8 @@
                     }
                 }
                 
-                if (nextDutyFormatted === 'Ξ”ΞµΞ½ Ξ­Ο‡ΞµΞΉ' && upcomingDays.length > 0) {
-                    nextDutyFormatted = 'Ξ”ΞµΞ½ Ξ²ΟΞ­ΞΈΞ·ΞΊΞµ';
+                if (nextDutyFormatted === 'Δεν έχει' && upcomingDays.length > 0) {
+                    nextDutyFormatted = 'Δεν βρέθηκε';
                 }
             }
             
@@ -1473,7 +1473,7 @@
                 const end = new Date(period.end + 'T00:00:00');
                 return today >= start && today <= end;
             });
-            const missingBadge = isCurrentlyMissing ? '<span class="badge bg-warning ms-2"><i class="fas fa-user-slash me-1"></i>Ξ‘Ο€ΞΏΟ…ΟƒΞ―Ξ±</span>' : '';
+            const missingBadge = isCurrentlyMissing ? '<span class="badge bg-warning ms-2"><i class="fas fa-user-slash me-1"></i>Απουσία</span>' : '';
             
             // Get last duty date and calculate next duty date
             const dutyDates = getLastAndNextDutyDates(person, groupNum, listType, listArray.length);
@@ -1491,10 +1491,10 @@
             
             // Create 3D priority badge
             const priorityBadge = priority < 999 ? 
-                `<div class="priority-badge-3d ${priorityClass}" onclick="event.stopPropagation(); editPerson(${groupNum}, '${person.replace(/'/g, "\\'")}')" title="Ξ ΟΞΏΟ„ΞµΟΞ±ΞΉΟΟ„Ξ·Ο„Ξ±: ${priority} - ΞΞ¬Ξ½Ο„Ξµ ΞΊΞ»ΞΉΞΊ Ξ³ΞΉΞ± ΞµΟ€ΞµΞΎΞµΟΞ³Ξ±ΟƒΞ―Ξ±">
+                `<div class="priority-badge-3d ${priorityClass}" onclick="event.stopPropagation(); editPerson(${groupNum}, '${person.replace(/'/g, "\\'")}')" title="Προτεραιότητα: ${priority} - Κάντε κλικ για επεξεργασία">
                     ${priority}
                 </div>` : 
-                `<div class="priority-badge-3d priority-low" onclick="event.stopPropagation(); editPerson(${groupNum}, '${person.replace(/'/g, "\\'")}')" title="Ξ”ΞµΞ½ Ξ­Ο‡ΞµΞΉ ΞΏΟΞΉΟƒΟ„ΞµΞ― Ο€ΟΞΏΟ„ΞµΟΞ±ΞΉΟΟ„Ξ·Ο„Ξ± - ΞΞ¬Ξ½Ο„Ξµ ΞΊΞ»ΞΉΞΊ Ξ³ΞΉΞ± ΞµΟ€ΞµΞΎΞµΟΞ³Ξ±ΟƒΞ―Ξ±" style="opacity: 0.6;">
+                `<div class="priority-badge-3d priority-low" onclick="event.stopPropagation(); editPerson(${groupNum}, '${person.replace(/'/g, "\\'")}')" title="Δεν έχει οριστεί προτεραιότητα - Κάντε κλικ για επεξεργασία" style="opacity: 0.6;">
                     ?
                 </div>`;
             
@@ -1507,17 +1507,17 @@
                             <span>${person}${missingBadge}</span>
                         </div>
                         <div style="font-size: 0.75rem; color: #666; margin-top: 0.25rem; margin-left: 1.5rem;">
-                            <div><strong>Ξ¤ΞµΞ»ΞµΟ…Ο„Ξ±Ξ―Ξ±:</strong> ${dutyDates.lastDuty}</div>
-                            <div><strong>Ξ•Ο€ΟΞΌΞµΞ½Ξ·:</strong> ${dutyDates.nextDuty}</div>
+                            <div><strong>Τελευταία:</strong> ${dutyDates.lastDuty}</div>
+                            <div><strong>Επόμενη:</strong> ${dutyDates.nextDuty}</div>
                         </div>
                     </div>
                 </div>
                 <div class="person-actions">
                     <div class="btn-group btn-group-sm" role="group">
-                        <button class="btn btn-outline-secondary" onclick="event.stopPropagation(); movePersonInList(${groupNum}, ${index}, '${listType}', 'up')" ${index === 0 ? 'disabled' : ''} title="ΞΞµΟ„Ξ±ΞΊΞ―Ξ½Ξ·ΟƒΞ· Ο€ΟΞΏΟ‚ Ο„Ξ± Ο€Ξ¬Ξ½Ο‰">
+                        <button class="btn btn-outline-secondary" onclick="event.stopPropagation(); movePersonInList(${groupNum}, ${index}, '${listType}', 'up')" ${index === 0 ? 'disabled' : ''} title="Μετακίνηση προς τα πάνω">
                             <i class="fas fa-arrow-up"></i>
                         </button>
-                        <button class="btn btn-outline-secondary" onclick="event.stopPropagation(); movePersonInList(${groupNum}, ${index}, '${listType}', 'down')" ${index === listArray.length - 1 ? 'disabled' : ''} title="ΞΞµΟ„Ξ±ΞΊΞ―Ξ½Ξ·ΟƒΞ· Ο€ΟΞΏΟ‚ Ο„Ξ± ΞΊΞ¬Ο„Ο‰">
+                        <button class="btn btn-outline-secondary" onclick="event.stopPropagation(); movePersonInList(${groupNum}, ${index}, '${listType}', 'down')" ${index === listArray.length - 1 ? 'disabled' : ''} title="Μετακίνηση προς τα κάτω">
                             <i class="fas fa-arrow-down"></i>
                         </button>
                     </div>
@@ -1672,7 +1672,7 @@
             editingPersonName = null;
             currentGroup = groupNumber;
             
-            document.getElementById('modalTitle').innerHTML = `Ξ ΟΞΏΟƒΞΈΞ®ΞΊΞ· Ξ‘Ο„ΟΞΌΞΏΟ… ΟƒΟ„Ξ·Ξ½ <span id="modalGroupNumber">${getGroupName(groupNumber)}</span>`;
+            document.getElementById('modalTitle').innerHTML = `Προσθήκη Ατόμου στην <span id="modalGroupNumber">${getGroupName(groupNumber)}</span>`;
             document.getElementById('personName').value = '';
             document.getElementById('personName').readOnly = false;
             document.getElementById('lastSpecialDuty').value = '';
@@ -1683,7 +1683,7 @@
             document.getElementById('priorityWeekend').value = '';
             document.getElementById('prioritySemi').value = '';
             document.getElementById('priorityNormal').value = '';
-            document.getElementById('savePersonButton').textContent = 'Ξ ΟΞΏΟƒΞΈΞ®ΞΊΞ· Ξ‘Ο„ΟΞΌΞΏΟ…';
+            document.getElementById('savePersonButton').textContent = 'Προσθήκη Ατόμου';
             
             const modal = new bootstrap.Modal(document.getElementById('addPersonModal'));
             modal.show();
@@ -1705,7 +1705,7 @@
             console.log(`Person lastDuties:`, lastDuties);
             console.log(`Special: ${lastDuties.special}, Weekend: ${lastDuties.weekend}, Semi: ${lastDuties.semi}, Normal: ${lastDuties.normal}`);
             
-            document.getElementById('modalTitle').innerHTML = `Ξ•Ο€ΞµΞΎΞµΟΞ³Ξ±ΟƒΞ―Ξ± Ξ£Ο„ΞΏΞΉΟ‡ΞµΞ―Ο‰Ξ½: ${personName}`;
+            document.getElementById('modalTitle').innerHTML = `Επεξεργασία Στοιχείων: ${personName}`;
             document.getElementById('personName').value = personName;
             document.getElementById('personName').readOnly = false;
             document.getElementById('lastSpecialDuty').value = lastDuties.special || '';
@@ -1716,7 +1716,7 @@
             document.getElementById('priorityWeekend').value = priorities.weekend || '';
             document.getElementById('prioritySemi').value = priorities.semi || '';
             document.getElementById('priorityNormal').value = priorities.normal || '';
-            document.getElementById('savePersonButton').textContent = 'Ξ‘Ο€ΞΏΞΈΞ®ΞΊΞµΟ…ΟƒΞ· Ξ‘Ξ»Ξ»Ξ±Ξ³ΟΞ½';
+            document.getElementById('savePersonButton').textContent = 'Αποθήκευση Αλλαγών';
             
             // Debug: Verify values were set
             console.log(`Form values set - Special: ${document.getElementById('lastSpecialDuty').value}, Weekend: ${document.getElementById('lastWeekendDuty').value}, Semi: ${document.getElementById('lastSemiDuty').value}, Normal: ${document.getElementById('lastNormalDuty').value}`);
@@ -1729,7 +1729,7 @@
         function savePerson() {
             const name = document.getElementById('personName').value.trim();
             if (!name) {
-                alert('Ξ Ξ±ΟΞ±ΞΊΞ±Ξ»Ο ΞµΞΉΟƒΞ¬Ξ³ΞµΟ„Ξµ ΟΞ½ΞΏΞΌΞ±');
+                alert('Παρακαλώ εισάγετε όνομα');
                 return;
             }
             
@@ -1807,8 +1807,8 @@
                 }
                 
                 // Update all occurrences in dutyAssignments
-                const oldPersonGroupStr = `${oldName} (ΞΞΌΞ¬Ξ΄Ξ± ${currentGroup})`;
-                const newPersonGroupStr = `${name} (ΞΞΌΞ¬Ξ΄Ξ± ${currentGroup})`;
+                const oldPersonGroupStr = `${oldName} (Ομάδα ${currentGroup})`;
+                const newPersonGroupStr = `${name} (Ομάδα ${currentGroup})`;
                 
                 Object.keys(dutyAssignments).forEach(dateKey => {
                     if (dutyAssignments[dateKey] && dutyAssignments[dateKey].includes(oldPersonGroupStr)) {
@@ -2008,7 +2008,7 @@
                         // Always ensure this person's assignment is present for this date
                         // This is a critical baseline assignment that must be preserved
                         const existingAssignment = getAssignmentForDate(dateKey);
-                        const personGroupStr = `${personKey} (ΞΞΌΞ¬Ξ΄Ξ± ${currentGroup})`;
+                        const personGroupStr = `${personKey} (Ομάδα ${currentGroup})`;
                         
                         // Mark this as a critical assignment (from last duty) - NEVER delete these
                         if (!criticalAssignments[dateKey]) {
@@ -2016,9 +2016,9 @@
                         }
                         if (!criticalAssignments[dateKey].includes(personGroupStr)) {
                             criticalAssignments[dateKey].push(personGroupStr);
-                            console.log(`[${mode}] β“ Added to criticalAssignments[${dateKey}]:`, criticalAssignments[dateKey]);
+                            console.log(`[${mode}] ✓ Added to criticalAssignments[${dateKey}]:`, criticalAssignments[dateKey]);
                         } else {
-                            console.log(`[${mode}] β“ Already in criticalAssignments[${dateKey}]:`, criticalAssignments[dateKey]);
+                            console.log(`[${mode}] ✓ Already in criticalAssignments[${dateKey}]:`, criticalAssignments[dateKey]);
                         }
                         
                         // Verify criticalAssignments was updated
@@ -2046,7 +2046,7 @@
                         if (!dutyAssignments[dateKey] || !dutyAssignments[dateKey].includes(personGroupStr)) {
                             console.error(`[${mode}] ERROR: Failed to add assignment for ${dateKey}! Expected: ${personGroupStr}, Got: ${dutyAssignments[dateKey]}`);
                         } else {
-                            console.log(`[${mode}] β“ Verified assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
+                            console.log(`[${mode}] ✓ Verified assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
                         }
                         
                         addedAssignments.push(dateKey);
@@ -2057,11 +2057,11 @@
             });
             
             if (addedAssignments.length > 0) {
-                console.log(`β“ Added ${addedAssignments.length} critical baseline assignments for ${personKey}`);
+                console.log(`✓ Added ${addedAssignments.length} critical baseline assignments for ${personKey}`);
                 // Verify criticalAssignments contains these dates
                 addedAssignments.forEach(dateKey => {
                     if (criticalAssignments[dateKey] && criticalAssignments[dateKey].length > 0) {
-                        console.log(`β“ Verified criticalAssignments[${dateKey}] =`, criticalAssignments[dateKey]);
+                        console.log(`✓ Verified criticalAssignments[${dateKey}] =`, criticalAssignments[dateKey]);
                     } else {
                         console.error(`ERROR: criticalAssignments[${dateKey}] is missing or empty!`);
                     }
@@ -2121,7 +2121,7 @@
                         if (shouldRemove) {
                             // Use current name (may have been changed) for removal
                             // If name changed, all references were already updated to use new name
-                            const personGroupStr = `${name} (ΞΞΌΞ¬Ξ΄Ξ± ${currentGroup})`;
+                            const personGroupStr = `${name} (Ομάδα ${currentGroup})`;
                             const existingAssignment = dutyAssignments[oldDateKey];
                             
                             // Remove from critical assignments
@@ -2294,24 +2294,24 @@
             // Show selection for target group
             const availableGroups = [1, 2, 3, 4].filter(g => g !== currentPersonActionsGroup);
             if (availableGroups.length === 0) {
-                alert('Ξ”ΞµΞ½ Ο…Ο€Ξ¬ΟΟ‡ΞΏΟ…Ξ½ Ξ¬Ξ»Ξ»ΞµΟ‚ ΞΏΞΌΞ¬Ξ΄ΞµΟ‚ Ξ³ΞΉΞ± ΞΌΞµΟ„Ξ±Ο†ΞΏΟΞ¬');
+                alert('Δεν υπάρχουν άλλες ομάδες για μεταφορά');
                 return;
             }
             
             const groupOptions = availableGroups.map(g => `${g}: ${getGroupName(g)}`).join(', ');
-            const targetGroupStr = prompt(`Ξ•Ο€ΞΉΞ»Ξ­ΞΎΟ„Ξµ Ο„Ξ·Ξ½ ΞΏΞΌΞ¬Ξ΄Ξ± Ο€ΟΞΏΞΏΟΞΉΟƒΞΌΞΏΟ (${groupOptions}):`);
+            const targetGroupStr = prompt(`Επιλέξτε την ομάδα προορισμού (${groupOptions}):`);
             const targetGroup = parseInt(targetGroupStr);
             
             if (targetGroup && availableGroups.includes(targetGroup)) {
                 transferPerson(currentPersonActionsGroup, currentPersonActionsIndex, targetGroup, currentPersonActionsListType);
             } else if (targetGroupStr !== null) {
-                alert('ΞΞ· Ξ­Ξ³ΞΊΟ…ΟΞ· ΞµΟ€ΞΉΞ»ΞΏΞ³Ξ® ΞΏΞΌΞ¬Ξ΄Ξ±Ο‚');
+                alert('Μη έγκυρη επιλογή ομάδας');
             }
         }
         
         // Delete person from actions modal
         function deletePersonFromActions() {
-            if (confirm(`Ξ•Ξ―ΟƒΟ„Ξµ ΟƒΞ―Ξ³ΞΏΟ…ΟΞΏΞΉ ΟΟ„ΞΉ ΞΈΞ­Ξ»ΞµΟ„Ξµ Ξ½Ξ± Ξ΄ΞΉΞ±Ξ³ΟΞ¬ΟΞµΟ„Ξµ Ο„ΞΏ Ξ¬Ο„ΞΏΞΌΞΏ "${currentPersonActionsName}" Ξ±Ο€Ο ΟΞ»ΞµΟ‚ Ο„ΞΉΟ‚ Ξ»Ξ―ΟƒΟ„ΞµΟ‚;`)) {
+            if (confirm(`Είστε σίγουροι ότι θέλετε να διαγράψετε το άτομο "${currentPersonActionsName}" από όλες τις λίστες;`)) {
                 const modal = bootstrap.Modal.getInstance(document.getElementById('personActionsModal'));
                 modal.hide();
                 
@@ -2337,7 +2337,7 @@
                 Object.keys(criticalAssignments).forEach(dateKey => {
                     if (criticalAssignments[dateKey]) {
                         criticalAssignments[dateKey] = criticalAssignments[dateKey].filter(a => 
-                            !a.includes(`${currentPersonActionsName} (ΞΞΌΞ¬Ξ΄Ξ± ${currentPersonActionsGroup})`)
+                            !a.includes(`${currentPersonActionsName} (Ομάδα ${currentPersonActionsGroup})`)
                         );
                         if (criticalAssignments[dateKey].length === 0) {
                             delete criticalAssignments[dateKey];
@@ -2347,7 +2347,7 @@
                 
                 Object.keys(dutyAssignments).forEach(dateKey => {
                     if (dutyAssignments[dateKey]) {
-                        const personGroupStr = `${currentPersonActionsName} (ΞΞΌΞ¬Ξ΄Ξ± ${currentPersonActionsGroup})`;
+                        const personGroupStr = `${currentPersonActionsName} (Ομάδα ${currentPersonActionsGroup})`;
                         if (dutyAssignments[dateKey].includes(personGroupStr)) {
                             dutyAssignments[dateKey] = dutyAssignments[dateKey]
                                 .split(', ')
@@ -2406,7 +2406,7 @@
             container.innerHTML = '';
             
             if (allPeople.length === 0) {
-                container.innerHTML = '<div class="text-center text-muted p-4">Ξ”ΞµΞ½ Ο…Ο€Ξ¬ΟΟ‡ΞΏΟ…Ξ½ Ξ¬Ο„ΞΏΞΌΞ± ΟƒΟ„ΞΏ ΟƒΟΟƒΟ„Ξ·ΞΌΞ±</div>';
+                container.innerHTML = '<div class="text-center text-muted p-4">Δεν υπάρχουν άτομα στο σύστημα</div>';
                 const modal = new bootstrap.Modal(document.getElementById('rankingsModal'));
                 modal.show();
                 return;
@@ -2439,7 +2439,7 @@
                     currentRanking = maxRanking + unrankedIndex + 1;
                 }
                 const groupNum = getPersonGroup(person);
-                const groupName = groupNum ? getGroupName(groupNum) : 'Ξ†Ξ³Ξ½Ο‰ΟƒΟ„Ξ·';
+                const groupName = groupNum ? getGroupName(groupNum) : 'Άγνωστη';
                 
                 const item = document.createElement('div');
                 item.className = 'ranking-item';
@@ -2634,7 +2634,7 @@
             const finishEdit = () => {
                 const newRanking = parseInt(input.value) || 1;
                 if (newRanking < 1) {
-                    alert('Ξ— ΞΉΞµΟΞ±ΟΟ‡Ξ―Ξ± Ο€ΟΞ­Ο€ΞµΞΉ Ξ½Ξ± ΞµΞ―Ξ½Ξ±ΞΉ Ο„ΞΏΟ…Ξ»Ξ¬Ο‡ΞΉΟƒΟ„ΞΏΞ½ 1');
+                    alert('Η ιεραρχία πρέπει να είναι τουλάχιστον 1');
                     input.focus();
                     return;
                 }
@@ -2645,7 +2645,7 @@
                 const maxRanking = allItems.length;
                 
                 if (newRanking > maxRanking) {
-                    alert(`Ξ— ΞΌΞ­Ξ³ΞΉΟƒΟ„Ξ· ΞΉΞµΟΞ±ΟΟ‡Ξ―Ξ± ΞµΞ―Ξ½Ξ±ΞΉ ${maxRanking}`);
+                    alert(`Η μέγιστη ιεραρχία είναι ${maxRanking}`);
                     input.focus();
                     return;
                 }
@@ -2657,7 +2657,7 @@
                 // Move the item to the target position in the DOM
                 if (currentIndex !== targetIndex) {
                     if (currentIndex < targetIndex) {
-                        // Moving down (e.g., position 6 β†’ 9)
+                        // Moving down (e.g., position 6 → 9)
                         // Need to get fresh items list after potential DOM changes
                         const freshItems = Array.from(container.querySelectorAll('.ranking-item'));
                         if (targetIndex < freshItems.length - 1) {
@@ -2666,7 +2666,7 @@
                             container.appendChild(item);
                         }
                     } else {
-                        // Moving up (e.g., position 9 β†’ 6)
+                        // Moving up (e.g., position 9 → 6)
                         const freshItems = Array.from(container.querySelectorAll('.ranking-item'));
                         container.insertBefore(item, freshItems[targetIndex]);
                     }
@@ -2731,12 +2731,12 @@
             const modal = bootstrap.Modal.getInstance(document.getElementById('rankingsModal'));
             modal.hide();
             
-            alert('Ξ— ΞΉΞµΟΞ±ΟΟ‡Ξ―Ξ± Ξ±Ο€ΞΏΞΈΞ·ΞΊΞµΟΟ„Ξ·ΞΊΞµ ΞµΟ€ΞΉΟ„Ο…Ο‡ΟΟ‚ ΟƒΟ„ΞΏ Firestore!');
+            alert('Η ιεραρχία αποθηκεύτηκε επιτυχώς στο Firestore!');
         }
 
         // Remove person from specific list
         function removePerson(groupNumber, index, listType) {
-            if (confirm('Ξ•Ξ―ΟƒΟ„Ξµ ΟƒΞ―Ξ³ΞΏΟ…ΟΞΏΞΉ ΟΟ„ΞΉ ΞΈΞ­Ξ»ΞµΟ„Ξµ Ξ½Ξ± Ξ±Ο†Ξ±ΞΉΟΞ­ΟƒΞµΟ„Ξµ Ξ±Ο…Ο„Ο Ο„ΞΏ Ξ¬Ο„ΞΏΞΌΞΏ Ξ±Ο€Ο Ξ±Ο…Ο„Ξ® Ο„Ξ· Ξ»Ξ―ΟƒΟ„Ξ±;')) {
+            if (confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτό το άτομο από αυτή τη λίστα;')) {
                 const list = groups[groupNumber][listType];
                 const person = list[index];
                 list.splice(index, 1);
@@ -2854,7 +2854,7 @@
             // Get all days where person had duty
             const personDutyDays = [];
             for (const [dayKey, assignment] of Object.entries(dutyAssignments)) {
-                if (assignment.includes(`${person} (ΞΞΌΞ¬Ξ΄Ξ± ${fromGroup})`)) {
+                if (assignment.includes(`${person} (Ομάδα ${fromGroup})`)) {
                     personDutyDays.push(dayKey);
                 }
             }
@@ -2884,7 +2884,7 @@
                 if (assignment) {
                     const targetGroupPeople = targetGroupData[dayTypeCategory] || [];
                     targetGroupPeople.forEach(targetPerson => {
-                        if (assignment.includes(`${targetPerson} (ΞΞΌΞ¬Ξ΄Ξ± ${toGroup})`)) {
+                        if (assignment.includes(`${targetPerson} (Ομάδα ${toGroup})`)) {
                             if (!sameDayPeople[dayTypeCategory].includes(targetPerson)) {
                                 sameDayPeople[dayTypeCategory].push(targetPerson);
                             }
@@ -2900,10 +2900,10 @@
         function renderTransferPositionLists(sameDayPeople) {
             const container = document.getElementById('transferPositionLists');
             const listTypes = [
-                { type: 'special', label: 'Ξ•ΞΉΞ΄ΞΉΞΊΞ­Ο‚ Ξ‘ΟΞ³Ξ―ΞµΟ‚', icon: 'fa-star' },
-                { type: 'weekend', label: 'Ξ£Ξ±Ξ²Ξ²Ξ±Ο„ΞΏΞΊΟΟΞΉΞ±ΞΊΞ±/Ξ‘ΟΞ³Ξ―ΞµΟ‚', icon: 'fa-calendar-week' },
-                { type: 'semi', label: 'Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―ΞµΟ‚', icon: 'fa-calendar-alt' },
-                { type: 'normal', label: 'ΞΞ±ΞΈΞ·ΞΌΞµΟΞΉΞ½Ξ­Ο‚', icon: 'fa-calendar-day' }
+                { type: 'special', label: 'Ειδικές Αργίες', icon: 'fa-star' },
+                { type: 'weekend', label: 'Σαββατοκύριακα/Αργίες', icon: 'fa-calendar-week' },
+                { type: 'semi', label: 'Ημιαργίες', icon: 'fa-calendar-alt' },
+                { type: 'normal', label: 'Καθημερινές', icon: 'fa-calendar-day' }
             ];
             
             const targetGroupData = groups[transferData.toGroup] || { special: [], weekend: [], semi: [], normal: [] };
@@ -2918,16 +2918,16 @@
                     // Show people who had duty on same days
                     optionsHtml = `
                         <div class="mb-2">
-                            <small class="text-muted">Ξ†Ο„ΞΏΞΌΞ± ΞΌΞµ Ο…Ο€Ξ·ΟΞµΟƒΞ―Ξ± Ο„Ξ·Ξ½ Ξ―Ξ΄ΞΉΞ± Ξ·ΞΌΞ­ΟΞ±:</small>
+                            <small class="text-muted">Άτομα με υπηρεσία την ίδια ημέρα:</small>
                             <div class="btn-group-vertical w-100" role="group">
                                 ${sameDayPeopleList.map(refPerson => {
                                     return `
                                         <div class="btn-group mb-1" role="group">
                                             <button type="button" class="btn btn-outline-primary btn-sm" onclick="setTransferPosition('${type}', '${refPerson.replace(/'/g, "\\'")}', 'above')">
-                                                <i class="fas fa-arrow-up me-1"></i>Ξ Ξ¬Ξ½Ο‰ Ξ±Ο€Ο ${refPerson}
+                                                <i class="fas fa-arrow-up me-1"></i>Πάνω από ${refPerson}
                                             </button>
                                             <button type="button" class="btn btn-outline-primary btn-sm" onclick="setTransferPosition('${type}', '${refPerson.replace(/'/g, "\\'")}', 'below')">
-                                                <i class="fas fa-arrow-down me-1"></i>ΞΞ¬Ο„Ο‰ Ξ±Ο€Ο ${refPerson}
+                                                <i class="fas fa-arrow-down me-1"></i>Κάτω από ${refPerson}
                                             </button>
                                         </div>
                                     `;
@@ -2941,20 +2941,20 @@
                 optionsHtml += `
                     <div class="mb-2">
                         <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="setTransferPosition('${type}', null, 'end')">
-                            <i class="fas fa-plus me-1"></i>Ξ ΟΞΏΟƒΞΈΞ®ΞΊΞ· ΟƒΟ„ΞΏ Ο„Ξ­Ξ»ΞΏΟ‚
+                            <i class="fas fa-plus me-1"></i>Προσθήκη στο τέλος
                         </button>
                     </div>
                 `;
                 
                 // Show current selection
                 const currentPosition = transferData.positions[type];
-                let positionDisplay = '<small class="text-muted">Ξ”ΞµΞ½ Ξ­Ο‡ΞµΞΉ ΞµΟ€ΞΉΞ»ΞµΞ³ΞµΞ―</small>';
+                let positionDisplay = '<small class="text-muted">Δεν έχει επιλεγεί</small>';
                 if (currentPosition) {
                     if (currentPosition.position === 'end') {
-                        positionDisplay = '<small class="text-success"><i class="fas fa-check me-1"></i>ΞΞ± Ο€ΟΞΏΟƒΟ„ΞµΞΈΞµΞ― ΟƒΟ„ΞΏ Ο„Ξ­Ξ»ΞΏΟ‚</small>';
+                        positionDisplay = '<small class="text-success"><i class="fas fa-check me-1"></i>Θα προστεθεί στο τέλος</small>';
                     } else {
-                        const positionText = currentPosition.position === 'above' ? 'Ο€Ξ¬Ξ½Ο‰' : 'ΞΊΞ¬Ο„Ο‰';
-                        positionDisplay = `<small class="text-success"><i class="fas fa-check me-1"></i>ΞΞ± Ο„ΞΏΟ€ΞΏΞΈΞµΟ„Ξ·ΞΈΞµΞ― ${positionText} Ξ±Ο€Ο ${currentPosition.referencePerson}</small>`;
+                        const positionText = currentPosition.position === 'above' ? 'πάνω' : 'κάτω';
+                        positionDisplay = `<small class="text-success"><i class="fas fa-check me-1"></i>Θα τοποθετηθεί ${positionText} από ${currentPosition.referencePerson}</small>`;
                     }
                 }
                 
@@ -3109,7 +3109,7 @@
             const name = document.getElementById('holidayName').value.trim();
             
             if (!date) {
-                alert('Ξ Ξ±ΟΞ±ΞΊΞ±Ξ»Ο ΞµΟ€ΞΉΞ»Ξ­ΞΎΟ„Ξµ Ξ·ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ±');
+                alert('Παρακαλώ επιλέξτε ημερομηνία');
                 return;
             }
             
@@ -3118,7 +3118,7 @@
             
             // Check if already exists
             if (holidays.find(h => h.date === holidayKey)) {
-                alert('Ξ‘Ο…Ο„Ξ® Ξ· Ξ·ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± ΞµΞ―Ξ½Ξ±ΞΉ Ξ®Ξ΄Ξ· ΟƒΞ·ΞΌΞµΞΉΟ‰ΞΌΞ­Ξ½Ξ· Ο‰Ο‚ Ξ±ΟΞ³Ξ―Ξ±');
+                alert('Αυτή η ημερομηνία είναι ήδη σημειωμένη ως αργία');
                 return;
             }
             
@@ -3137,7 +3137,7 @@
 
         // Remove holiday
         function removeHoliday(index) {
-            if (confirm('Ξ•Ξ―ΟƒΟ„Ξµ ΟƒΞ―Ξ³ΞΏΟ…ΟΞΏΞΉ ΟΟ„ΞΉ ΞΈΞ­Ξ»ΞµΟ„Ξµ Ξ½Ξ± Ξ±Ο†Ξ±ΞΉΟΞ­ΟƒΞµΟ„Ξµ Ξ±Ο…Ο„Ξ® Ο„Ξ·Ξ½ Ξ±ΟΞ³Ξ―Ξ±;')) {
+            if (confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την αργία;')) {
                 holidays.splice(index, 1);
                 saveData();
                 renderHolidays();
@@ -3153,7 +3153,7 @@
             container.innerHTML = '';
             
             if (holidays.length === 0) {
-                container.innerHTML = '<p class="text-muted text-center">Ξ”ΞµΞ½ Ξ­Ο‡ΞΏΟ…Ξ½ Ο€ΟΞΏΟƒΟ„ΞµΞΈΞµΞ― Ξ±ΟΞ³Ξ―ΞµΟ‚ Ξ±ΞΊΟΞΌΞ±</p>';
+                container.innerHTML = '<p class="text-muted text-center">Δεν έχουν προστεθεί αργίες ακόμα</p>';
                 return;
             }
             
@@ -3306,7 +3306,7 @@
             container.innerHTML = '';
             
             if (specialHolidays.length === 0) {
-                container.innerHTML = '<p class="text-muted text-center">Ξ”ΞµΞ½ Ξ­Ο‡ΞΏΟ…Ξ½ Ο€ΟΞΏΟƒΟ„ΞµΞΈΞµΞ― ΞµΞΉΞ΄ΞΉΞΊΞ­Ο‚ Ξ±ΟΞ³Ξ―ΞµΟ‚ Ξ±ΞΊΟΞΌΞ±</p>';
+                container.innerHTML = '<p class="text-muted text-center">Δεν έχουν προστεθεί ειδικές αργίες ακόμα</p>';
                 return;
             }
             
@@ -3344,7 +3344,7 @@
             const name = document.getElementById('specialHolidayName').value.trim();
             
             if (!date) {
-                alert('Ξ Ξ±ΟΞ±ΞΊΞ±Ξ»Ο ΞµΟ€ΞΉΞ»Ξ­ΞΎΟ„Ξµ Ξ·ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ±');
+                alert('Παρακαλώ επιλέξτε ημερομηνία');
                 return;
             }
             
@@ -3352,7 +3352,7 @@
             
             // Check if already exists
             if (specialHolidays.some(h => h.date === dateKey)) {
-                alert('Ξ‘Ο…Ο„Ξ® Ξ· Ξ·ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± ΞµΞ―Ξ½Ξ±ΞΉ Ξ®Ξ΄Ξ· ΟƒΞ·ΞΌΞµΞΉΟ‰ΞΌΞ­Ξ½Ξ· Ο‰Ο‚ ΞµΞΉΞ΄ΞΉΞΊΞ® Ξ±ΟΞ³Ξ―Ξ±');
+                alert('Αυτή η ημερομηνία είναι ήδη σημειωμένη ως ειδική αργία');
                 return;
             }
             
@@ -3373,7 +3373,7 @@
 
         // Remove special holiday (kept for backward compatibility, but not used in UI)
         function removeSpecialHoliday(index) {
-            if (confirm('Ξ•Ξ―ΟƒΟ„Ξµ ΟƒΞ―Ξ³ΞΏΟ…ΟΞΏΞΉ ΟΟ„ΞΉ ΞΈΞ­Ξ»ΞµΟ„Ξµ Ξ½Ξ± Ξ±Ο†Ξ±ΞΉΟΞ­ΟƒΞµΟ„Ξµ Ξ±Ο…Ο„Ξ® Ο„Ξ·Ξ½ ΞµΞΉΞ΄ΞΉΞΊΞ® Ξ±ΟΞ³Ξ―Ξ±;')) {
+            if (confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την ειδική αργία;')) {
                 specialHolidays.splice(index, 1);
                 saveData();
                 renderCalendar();
@@ -3406,7 +3406,7 @@
             container.innerHTML = '';
             
             if (recurringSpecialHolidays.length === 0) {
-                container.innerHTML = '<p class="text-muted text-center">Ξ”ΞµΞ½ Ξ­Ο‡ΞΏΟ…Ξ½ ΞΏΟΞΉΟƒΟ„ΞµΞ― ΞµΟ€Ξ±Ξ½Ξ±Ξ»Ξ±ΞΌΞ²Ξ±Ξ½ΟΞΌΞµΞ½ΞµΟ‚ Ξ±ΟΞ³Ξ―ΞµΟ‚</p>';
+                container.innerHTML = '<p class="text-muted text-center">Δεν έχουν οριστεί επαναλαμβανόμενες αργίες</p>';
                 return;
             }
             
@@ -3417,14 +3417,14 @@
                 
                 let displayText = '';
                 if (holiday.type === 'fixed') {
-                    const monthNames = ['Ξ™Ξ±Ξ½ΞΏΟ…Ξ±ΟΞ―ΞΏΟ…', 'Ξ¦ΞµΞ²ΟΞΏΟ…Ξ±ΟΞ―ΞΏΟ…', 'ΞΞ±ΟΟ„Ξ―ΞΏΟ…', 'Ξ‘Ο€ΟΞΉΞ»Ξ―ΞΏΟ…', 'ΞΞ±ΞΞΏΟ…', 'Ξ™ΞΏΟ…Ξ½Ξ―ΞΏΟ…', 
-                                       'Ξ™ΞΏΟ…Ξ»Ξ―ΞΏΟ…', 'Ξ‘Ο…Ξ³ΞΏΟΟƒΟ„ΞΏΟ…', 'Ξ£ΞµΟ€Ο„ΞµΞΌΞ²ΟΞ―ΞΏΟ…', 'ΞΞΊΟ„Ο‰Ξ²ΟΞ―ΞΏΟ…', 'ΞΞΏΞµΞΌΞ²ΟΞ―ΞΏΟ…', 'Ξ”ΞµΞΊΞµΞΌΞ²ΟΞ―ΞΏΟ…'];
+                    const monthNames = ['Ιανουαρίου', 'Φεβρουαρίου', 'Μαρτίου', 'Απριλίου', 'Μαΐου', 'Ιουνίου', 
+                                       'Ιουλίου', 'Αυγούστου', 'Σεπτεμβρίου', 'Οκτωβρίου', 'Νοεμβρίου', 'Δεκεμβρίου'];
                     displayText = `${holiday.day} ${monthNames[holiday.month - 1]} - ${holiday.name}`;
                 } else if (holiday.type === 'easter-relative') {
-                    const offsetText = holiday.offset === 0 ? 'Ξ Ξ¬ΟƒΟ‡Ξ±' : 
-                                      holiday.offset === -1 ? '1 Ξ·ΞΌΞ­ΟΞ± Ο€ΟΞΉΞ½ Ο„ΞΏ Ξ Ξ¬ΟƒΟ‡Ξ±' :
-                                      holiday.offset === 1 ? '1 Ξ·ΞΌΞ­ΟΞ± ΞΌΞµΟ„Ξ¬ Ο„ΞΏ Ξ Ξ¬ΟƒΟ‡Ξ±' :
-                                      `${holiday.offset} Ξ·ΞΌΞ­ΟΞµΟ‚ ${holiday.offset > 0 ? 'ΞΌΞµΟ„Ξ¬' : 'Ο€ΟΞΉΞ½'} Ο„ΞΏ Ξ Ξ¬ΟƒΟ‡Ξ±`;
+                    const offsetText = holiday.offset === 0 ? 'Πάσχα' : 
+                                      holiday.offset === -1 ? '1 ημέρα πριν το Πάσχα' :
+                                      holiday.offset === 1 ? '1 ημέρα μετά το Πάσχα' :
+                                      `${holiday.offset} ημέρες ${holiday.offset > 0 ? 'μετά' : 'πριν'} το Πάσχα`;
                     displayText = `${holiday.name} (${offsetText})`;
                 }
                 
@@ -3458,7 +3458,7 @@
             const name = document.getElementById('recurringHolidayName').value.trim();
             
             if (!name) {
-                alert('Ξ Ξ±ΟΞ±ΞΊΞ±Ξ»Ο ΞµΞΉΟƒΞ¬Ξ³ΞµΟ„Ξµ ΟΞ½ΞΏΞΌΞ±');
+                alert('Παρακαλώ εισάγετε όνομα');
                 return;
             }
             
@@ -3469,7 +3469,7 @@
                 const day = parseInt(document.getElementById('recurringHolidayDay').value);
                 
                 if (!month || !day) {
-                    alert('Ξ Ξ±ΟΞ±ΞΊΞ±Ξ»Ο ΞµΟ€ΞΉΞ»Ξ­ΞΎΟ„Ξµ ΞΌΞ®Ξ½Ξ± ΞΊΞ±ΞΉ Ξ·ΞΌΞ­ΟΞ±');
+                    alert('Παρακαλώ επιλέξτε μήνα και ημέρα');
                     return;
                 }
                 
@@ -3494,7 +3494,7 @@
 
         // Remove recurring holiday
         function removeRecurringHoliday(index) {
-            if (confirm('Ξ•Ξ―ΟƒΟ„Ξµ ΟƒΞ―Ξ³ΞΏΟ…ΟΞΏΞΉ ΟΟ„ΞΉ ΞΈΞ­Ξ»ΞµΟ„Ξµ Ξ½Ξ± Ξ±Ο†Ξ±ΞΉΟΞ­ΟƒΞµΟ„Ξµ Ξ±Ο…Ο„Ξ® Ο„Ξ·Ξ½ ΞµΟ€Ξ±Ξ½Ξ±Ξ»Ξ±ΞΌΞ²Ξ±Ξ½ΟΞΌΞµΞ½Ξ· Ξ±ΟΞ³Ξ―Ξ±;')) {
+            if (confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την επαναλαμβανόμενη αργία;')) {
                 recurringSpecialHolidays.splice(index, 1);
                 saveRecurringHolidaysConfig();
                 renderRecurringHolidays();
@@ -3669,29 +3669,29 @@
             const dateKey = formatDateKey(date);
             
             // Fixed Orthodox holidays
-            if (month === 1 && day === 1) return 'Ξ ΟΟ‰Ο„ΞΏΟ‡ΟΞΏΞ½ΞΉΞ¬';
-            if (month === 1 && day === 6) return 'ΞΞµΞΏΟ†Ξ¬Ξ½ΞΉΞ±';
-            if (month === 3 && day === 25) return 'Ξ•Ο…Ξ±Ξ³Ξ³ΞµΞ»ΞΉΟƒΞΌΟΟ‚';
-            if (month === 4 && day === 1) return 'Ξ•ΞΞΞ‘';
-            if (month === 5 && day === 1) return 'Ξ ΟΟ‰Ο„ΞΏΞΌΞ±Ξ³ΞΉΞ¬';
-            if (month === 8 && day === 15) return 'ΞΞΏΞ―ΞΌΞ·ΟƒΞ·';
-            if (month === 10 && day === 1) return 'Ξ‘Ξ½ΞµΞΎΞ±ΟΟ„Ξ·ΟƒΞ―Ξ±';
-            if (month === 10 && day === 28) return 'ΞΟ‡ΞΉ';
+            if (month === 1 && day === 1) return 'Πρωτοχρονιά';
+            if (month === 1 && day === 6) return 'Θεοφάνια';
+            if (month === 3 && day === 25) return 'Ευαγγελισμός';
+            if (month === 4 && day === 1) return 'ΕΟΚΑ';
+            if (month === 5 && day === 1) return 'Πρωτομαγιά';
+            if (month === 8 && day === 15) return 'Κοίμηση';
+            if (month === 10 && day === 1) return 'Ανεξαρτησία';
+            if (month === 10 && day === 28) return 'Όχι';
             // December 24 is a special holiday, name comes from special holidays list
-            if (month === 12 && day === 25) return 'Ξ§ΟΞΉΟƒΟ„ΞΏΟΞ³ΞµΞ½Ξ½Ξ±';
-            if (month === 12 && day === 26) return 'Ξ£ΟΞ½Ξ±ΞΎΞ·Ο‚';
-            if (month === 12 && day === 31) return 'Ξ Ξ±ΟΞ±ΞΌΞΏΞ½Ξ®';
+            if (month === 12 && day === 25) return 'Χριστούγεννα';
+            if (month === 12 && day === 26) return 'Σύναξης';
+            if (month === 12 && day === 31) return 'Παραμονή';
             
             // Orthodox holidays based on Easter (excluding Ascension and Pentecost)
             const orthodoxHolidays = calculateOrthodoxHolidays(year);
             
-            if (dateKey === formatDateKey(orthodoxHolidays.cleanMonday)) return 'ΞΞ±ΞΈΞ±ΟΞ¬ Ξ”ΞµΟ…Ο„Ξ­ΟΞ±';
-            if (dateKey === formatDateKey(orthodoxHolidays.palmSunday)) return 'ΞΟ…ΟΞΉΞ±ΞΊΞ® Ξ’Ξ±ΞΟ‰Ξ½';
-            if (dateKey === formatDateKey(orthodoxHolidays.goodFriday)) return 'Ξ. Ξ Ξ±ΟΞ±ΟƒΞΊΞµΟ…Ξ®';
-            if (dateKey === formatDateKey(orthodoxHolidays.greatSaturday)) return 'Ξ. Ξ£Ξ¬Ξ²Ξ²Ξ±Ο„ΞΏ';
-            if (dateKey === formatDateKey(orthodoxHolidays.easterSunday)) return 'Ξ Ξ¬ΟƒΟ‡Ξ±';
-            if (dateKey === formatDateKey(orthodoxHolidays.easterMonday)) return 'Ξ”ΞµΟ…Ο„Ξ­ΟΞ± Ξ Ξ¬ΟƒΟ‡Ξ±';
-            if (dateKey === formatDateKey(orthodoxHolidays.whitMonday)) return 'Ξ‘Ξ³Ξ―ΞΏΟ… Ξ Ξ½ΞµΟΞΌΞ±Ο„ΞΏΟ‚';
+            if (dateKey === formatDateKey(orthodoxHolidays.cleanMonday)) return 'Καθαρά Δευτέρα';
+            if (dateKey === formatDateKey(orthodoxHolidays.palmSunday)) return 'Κυριακή Βαΐων';
+            if (dateKey === formatDateKey(orthodoxHolidays.goodFriday)) return 'Μ. Παρασκευή';
+            if (dateKey === formatDateKey(orthodoxHolidays.greatSaturday)) return 'Μ. Σάββατο';
+            if (dateKey === formatDateKey(orthodoxHolidays.easterSunday)) return 'Πάσχα';
+            if (dateKey === formatDateKey(orthodoxHolidays.easterMonday)) return 'Δευτέρα Πάσχα';
+            if (dateKey === formatDateKey(orthodoxHolidays.whitMonday)) return 'Αγίου Πνεύματος';
             
             return null;
         }
@@ -3766,20 +3766,20 @@
 
         // Get Greek day name (short)
         function getGreekDayName(date) {
-            const days = ['ΞΟ…ΟΞΉΞ±ΞΊΞ®', 'Ξ”ΞµΟ…Ο„Ξ­ΟΞ±', 'Ξ¤ΟΞ―Ο„Ξ·', 'Ξ¤ΞµΟ„Ξ¬ΟΟ„Ξ·', 'Ξ Ξ­ΞΌΟ€Ο„Ξ·', 'Ξ Ξ±ΟΞ±ΟƒΞΊΞµΟ…Ξ®', 'Ξ£Ξ¬Ξ²Ξ²Ξ±Ο„ΞΏ'];
+            const days = ['Κυριακή', 'Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτη', 'Παρασκευή', 'Σάββατο'];
             return days[date.getDay()];
         }
         
         // Get Greek day name in uppercase for Excel
         function getGreekDayNameUppercase(date) {
-            const days = ['ΞΞ¥Ξ΅Ξ™Ξ‘ΞΞ—', 'Ξ”Ξ•Ξ¥Ξ¤Ξ•Ξ΅Ξ‘', 'Ξ¤Ξ΅Ξ™Ξ¤Ξ—', 'Ξ¤Ξ•Ξ¤Ξ‘Ξ΅Ξ¤Ξ—', 'Ξ Ξ•ΞΞ Ξ¤Ξ—', 'Ξ Ξ‘Ξ΅Ξ‘Ξ£ΞΞ•Ξ¥Ξ—', 'Ξ£Ξ‘Ξ’Ξ’Ξ‘Ξ¤Ξ'];
+            const days = ['ΚΥΡΙΑΚΗ', 'ΔΕΥΤΕΡΑ', 'ΤΡΙΤΗ', 'ΤΕΤΑΡΤΗ', 'ΠΕΜΠΤΗ', 'ΠΑΡΑΣΚΕΥΗ', 'ΣΑΒΒΑΤΟ'];
             return days[date.getDay()];
         }
 
         // Get Greek month name
         function getGreekMonthName(date) {
-            const months = ['Ξ™Ξ±Ξ½ΞΏΟ…Ξ±ΟΞ―ΞΏΟ…', 'Ξ¦ΞµΞ²ΟΞΏΟ…Ξ±ΟΞ―ΞΏΟ…', 'ΞΞ±ΟΟ„Ξ―ΞΏΟ…', 'Ξ‘Ο€ΟΞΉΞ»Ξ―ΞΏΟ…', 'ΞΞ±ΞΞΏΟ…', 'Ξ™ΞΏΟ…Ξ½Ξ―ΞΏΟ…',
-                          'Ξ™ΞΏΟ…Ξ»Ξ―ΞΏΟ…', 'Ξ‘Ο…Ξ³ΞΏΟΟƒΟ„ΞΏΟ…', 'Ξ£ΞµΟ€Ο„ΞµΞΌΞ²ΟΞ―ΞΏΟ…', 'ΞΞΊΟ„Ο‰Ξ²ΟΞ―ΞΏΟ…', 'ΞΞΏΞµΞΌΞ²ΟΞ―ΞΏΟ…', 'Ξ”ΞµΞΊΞµΞΌΞ²ΟΞ―ΞΏΟ…'];
+            const months = ['Ιανουαρίου', 'Φεβρουαρίου', 'Μαρτίου', 'Απριλίου', 'Μαΐου', 'Ιουνίου',
+                          'Ιουλίου', 'Αυγούστου', 'Σεπτεμβρίου', 'Οκτωβρίου', 'Νοεμβρίου', 'Δεκεμβρίου'];
             return months[date.getMonth()];
         }
 
@@ -3833,9 +3833,9 @@
                         <table class="table table-bordered" style="font-size: 12px;">
                             <thead>
                                 <tr style="background-color: #428BCA; color: white;">
-                                    <th style="width: 12%; text-align: center; padding: 8px;">Ξ—ΞΞ•Ξ΅.</th>
-                                    <th style="width: 15%; text-align: center; padding: 8px;">Ξ—ΞΞ•Ξ΅Ξ‘</th>
-                                    <th style="width: 30%; text-align: center; padding: 8px;">ΞΞΞΞΞ‘Ξ¤Ξ•Ξ Ξ©ΞΞ¥ΞΞ</th>
+                                    <th style="width: 12%; text-align: center; padding: 8px;">ΗΜΕΡ.</th>
+                                    <th style="width: 15%; text-align: center; padding: 8px;">ΗΜΕΡΑ</th>
+                                    <th style="width: 30%; text-align: center; padding: 8px;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
                                 </tr>
                             </thead>
                             <tbody id="previewGroup${groupNum}">
@@ -3863,7 +3863,7 @@
                         // Extract person name for this group
                         const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
                         for (const part of parts) {
-                            const match = part.match(/^(.+?)\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)\s*$/);
+                            const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                             if (match && parseInt(match[2]) === groupNum) {
                                 personName = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
                                 break;
@@ -3895,7 +3895,7 @@
                 previewContent.innerHTML = `
                     <div class="alert alert-warning">
                         <i class="fas fa-exclamation-triangle me-2"></i>
-                        Ξ”ΞµΞ½ Ο…Ο€Ξ¬ΟΟ‡ΞΏΟ…Ξ½ ΞΏΞΌΞ¬Ξ΄ΞµΟ‚ ΞΌΞµ Ξ¬Ο„ΞΏΞΌΞ± Ξ³ΞΉΞ± Ξ½Ξ± Ξ΄Ξ·ΞΌΞΉΞΏΟ…ΟΞ³Ξ·ΞΈΞΏΟΞ½ Excel Ξ±ΟΟ‡ΞµΞ―Ξ±.
+                        Δεν υπάρχουν ομάδες με άτομα για να δημιουργηθούν Excel αρχεία.
                     </div>
                 `;
                 if (generateBtn) {
@@ -3928,7 +3928,7 @@
                 const loadingAlert = document.createElement('div');
                 loadingAlert.className = 'alert alert-info position-fixed top-50 start-50 translate-middle';
                 loadingAlert.style.zIndex = '9999';
-                loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Ξ”Ξ·ΞΌΞΉΞΏΟ…ΟΞ³Ξ―Ξ± Excel Ξ±ΟΟ‡ΞµΞ―Ο‰Ξ½...';
+                loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Δημιουργία Excel αρχείων...';
                 document.body.appendChild(loadingAlert);
                 
                 // Check if ExcelJS is available, otherwise fall back to SheetJS
@@ -3947,12 +3947,12 @@
                     if (useExcelJS) {
                         // Use ExcelJS for better styling support
                         const workbook = new ExcelJS.Workbook();
-                        const worksheet = workbook.addWorksheet('Ξ¥Ο€Ξ·ΟΞµΟƒΞ―ΞµΟ‚');
+                        const worksheet = workbook.addWorksheet('Υπηρεσίες');
                         
                         // Set title - merge cells A1 through C1
                         worksheet.mergeCells('A1:C1');
                         const titleCell = worksheet.getCell('A1');
-                        titleCell.value = `Ξ¥Ξ Ξ—Ξ΅Ξ•Ξ£Ξ™Ξ‘ ${groupName} ΞΞ—ΞΞΞ£ ${monthName.toUpperCase()} ${year}`;
+                        titleCell.value = `ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`;
                         titleCell.font = { 
                             name: 'Arial', 
                             bold: true, 
@@ -3982,9 +3982,9 @@
                         
                         // Header row
                         const headerRow = worksheet.getRow(3);
-                        headerRow.getCell(1).value = 'Ξ—ΞΞ•Ξ΅.';
-                        headerRow.getCell(2).value = 'Ξ—ΞΞ•Ξ΅Ξ‘';
-                        headerRow.getCell(3).value = 'ΞΞΞΞΞ‘Ξ¤Ξ•Ξ Ξ©ΞΞ¥ΞΞ';
+                        headerRow.getCell(1).value = 'ΗΜΕΡ.';
+                        headerRow.getCell(2).value = 'ΗΜΕΡΑ';
+                        headerRow.getCell(3).value = 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ';
                         
                         // Style each header cell individually
                         ['A3', 'B3', 'C3'].forEach(cellRef => {
@@ -4037,7 +4037,7 @@
                                 // Extract person name for this group - split by comma first to handle properly
                                 const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
                                 for (const part of parts) {
-                                    const match = part.match(/^(.+?)\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)\s*$/);
+                                    const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                                     if (match && parseInt(match[2]) === groupNum) {
                                         // Remove any leading/trailing commas from the name
                                         personName = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
@@ -4113,11 +4113,11 @@
                         const data = [];
                         const rowDayTypes = [];
                         
-                        data.push([`Ξ¥Ξ Ξ—Ξ΅Ξ•Ξ£Ξ™Ξ‘ ${groupName} ΞΞ—ΞΞΞ£ ${monthName.toUpperCase()} ${year}`]);
+                        data.push([`ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`]);
                         data.push([]);
                         rowDayTypes.push(null, null);
                         
-                        data.push(['Ξ—ΞΞ•Ξ΅.', 'Ξ—ΞΞ•Ξ΅Ξ‘', 'ΞΞΞΞΞ‘Ξ¤Ξ•Ξ Ξ©ΞΞ¥ΞΞ']);
+                        data.push(['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ']);
                         rowDayTypes.push(null);
                         
                         for (let day = 1; day <= daysInMonth; day++) {
@@ -4132,7 +4132,7 @@
                             if (assignment) {
                                 const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
                                 for (const part of parts) {
-                                    const match = part.match(/^(.+?)\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)\s*$/);
+                                    const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                                     if (match && parseInt(match[2]) === groupNum) {
                                         personName = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
                                         break;
@@ -4190,7 +4190,7 @@
                             });
                         }
                         
-                        XLSX.utils.book_append_sheet(wb, ws, 'Ξ¥Ο€Ξ·ΟΞµΟƒΞ―ΞµΟ‚');
+                        XLSX.utils.book_append_sheet(wb, ws, 'Υπηρεσίες');
                         const fileName = `YPHRESIA_${groupName.replace(/[^a-zA-Z0-9]/g, '_')}_${monthName.replace(/[^a-zA-Z0-9]/g, '_')}_${year}.xlsx`;
                         XLSX.writeFile(wb, fileName);
                     }
@@ -4209,10 +4209,10 @@
                     }
                 }
                 
-                alert('Ξ¤Ξ± Excel Ξ±ΟΟ‡ΞµΞ―Ξ± Ξ΄Ξ·ΞΌΞΉΞΏΟ…ΟΞ³Ξ®ΞΈΞ·ΞΊΞ±Ξ½ ΞµΟ€ΞΉΟ„Ο…Ο‡ΟΟ‚!');
+                alert('Τα Excel αρχεία δημιουργήθηκαν επιτυχώς!');
             } catch (error) {
                 console.error('Error generating Excel files:', error);
-                alert('Ξ£Ο†Ξ¬Ξ»ΞΌΞ± ΞΊΞ±Ο„Ξ¬ Ο„Ξ· Ξ΄Ξ·ΞΌΞΉΞΏΟ…ΟΞ³Ξ―Ξ± Ο„Ο‰Ξ½ Excel Ξ±ΟΟ‡ΞµΞ―Ο‰Ξ½: ' + error.message);
+                alert('Σφάλμα κατά τη δημιουργία των Excel αρχείων: ' + error.message);
                 // Remove loading message if still present
                 const loadingAlert = document.querySelector('.alert.position-fixed');
                 if (loadingAlert) {
@@ -4240,8 +4240,8 @@
         function extractAllPersonNames(assignment) {
             if (!assignment) return [];
             
-            // Match all patterns like "Name (ΞΞΌΞ¬Ξ΄Ξ± X)"
-            const matches = assignment.matchAll(/([^(]+)\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)/g);
+            // Match all patterns like "Name (Ομάδα X)"
+            const matches = assignment.matchAll(/([^(]+)\s*\(Ομάδα\s*(\d+)\)/g);
             const persons = [];
             
             for (const match of matches) {
@@ -4337,7 +4337,7 @@
             grid.innerHTML = '';
             
             // Day headers - Monday first
-            const dayHeaders = ['Ξ”ΞµΟ…', 'Ξ¤ΟΞΉ', 'Ξ¤ΞµΟ„', 'Ξ ΞµΞΌ', 'Ξ Ξ±Ο', 'Ξ£Ξ±Ξ²', 'ΞΟ…Ο'];
+            const dayHeaders = ['Δευ', 'Τρι', 'Τετ', 'Πεμ', 'Παρ', 'Σαβ', 'Κυρ'];
             dayHeaders.forEach(header => {
                 const headerDiv = document.createElement('div');
                 headerDiv.className = 'calendar-day-header';
@@ -4402,8 +4402,8 @@
                     const personGroups = [];
                     
                     parts.forEach(part => {
-                        // Try to match "Name (ΞΞΌΞ¬Ξ΄Ξ± X)" pattern
-                        const match = part.match(/^(.+?)\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)\s*$/);
+                        // Try to match "Name (Ομάδα X)" pattern
+                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                         if (match) {
                             // Remove any leading/trailing commas from the name
                             const name = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
@@ -4415,9 +4415,9 @@
                         } else {
                             // If no group pattern, check if it's just a name
                             // Try to extract group info if it exists elsewhere in the string
-                            const groupMatch = part.match(/\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)/);
+                            const groupMatch = part.match(/\(Ομάδα\s*(\d+)\)/);
                             if (groupMatch) {
-                                let name = part.replace(/\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*\d+\)\s*/, '').trim();
+                                let name = part.replace(/\s*\(Ομάδα\s*\d+\)\s*/, '').trim();
                                 name = name.replace(/^,+\s*/, '').replace(/\s*,+$/, ''); // Remove leading/trailing commas
                                 personGroups.push({
                                     name: name,
@@ -4445,7 +4445,7 @@
                         // Check if this person-group combination is in critical assignments
                         const isCritical = criticalPeople.some(cp => {
                             if (group) {
-                                return cp === fullString || (cp.includes(name) && cp.includes(`(ΞΞΌΞ¬Ξ΄Ξ± ${group})`));
+                                return cp === fullString || (cp.includes(name) && cp.includes(`(Ομάδα ${group})`));
                             } else {
                                 return cp.includes(name);
                             }
@@ -4457,10 +4457,10 @@
                         let indicatorTitle = '';
                         if (reason) {
                             if (reason.type === 'skip') {
-                                indicatorIcon = '<i class="fas fa-arrow-right text-warning" title="Ξ Ξ±ΟΞ±Ξ»ΞµΞ―Ο†ΞΈΞ·ΞΊΞµ"></i> ';
+                                indicatorIcon = '<i class="fas fa-arrow-right text-warning" title="Παραλείφθηκε"></i> ';
                                 indicatorTitle = reason.reason;
                             } else if (reason.type === 'swap') {
-                                indicatorIcon = '<i class="fas fa-exchange-alt text-info" title="Ξ‘Ξ»Ξ»Ξ±Ξ³Ξ®"></i> ';
+                                indicatorIcon = '<i class="fas fa-exchange-alt text-info" title="Αλλαγή"></i> ';
                                 indicatorTitle = reason.reason;
                             }
                         }
@@ -4471,7 +4471,7 @@
                         const hasConflict = hasConsecutiveDuty(key, name, parseInt(group || 0));
                         if (hasConflict) {
                             // Make conflict icon highly visible - larger, with background color and border
-                            conflictIcon = '<i class="fas fa-exclamation-triangle" style="color: #dc3545; font-size: 1.2em; background-color: #fff3cd; padding: 3px 5px; border-radius: 4px; border: 2px solid #dc3545; display: inline-block; min-width: 20px; text-align: center;" title="Ξ£ΟΞ³ΞΊΟΞΏΟ…ΟƒΞ·"></i> ';
+                            conflictIcon = '<i class="fas fa-exclamation-triangle" style="color: #dc3545; font-size: 1.2em; background-color: #fff3cd; padding: 3px 5px; border-radius: 4px; border: 2px solid #dc3545; display: inline-block; min-width: 20px; text-align: center;" title="Σύγκρουση"></i> ';
                             const date = new Date(key + 'T00:00:00');
                             const dayBefore = new Date(date);
                             dayBefore.setDate(dayBefore.getDate() - 1);
@@ -4483,17 +4483,17 @@
                             let conflictDetails = [];
                             if (hasDutyOnDay(dayBeforeKey, name, parseInt(group || 0))) {
                                 const beforeDateStr = dayBefore.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                conflictDetails.push(`Ξ£Ο…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ· Ξ·ΞΌΞ­ΟΞ±: ${beforeDateStr}`);
+                                conflictDetails.push(`Συνεχόμενη ημέρα: ${beforeDateStr}`);
                             }
                             if (hasDutyOnDay(dayAfterKey, name, parseInt(group || 0))) {
                                 const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                conflictDetails.push(`Ξ£Ο…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ· Ξ·ΞΌΞ­ΟΞ±: ${afterDateStr}`);
+                                conflictDetails.push(`Συνεχόμενη ημέρα: ${afterDateStr}`);
                             }
                             if (conflictDetails.length > 0) {
                                 const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                conflictTitle = `Ξ£ΟΞ³ΞΊΟΞΏΟ…ΟƒΞ· - Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± ΞµΟ€Ξ·ΟΞµΞ±ΟƒΞΌΞ­Ξ½Ξ·: ${currentDateStr}, ${conflictDetails.join(', ')}`;
+                                conflictTitle = `Σύγκρουση - Ημερομηνία επηρεασμένη: ${currentDateStr}, ${conflictDetails.join(', ')}`;
                             } else {
-                                conflictTitle = 'Ξ£ΟΞ³ΞΊΟΞΏΟ…ΟƒΞ·';
+                                conflictTitle = 'Σύγκρουση';
                             }
                         }
                         
@@ -4522,7 +4522,7 @@
                         showDayDetails(date);
                     } catch (error) {
                         console.error('Error showing day details:', error);
-                        alert('Ξ£Ο†Ξ¬Ξ»ΞΌΞ± ΞΊΞ±Ο„Ξ¬ Ο„ΞΏ Ξ¬Ξ½ΞΏΞΉΞ³ΞΌΞ± Ο„Ο‰Ξ½ Ξ»ΞµΟ€Ο„ΞΏΞΌΞµΟΞµΞΉΟΞ½ Ξ·ΞΌΞ­ΟΞ±Ο‚: ' + error.message);
+                        alert('Σφάλμα κατά το άνοιγμα των λεπτομερειών ημέρας: ' + error.message);
                     }
                 });
                 
@@ -4533,10 +4533,10 @@
         // Get day type label
         function getDayTypeLabel(dayType) {
             switch(dayType) {
-                case 'special-holiday': return 'Ξ•ΞΉΞ΄ΞΉΞΊΞ®';
-                case 'normal-day': return 'ΞΞ±ΞΈΞ·ΞΌΞµΟΞΉΞ½Ξ®';
-                case 'semi-normal-day': return 'Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ±';
-                case 'weekend-holiday': return 'Ξ£Ξ±Ξ²Ξ²Ξ±Ο„ΞΏΞΊΟΟΞΉΞ±ΞΊΞΏ/Ξ‘ΟΞ³Ξ―Ξ±';
+                case 'special-holiday': return 'Ειδική';
+                case 'normal-day': return 'Καθημερινή';
+                case 'semi-normal-day': return 'Ημιαργία';
+                case 'weekend-holiday': return 'Σαββατοκύριακο/Αργία';
                 default: return '';
             }
         }
@@ -4561,15 +4561,15 @@
             let message = '';
             
             if (type === 'skip') {
-                message = `Ξ¤ΞΏ Ξ¬Ο„ΞΏΞΌΞΏ ${personName} Ξ­Ο‡ΞµΞΉ ΟƒΟΞ³ΞΊΟΞΏΟ…ΟƒΞ· ΟƒΟ„ΞΉΟ‚ ${dateStr}.\n\nΞ›ΟΞ³ΞΏΟ‚: ${reason}\n\nΞΞ± Ο€Ξ±ΟΞ±Ξ»ΞµΞΉΟ†ΞΈΞµΞ― Ξ±Ο…Ο„Ο Ο„ΞΏ Ξ¬Ο„ΞΏΞΌΞΏ;`;
+                message = `Το άτομο ${personName} έχει σύγκρουση στις ${dateStr}.\n\nΛόγος: ${reason}\n\nΝα παραλειφθεί αυτό το άτομο;`;
             } else if (type === 'swap') {
                 if (swapPerson && swapDateStr) {
-                    message = `Ξ¤ΞΏ Ξ¬Ο„ΞΏΞΌΞΏ ${personName} Ξ­Ο‡ΞµΞΉ ΟƒΟΞ³ΞΊΟΞΏΟ…ΟƒΞ· ΟƒΟ„ΞΉΟ‚ ${dateStr}.\n\nΞ›ΟΞ³ΞΏΟ‚: ${reason}\n\nΞ’ΟΞ­ΞΈΞ·ΞΊΞµ Ξ¬Ο„ΞΏΞΌΞΏ ${swapPerson} Ξ³ΞΉΞ± Ξ±Ξ»Ξ»Ξ±Ξ³Ξ® ΟƒΟ„ΞΉΟ‚ ${swapDateStr}.\n\nΞΞ± Ο€ΟΞΏΟ‡Ο‰ΟΞ®ΟƒΞµΞΉ Ξ· Ξ±Ξ»Ξ»Ξ±Ξ³Ξ®;`;
+                    message = `Το άτομο ${personName} έχει σύγκρουση στις ${dateStr}.\n\nΛόγος: ${reason}\n\nΒρέθηκε άτομο ${swapPerson} για αλλαγή στις ${swapDateStr}.\n\nΝα προχωρήσει η αλλαγή;`;
                 } else {
-                    message = `Ξ¤ΞΏ Ξ¬Ο„ΞΏΞΌΞΏ ${personName} Ξ­Ο‡ΞµΞΉ ΟƒΟΞ³ΞΊΟΞΏΟ…ΟƒΞ· ΟƒΟ„ΞΉΟ‚ ${dateStr}.\n\nΞ›ΟΞ³ΞΏΟ‚: ${reason}\n\nΞΞ± Ο€ΟΞΏΟ‡Ο‰ΟΞ®ΟƒΞµΞΉ Ξ· Ξ±Ξ»Ξ»Ξ±Ξ³Ξ®;`;
+                    message = `Το άτομο ${personName} έχει σύγκρουση στις ${dateStr}.\n\nΛόγος: ${reason}\n\nΝα προχωρήσει η αλλαγή;`;
                 }
             } else if (type === 'conflict') {
-                message = `Ξ¤ΞΏ Ξ¬Ο„ΞΏΞΌΞΏ ${personName} Ξ­Ο‡ΞµΞΉ ΟƒΟΞ³ΞΊΟΞΏΟ…ΟƒΞ· ΟƒΟ„ΞΉΟ‚ ${dateStr}.\n\nΞ›ΟΞ³ΞΏΟ‚: ${reason}\n\nΞΞ± Ο€ΟΞΏΟ‡Ο‰ΟΞ®ΟƒΞµΞΉ Ξ· Ξ±Ξ½Ξ¬ΞΈΞµΟƒΞ· Ο€Ξ±ΟΞ¬ Ο„Ξ· ΟƒΟΞ³ΞΊΟΞΏΟ…ΟƒΞ·;`;
+                message = `Το άτομο ${personName} έχει σύγκρουση στις ${dateStr}.\n\nΛόγος: ${reason}\n\nΝα προχωρήσει η ανάθεση παρά τη σύγκρουση;`;
             }
             
             return confirm(message);
@@ -4706,15 +4706,15 @@
             
             if (!assignment) return false;
             
-            const personGroupStr = `${person} (ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`;
+            const personGroupStr = `${person} (Ομάδα ${groupNum})`;
             return assignment.includes(personGroupStr);
         }
 
         // Check if a person has duty on consecutive days (day before or day after)
         // Conflict rules:
-        // - Normal β†” Semi-normal (before and after)
-        // - Semi-normal β†” Weekend/Special Holiday (before and after)
-        // - Weekend/Special Holiday β†” Normal (before and after)
+        // - Normal ↔ Semi-normal (before and after)
+        // - Semi-normal ↔ Weekend/Special Holiday (before and after)
+        // - Weekend/Special Holiday ↔ Normal (before and after)
         function hasConsecutiveDuty(dayKey, person, groupNum) {
             const date = new Date(dayKey + 'T00:00:00');
             const currentDayType = getDayType(date);
@@ -4747,9 +4747,9 @@
                 }
                 
                 // Check for conflicts based on specific rules:
-                // 1. Normal β†” Semi-normal
-                // 2. Semi-normal β†” Weekend/Special Holiday
-                // 3. Weekend/Special Holiday β†” Normal
+                // 1. Normal ↔ Semi-normal
+                // 2. Semi-normal ↔ Weekend/Special Holiday
+                // 3. Weekend/Special Holiday ↔ Normal
                 const isNormalSemiConflict = (currentTypeCategory === 'normal' && beforeTypeCategory === 'semi') || 
                                              (currentTypeCategory === 'semi' && beforeTypeCategory === 'normal');
                 const isSemiWeekendSpecialConflict = (currentTypeCategory === 'semi' && (beforeTypeCategory === 'weekend' || beforeTypeCategory === 'special')) ||
@@ -4792,9 +4792,9 @@
                 }
                 
                 // Check for conflicts based on specific rules:
-                // 1. Normal β†” Semi-normal
-                // 2. Semi-normal β†” Weekend/Special Holiday
-                // 3. Weekend/Special Holiday β†” Normal
+                // 1. Normal ↔ Semi-normal
+                // 2. Semi-normal ↔ Weekend/Special Holiday
+                // 3. Weekend/Special Holiday ↔ Normal
                 const isNormalSemiConflict = (currentTypeCategory === 'normal' && afterTypeCategory === 'semi') || 
                                              (currentTypeCategory === 'semi' && afterTypeCategory === 'normal');
                 const isSemiWeekendSpecialConflict = (currentTypeCategory === 'semi' && (afterTypeCategory === 'weekend' || afterTypeCategory === 'special')) ||
@@ -5182,7 +5182,7 @@
                 const preserveCheckbox = document.getElementById('preserveExistingAssignments');
                 
                 if (!startMonthInput || !preserveCheckbox) {
-                    alert('Ξ£Ο†Ξ¬Ξ»ΞΌΞ±: Ξ”ΞµΞ½ Ξ²ΟΞ­ΞΈΞ·ΞΊΞ±Ξ½ Ο„Ξ± Ξ±Ο€Ξ±ΟΞ±Ξ―Ο„Ξ·Ο„Ξ± ΟƒΟ„ΞΏΞΉΟ‡ΞµΞ―Ξ± Ο„Ξ·Ο‚ Ο†ΟΟΞΌΞ±Ο‚');
+                    alert('Σφάλμα: Δεν βρέθηκαν τα απαραίτητα στοιχεία της φόρμας');
                     console.error('Missing form elements:', { startMonthInput, endMonthInput, preserveCheckbox });
                     return;
                 }
@@ -5192,7 +5192,7 @@
                 const preserveExisting = preserveCheckbox.checked;
                 
                 if (!startMonth) {
-                    alert('Ξ Ξ±ΟΞ±ΞΊΞ±Ξ»Ο ΞµΟ€ΞΉΞ»Ξ­ΞΎΟ„Ξµ Ο„ΞΏΟ…Ξ»Ξ¬Ο‡ΞΉΟƒΟ„ΞΏΞ½ Ο„ΞΏΞ½ ΞΌΞ®Ξ½Ξ± Ξ­Ξ½Ξ±ΟΞΎΞ·Ο‚');
+                    alert('Παρακαλώ επιλέξτε τουλάχιστον τον μήνα έναρξης');
                     return;
                 }
                 
@@ -5225,7 +5225,7 @@
                 showStepByStepCalculation();
             } catch (error) {
                 console.error('Error in calculateDutiesForSelectedMonths:', error);
-                alert('Ξ£Ο†Ξ¬Ξ»ΞΌΞ± ΞΊΞ±Ο„Ξ¬ Ο„ΞΏΞ½ Ο…Ο€ΞΏΞ»ΞΏΞ³ΞΉΟƒΞΌΟ: ' + error.message);
+                alert('Σφάλμα κατά τον υπολογισμό: ' + error.message);
             }
         }
         
@@ -5307,28 +5307,28 @@
             const specialHolidays = dayTypeLists.special;
             
             let html = '<div class="step-content">';
-            html += '<h6 class="mb-3"><i class="fas fa-star text-warning me-2"></i>Ξ’Ξ®ΞΌΞ± 1: Ξ•ΞΉΞ΄ΞΉΞΊΞ­Ο‚ Ξ‘ΟΞ³Ξ―ΞµΟ‚</h6>';
+            html += '<h6 class="mb-3"><i class="fas fa-star text-warning me-2"></i>Βήμα 1: Ειδικές Αργίες</h6>';
             
             if (specialHolidays.length === 0) {
                 html += '<div class="alert alert-info">';
                 html += '<i class="fas fa-info-circle me-2"></i>';
-                html += 'Ξ”ΞµΞ½ Ξ²ΟΞ­ΞΈΞ·ΞΊΞ±Ξ½ ΞµΞΉΞ΄ΞΉΞΊΞ­Ο‚ Ξ±ΟΞ³Ξ―ΞµΟ‚ ΟƒΟ„Ξ·Ξ½ ΞµΟ€ΞΉΞ»ΞµΞ³ΞΌΞ­Ξ½Ξ· Ο€ΞµΟΞ―ΞΏΞ΄ΞΏ.';
+                html += 'Δεν βρέθηκαν ειδικές αργίες στην επιλεγμένη περίοδο.';
                 html += '</div>';
             } else {
                 html += '<div class="alert alert-success">';
-                html += `<i class="fas fa-check-circle me-2"></i>Ξ’ΟΞ­ΞΈΞ·ΞΊΞ±Ξ½ <strong>${specialHolidays.length}</strong> ΞµΞΉΞ΄ΞΉΞΊΞ­Ο‚ Ξ±ΟΞ³Ξ―ΞµΟ‚ ΟƒΟ„Ξ·Ξ½ ΞµΟ€ΞΉΞ»ΞµΞ³ΞΌΞ­Ξ½Ξ· Ο€ΞµΟΞ―ΞΏΞ΄ΞΏ.`;
+                html += `<i class="fas fa-check-circle me-2"></i>Βρέθηκαν <strong>${specialHolidays.length}</strong> ειδικές αργίες στην επιλεγμένη περίοδο.`;
                 html += '</div>';
                 
                 html += '<div class="table-responsive mt-3">';
                 html += '<table class="table table-bordered table-hover">';
                 html += '<thead class="table-warning">';
                 html += '<tr>';
-                html += '<th>Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ±</th>';
-                html += '<th>ΞΞ½ΞΏΞΌΞ± Ξ‘ΟΞ³Ξ―Ξ±Ο‚</th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 1<br><small>Ξ•Ξ Ξ™ΞΞ•Ξ¦Ξ‘Ξ›Ξ—Ξ£-Ξ‘Ξ¥Ξ</small></th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 2<br><small>ΞΞ—Ξ§Ξ‘ΞΞ™ΞΞΞ£-ΞΞ Ξ›ΞΞ¥Ξ΅Ξ“ΞΞ£-ΞΞ”Ξ—Ξ“ΞΞ£</small></th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 3<br><small>Ξ¤Ξ•Ξ§ΞΞ™ΞΞΞ£ Ξ•/Ξ  AW139</small></th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 4<br><small>Ξ¤Ξ•Ξ§ΞΞ™ΞΞΞ£ Ξ•Ξ Ξ™Ξ“Ξ•Ξ™Ξ©Ξ ΞΞ•Ξ£Ξ©Ξ</small></th>';
+                html += '<th>Ημερομηνία</th>';
+                html += '<th>Όνομα Αργίας</th>';
+                html += '<th>Ομάδα 1<br><small>ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</small></th>';
+                html += '<th>Ομάδα 2<br><small>ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</small></th>';
+                html += '<th>Ομάδα 3<br><small>ΤΕΧΝΙΚΟΣ Ε/Π AW139</small></th>';
+                html += '<th>Ομάδα 4<br><small>ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</small></th>';
                 html += '</tr>';
                 html += '</thead>';
                 html += '<tbody>';
@@ -5366,7 +5366,7 @@
                     
                     html += '<tr>';
                     html += `<td><strong>${dateStr}</strong><br><small class="text-muted">${dayName}</small></td>`;
-                    html += `<td>${holidayName || 'Ξ•ΞΉΞ΄ΞΉΞΊΞ® Ξ‘ΟΞ³Ξ―Ξ±'}</td>`;
+                    html += `<td>${holidayName || 'Ειδική Αργία'}</td>`;
                     
                     // Calculate who will be assigned for each group based on rotation order
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -5400,13 +5400,13 @@
                             if (assignedPerson) {
                                 const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'special', dayTypeLists, startDate);
                                     const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'special', groupPeople.length);
-                                    lastDutyInfo = dutyDates.lastDuty !== 'Ξ”ΞµΞ½ Ξ­Ο‡ΞµΞΉ' ? `<br><small class="text-muted">Ξ¤ΞµΞ»ΞµΟ…Ο„Ξ±Ξ―Ξ±: ${dutyDates.lastDuty}</small>` : '';
+                                    lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
                                 
                                 // Show days counted in parentheses
                                 if (daysSince !== null && daysSince !== Infinity) {
-                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} Ξ·ΞΌΞ­ΟΞµΟ‚)</span>`;
+                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} ημέρες)</span>`;
                                 } else if (daysSince === Infinity) {
-                                    daysCountInfo = ' <span class="text-success">(Ο€ΟΟΟ„Ξ· Ο†ΞΏΟΞ¬)</span>';
+                                    daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
                                 }
                             }
                             
@@ -5471,7 +5471,7 @@
                 loadingAlert = document.createElement('div');
                 loadingAlert.className = 'alert alert-info position-fixed top-50 start-50 translate-middle';
                 loadingAlert.style.zIndex = '9999';
-                loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Ξ¥Ο€ΞΏΞ»ΞΏΞ³ΞΉΟƒΞΌΟΟ‚ ΞΊΞ±ΞΉ Ξ±Ο€ΞΏΞΈΞ®ΞΊΞµΟ…ΟƒΞ·...';
+                loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Υπολογισμός και αποθήκευση...';
                 document.body.appendChild(loadingAlert);
             
             // Execute the actual calculation
@@ -5510,7 +5510,7 @@
             if (!tempAssignments) {
                 // Try to load from Firestore if not in memory
                 if (loadingAlert && loadingAlert.parentNode) {
-                    loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Ξ¦ΟΟΟ„Ο‰ΟƒΞ· Ο€ΟΞΏΟƒΟ‰ΟΞΉΞ½ΟΞ½ Ο…Ο€ΞΏΞ»ΞΏΞ³ΞΉΟƒΞΌΟΞ½...';
+                    loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Φόρτωση προσωρινών υπολογισμών...';
                 }
                 try {
                     const db = window.db || firebase.firestore();
@@ -5580,7 +5580,7 @@
                                     if (!specialHolidayAssignments[dateKey]) {
                                         specialHolidayAssignments[dateKey] = '';
                                     }
-                                    const assignment = `${assignedPerson} (ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`;
+                                    const assignment = `${assignedPerson} (Ομάδα ${groupNum})`;
                                     if (!specialHolidayAssignments[dateKey].includes(assignment)) {
                                         specialHolidayAssignments[dateKey] = specialHolidayAssignments[dateKey] 
                                             ? `${specialHolidayAssignments[dateKey]}, ${assignment}`
@@ -5601,7 +5601,7 @@
                             if (!weekendAssignments[dateKey]) {
                                 weekendAssignments[dateKey] = '';
                             }
-                            const assignment = `${person} (ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`;
+                            const assignment = `${person} (Ομάδα ${groupNum})`;
                             if (!weekendAssignments[dateKey].includes(assignment)) {
                                 weekendAssignments[dateKey] = weekendAssignments[dateKey]
                                     ? `${weekendAssignments[dateKey]}, ${assignment}`
@@ -5619,7 +5619,7 @@
                             if (!semiNormalAssignments[dateKey]) {
                                 semiNormalAssignments[dateKey] = '';
                             }
-                            const assignment = `${person} (ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`;
+                            const assignment = `${person} (Ομάδα ${groupNum})`;
                             if (!semiNormalAssignments[dateKey].includes(assignment)) {
                                 semiNormalAssignments[dateKey] = semiNormalAssignments[dateKey]
                                     ? `${semiNormalAssignments[dateKey]}, ${assignment}`
@@ -5637,7 +5637,7 @@
                             if (!normalDayAssignments[dateKey]) {
                                 normalDayAssignments[dateKey] = '';
                             }
-                            const assignment = `${person} (ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`;
+                            const assignment = `${person} (Ομάδα ${groupNum})`;
                             if (!normalDayAssignments[dateKey].includes(assignment)) {
                                 normalDayAssignments[dateKey] = normalDayAssignments[dateKey]
                                     ? `${normalDayAssignments[dateKey]}, ${assignment}`
@@ -5683,7 +5683,7 @@
             } else {
                 // No temp assignments found - this should not happen if preview was shown
                 console.error('No temp assignments found! Please go through the preview steps first.');
-                alert('Ξ£Ο†Ξ¬Ξ»ΞΌΞ±: Ξ”ΞµΞ½ Ξ²ΟΞ­ΞΈΞ·ΞΊΞ±Ξ½ Ο€ΟΞΏΟƒΟ‰ΟΞΉΞ½ΞΏΞ― Ο…Ο€ΞΏΞ»ΞΏΞ³ΞΉΟƒΞΌΞΏΞ―. Ξ Ξ±ΟΞ±ΞΊΞ±Ξ»Ο Ο€Ξ·Ξ³Ξ±Ξ―Ξ½ΞµΟ„Ξµ Ο€ΟΟΟ„Ξ± Ξ±Ο€Ο Ο„Ξ± Ξ²Ξ®ΞΌΞ±Ο„Ξ± Ο€ΟΞΏΞµΟ€ΞΉΟƒΞΊΟΟ€Ξ·ΟƒΞ·Ο‚.');
+                alert('Σφάλμα: Δεν βρέθηκαν προσωρινοί υπολογισμοί. Παρακαλώ πηγαίνετε πρώτα από τα βήματα προεπισκόπησης.');
                 if (loadingAlert && loadingAlert.parentNode) {
                     document.body.removeChild(loadingAlert);
                 }
@@ -5692,7 +5692,7 @@
             
                 // Save all assignments to Firebase
                 if (loadingAlert && loadingAlert.parentNode) {
-                    loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Ξ‘Ο€ΞΏΞΈΞ®ΞΊΞµΟ…ΟƒΞ· ΟƒΟ„ΞΏ Firebase...';
+                    loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Αποθήκευση στο Firebase...';
                 }
                 await saveData();
                 
@@ -5710,7 +5710,7 @@
                 
                 // Reload data from Firebase to refresh the display
                 if (loadingAlert && loadingAlert.parentNode) {
-                    loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Ξ¦ΟΟΟ„Ο‰ΟƒΞ· Ξ΄ΞµΞ΄ΞΏΞΌΞ­Ξ½Ο‰Ξ½...';
+                    loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Φόρτωση δεδομένων...';
                 }
                 await loadData();
                 
@@ -5744,7 +5744,7 @@
                     document.body.style.paddingRight = '';
                 }, 300);
                 
-                alert('Ξ Ο…Ο€ΞΏΞ»ΞΏΞ³ΞΉΟƒΞΌΟΟ‚ ΞΏΞ»ΞΏΞΊΞ»Ξ·ΟΟΞΈΞ·ΞΊΞµ ΞΊΞ±ΞΉ Ξ±Ο€ΞΏΞΈΞ·ΞΊΞµΟΟ„Ξ·ΞΊΞµ ΞµΟ€ΞΉΟ„Ο…Ο‡ΟΟ‚!');
+                alert('Ο υπολογισμός ολοκληρώθηκε και αποθηκεύτηκε επιτυχώς!');
                 
                 // Additional cleanup after alert is dismissed
                 setTimeout(() => {
@@ -5775,7 +5775,7 @@
                     errorModal.hide();
                 }
                 
-                alert('Ξ£Ο†Ξ¬Ξ»ΞΌΞ± ΞΊΞ±Ο„Ξ¬ Ο„ΞΏΞ½ Ο…Ο€ΞΏΞ»ΞΏΞ³ΞΉΟƒΞΌΟ: ' + error.message);
+                alert('Σφάλμα κατά τον υπολογισμό: ' + error.message);
             }
         }
 
@@ -5825,28 +5825,28 @@
             });
             
             let html = '<div class="step-content">';
-            html += '<h6 class="mb-3"><i class="fas fa-calendar-weekend text-info me-2"></i>Ξ’Ξ®ΞΌΞ± 2: Ξ£Ξ±Ξ²Ξ²Ξ±Ο„ΞΏΞΊΟΟΞΉΞ±ΞΊΞ±/Ξ‘ΟΞ³Ξ―ΞµΟ‚</h6>';
+            html += '<h6 class="mb-3"><i class="fas fa-calendar-weekend text-info me-2"></i>Βήμα 2: Σαββατοκύριακα/Αργίες</h6>';
             
             if (weekendHolidays.length === 0) {
                 html += '<div class="alert alert-info">';
                 html += '<i class="fas fa-info-circle me-2"></i>';
-                html += 'Ξ”ΞµΞ½ Ξ²ΟΞ­ΞΈΞ·ΞΊΞ±Ξ½ ΟƒΞ±Ξ²Ξ²Ξ±Ο„ΞΏΞΊΟΟΞΉΞ±ΞΊΞ±/Ξ±ΟΞ³Ξ―ΞµΟ‚ ΟƒΟ„Ξ·Ξ½ ΞµΟ€ΞΉΞ»ΞµΞ³ΞΌΞ­Ξ½Ξ· Ο€ΞµΟΞ―ΞΏΞ΄ΞΏ.';
+                html += 'Δεν βρέθηκαν σαββατοκύριακα/αργίες στην επιλεγμένη περίοδο.';
                 html += '</div>';
             } else {
                 html += '<div class="alert alert-success">';
-                html += `<i class="fas fa-check-circle me-2"></i>Ξ’ΟΞ­ΞΈΞ·ΞΊΞ±Ξ½ <strong>${weekendHolidays.length}</strong> ΟƒΞ±Ξ²Ξ²Ξ±Ο„ΞΏΞΊΟΟΞΉΞ±ΞΊΞ±/Ξ±ΟΞ³Ξ―ΞµΟ‚ ΟƒΟ„Ξ·Ξ½ ΞµΟ€ΞΉΞ»ΞµΞ³ΞΌΞ­Ξ½Ξ· Ο€ΞµΟΞ―ΞΏΞ΄ΞΏ.`;
+                html += `<i class="fas fa-check-circle me-2"></i>Βρέθηκαν <strong>${weekendHolidays.length}</strong> σαββατοκύριακα/αργίες στην επιλεγμένη περίοδο.`;
                 html += '</div>';
                 
                 html += '<div class="table-responsive mt-3">';
                 html += '<table class="table table-bordered table-hover">';
                 html += '<thead class="table-info">';
                 html += '<tr>';
-                html += '<th>Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ±</th>';
-                html += '<th>ΞΞ½ΞΏΞΌΞ± Ξ‘ΟΞ³Ξ―Ξ±Ο‚</th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 1<br><small>Ξ•Ξ Ξ™ΞΞ•Ξ¦Ξ‘Ξ›Ξ—Ξ£-Ξ‘Ξ¥Ξ</small></th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 2<br><small>ΞΞ—Ξ§Ξ‘ΞΞ™ΞΞΞ£-ΞΞ Ξ›ΞΞ¥Ξ΅Ξ“ΞΞ£-ΞΞ”Ξ—Ξ“ΞΞ£</small></th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 3<br><small>Ξ¤Ξ•Ξ§ΞΞ™ΞΞΞ£ Ξ•/Ξ  AW139</small></th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 4<br><small>Ξ¤Ξ•Ξ§ΞΞ™ΞΞΞ£ Ξ•Ξ Ξ™Ξ“Ξ•Ξ™Ξ©Ξ ΞΞ•Ξ£Ξ©Ξ</small></th>';
+                html += '<th>Ημερομηνία</th>';
+                html += '<th>Όνομα Αργίας</th>';
+                html += '<th>Ομάδα 1<br><small>ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</small></th>';
+                html += '<th>Ομάδα 2<br><small>ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</small></th>';
+                html += '<th>Ομάδα 3<br><small>ΤΕΧΝΙΚΟΣ Ε/Π AW139</small></th>';
+                html += '<th>Ομάδα 4<br><small>ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</small></th>';
                 html += '</tr>';
                 html += '</thead>';
                 html += '<tbody>';
@@ -5882,16 +5882,16 @@
                     if (holidayNameAuto) {
                         holidayName = holidayNameAuto;
                     } else if (date.getDay() === 0) {
-                        holidayName = 'ΞΟ…ΟΞΉΞ±ΞΊΞ®';
+                        holidayName = 'Κυριακή';
                     } else if (date.getDay() === 6) {
-                        holidayName = 'Ξ£Ξ¬Ξ²Ξ²Ξ±Ο„ΞΏ';
+                        holidayName = 'Σάββατο';
                     } else {
-                        holidayName = 'Ξ‘ΟΞ³Ξ―Ξ±';
+                        holidayName = 'Αργία';
                     }
                     
                     html += '<tr>';
                     html += `<td><strong>${dateStr}</strong><br><small class="text-muted">${dayName}</small></td>`;
-                    html += `<td>${holidayName || 'Ξ‘ΟΞ³Ξ―Ξ±'}</td>`;
+                    html += `<td>${holidayName || 'Αργία'}</td>`;
                     
                     // Calculate who will be assigned for each group based on rotation order
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -6079,13 +6079,13 @@
                             if (assignedPerson) {
                                 const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'weekend', dayTypeLists, startDate);
                                     const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'weekend', groupPeople.length);
-                                    lastDutyInfo = dutyDates.lastDuty !== 'Ξ”ΞµΞ½ Ξ­Ο‡ΞµΞΉ' ? `<br><small class="text-muted">Ξ¤ΞµΞ»ΞµΟ…Ο„Ξ±Ξ―Ξ±: ${dutyDates.lastDuty}</small>` : '';
+                                    lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
                                 
                                 // Show days counted in parentheses
                                 if (daysSince !== null && daysSince !== Infinity) {
-                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} Ξ·ΞΌΞ­ΟΞµΟ‚)</span>`;
+                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} ημέρες)</span>`;
                                 } else if (daysSince === Infinity) {
-                                    daysCountInfo = ' <span class="text-success">(Ο€ΟΟΟ„Ξ· Ο†ΞΏΟΞ¬)</span>';
+                                    daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
                                 }
                             }
                             
@@ -6223,28 +6223,28 @@
             });
             
             let html = '<div class="step-content">';
-            html += '<h6 class="mb-3"><i class="fas fa-calendar-day text-warning me-2"></i>Ξ’Ξ®ΞΌΞ± 3: Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―ΞµΟ‚</h6>';
+            html += '<h6 class="mb-3"><i class="fas fa-calendar-day text-warning me-2"></i>Βήμα 3: Ημιαργίες</h6>';
             
             if (semiNormalDays.length === 0) {
                 html += '<div class="alert alert-info">';
                 html += '<i class="fas fa-info-circle me-2"></i>';
-                html += 'Ξ”ΞµΞ½ Ξ²ΟΞ­ΞΈΞ·ΞΊΞ±Ξ½ Ξ·ΞΌΞΉΞ±ΟΞ³Ξ―ΞµΟ‚ ΟƒΟ„Ξ·Ξ½ ΞµΟ€ΞΉΞ»ΞµΞ³ΞΌΞ­Ξ½Ξ· Ο€ΞµΟΞ―ΞΏΞ΄ΞΏ.';
+                html += 'Δεν βρέθηκαν ημιαργίες στην επιλεγμένη περίοδο.';
                 html += '</div>';
             } else {
                 html += '<div class="alert alert-success">';
-                html += `<i class="fas fa-check-circle me-2"></i>Ξ’ΟΞ­ΞΈΞ·ΞΊΞ±Ξ½ <strong>${semiNormalDays.length}</strong> Ξ·ΞΌΞΉΞ±ΟΞ³Ξ―ΞµΟ‚ ΟƒΟ„Ξ·Ξ½ ΞµΟ€ΞΉΞ»ΞµΞ³ΞΌΞ­Ξ½Ξ· Ο€ΞµΟΞ―ΞΏΞ΄ΞΏ.`;
+                html += `<i class="fas fa-check-circle me-2"></i>Βρέθηκαν <strong>${semiNormalDays.length}</strong> ημιαργίες στην επιλεγμένη περίοδο.`;
                 html += '</div>';
                 
                 html += '<div class="table-responsive mt-3">';
                 html += '<table class="table table-bordered table-hover">';
                 html += '<thead class="table-warning">';
                 html += '<tr>';
-                html += '<th>Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ±</th>';
-                html += '<th>Ξ—ΞΌΞ­ΟΞ±</th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 1<br><small>Ξ•Ξ Ξ™ΞΞ•Ξ¦Ξ‘Ξ›Ξ—Ξ£-Ξ‘Ξ¥Ξ</small></th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 2<br><small>ΞΞ—Ξ§Ξ‘ΞΞ™ΞΞΞ£-ΞΞ Ξ›ΞΞ¥Ξ΅Ξ“ΞΞ£-ΞΞ”Ξ—Ξ“ΞΞ£</small></th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 3<br><small>Ξ¤Ξ•Ξ§ΞΞ™ΞΞΞ£ Ξ•/Ξ  AW139</small></th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 4<br><small>Ξ¤Ξ•Ξ§ΞΞ™ΞΞΞ£ Ξ•Ξ Ξ™Ξ“Ξ•Ξ™Ξ©Ξ ΞΞ•Ξ£Ξ©Ξ</small></th>';
+                html += '<th>Ημερομηνία</th>';
+                html += '<th>Ημέρα</th>';
+                html += '<th>Ομάδα 1<br><small>ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</small></th>';
+                html += '<th>Ομάδα 2<br><small>ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</small></th>';
+                html += '<th>Ομάδα 3<br><small>ΤΕΧΝΙΚΟΣ Ε/Π AW139</small></th>';
+                html += '<th>Ομάδα 4<br><small>ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</small></th>';
                 html += '</tr>';
                 html += '</thead>';
                 html += '<tbody>';
@@ -6406,12 +6406,12 @@
                             if (assignedPerson) {
                                 const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'semi', dayTypeLists, startDate);
                                 const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'semi', groupPeople.length);
-                                lastDutyInfo = dutyDates.lastDuty !== 'Ξ”ΞµΞ½ Ξ­Ο‡ΞµΞΉ' ? `<br><small class="text-muted">Ξ¤ΞµΞ»ΞµΟ…Ο„Ξ±Ξ―Ξ±: ${dutyDates.lastDuty}</small>` : '';
+                                lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
                                 
                                 if (daysSince !== null && daysSince !== Infinity) {
-                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} Ξ·ΞΌΞ­ΟΞµΟ‚)</span>`;
+                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} ημέρες)</span>`;
                                 } else if (daysSince === Infinity) {
-                                    daysCountInfo = ' <span class="text-success">(Ο€ΟΟΟ„Ξ· Ο†ΞΏΟΞ¬)</span>';
+                                    daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
                                 }
                             }
                             
@@ -6771,28 +6771,28 @@
             });
             
             let html = '<div class="step-content">';
-            html += '<h6 class="mb-3"><i class="fas fa-calendar-day text-primary me-2"></i>Ξ’Ξ®ΞΌΞ± 4: ΞΞ±ΞΈΞ·ΞΌΞµΟΞΉΞ½Ξ­Ο‚</h6>';
+            html += '<h6 class="mb-3"><i class="fas fa-calendar-day text-primary me-2"></i>Βήμα 4: Καθημερινές</h6>';
             
             if (normalDays.length === 0) {
                 html += '<div class="alert alert-info">';
                 html += '<i class="fas fa-info-circle me-2"></i>';
-                html += 'Ξ”ΞµΞ½ Ξ²ΟΞ­ΞΈΞ·ΞΊΞ±Ξ½ ΞΊΞ±ΞΈΞ·ΞΌΞµΟΞΉΞ½Ξ­Ο‚ Ξ·ΞΌΞ­ΟΞµΟ‚ ΟƒΟ„Ξ·Ξ½ ΞµΟ€ΞΉΞ»ΞµΞ³ΞΌΞ­Ξ½Ξ· Ο€ΞµΟΞ―ΞΏΞ΄ΞΏ.';
+                html += 'Δεν βρέθηκαν καθημερινές ημέρες στην επιλεγμένη περίοδο.';
                 html += '</div>';
             } else {
                 html += '<div class="alert alert-success">';
-                html += `<i class="fas fa-check-circle me-2"></i>Ξ’ΟΞ­ΞΈΞ·ΞΊΞ±Ξ½ <strong>${normalDays.length}</strong> ΞΊΞ±ΞΈΞ·ΞΌΞµΟΞΉΞ½Ξ­Ο‚ Ξ·ΞΌΞ­ΟΞµΟ‚ ΟƒΟ„Ξ·Ξ½ ΞµΟ€ΞΉΞ»ΞµΞ³ΞΌΞ­Ξ½Ξ· Ο€ΞµΟΞ―ΞΏΞ΄ΞΏ.`;
+                html += `<i class="fas fa-check-circle me-2"></i>Βρέθηκαν <strong>${normalDays.length}</strong> καθημερινές ημέρες στην επιλεγμένη περίοδο.`;
                 html += '</div>';
                 
                 html += '<div class="table-responsive mt-3">';
                 html += '<table class="table table-bordered table-hover">';
                 html += '<thead class="table-primary">';
                 html += '<tr>';
-                html += '<th>Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ±</th>';
-                html += '<th>Ξ—ΞΌΞ­ΟΞ±</th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 1<br><small>Ξ•Ξ Ξ™ΞΞ•Ξ¦Ξ‘Ξ›Ξ—Ξ£-Ξ‘Ξ¥Ξ</small></th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 2<br><small>ΞΞ—Ξ§Ξ‘ΞΞ™ΞΞΞ£-ΞΞ Ξ›ΞΞ¥Ξ΅Ξ“ΞΞ£-ΞΞ”Ξ—Ξ“ΞΞ£</small></th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 3<br><small>Ξ¤Ξ•Ξ§ΞΞ™ΞΞΞ£ Ξ•/Ξ  AW139</small></th>';
-                html += '<th>ΞΞΌΞ¬Ξ΄Ξ± 4<br><small>Ξ¤Ξ•Ξ§ΞΞ™ΞΞΞ£ Ξ•Ξ Ξ™Ξ“Ξ•Ξ™Ξ©Ξ ΞΞ•Ξ£Ξ©Ξ</small></th>';
+                html += '<th>Ημερομηνία</th>';
+                html += '<th>Ημέρα</th>';
+                html += '<th>Ομάδα 1<br><small>ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</small></th>';
+                html += '<th>Ομάδα 2<br><small>ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</small></th>';
+                html += '<th>Ομάδα 3<br><small>ΤΕΧΝΙΚΟΣ Ε/Π AW139</small></th>';
+                html += '<th>Ομάδα 4<br><small>ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</small></th>';
                 html += '</tr>';
                 html += '</thead>';
                 html += '<tbody>';
@@ -6975,12 +6975,12 @@
                                     }
                                 }
                                 
-                                // If there's a conflict, swap with person who has same day of week (Mondayβ†”Wednesday, Tuesdayβ†”Thursday)
+                                // If there's a conflict, swap with person who has same day of week (Monday↔Wednesday, Tuesday↔Thursday)
                                 if (hasConsecutiveConflict && assignedPerson) {
                                     const skippedPerson = assignedPerson;
                                     const currentDayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                                     
-                                    // Determine swap day pairs: Mondayβ†”Wednesday (1β†”3), Tuesdayβ†”Thursday (2β†”4)
+                                    // Determine swap day pairs: Monday↔Wednesday (1↔3), Tuesday↔Thursday (2↔4)
                                     let targetDayOfWeek = null;
                                     let alternativeDayOfWeek = null;
                                     if (currentDayOfWeek === 1) { // Monday
@@ -7085,7 +7085,7 @@
                                             return !swapPersonHasConflict && !skippedPersonHasConflict;
                                         };
                                         
-                                        // STEP 1: Try alternative day in same week (e.g., Monday 12/01/26 β†’ Wednesday 14/01/26)
+                                        // STEP 1: Try alternative day in same week (e.g., Monday 12/01/26 → Wednesday 14/01/26)
                                         if (alternativeDayOfWeek !== null) {
                                         for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
                                             const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
@@ -7106,7 +7106,7 @@
                                             }
                                         }
                                         
-                                        // STEP 2: If Step 1 not possible (no swap found), try NEXT SAME day of week in SAME MONTH (e.g., Monday 12/01/26 β†’ Monday 19/01/26)
+                                        // STEP 2: If Step 1 not possible (no swap found), try NEXT SAME day of week in SAME MONTH (e.g., Monday 12/01/26 → Monday 19/01/26)
                                         // Only proceed if Step 1 did NOT find a valid swap (both swapDayKey and swapDayIndex must be null/unset, and swapFound must be false)
                                         if (!swapFound && swapDayKey === null && swapDayIndex === null) {
                                             for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
@@ -7128,7 +7128,7 @@
                                             }
                                         }
                                         
-                                        // STEP 3: If Step 2 not possible, try alternative day in week AFTER next (e.g., Monday 12/01/26 β†’ Wednesday 21/01/26)
+                                        // STEP 3: If Step 2 not possible, try alternative day in week AFTER next (e.g., Monday 12/01/26 → Wednesday 21/01/26)
                                         // Collect ALL week-after-next candidates for alternative day and pick the EARLIEST valid one
                                         // Only proceed if Step 1 and Step 2 did NOT find a valid swap
                                         if (!swapFound && swapDayKey === null && swapDayIndex === null && alternativeDayOfWeek !== null) {
@@ -7276,14 +7276,14 @@
                                                 const isSameWeekSwap = isSameWeek(date, swapDate);
                                                 let reason;
                                                 if (isSameMonthSwap) {
-                                                    reason = `Ξ‘Ξ»Ξ»Ξ±Ξ³Ξ® ΞΌΞµ ${swapPerson} Ξ»ΟΞ³Ο‰ ΟƒΟ…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ·Ο‚ Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ±Ο‚ (Ξ―Ξ΄ΞΉΞΏΟ‚ ΞΌΞ®Ξ½Ξ±Ο‚)`;
+                                                    reason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδιος μήνας)`;
                                                 } else if (isSameWeekSwap) {
-                                                    reason = `Ξ‘Ξ»Ξ»Ξ±Ξ³Ξ® ΞΌΞµ ${swapPerson} Ξ»ΟΞ³Ο‰ ΟƒΟ…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ·Ο‚ Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ±Ο‚ (Ξ―Ξ΄ΞΉΞ± ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ±)`;
+                                                    reason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδια εβδομάδα)`;
                                                 } else {
-                                                    reason = `Ξ‘Ξ»Ξ»Ξ±Ξ³Ξ® ΞΌΞµ ${swapPerson} Ξ»ΟΞ³Ο‰ ΟƒΟ…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ·Ο‚ Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ±Ο‚ (ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ± ΞΌΞµΟ„Ξ¬ Ο„Ξ·Ξ½ ΞµΟ€ΟΞΌΞµΞ½Ξ·)`;
+                                                    reason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (εβδομάδα μετά την επόμενη)`;
                                                 }
                                                 storeAssignmentReason(dateKey, groupNum, assignedPerson, 'swap', reason, skippedPerson);
-                                                storeAssignmentReason(swapDayKey, groupNum, skippedPerson, 'swap', `Ξ‘Ξ»Ξ»Ξ±Ξ³Ξ® ΞΌΞµ ${assignedPerson} Ξ»ΟΞ³Ο‰ ΟƒΟ…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ·Ο‚ Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ±Ο‚`, assignedPerson);
+                                                storeAssignmentReason(swapDayKey, groupNum, skippedPerson, 'swap', `Αλλαγή με ${assignedPerson} λόγω συνεχόμενης Ημιαργίας`, assignedPerson);
                                             } else {
                                                 // Swap person or skipped person has conflict, can't swap - try alternative
                                                 // (The code will continue to try alternative day of week)
@@ -7320,12 +7320,12 @@
                             if (assignedPerson) {
                                 const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'normal', dayTypeLists, startDate);
                                 const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'normal', groupPeople.length);
-                                lastDutyInfo = dutyDates.lastDuty !== 'Ξ”ΞµΞ½ Ξ­Ο‡ΞµΞΉ' ? `<br><small class="text-muted">Ξ¤ΞµΞ»ΞµΟ…Ο„Ξ±Ξ―Ξ±: ${dutyDates.lastDuty}</small>` : '';
+                                lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
                                 
                                 if (daysSince !== null && daysSince !== Infinity) {
-                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} Ξ·ΞΌΞ­ΟΞµΟ‚)</span>`;
+                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} ημέρες)</span>`;
                                 } else if (daysSince === Infinity) {
-                                    daysCountInfo = ' <span class="text-success">(Ο€ΟΟΟ„Ξ· Ο†ΞΏΟΞ¬)</span>';
+                                    daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
                                 }
                             }
                             
@@ -7424,7 +7424,7 @@
         // Helper function to add/remove person from day assignment
         function assignPersonToDay(dayKey, person, groupNum) {
             const existingAssignment = getAssignmentForDate(dayKey);
-            const personGroupStr = `${person} (ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`;
+            const personGroupStr = `${person} (Ομάδα ${groupNum})`;
             
             if (existingAssignment) {
                 if (!existingAssignment.includes(personGroupStr)) {
@@ -7433,7 +7433,7 @@
                 } else {
                     // Replace existing assignment for this group
                     const parts = existingAssignment.split(',').map(p => p.trim()).filter(p => p);
-                    const filtered = parts.filter(p => !p.includes(`(ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`));
+                    const filtered = parts.filter(p => !p.includes(`(Ομάδα ${groupNum})`));
                     filtered.push(personGroupStr);
                     setAssignmentForDate(dayKey, filtered.join(', '));
                 }
@@ -7458,7 +7458,7 @@
             
             const parts = existingAssignment.split(',').map(p => p.trim()).filter(p => p);
             const filtered = parts.filter(p => {
-                const match = p.match(/^(.+?)\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)\s*$/);
+                const match = p.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                 if (match && parseInt(match[2]) === groupNum) {
                     return match[1].trim() !== person;
                 }
@@ -7507,7 +7507,7 @@
                 if (assignment) {
                     const parts = assignment.split(',').map(p => p.trim());
                     for (const part of parts) {
-                        const match = part.match(/^(.+?)\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)\s*$/);
+                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                         if (match && parseInt(match[2]) === groupNum && match[1].trim() === person) {
                             return dayKey;
                         }
@@ -7606,7 +7606,7 @@
                 
                 // Skip critical assignments
                 const isCritical = criticalAssignments[dayKey] && 
-                                criticalAssignments[dayKey].some(a => a.includes(`(ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`));
+                                criticalAssignments[dayKey].some(a => a.includes(`(Ομάδα ${groupNum})`));
                 if (isCritical) continue;
                 
                 // Check if person can take this day (no conflicts)
@@ -7618,7 +7618,7 @@
                     if (currentAssignment) {
                         const parts = currentAssignment.split(',').map(p => p.trim());
                         for (const part of parts) {
-                            const match = part.match(/^(.+?)\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)\s*$/);
+                            const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                             if (match && parseInt(match[2]) === groupNum) {
                                 currentPersonForGroup = match[1].trim();
                                 break;
@@ -7703,7 +7703,7 @@
                 
                 // Skip critical assignments
                 const isCritical = criticalAssignments[dayKey] && 
-                                criticalAssignments[dayKey].some(a => a.includes(`(ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`));
+                                criticalAssignments[dayKey].some(a => a.includes(`(Ομάδα ${groupNum})`));
                 if (isCritical) continue;
                 
                 // Get current assignment for this group on this day
@@ -7712,7 +7712,7 @@
                 if (currentAssignment) {
                     const parts = currentAssignment.split(',').map(p => p.trim());
                     for (const part of parts) {
-                        const match = part.match(/^(.+?)\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)\s*$/);
+                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                         if (match && parseInt(match[2]) === groupNum) {
                             currentPerson = match[1].trim();
                             break;
@@ -7913,7 +7913,7 @@
                     days.forEach((dayKey, dayIndex) => {
                         // Skip if day already has assignment for this group (critical assignments or swapped days)
                         const existingAssignment = getAssignmentForDate(dayKey);
-                        if (existingAssignment && existingAssignment.includes(`(ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`)) {
+                        if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
                             return;
                         }
                         
@@ -8097,7 +8097,7 @@
                                 // For weekends: track that this person was skipped in this month
                                 if (dayTypeCategory === 'weekend') {
                                     const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                    const reason = `Ξ Ξ±ΟΞ¬Ξ»ΞµΞΉΟΞ· Ξ»ΟΞ³Ο‰ ΞµΞΉΞ΄ΞΉΞΊΞ®Ο‚ Ξ±ΟΞ³Ξ―Ξ±Ο‚ ΟƒΟ„ΞΏΞ½ Ξ―Ξ΄ΞΉΞΏ ΞΌΞ®Ξ½Ξ±`;
+                                    const reason = `Παράλειψη λόγω ειδικής αργίας στον ίδιο μήνα`;
                                     
                                     // Ask for permission before skipping
                                     const userApproved = askPermissionForConflict('skip', skippedPerson, currentDateStr, reason);
@@ -8117,7 +8117,7 @@
                                     }
                                 }
                                 
-                                // For normal days: swap with person who has same day of week (Mondayβ†”Wednesday, Tuesdayβ†”Thursday)
+                                // For normal days: swap with person who has same day of week (Monday↔Wednesday, Tuesday↔Thursday)
                                 // BUT: Only attempt swap if the skipped person hasn't already been swapped before
                                 // This prevents the same person from being swapped multiple times
                                 if (dayTypeCategory === 'normal' && skippedPerson && !swappedPeople.has(skippedPerson)) {
@@ -8125,7 +8125,7 @@
                                     console.log(`[SWAP ATTEMPT DEBUG] Attempting to swap ${skippedPerson} from ${dayKey} (${dayDate.toLocaleDateString('el-GR')}), Day of Week: ${dayDate.getDay()} (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayDate.getDay()]})`);
                                     const currentDayOfWeek = dayDate.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                                     
-                                    // Determine swap day pairs: Mondayβ†”Wednesday (1β†”3), Tuesdayβ†”Thursday (2β†”4)
+                                    // Determine swap day pairs: Monday↔Wednesday (1↔3), Tuesday↔Thursday (2↔4)
                                     let targetDayOfWeek = null;
                                     let alternativeDayOfWeek = null;
                                     if (currentDayOfWeek === 1) { // Monday
@@ -8186,7 +8186,7 @@
                                             return !swapPersonHasConflict && !skippedPersonHasConflict;
                                         };
                                         
-                                        // STEP 1: Try alternative day in same week (e.g., Monday 12/01/26 β†’ Wednesday 14/01/26)
+                                        // STEP 1: Try alternative day in same week (e.g., Monday 12/01/26 → Wednesday 14/01/26)
                                         if (alternativeDayOfWeek !== null) {
                                         for (let i = dayIndex + 1; i < days.length; i++) {
                                             const checkDayKey = days[i];
@@ -8203,7 +8203,7 @@
                                                         const swapPerson = groupPeople[swapRotationPosition];
                                                         const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                                         const swapDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                                        const reason = 'Ξ£Ο…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ· Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ± (Ξ―Ξ΄ΞΉΞ± ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ±)';
+                                                        const reason = 'Συνεχόμενη Ημιαργία (ίδια εβδομάδα)';
                                                         
                                                         const userApproved = askPermissionForConflict('swap', skippedPerson, currentDateStr, reason, swapPerson, swapDateStr);
                                                         
@@ -8220,7 +8220,7 @@
                                             }
                                         }
                                         
-                                        // STEP 2: If Step 1 not possible (no swap found), try NEXT SAME day of week in SAME MONTH (e.g., Monday 12/01/26 β†’ Monday 19/01/26)
+                                        // STEP 2: If Step 1 not possible (no swap found), try NEXT SAME day of week in SAME MONTH (e.g., Monday 12/01/26 → Monday 19/01/26)
                                         // Only proceed if Step 1 did NOT find a valid swap (both swapDayKey and swapDayIndex must be null/unset)
                                         if (swapDayKey === null && swapDayIndex === null) {
                                             for (let i = dayIndex + 1; i < days.length; i++) {
@@ -8238,7 +8238,7 @@
                                                         const swapPerson = groupPeople[swapRotationPosition];
                                                         const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                                         const swapDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                                        const reason = 'Ξ£Ο…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ· Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ± (Ξ―Ξ΄ΞΉΞΏΟ‚ ΞΌΞ®Ξ½Ξ±Ο‚)';
+                                                        const reason = 'Συνεχόμενη Ημιαργία (ίδιος μήνας)';
                                                         
                                                         const userApproved = askPermissionForConflict('swap', skippedPerson, currentDateStr, reason, swapPerson, swapDateStr);
                                                         
@@ -8255,7 +8255,7 @@
                                             }
                                         }
                                         
-                                        // STEP 3: If Step 2 not possible, try alternative day in week AFTER next (e.g., Monday 12/01/26 β†’ Wednesday 21/01/26)
+                                        // STEP 3: If Step 2 not possible, try alternative day in week AFTER next (e.g., Monday 12/01/26 → Wednesday 21/01/26)
                                         // Collect ALL week-after-next candidates and pick the EARLIEST valid one
                                         // Only proceed if Step 1 and Step 2 did NOT find a valid swap
                                         let weekAfterNextCandidates = [];
@@ -8297,7 +8297,7 @@
                                                 // Ask user permission
                                                 const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                                 const swapDateStr = swapDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                                const reason = 'Ξ£Ο…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ· Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ± (ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ± ΞΌΞµΟ„Ξ¬ Ο„Ξ·Ξ½ ΞµΟ€ΟΞΌΞµΞ½Ξ·)';
+                                                const reason = 'Συνεχόμενη Ημιαργία (εβδομάδα μετά την επόμενη)';
                                                 const userApproved = askPermissionForConflict('swap', skippedPerson, currentDateStr, reason, swapPerson, swapDateStr);
                                                 
                                                 if (userApproved) {
@@ -8330,11 +8330,11 @@
                                             const swapDateStr = swapDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             let reason;
                                             if (isSameMonthSwap) {
-                                                reason = 'Ξ£Ο…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ· Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ± (Ξ―Ξ΄ΞΉΞΏΟ‚ ΞΌΞ®Ξ½Ξ±Ο‚)';
+                                                reason = 'Συνεχόμενη Ημιαργία (ίδιος μήνας)';
                                             } else if (isSameWeekSwap) {
-                                                reason = 'Ξ£Ο…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ· Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ± (Ξ―Ξ΄ΞΉΞ± ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ±)';
+                                                reason = 'Συνεχόμενη Ημιαργία (ίδια εβδομάδα)';
                                             } else {
-                                                reason = 'Ξ£Ο…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ· Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ± (ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ± ΞΌΞµΟ„Ξ¬ Ο„Ξ·Ξ½ ΞµΟ€ΟΞΌΞµΞ½Ξ·)';
+                                                reason = 'Συνεχόμενη Ημιαργία (εβδομάδα μετά την επόμενη)';
                                             }
                                             
                                             // Only ask if permission wasn't already asked (for same-month and same-week swaps, permission was asked when finding swap day)
@@ -8392,14 +8392,14 @@
                                                 const isSameWeekSwap = isSameWeek(dayDate, swapDate);
                                                 let swapReason;
                                                 if (isSameMonthSwap) {
-                                                    swapReason = `Ξ‘Ξ»Ξ»Ξ±Ξ³Ξ® ΞΌΞµ ${swapPerson} Ξ»ΟΞ³Ο‰ ΟƒΟ…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ·Ο‚ Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ±Ο‚ (Ξ―Ξ΄ΞΉΞΏΟ‚ ΞΌΞ®Ξ½Ξ±Ο‚)`;
+                                                    swapReason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδιος μήνας)`;
                                                 } else if (isSameWeekSwap) {
-                                                    swapReason = `Ξ‘Ξ»Ξ»Ξ±Ξ³Ξ® ΞΌΞµ ${swapPerson} Ξ»ΟΞ³Ο‰ ΟƒΟ…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ·Ο‚ Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ±Ο‚ (Ξ―Ξ΄ΞΉΞ± ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ±)`;
+                                                    swapReason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδια εβδομάδα)`;
                                                 } else {
-                                                    swapReason = `Ξ‘Ξ»Ξ»Ξ±Ξ³Ξ® ΞΌΞµ ${swapPerson} Ξ»ΟΞ³Ο‰ ΟƒΟ…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ·Ο‚ Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ±Ο‚ (ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ± ΞΌΞµΟ„Ξ¬ Ο„Ξ·Ξ½ ΞµΟ€ΟΞΌΞµΞ½Ξ·)`;
+                                                    swapReason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (εβδομάδα μετά την επόμενη)`;
                                                 }
                                                 storeAssignmentReason(dayKey, groupNum, assignedPerson, 'swap', swapReason, skippedPerson);
-                                                storeAssignmentReason(swapDayKey, groupNum, skippedPerson, 'swap', `Ξ‘Ξ»Ξ»Ξ±Ξ³Ξ® ΞΌΞµ ${assignedPerson} Ξ»ΟΞ³Ο‰ ΟƒΟ…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ·Ο‚ Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ±Ο‚`, assignedPerson);
+                                                storeAssignmentReason(swapDayKey, groupNum, skippedPerson, 'swap', `Αλλαγή με ${assignedPerson} λόγω συνεχόμενης Ημιαργίας`, assignedPerson);
                                                 
                                                 // Mark that swap day is already assigned, so we skip it when we reach it in the loop
                                                 if (!swappedDays[swapDayKey]) swappedDays[swapDayKey] = {};
@@ -8574,16 +8574,16 @@
                             if (nextAvailableDay) {
                                 // Check if next available day already has assignment for this group
                                 const nextAssignment = getAssignmentForDate(nextAvailableDay);
-                                if (!nextAssignment || !nextAssignment.includes(`(ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`)) {
+                                if (!nextAssignment || !nextAssignment.includes(`(Ομάδα ${groupNum})`)) {
                                     // Assign skipped person to next available day
                                     assignPersonToDay(nextAvailableDay, skippedPerson, groupNum);
                                     }
                                 }
                             } else if (dayTypeCategory === 'normal') {
-                                // For normal days: swap with person who has same day of week (Mondayβ†”Wednesday, Tuesdayβ†”Thursday)
+                                // For normal days: swap with person who has same day of week (Monday↔Wednesday, Tuesday↔Thursday)
                                 const currentDayOfWeek = dayDate.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                                 
-                                // Determine swap day pairs: Mondayβ†”Wednesday (1β†”3), Tuesdayβ†”Thursday (2β†”4)
+                                // Determine swap day pairs: Monday↔Wednesday (1↔3), Tuesday↔Thursday (2↔4)
                                 let targetDayOfWeek = null;
                                 let alternativeDayOfWeek = null;
                                 if (currentDayOfWeek === 1) { // Monday
@@ -8605,7 +8605,7 @@
                                 let swapDayKey = null;
                                 let swapDayIndex = null;
                                 
-                                // STEP 1: Try alternative day of week FIRST (e.g., Monday β†’ Wednesday in same week or soon after)
+                                // STEP 1: Try alternative day of week FIRST (e.g., Monday → Wednesday in same week or soon after)
                                 if (alternativeDayOfWeek !== null) {
                                     for (let i = dayIndex + 1; i < days.length; i++) {
                                         const checkDayKey = days[i];
@@ -8623,7 +8623,7 @@
                                         }
                                     }
                                     
-                                // STEP 2: If alternative day not found, try next same day of week (e.g., Monday β†’ next Monday)
+                                // STEP 2: If alternative day not found, try next same day of week (e.g., Monday → next Monday)
                                 if (!swapDayKey && targetDayOfWeek !== null) {
                                         for (let i = dayIndex + 1; i < days.length; i++) {
                                             const checkDayKey = days[i];
@@ -8654,7 +8654,7 @@
                                     
                                     // Check if swap day already has assignment
                                     const swapAssignment = getAssignmentForDate(swapDayKey);
-                                    const swapDayAlreadyAssigned = swapAssignment && swapAssignment.includes(`(ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`);
+                                    const swapDayAlreadyAssigned = swapAssignment && swapAssignment.includes(`(Ομάδα ${groupNum})`);
                                     
                                     // Check if swap person was already assigned this month (due to previous swap)
                                     let swapMonth = swapDate.getMonth();
@@ -8830,7 +8830,7 @@
                 const modalElement = document.getElementById('dayDetailsModal');
                 if (!modalElement) {
                     console.error('dayDetailsModal element not found');
-                    alert('Ξ¤ΞΏ modal Ξ΄ΞµΞ½ Ξ²ΟΞ­ΞΈΞ·ΞΊΞµ. Ξ Ξ±ΟΞ±ΞΊΞ±Ξ»Ο Ξ±Ξ½Ξ±Ξ½ΞµΟΟƒΟ„Ξµ Ο„Ξ· ΟƒΞµΞ»Ξ―Ξ΄Ξ±.');
+                    alert('Το modal δεν βρέθηκε. Παρακαλώ ανανεώστε τη σελίδα.');
                     return;
                 }
                 
@@ -8842,18 +8842,18 @@
             
             let content = `
                 <div class="mb-3">
-                    <strong>Ξ¤ΟΟ€ΞΏΟ‚ Ξ—ΞΌΞ­ΟΞ±Ο‚:</strong> ${getDayTypeLabel(dayType)}
+                    <strong>Τύπος Ημέρας:</strong> ${getDayTypeLabel(dayType)}
                 </div>
             `;
             
             if (isSpecialHoliday(date)) {
                 const holidayName = getOrthodoxHolidayName(date);
-                const displayName = holidayName || 'Ξ•ΞΉΞ΄ΞΉΞΊΞ® Ξ‘ΟΞ³Ξ―Ξ±';
+                const displayName = holidayName || 'Ειδική Αργία';
                 
                 content += `
                     <div class="alert alert-warning" style="background: #FFE082; border-color: #FFC107;">
                         <i class="fas fa-star me-2"></i>
-                        <strong>Ξ•ΞΉΞ΄ΞΉΞΊΞ® Ξ‘ΟΞ³Ξ―Ξ±:</strong> ${displayName}
+                        <strong>Ειδική Αργία:</strong> ${displayName}
                     </div>
                 `;
             } else if (isOrthodoxOrCyprusHoliday(date)) {
@@ -8861,7 +8861,7 @@
                 content += `
                     <div class="alert alert-info">
                         <i class="fas fa-church me-2"></i>
-                        <strong>ΞΟΞΈΟΞ΄ΞΏΞΎΞ·/ΞΟ…Ο€ΟΞΉΞ±ΞΊΞ® Ξ‘ΟΞ³Ξ―Ξ±:</strong> ${holidayName || 'Ξ‘ΟΞ³Ξ―Ξ±'}
+                        <strong>Ορθόδοξη/Κυπριακή Αργία:</strong> ${holidayName || 'Αργία'}
                     </div>
                 `;
             } else if (isHoliday(date)) {
@@ -8869,7 +8869,7 @@
                 content += `
                     <div class="alert alert-info">
                         <i class="fas fa-calendar-times me-2"></i>
-                        <strong>Ξ‘ΟΞ³Ξ―Ξ±:</strong> ${holiday ? holiday.name : 'Ξ‘ΟΞ³Ξ―Ξ±'}
+                        <strong>Αργία:</strong> ${holiday ? holiday.name : 'Αργία'}
                     </div>
                 `;
             }
@@ -8883,8 +8883,8 @@
                 const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
                 
                 parts.forEach(part => {
-                    // Try to match "Name (ΞΞΌΞ¬Ξ΄Ξ± X)" pattern
-                    const match = part.match(/^(.+?)\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)\s*$/);
+                    // Try to match "Name (Ομάδα X)" pattern
+                    const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                     if (match) {
                         const name = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, ''); // Remove leading/trailing commas
                         const group = parseInt(match[2]);
@@ -8898,10 +8898,10 @@
                         }
                     } else {
                         // Try to extract group info if it exists elsewhere in the string
-                        const groupMatch = part.match(/\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)/);
+                        const groupMatch = part.match(/\(Ομάδα\s*(\d+)\)/);
                         if (groupMatch) {
                             const group = parseInt(groupMatch[1]);
-                            const name = part.replace(/\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*\d+\)\s*/, '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
+                            const name = part.replace(/\s*\(Ομάδα\s*\d+\)\s*/, '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
                             if (!groupsFound.has(group)) {
                                 personGroups.push({
                                     name: name,
@@ -8935,14 +8935,14 @@
             // Create editable dropdown fields for each group
             content += `
                 <div class="mb-3">
-                    <strong><i class="fas fa-user-shield me-2"></i>Ξ£Ξµ Ξ¥Ο€Ξ·ΟΞµΟƒΞ―Ξ±:</strong>
+                    <strong><i class="fas fa-user-shield me-2"></i>Σε Υπηρεσία:</strong>
                     <div id="dutyPersonsContainer" class="mt-2">
             `;
             
             personGroups.forEach((person, index) => {
                 const isCritical = person.name && criticalPeople.some(cp => {
                     if (person.group) {
-                        return cp === person.fullString || (cp.includes(person.name) && cp.includes(`(ΞΞΌΞ¬Ξ΄Ξ± ${person.group})`));
+                        return cp === person.fullString || (cp.includes(person.name) && cp.includes(`(Ομάδα ${person.group})`));
                     } else {
                         return cp.includes(person.name);
                     }
@@ -8953,20 +8953,20 @@
                 let reasonBadge = '';
                 if (reason) {
                     if (reason.type === 'skip') {
-                        reasonBadge = `<span class="badge bg-warning ms-2" title="${reason.reason}"><i class="fas fa-arrow-right me-1"></i>Ξ Ξ±ΟΞ±Ξ»ΞµΞ―Ο†ΞΈΞ·ΞΊΞµ</span>`;
+                        reasonBadge = `<span class="badge bg-warning ms-2" title="${reason.reason}"><i class="fas fa-arrow-right me-1"></i>Παραλείφθηκε</span>`;
                     } else if (reason.type === 'swap') {
-                        reasonBadge = `<span class="badge bg-info ms-2" title="${reason.reason}"><i class="fas fa-exchange-alt me-1"></i>Ξ‘Ξ»Ξ»Ξ±Ξ³Ξ®${reason.swappedWith ? ` ΞΌΞµ ${reason.swappedWith}` : ''}</span>`;
+                        reasonBadge = `<span class="badge bg-info ms-2" title="${reason.reason}"><i class="fas fa-exchange-alt me-1"></i>Αλλαγή${reason.swappedWith ? ` με ${reason.swappedWith}` : ''}</span>`;
                     }
                 }
                 
-                const groupName = person.group ? getGroupName(person.group) : 'Ξ†Ξ³Ξ½Ο‰ΟƒΟ„Ξ· ΞΞΌΞ¬Ξ΄Ξ±';
+                const groupName = person.group ? getGroupName(person.group) : 'Άγνωστη Ομάδα';
                 const criticalClass = isCritical ? 'border-danger bg-light' : '';
-                const criticalLabel = isCritical ? '<span class="badge bg-danger ms-2"><i class="fas fa-lock me-1"></i>ΞΟΞ―ΟƒΞΉΞΌΞ· (Ξ‘Ο€ΟΞ²Ξ±ΟƒΞ·)</span>' : '';
+                const criticalLabel = isCritical ? '<span class="badge bg-danger ms-2"><i class="fas fa-lock me-1"></i>Κρίσιμη (Απόβαση)</span>' : '';
                 const disabledAttr = isCritical ? 'disabled' : '';
-                const disabledTitle = isCritical ? 'title="Ξ‘Ο…Ο„Ξ® Ξ· Ξ±Ξ½Ξ¬ΞΈΞµΟƒΞ· ΞµΞ―Ξ½Ξ±ΞΉ ΞΊΟΞ―ΟƒΞΉΞΌΞ· ΞΊΞ±ΞΉ Ξ΄ΞµΞ½ ΞΌΟ€ΞΏΟΞµΞ― Ξ½Ξ± Ξ±Ξ»Ξ»Ξ¬ΞΎΞµΞΉ"' : '';
+                const disabledTitle = isCritical ? 'title="Αυτή η ανάθεση είναι κρίσιμη και δεν μπορεί να αλλάξει"' : '';
                 
                 // Add reason display below the person name
-                const reasonDisplay = reason ? `<div class="mt-1 small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Ξ›ΟΞ³ΞΏΟ‚:</strong> ${reason.reason}</div>` : '';
+                const reasonDisplay = reason ? `<div class="mt-1 small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${reason.reason}</div>` : '';
                 
                 // Get all people from this group for dropdown
                 const groupData = groups[person.group] || {};
@@ -8979,14 +8979,14 @@
                 const peopleList = Array.from(allPeopleInGroup).sort();
                 
                 // Build dropdown options
-                let peopleOptions = '<option value="">-- Ξ•Ο€ΞΉΞ»Ξ­ΞΎΟ„Ξµ Ξ†Ο„ΞΏΞΌΞΏ --</option>';
+                let peopleOptions = '<option value="">-- Επιλέξτε Άτομο --</option>';
                 peopleOptions += peopleList.map(p => 
                     `<option value="${p}" ${p === person.name ? 'selected' : ''}>${p}</option>`
                 ).join('');
                 
                 content += `
                     <div class="mb-2 p-2 border rounded ${criticalClass}" ${disabledTitle}>
-                        <label class="form-label small text-muted">ΞΞΌΞ¬Ξ΄Ξ± ${person.group}: ${groupName}${criticalLabel}${reasonBadge}</label>
+                        <label class="form-label small text-muted">Ομάδα ${person.group}: ${groupName}${criticalLabel}${reasonBadge}</label>
                         <select class="form-select duty-person-select" 
                                 data-index="${index}" 
                                 data-group="${person.group}" 
@@ -8996,7 +8996,7 @@
                             ${peopleOptions}
                         </select>
                         ${reasonDisplay}
-                        ${isCritical ? '<small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i>Ξ‘Ο…Ο„Ξ® Ξ· Ξ±Ξ½Ξ¬ΞΈΞµΟƒΞ· Ο€ΟΞΏΞ­ΟΟ‡ΞµΟ„Ξ±ΞΉ Ξ±Ο€Ο Ο„ΞΉΟ‚ Ξ·ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―ΞµΟ‚ Ο„ΞµΞ»ΞµΟ…Ο„Ξ±Ξ―Ξ±Ο‚ Ο…Ο€Ξ·ΟΞµΟƒΞ―Ξ±Ο‚ ΞΊΞ±ΞΉ Ξ΄ΞµΞ½ ΞΌΟ€ΞΏΟΞµΞ― Ξ½Ξ± Ξ±Ξ»Ξ»Ξ¬ΞΎΞµΞΉ.</small>' : ''}
+                        ${isCritical ? '<small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i>Αυτή η ανάθεση προέρχεται από τις ημερομηνίες τελευταίας υπηρεσίας και δεν μπορεί να αλλάξει.</small>' : ''}
                     </div>
                 `;
             });
@@ -9012,7 +9012,7 @@
                 modal.show();
             } catch (error) {
                 console.error('Error in showDayDetails:', error);
-                alert('Ξ£Ο†Ξ¬Ξ»ΞΌΞ±: ' + error.message);
+                alert('Σφάλμα: ' + error.message);
             }
         }
         
@@ -9030,7 +9030,7 @@
             const originalCritical = criticalAssignments[currentEditingDayKey] || [];
             const originalCriticalPeople = new Set();
             originalCritical.forEach(cp => {
-                const match = cp.match(/^(.+?)\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)\s*$/);
+                const match = cp.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                 if (match) {
                     const name = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
                     const group = parseInt(match[2]);
@@ -9047,11 +9047,11 @@
                 if (isCritical) {
                     const originalName = select.dataset.originalName;
                     if (originalName && group) {
-                        newAssignments.push(`${originalName} (ΞΞΌΞ¬Ξ΄Ξ± ${group})`);
+                        newAssignments.push(`${originalName} (Ομάδα ${group})`);
                     }
                 } else if (personName && group) {
                     // Non-critical assignments can be changed
-                    newAssignments.push(`${personName} (ΞΞΌΞ¬Ξ΄Ξ± ${group})`);
+                    newAssignments.push(`${personName} (Ομάδα ${group})`);
                 }
             });
             
@@ -9065,7 +9065,7 @@
             // Preserve all original critical assignments
             const newCritical = [];
             newAssignments.forEach(newAssignment => {
-                const match = newAssignment.match(/^(.+?)\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)\s*$/);
+                const match = newAssignment.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                 if (match) {
                     const name = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
                     const group = parseInt(match[2]);
@@ -9090,7 +9090,7 @@
                 modal.hide();
             }
             
-            alert('ΞΞΉ Ξ±Ξ»Ξ»Ξ±Ξ³Ξ­Ο‚ Ξ±Ο€ΞΏΞΈΞ·ΞΊΞµΟΟ„Ξ·ΞΊΞ±Ξ½ ΞµΟ€ΞΉΟ„Ο…Ο‡ΟΟ‚!');
+            alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
         }
 
         // Open assign duty modal from day details
@@ -9131,7 +9131,7 @@
             
             // Reset form
             document.getElementById('assignDutyGroup').value = '';
-            document.getElementById('assignDutyPerson').innerHTML = '<option value="">Ξ•Ο€ΞΉΞ»Ξ­ΞΎΟ„Ξµ Ξ†Ο„ΞΏΞΌΞΏ</option>';
+            document.getElementById('assignDutyPerson').innerHTML = '<option value="">Επιλέξτε Άτομο</option>';
             
             // Update person dropdown when group changes
             document.getElementById('assignDutyGroup').addEventListener('change', function() {
@@ -9149,7 +9149,7 @@
             const personSelect = document.getElementById('assignDutyPerson');
             const selectedGroup = parseInt(groupSelect.value);
             
-            personSelect.innerHTML = '<option value="">Ξ•Ο€ΞΉΞ»Ξ­ΞΎΟ„Ξµ Ξ†Ο„ΞΏΞΌΞΏ</option>';
+            personSelect.innerHTML = '<option value="">Επιλέξτε Άτομο</option>';
             
             if (selectedGroup && groups[selectedGroup]) {
                 const groupData = groups[selectedGroup];
@@ -9178,12 +9178,12 @@
             const person = document.getElementById('assignDutyPerson').value.trim();
             
             if (!date) {
-                alert('Ξ Ξ±ΟΞ±ΞΊΞ±Ξ»Ο ΞµΟ€ΞΉΞ»Ξ­ΞΎΟ„Ξµ Ξ·ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ±');
+                alert('Παρακαλώ επιλέξτε ημερομηνία');
                 return;
             }
             
             if (!groupNum || !person) {
-                alert('Ξ Ξ±ΟΞ±ΞΊΞ±Ξ»Ο ΞµΟ€ΞΉΞ»Ξ­ΞΎΟ„Ξµ ΞΏΞΌΞ¬Ξ΄Ξ± ΞΊΞ±ΞΉ Ξ¬Ο„ΞΏΞΌΞΏ');
+                alert('Παρακαλώ επιλέξτε ομάδα και άτομο');
                 return;
             }
             
@@ -9194,12 +9194,12 @@
                 // Update existing assignment
                 const existing = dutyAssignments[dateKey];
                 // Remove old assignment for this group if exists
-                const updated = existing.split(', ').filter(a => !a.includes(`ΞΞΌΞ¬Ξ΄Ξ± ${groupNum}`));
-                updated.push(`${person} (ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`);
+                const updated = existing.split(', ').filter(a => !a.includes(`Ομάδα ${groupNum}`));
+                updated.push(`${person} (Ομάδα ${groupNum})`);
                 dutyAssignments[dateKey] = updated.join(', ');
             } else {
                 // Create new assignment
-                dutyAssignments[dateKey] = `${person} (ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`;
+                dutyAssignments[dateKey] = `${person} (Ομάδα ${groupNum})`;
             }
             
             saveData();
@@ -9208,14 +9208,14 @@
             const modal = bootstrap.Modal.getInstance(document.getElementById('assignDutyModal'));
             modal.hide();
             
-            alert('Ξ— Ξ±Ξ½Ξ¬ΞΈΞµΟƒΞ· Ο…Ο€Ξ·ΟΞµΟƒΞ―Ξ±Ο‚ Ξ±Ο€ΞΏΞΈΞ·ΞΊΞµΟΟ„Ξ·ΞΊΞµ ΞµΟ€ΞΉΟ„Ο…Ο‡ΟΟ‚!');
+            alert('Η ανάθεση υπηρεσίας αποθηκεύτηκε επιτυχώς!');
         }
 
         // Remove duty assignment
         function removeDutyAssignment() {
             if (!selectedDateForDuty) return;
             
-            if (!confirm('Ξ•Ξ―ΟƒΟ„Ξµ ΟƒΞ―Ξ³ΞΏΟ…ΟΞΏΞΉ ΟΟ„ΞΉ ΞΈΞ­Ξ»ΞµΟ„Ξµ Ξ½Ξ± Ξ±Ο†Ξ±ΞΉΟΞ­ΟƒΞµΟ„Ξµ Ο„Ξ·Ξ½ Ξ±Ξ½Ξ¬ΞΈΞµΟƒΞ· Ο…Ο€Ξ·ΟΞµΟƒΞ―Ξ±Ο‚ Ξ³ΞΉΞ± Ξ±Ο…Ο„Ξ® Ο„Ξ·Ξ½ Ξ·ΞΌΞ­ΟΞ±;')) {
+            if (!confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε την ανάθεση υπηρεσίας για αυτή την ημέρα;')) {
                 return;
             }
             
@@ -9228,7 +9228,7 @@
             const modal = bootstrap.Modal.getInstance(document.getElementById('dayDetailsModal'));
             modal.hide();
             
-            alert('Ξ— Ξ±Ξ½Ξ¬ΞΈΞµΟƒΞ· Ο…Ο€Ξ·ΟΞµΟƒΞ―Ξ±Ο‚ Ξ±Ο†Ξ±ΞΉΟΞ­ΞΈΞ·ΞΊΞµ ΞµΟ€ΞΉΟ„Ο…Ο‡ΟΟ‚!');
+            alert('Η ανάθεση υπηρεσίας αφαιρέθηκε επιτυχώς!');
         }
 
         // Check if person is missing on a specific date
@@ -9272,7 +9272,7 @@
             const missingPeriods = groupData.missingPeriods?.[currentMissingPeriodPerson] || [];
             
             if (missingPeriods.length === 0) {
-                container.innerHTML = '<p class="text-muted text-center small">Ξ”ΞµΞ½ Ο…Ο€Ξ¬ΟΟ‡ΞΏΟ…Ξ½ ΞΊΞ±Ο„Ξ±Ο‡Ο‰ΟΞ·ΞΌΞ­Ξ½ΞµΟ‚ Ο€ΞµΟΞΉΟΞ΄ΞΏΞΉ Ξ±Ο€ΞΏΟ…ΟƒΞ―Ξ±Ο‚</p>';
+                container.innerHTML = '<p class="text-muted text-center small">Δεν υπάρχουν καταχωρημένες περιόδοι απουσίας</p>';
                 return;
             }
             
@@ -9286,9 +9286,9 @@
                 const isFuture = today < startDate;
                 
                 let statusBadge = '';
-                if (isActive) statusBadge = '<span class="badge bg-warning ms-2">Ξ•Ξ½ΞµΟΞ³Ξ®</span>';
-                else if (isPast) statusBadge = '<span class="badge bg-secondary ms-2">Ξ Ξ±ΟΞµΞ»ΞΈΞΏΟΟƒΞ±</span>';
-                else if (isFuture) statusBadge = '<span class="badge bg-info ms-2">ΞΞµΞ»Ξ»ΞΏΞ½Ο„ΞΉΞΊΞ®</span>';
+                if (isActive) statusBadge = '<span class="badge bg-warning ms-2">Ενεργή</span>';
+                else if (isPast) statusBadge = '<span class="badge bg-secondary ms-2">Παρελθούσα</span>';
+                else if (isFuture) statusBadge = '<span class="badge bg-info ms-2">Μελλοντική</span>';
                 
                 return `
                     <div class="card mb-2">
@@ -9314,7 +9314,7 @@
             const end = document.getElementById('missingPeriodEnd').value;
             
             if (!start || !end) {
-                alert('Ξ Ξ±ΟΞ±ΞΊΞ±Ξ»Ο ΟƒΟ…ΞΌΟ€Ξ»Ξ·ΟΟΟƒΟ„Ξµ ΞΊΞ±ΞΉ Ο„ΞΉΟ‚ Ξ΄ΟΞΏ Ξ·ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―ΞµΟ‚');
+                alert('Παρακαλώ συμπληρώστε και τις δύο ημερομηνίες');
                 return;
             }
             
@@ -9322,7 +9322,7 @@
             const endDate = new Date(end + 'T00:00:00');
             
             if (endDate < startDate) {
-                alert('Ξ— Ξ·ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± Ξ»Ξ®ΞΎΞ·Ο‚ Ο€ΟΞ­Ο€ΞµΞΉ Ξ½Ξ± ΞµΞ―Ξ½Ξ±ΞΉ ΞΌΞµΟ„Ξ¬ Ο„Ξ·Ξ½ Ξ·ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± Ξ­Ξ½Ξ±ΟΞΎΞ·Ο‚');
+                alert('Η ημερομηνία λήξης πρέπει να είναι μετά την ημερομηνία έναρξης');
                 return;
             }
             
@@ -9352,7 +9352,7 @@
 
         // Remove missing period
         function removeMissingPeriod(index) {
-            if (!confirm('Ξ•Ξ―ΟƒΟ„Ξµ ΟƒΞ―Ξ³ΞΏΟ…ΟΞΏΞΉ ΟΟ„ΞΉ ΞΈΞ­Ξ»ΞµΟ„Ξµ Ξ½Ξ± Ξ±Ο†Ξ±ΞΉΟΞ­ΟƒΞµΟ„Ξµ Ξ±Ο…Ο„Ξ® Ο„Ξ·Ξ½ Ο€ΞµΟΞ―ΞΏΞ΄ΞΏ Ξ±Ο€ΞΏΟ…ΟƒΞ―Ξ±Ο‚;')) {
+            if (!confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την περίοδο απουσίας;')) {
                 return;
             }
             
@@ -9581,7 +9581,7 @@
                     if (assignment) {
                         const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
                         for (const part of parts) {
-                            const match = part.match(/^(.+?)\s*\(ΞΞΌΞ¬Ξ΄Ξ±\s*(\d+)\)\s*$/);
+                            const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                             if (match && parseInt(match[2]) === groupNum) {
                                 assignedPerson = match[1].trim();
                                 break;
@@ -9620,7 +9620,7 @@
                         const assignedIndex = groupPeople.indexOf(assignedPerson);
                         
                         if (assignedIndex === -1) {
-                            violationReason = 'Ξ¤ΞΏ Ξ¬Ο„ΞΏΞΌΞΏ Ο€ΞΏΟ… Ξ±Ξ½Ξ­ΞΈΞµΟ„Ξ±ΞΉ Ξ΄ΞµΞ½ ΞµΞ―Ξ½Ξ±ΞΉ ΟƒΟ„Ξ· Ξ»Ξ―ΟƒΟ„Ξ± Ο€ΞµΟΞΉΟƒΟ„ΟΞΏΟ†Ξ®Ο‚';
+                            violationReason = 'Το άτομο που ανέθεται δεν είναι στη λίστα περιστροφής';
                         } else if (expectedIndex === -1) {
                             // Expected person not in list (shouldn't happen)
                             continue;
@@ -9639,9 +9639,9 @@
                                 if (missingPeriod) {
                                     const startStr = missingPeriod.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                     const endStr = missingPeriod.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                    conflictDetails.push(`Ξ†Ο„ΞΏΞΌΞΏ Ξ»ΞµΞ―Ο€ΞµΞΉ: ${startStr} - ${endStr}`);
+                                    conflictDetails.push(`Άτομο λείπει: ${startStr} - ${endStr}`);
                                 } else {
-                                    conflictDetails.push(`Ξ†Ο„ΞΏΞΌΞΏ Ξ»ΞµΞ―Ο€ΞµΞΉ`);
+                                    conflictDetails.push(`Άτομο λείπει`);
                                 }
                             }
                             
@@ -9657,8 +9657,8 @@
                                     while (checkDate <= lastDay) {
                                         if (isSpecialHoliday(checkDate) && hasDutyOnDay(formatDateKey(checkDate), expectedPerson, groupNum)) {
                                             const specialDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                            const holidayName = getOrthodoxHolidayNameAuto(checkDate) || 'Ξ•ΞΉΞ΄ΞΉΞΊΞ® Ξ‘ΟΞ³Ξ―Ξ±';
-                                            conflictDetails.push(`ΞΟ‡ΞµΞΉ ΞµΞΉΞ΄ΞΉΞΊΞ® Ξ±ΟΞ³Ξ―Ξ±: ${holidayName} (${specialDateStr})`);
+                                            const holidayName = getOrthodoxHolidayNameAuto(checkDate) || 'Ειδική Αργία';
+                                            conflictDetails.push(`Έχει ειδική αργία: ${holidayName} (${specialDateStr})`);
                                             break;
                                         }
                                         checkDate.setDate(checkDate.getDate() + 1);
@@ -9683,8 +9683,8 @@
                                         hasLegitimateConflict = true;
                                         const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                         const beforeDateStr = dayBefore.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                        const beforeTypeName = beforeType === 'special-holiday' ? 'Ξ•ΞΉΞ΄ΞΉΞΊΞ® Ξ‘ΟΞ³Ξ―Ξ±' : 'Ξ£Ξ±Ξ²Ξ²Ξ±Ο„ΞΏΞΊΟΟΞΉΞ±ΞΊΞΏ/Ξ‘ΟΞ³Ξ―Ξ±';
-                                        conflictDetails.push(`Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± ΞµΟ€Ξ·ΟΞµΞ±ΟƒΞΌΞ­Ξ½Ξ·: ${currentDateStr}, Ξ£Ο…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ· ${beforeTypeName}: ${beforeDateStr}`);
+                                        const beforeTypeName = beforeType === 'special-holiday' ? 'Ειδική Αργία' : 'Σαββατοκύριακο/Αργία';
+                                        conflictDetails.push(`Ημερομηνία επηρεασμένη: ${currentDateStr}, Συνεχόμενη ${beforeTypeName}: ${beforeDateStr}`);
                                     }
                                 }
                                 
@@ -9694,8 +9694,8 @@
                                         hasLegitimateConflict = true;
                                         const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                         const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                        const afterTypeName = afterType === 'special-holiday' ? 'Ξ•ΞΉΞ΄ΞΉΞΊΞ® Ξ‘ΟΞ³Ξ―Ξ±' : 'Ξ£Ξ±Ξ²Ξ²Ξ±Ο„ΞΏΞΊΟΟΞΉΞ±ΞΊΞΏ/Ξ‘ΟΞ³Ξ―Ξ±';
-                                        conflictDetails.push(`Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± ΞµΟ€Ξ·ΟΞµΞ±ΟƒΞΌΞ­Ξ½Ξ·: ${currentDateStr}, Ξ£Ο…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ· ${afterTypeName}: ${afterDateStr}`);
+                                        const afterTypeName = afterType === 'special-holiday' ? 'Ειδική Αργία' : 'Σαββατοκύριακο/Αργία';
+                                        conflictDetails.push(`Ημερομηνία επηρεασμένη: ${currentDateStr}, Συνεχόμενη ${afterTypeName}: ${afterDateStr}`);
                                     }
                                 }
                                 
@@ -9707,8 +9707,8 @@
                                             hasLegitimateConflict = true;
                                             const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             const beforeDateStr = dayBefore.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                            const beforeTypeName = beforeType === 'special-holiday' ? 'Ξ•ΞΉΞ΄ΞΉΞΊΞ® Ξ‘ΟΞ³Ξ―Ξ±' : 'Ξ£Ξ±Ξ²Ξ²Ξ±Ο„ΞΏΞΊΟΟΞΉΞ±ΞΊΞΏ/Ξ‘ΟΞ³Ξ―Ξ±';
-                                            conflictDetails.push(`Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± ΞµΟ€Ξ·ΟΞµΞ±ΟƒΞΌΞ­Ξ½Ξ·: ${currentDateStr}, Ξ¤ΞΏ Ξ±Ξ½Ξ­ΞΈΞµΟ„ΞΏ Ξ¬Ο„ΞΏΞΌΞΏ Ξ­Ο‡ΞµΞΉ ΟƒΟ…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ· ${beforeTypeName}: ${beforeDateStr}`);
+                                            const beforeTypeName = beforeType === 'special-holiday' ? 'Ειδική Αργία' : 'Σαββατοκύριακο/Αργία';
+                                            conflictDetails.push(`Ημερομηνία επηρεασμένη: ${currentDateStr}, Το ανέθετο άτομο έχει συνεχόμενη ${beforeTypeName}: ${beforeDateStr}`);
                                         }
                                     }
                                     if (afterType === 'weekend-holiday' || afterType === 'special-holiday') {
@@ -9716,8 +9716,8 @@
                                             hasLegitimateConflict = true;
                                             const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                            const afterTypeName = afterType === 'special-holiday' ? 'Ξ•ΞΉΞ΄ΞΉΞΊΞ® Ξ‘ΟΞ³Ξ―Ξ±' : 'Ξ£Ξ±Ξ²Ξ²Ξ±Ο„ΞΏΞΊΟΟΞΉΞ±ΞΊΞΏ/Ξ‘ΟΞ³Ξ―Ξ±';
-                                            conflictDetails.push(`Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± ΞµΟ€Ξ·ΟΞµΞ±ΟƒΞΌΞ­Ξ½Ξ·: ${currentDateStr}, Ξ¤ΞΏ Ξ±Ξ½Ξ­ΞΈΞµΟ„ΞΏ Ξ¬Ο„ΞΏΞΌΞΏ Ξ­Ο‡ΞµΞΉ ΟƒΟ…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ· ${afterTypeName}: ${afterDateStr}`);
+                                            const afterTypeName = afterType === 'special-holiday' ? 'Ειδική Αργία' : 'Σαββατοκύριακο/Αργία';
+                                            conflictDetails.push(`Ημερομηνία επηρεασμένη: ${currentDateStr}, Το ανέθετο άτομο έχει συνεχόμενη ${afterTypeName}: ${afterDateStr}`);
                                         }
                                     }
                                 }
@@ -9734,7 +9734,7 @@
                                         hasLegitimateConflict = true;
                                         const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                         const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                        conflictDetails.push(`Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± ΞµΟ€Ξ·ΟΞµΞ±ΟƒΞΌΞ­Ξ½Ξ·: ${currentDateStr}, Ξ£Ο…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ· Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ±: ${afterDateStr}`);
+                                        conflictDetails.push(`Ημερομηνία επηρεασμένη: ${currentDateStr}, Συνεχόμενη Ημιαργία: ${afterDateStr}`);
                                     }
                                 }
                                 
@@ -9746,7 +9746,7 @@
                                             hasLegitimateConflict = true;
                                             const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                            conflictDetails.push(`Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± ΞµΟ€Ξ·ΟΞµΞ±ΟƒΞΌΞ­Ξ½Ξ·: ${currentDateStr}, Ξ¤ΞΏ Ξ±Ξ½Ξ­ΞΈΞµΟ„ΞΏ Ξ¬Ο„ΞΏΞΌΞΏ Ξ­Ο‡ΞµΞΉ ΟƒΟ…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ· Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ±: ${afterDateStr}`);
+                                            conflictDetails.push(`Ημερομηνία επηρεασμένη: ${currentDateStr}, Το ανέθετο άτομο έχει συνεχόμενη Ημιαργία: ${afterDateStr}`);
                                         }
                                     }
                                 }
@@ -9756,29 +9756,29 @@
                             if (hasLegitimateConflict) {
                             // Build detailed violation reason
                             if (isMissing) {
-                                violationReason = 'Ξ†Ο„ΞΏΞΌΞΏ Ξ»ΞµΞ―Ο€ΞµΞΉ Ο„Ξ·Ξ½ Ξ·ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ±';
+                                violationReason = 'Άτομο λείπει την ημερομηνία';
                                 if (conflictDetails.length > 0) {
                                     violationReason += ` (${conflictDetails.join('; ')})`;
                                 }
                                 } else if (dayTypeCategory === 'weekend') {
-                                    violationReason = 'Ξ Ξ±ΟΞ¬Ξ»ΞµΞΉΟΞ· Ξ»ΟΞ³Ο‰ ΞµΞΉΞ΄ΞΉΞΊΞ®Ο‚ Ξ±ΟΞ³Ξ―Ξ±Ο‚ ΟƒΟ„ΞΏΞ½ Ξ―Ξ΄ΞΉΞΏ ΞΌΞ®Ξ½Ξ±';
+                                    violationReason = 'Παράλειψη λόγω ειδικής αργίας στον ίδιο μήνα';
                                 if (conflictDetails.length > 0) {
                                     violationReason += ` (${conflictDetails.join('; ')})`;
                                 }
                                 } else if (dayTypeCategory === 'semi') {
                                     const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                    violationReason = `Ξ‘Ξ»Ξ»Ξ±Ξ³Ξ® Ξ»ΟΞ³Ο‰ ΟƒΟ…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ·Ο‚ Ξ£Ξ±Ξ²Ξ²Ξ±Ο„ΞΏΞΊΟΟΞΉΞ±ΞΊΞΏΟ…/Ξ‘ΟΞ³Ξ―Ξ±Ο‚ Ξ® Ξ•ΞΉΞ΄ΞΉΞΊΞ®Ο‚ Ξ‘ΟΞ³Ξ―Ξ±Ο‚ - Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± ΞµΟ€Ξ·ΟΞµΞ±ΟƒΞΌΞ­Ξ½Ξ·: ${currentDateStr}`;
+                                    violationReason = `Αλλαγή λόγω συνεχόμενης Σαββατοκύριακου/Αργίας ή Ειδικής Αργίας - Ημερομηνία επηρεασμένη: ${currentDateStr}`;
                                 if (conflictDetails.length > 0) {
                                     violationReason += ` (${conflictDetails.join('; ')})`;
                                 }
                                 } else if (dayTypeCategory === 'normal') {
                                     const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                    violationReason = `Ξ‘Ξ»Ξ»Ξ±Ξ³Ξ® Ξ»ΟΞ³Ο‰ ΟƒΟ…Ξ½ΞµΟ‡ΟΞΌΞµΞ½Ξ·Ο‚ Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―Ξ±Ο‚ - Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± ΞµΟ€Ξ·ΟΞµΞ±ΟƒΞΌΞ­Ξ½Ξ·: ${currentDateStr}`;
+                                    violationReason = `Αλλαγή λόγω συνεχόμενης Ημιαργίας - Ημερομηνία επηρεασμένη: ${currentDateStr}`;
                                 if (conflictDetails.length > 0) {
                                     violationReason += ` (${conflictDetails.join('; ')})`;
                                 }
                                 } else {
-                                    violationReason = 'Ξ‘Ξ»Ξ»Ξ±Ξ³Ξ® Ξ»ΟΞ³Ο‰ ΟƒΟ…Ξ³ΞΊΟΞΏΟΟƒΞµΟ‰Ξ½';
+                                    violationReason = 'Αλλαγή λόγω συγκρούσεων';
                                 if (conflictDetails.length > 0) {
                                     violationReason += ` (${conflictDetails.join('; ')})`;
                                 }
@@ -9805,10 +9805,10 @@
                             // Look for the date where swappedWith person is assigned
                             for (const checkDateKey of allDatesInMonth) {
                                 const checkAssignment = getAssignmentForDate(checkDateKey) || '';
-                                if (checkAssignment.includes(`${assignmentReason.swappedWith} (ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`)) {
+                                if (checkAssignment.includes(`${assignmentReason.swappedWith} (Ομάδα ${groupNum})`)) {
                                     const swapDate = new Date(checkDateKey + 'T00:00:00');
                                     const swapDateStr = swapDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                    swapDateInfo = `, Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± Ξ±Ξ»Ξ»Ξ±Ξ³Ξ®Ο‚: ${swapDateStr}`;
+                                    swapDateInfo = `, Ημερομηνία αλλαγής: ${swapDateStr}`;
                                     swapDateFound = true;
                                     break;
                                 }
@@ -9826,10 +9826,10 @@
                                     const checkDate = new Date(year, month - 1, d);
                                     const checkDateKey = formatDateKey(checkDate);
                                     const checkAssignment = getAssignmentForDate(checkDateKey) || '';
-                                    if (checkAssignment.includes(`${assignmentReason.swappedWith} (ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`)) {
+                                    if (checkAssignment.includes(`${assignmentReason.swappedWith} (Ομάδα ${groupNum})`)) {
                                         const swapDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                         const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                        swapDateInfo = `, Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± ΞµΟ€Ξ·ΟΞµΞ±ΟƒΞΌΞ­Ξ½Ξ·: ${currentDateStr}, Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± Ξ±Ξ»Ξ»Ξ±Ξ³Ξ®Ο‚: ${swapDateStr}`;
+                                        swapDateInfo = `, Ημερομηνία επηρεασμένη: ${currentDateStr}, Ημερομηνία αλλαγής: ${swapDateStr}`;
                                         swapDateFound = true;
                                         break;
                                     }
@@ -9841,9 +9841,9 @@
                                         const checkDate = new Date(year, month + 1, d);
                                         const checkDateKey = formatDateKey(checkDate);
                                         const checkAssignment = getAssignmentForDate(checkDateKey) || '';
-                                        if (checkAssignment.includes(`${assignmentReason.swappedWith} (ΞΞΌΞ¬Ξ΄Ξ± ${groupNum})`)) {
+                                        if (checkAssignment.includes(`${assignmentReason.swappedWith} (Ομάδα ${groupNum})`)) {
                                             const swapDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                            swapDateInfo = `, Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± Ξ±Ξ»Ξ»Ξ±Ξ³Ξ®Ο‚: ${swapDateStr}`;
+                                            swapDateInfo = `, Ημερομηνία αλλαγής: ${swapDateStr}`;
                                             swapDateFound = true;
                                             break;
                                         }
@@ -9923,7 +9923,7 @@
 <html lang="el">
 <head>
     <meta charset="UTF-8">
-    <title>Ξ£ΞµΞΉΟΞ­Ο‚ Ξ ΞµΟΞΉΟƒΟ„ΟΞΏΟ†Ξ®Ο‚ & Ξ™ΞµΟΞ±ΟΟ‡Ξ―Ξ±</title>
+    <title>Σειρές Περιστροφής & Ιεραρχία</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -9991,10 +9991,10 @@
     </style>
 </head>
 <body>
-    <h1>Ξ£ΞµΞΉΟΞ­Ο‚ Ξ ΞµΟΞΉΟƒΟ„ΟΞΏΟ†Ξ®Ο‚ & Ξ™ΞµΟΞ±ΟΟ‡Ξ―Ξ± Ξ¥Ο€Ξ·ΟΞµΟƒΞΉΟΞ½</h1>
-    <p style="text-align: center; color: #666;">Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ± ΞµΞΊΟ„ΟΟ€Ο‰ΟƒΞ·Ο‚: ${new Date().toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+    <h1>Σειρές Περιστροφής & Ιεραρχία Υπηρεσιών</h1>
+    <p style="text-align: center; color: #666;">Ημερομηνία εκτύπωσης: ${new Date().toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
     
-    <h2>Ξ£ΞµΞΉΟΞ­Ο‚ Ξ ΞµΟΞΉΟƒΟ„ΟΞΏΟ†Ξ®Ο‚ Ξ±Ξ½Ξ¬ ΞΞΌΞ¬Ξ΄Ξ±</h2>
+    <h2>Σειρές Περιστροφής ανά Ομάδα</h2>
 `;
             
             // Add rotation lists for each group
@@ -10004,15 +10004,15 @@
                 
                 html += `
     <div class="group-section">
-        <h3>ΞΞΌΞ¬Ξ΄Ξ± ${groupNum}: ${groupName}</h3>
+        <h3>Ομάδα ${groupNum}: ${groupName}</h3>
 `;
                 
                 // List types with Greek names
                 const listTypes = [
-                    { key: 'special', name: 'Ξ•ΞΉΞ΄ΞΉΞΊΞ­Ο‚ Ξ‘ΟΞ³Ξ―ΞµΟ‚' },
-                    { key: 'weekend', name: 'Ξ£Ξ±Ξ²Ξ²Ξ±Ο„ΞΏΞΊΟΟΞΉΞ±ΞΊΞ±/Ξ‘ΟΞ³Ξ―ΞµΟ‚' },
-                    { key: 'semi', name: 'Ξ—ΞΌΞΉΞ±ΟΞ³Ξ―ΞµΟ‚' },
-                    { key: 'normal', name: 'ΞΞ±ΞΈΞ·ΞΌΞµΟΞΉΞ½Ξ­Ο‚' }
+                    { key: 'special', name: 'Ειδικές Αργίες' },
+                    { key: 'weekend', name: 'Σαββατοκύριακα/Αργίες' },
+                    { key: 'semi', name: 'Ημιαργίες' },
+                    { key: 'normal', name: 'Καθημερινές' }
                 ];
                 
                 listTypes.forEach(listType => {
@@ -10032,7 +10032,7 @@
                     } else {
                         html += `
         <div class="list-section">
-            <strong>${listType.name}:</strong> <span style="color: #999;">(ΞΞµΞ½Ξ® Ξ»Ξ―ΟƒΟ„Ξ±)</span>
+            <strong>${listType.name}:</strong> <span style="color: #999;">(Κενή λίστα)</span>
         </div>
 `;
                     }
@@ -10044,13 +10044,13 @@
             
             // Add rankings section
             html += `
-    <h2>Ξ™ΞµΟΞ±ΟΟ‡Ξ―Ξ± (Rankings)</h2>
+    <h2>Ιεραρχία (Rankings)</h2>
     <table>
         <thead>
             <tr>
-                <th style="width: 80px;">ΞΞ±Ο„Ξ¬Ο„Ξ±ΞΎΞ·</th>
-                <th>ΞΞ½ΞΏΞΌΞ±</th>
-                <th>ΞΞΌΞ¬Ξ΄Ξ±</th>
+                <th style="width: 80px;">Κατάταξη</th>
+                <th>Όνομα</th>
+                <th>Ομάδα</th>
             </tr>
         </thead>
         <tbody>
@@ -10073,7 +10073,7 @@
     </table>
     
     <div style="margin-top: 40px; text-align: center; color: #666; font-size: 10px;">
-        <p>Ξ‘Ο…Ο„Ο Ο„ΞΏ Ξ­Ξ³Ξ³ΟΞ±Ο†ΞΏ Ξ΄Ξ·ΞΌΞΉΞΏΟ…ΟΞ³Ξ®ΞΈΞ·ΞΊΞµ Ξ±Ο€Ο Ο„ΞΏ ΟƒΟΟƒΟ„Ξ·ΞΌΞ± Ξ”ΞΉΞ±Ο‡ΞµΞ―ΟΞΉΟƒΞ·Ο‚ Ξ¥Ο€Ξ·ΟΞµΟƒΞΉΟΞ½</p>
+        <p>Αυτό το έγγραφο δημιουργήθηκε από το σύστημα Διαχείρισης Υπηρεσιών</p>
     </div>
 </body>
 </html>
