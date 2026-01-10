@@ -156,9 +156,9 @@ auth.onAuthStateChanged(async function(user) {
                 
                 if (shouldUpdateLastSignIn) {
                     // Update lastSignIn for existing users (only if more than 1 hour passed)
-                    await db.collection('technicians').doc(user.uid).update({
-                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp()
-                    });
+                await db.collection('technicians').doc(user.uid).update({
+                    lastSignIn: firebase.firestore.FieldValue.serverTimestamp()
+                });
                 }
                 
                 // Update localStorage with current fullName if available

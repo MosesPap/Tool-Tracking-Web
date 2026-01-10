@@ -282,8 +282,8 @@
                         });
                     }
                     
-                    // Save immediately to ensure priorities are persisted
-                    saveData();
+                    // NOTE: Do NOT call saveData() here - it would overwrite assignments that haven't been loaded yet
+                    // Priorities will be saved when they're actually modified by the user
                     
                     // Debug: Log lastDuties and priorities to verify they're loaded
                     console.log('Loaded groups from Firestore');
@@ -844,54 +844,83 @@
                 }
                 
                 // Save assignments to separate documents by day type, organized by month
+                // Only save if there are actual assignments to avoid overwriting with empty data
                 try {
-                    const organizedNormal = organizeAssignmentsByMonth(normalDayAssignments);
-                    const sanitizedNormal = sanitizeForFirestore(organizedNormal);
-                await db.collection('dutyShifts').doc('normalDayAssignments').set({
-                        ...sanitizedNormal,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid
-                });
-                    console.log('Saved normalDayAssignments organized by month:', Object.keys(organizedNormal).length, 'months');
+                    const assignmentCount = Object.keys(normalDayAssignments).filter(key => 
+                        key !== 'lastUpdated' && key !== 'updatedBy' && key !== '_migratedFrom' && key !== '_migrationDate'
+                    ).length;
+                    if (assignmentCount > 0) {
+                        const organizedNormal = organizeAssignmentsByMonth(normalDayAssignments);
+                        const sanitizedNormal = sanitizeForFirestore(organizedNormal);
+                    await db.collection('dutyShifts').doc('normalDayAssignments').set({
+                            ...sanitizedNormal,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                        console.log('Saved normalDayAssignments organized by month:', Object.keys(organizedNormal).length, 'months', assignmentCount, 'assignments');
+                    } else {
+                        console.log('Skipping save of normalDayAssignments - no assignments to save');
+                    }
                 } catch (error) {
                     console.error('Error saving normalDayAssignments to Firestore:', error);
                 }
                 
                 try {
-                    const organizedSemi = organizeAssignmentsByMonth(semiNormalAssignments);
-                    const sanitizedSemi = sanitizeForFirestore(organizedSemi);
-                await db.collection('dutyShifts').doc('semiNormalAssignments').set({
-                        ...sanitizedSemi,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid
-                });
-                    console.log('Saved semiNormalAssignments organized by month:', Object.keys(organizedSemi).length, 'months');
+                    const assignmentCount = Object.keys(semiNormalAssignments).filter(key => 
+                        key !== 'lastUpdated' && key !== 'updatedBy' && key !== '_migratedFrom' && key !== '_migrationDate'
+                    ).length;
+                    if (assignmentCount > 0) {
+                        const organizedSemi = organizeAssignmentsByMonth(semiNormalAssignments);
+                        const sanitizedSemi = sanitizeForFirestore(organizedSemi);
+                    await db.collection('dutyShifts').doc('semiNormalAssignments').set({
+                            ...sanitizedSemi,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                        console.log('Saved semiNormalAssignments organized by month:', Object.keys(organizedSemi).length, 'months', assignmentCount, 'assignments');
+                    } else {
+                        console.log('Skipping save of semiNormalAssignments - no assignments to save');
+                    }
                 } catch (error) {
                     console.error('Error saving semiNormalAssignments to Firestore:', error);
                 }
                 
                 try {
-                    const organizedWeekend = organizeAssignmentsByMonth(weekendAssignments);
-                    const sanitizedWeekend = sanitizeForFirestore(organizedWeekend);
-                await db.collection('dutyShifts').doc('weekendAssignments').set({
-                        ...sanitizedWeekend,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid
-                });
-                    console.log('Saved weekendAssignments organized by month:', Object.keys(organizedWeekend).length, 'months');
+                    const assignmentCount = Object.keys(weekendAssignments).filter(key => 
+                        key !== 'lastUpdated' && key !== 'updatedBy' && key !== '_migratedFrom' && key !== '_migrationDate'
+                    ).length;
+                    if (assignmentCount > 0) {
+                        const organizedWeekend = organizeAssignmentsByMonth(weekendAssignments);
+                        const sanitizedWeekend = sanitizeForFirestore(organizedWeekend);
+                    await db.collection('dutyShifts').doc('weekendAssignments').set({
+                            ...sanitizedWeekend,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                        console.log('Saved weekendAssignments organized by month:', Object.keys(organizedWeekend).length, 'months', assignmentCount, 'assignments');
+                    } else {
+                        console.log('Skipping save of weekendAssignments - no assignments to save');
+                    }
                 } catch (error) {
                     console.error('Error saving weekendAssignments to Firestore:', error);
                 }
                 
                 try {
-                    const organizedSpecial = organizeAssignmentsByMonth(specialHolidayAssignments);
-                    const sanitizedSpecial = sanitizeForFirestore(organizedSpecial);
-                await db.collection('dutyShifts').doc('specialHolidayAssignments').set({
-                        ...sanitizedSpecial,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid
-                });
-                    console.log('Saved specialHolidayAssignments organized by month:', Object.keys(organizedSpecial).length, 'months');
+                    const assignmentCount = Object.keys(specialHolidayAssignments).filter(key => 
+                        key !== 'lastUpdated' && key !== 'updatedBy' && key !== '_migratedFrom' && key !== '_migrationDate'
+                    ).length;
+                    if (assignmentCount > 0) {
+                        const organizedSpecial = organizeAssignmentsByMonth(specialHolidayAssignments);
+                        const sanitizedSpecial = sanitizeForFirestore(organizedSpecial);
+                    await db.collection('dutyShifts').doc('specialHolidayAssignments').set({
+                            ...sanitizedSpecial,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                        console.log('Saved specialHolidayAssignments organized by month:', Object.keys(organizedSpecial).length, 'months', assignmentCount, 'assignments');
+                    } else {
+                        console.log('Skipping save of specialHolidayAssignments - no assignments to save');
+                    }
                 } catch (error) {
                     console.error('Error saving specialHolidayAssignments to Firestore:', error);
                 }
