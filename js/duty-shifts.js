@@ -4889,14 +4889,14 @@
         }
 
         // Check if a person has duty on consecutive days (day before or day after)
+        // Enhanced version that can check against simulated assignments (for preview)
         // Enhanced conflict rules (all combinations checked):
         // - Normal ↔ Semi-normal (before and after)
         // - Normal ↔ Weekend (before and after)
         // - Normal ↔ Special (before and after)
         // - Semi-normal ↔ Weekend (before and after)
         // - Semi-normal ↔ Special (before and after)
-        // Optional: assignedPeopleMap - tracks in-progress assignments during calculation loop
-        function hasConsecutiveDuty(dayKey, person, groupNum, assignedPeopleMap = null) {
+        function hasConsecutiveDuty(dayKey, person, groupNum, simulatedAssignments = null) {
             const date = new Date(dayKey + 'T00:00:00');
             const currentDayType = getDayType(date);
             
@@ -4923,31 +4923,35 @@
                 return false;
             };
             
-            // Helper function to check if person has duty on a day (checks both saved and in-progress assignments)
-            const checkHasDutyOnDay = (checkDayKey) => {
-                // First check in-progress assignments if provided (for same-day loop processing)
-                if (assignedPeopleMap) {
-                    const checkDate = new Date(checkDayKey + 'T00:00:00');
-                    const checkMonth = checkDate.getMonth();
-                    const checkYear = checkDate.getFullYear();
-                    const checkMonthKey = `${checkYear}-${checkMonth}`;
-                    
-                    if (assignedPeopleMap[checkMonthKey] && assignedPeopleMap[checkMonthKey][groupNum]) {
-                        if (assignedPeopleMap[checkMonthKey][groupNum].has(person)) {
-                            return true;
-                        }
-                    }
-                }
-                
-                // Then check saved assignments
-                return hasDutyOnDay(checkDayKey, person, groupNum);
-            };
-            
             // Check day before
             const dayBefore = new Date(date);
             dayBefore.setDate(dayBefore.getDate() - 1);
             const dayBeforeKey = formatDateKey(dayBefore);
-            const hasDutyBefore = checkHasDutyOnDay(dayBeforeKey);
+            
+            // Check if person has duty on day before (check simulated assignments if provided)
+            let hasDutyBefore = false;
+            if (simulatedAssignments) {
+                // Check simulated assignments first
+                const beforeMonthKey = `${dayBefore.getFullYear()}-${dayBefore.getMonth()}`;
+                const beforeDayType = getDayType(dayBefore);
+                let beforeTypeCategory = 'normal';
+                if (beforeDayType === 'special-holiday') {
+                    beforeTypeCategory = 'special';
+                    hasDutyBefore = simulatedAssignments.special?.[beforeMonthKey]?.[groupNum]?.has(person) || false;
+                } else if (beforeDayType === 'semi-normal-day') {
+                    beforeTypeCategory = 'semi';
+                    hasDutyBefore = simulatedAssignments.semi?.[dayBeforeKey]?.[groupNum] === person;
+                } else if (beforeDayType === 'weekend-holiday') {
+                    beforeTypeCategory = 'weekend';
+                    hasDutyBefore = simulatedAssignments.weekend?.[dayBeforeKey]?.[groupNum] === person;
+                } else {
+                    beforeTypeCategory = 'normal';
+                    hasDutyBefore = simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum] === person;
+                }
+            } else {
+                // Check permanent assignments
+                hasDutyBefore = hasDutyOnDay(dayBeforeKey, person, groupNum);
+            }
             
             if (hasDutyBefore) {
                 const beforeDayType = getDayType(dayBefore);
@@ -4974,17 +4978,38 @@
             dayAfter.setDate(dayAfter.getDate() + 1);
             const dayAfterKey = formatDateKey(dayAfter);
             
-            // Check all assignment sources for day after (both saved and in-progress)
-            const dayAfterAssigned = dutyAssignments[dayAfterKey] || 
-                                     normalDayAssignments[dayAfterKey] ||
-                                     semiNormalAssignments[dayAfterKey] ||
-                                     weekendAssignments[dayAfterKey] ||
-                                     specialHolidayAssignments[dayAfterKey];
-            const hasDutyAfter = (dayAfterAssigned && hasDutyOnDay(dayAfterKey, person, groupNum)) || 
-                                 checkHasDutyOnDay(dayAfterKey);
+            // Check if person has duty on day after (check simulated assignments if provided)
+            let hasDutyAfter = false;
+            if (simulatedAssignments) {
+                // Check simulated assignments first
+                const afterMonthKey = `${dayAfter.getFullYear()}-${dayAfter.getMonth()}`;
+                const afterDayType = getDayType(dayAfter);
+                let afterTypeCategory = 'normal';
+                if (afterDayType === 'special-holiday') {
+                    afterTypeCategory = 'special';
+                    hasDutyAfter = simulatedAssignments.special?.[afterMonthKey]?.[groupNum]?.has(person) || false;
+                } else if (afterDayType === 'semi-normal-day') {
+                    afterTypeCategory = 'semi';
+                    hasDutyAfter = simulatedAssignments.semi?.[dayAfterKey]?.[groupNum] === person;
+                } else if (afterDayType === 'weekend-holiday') {
+                    afterTypeCategory = 'weekend';
+                    hasDutyAfter = simulatedAssignments.weekend?.[dayAfterKey]?.[groupNum] === person;
+                } else {
+                    afterTypeCategory = 'normal';
+                    hasDutyAfter = simulatedAssignments.normal?.[dayAfterKey]?.[groupNum] === person;
+                }
+            } else {
+                // Check permanent assignments
+                const dayAfterAssigned = dutyAssignments[dayAfterKey] || 
+                                         normalDayAssignments[dayAfterKey] ||
+                                         semiNormalAssignments[dayAfterKey] ||
+                                         weekendAssignments[dayAfterKey] ||
+                                         specialHolidayAssignments[dayAfterKey];
+                hasDutyAfter = dayAfterAssigned && hasDutyOnDay(dayAfterKey, person, groupNum);
+            }
             
-            // Only check day after if it's already assigned (exists in any assignment document or in-progress)
-            // This means it was processed earlier due to higher priority or in the same loop
+            // Only check day after if it's already assigned (exists in any assignment document or simulated)
+            // This means it was processed earlier due to higher priority
             if (hasDutyAfter) {
                 const afterDayType = getDayType(dayAfter);
                 let afterTypeCategory = 'normal';
@@ -7183,62 +7208,14 @@
                                     // Advance rotation position for next iteration
                                     globalNormalRotationPosition[groupNum] = rotationPosition + 1;
                                 } else if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                                    // Check for consecutive conflicts using hasConsecutiveDuty logic
-                                    // This checks for any consecutive duty (semi-normal, weekend, etc.)
-                                    // Check day before and day after for any consecutive duty
-                                    const dayBefore = new Date(date);
-                                    dayBefore.setDate(dayBefore.getDate() - 1);
-                                const dayAfter = new Date(date);
-                                dayAfter.setDate(dayAfter.getDate() + 1);
-                                    const dayBeforeKey = formatDateKey(dayBefore);
-                                const dayAfterKey = formatDateKey(dayAfter);
-                                    
-                                    const beforeType = getDayType(dayBefore);
-                                const afterType = getDayType(dayAfter);
-                                    const currentType = getDayType(date);
-                                    
-                                    // Check if person has duty on day before (from any simulated assignment)
-                                    const hasDutyBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] === assignedPerson ||
-                                                          simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(assignedPerson) ||
-                                                          simulatedSemiAssignments[dayBeforeKey]?.[groupNum] === assignedPerson ||
-                                                          normalAssignments[dayBeforeKey]?.[groupNum] === assignedPerson;
-                                    
-                                    // Check if person has duty on day after (from any simulated assignment)
-                                    const hasDutyAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] === assignedPerson ||
-                                                         simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(assignedPerson) ||
-                                                         simulatedSemiAssignments[dayAfterKey]?.[groupNum] === assignedPerson ||
-                                                         normalAssignments[dayAfterKey]?.[groupNum] === assignedPerson;
-                                    
-                                    if (hasDutyBefore || hasDutyAfter) {
-                                        let beforeTypeCategory = 'normal';
-                                        if (beforeType === 'special-holiday') beforeTypeCategory = 'special';
-                                        else if (beforeType === 'semi-normal-day') beforeTypeCategory = 'semi';
-                                        else if (beforeType === 'weekend-holiday') beforeTypeCategory = 'weekend';
-                                        
-                                        let afterTypeCategory = 'normal';
-                                        if (afterType === 'special-holiday') afterTypeCategory = 'special';
-                                        else if (afterType === 'semi-normal-day') afterTypeCategory = 'semi';
-                                        else if (afterType === 'weekend-holiday') afterTypeCategory = 'weekend';
-                                        
-                                        let currentTypeCategory = 'normal';
-                                        if (currentType === 'special-holiday') currentTypeCategory = 'special';
-                                        else if (currentType === 'semi-normal-day') currentTypeCategory = 'semi';
-                                        else if (currentType === 'weekend-holiday') currentTypeCategory = 'weekend';
-                                        
-                                        // Conflict if different day types OR if either day is special holiday
-                                        if ((hasDutyBefore && (currentTypeCategory !== beforeTypeCategory || currentType === 'special-holiday' || beforeType === 'special-holiday')) ||
-                                            (hasDutyAfter && (currentTypeCategory !== afterTypeCategory || currentType === 'special-holiday' || afterType === 'special-holiday'))) {
-                                            hasConsecutiveConflict = true;
-                                        }
-                                    }
-                                    
-                                    // Legacy check for semi-normal (keep for backward compatibility)
-                                    if (!hasConsecutiveConflict && afterType === 'semi-normal-day') {
-                                        const personAfter = simulatedSemiAssignments[dayAfterKey]?.[groupNum];
-                                        if (personAfter === assignedPerson) {
-                                            hasConsecutiveConflict = true;
-                                        }
-                                    }
+                                    // Use enhanced hasConsecutiveDuty with simulated assignments
+                                    const simulatedAssignments = {
+                                        special: simulatedSpecialAssignments,
+                                        weekend: simulatedWeekendAssignments,
+                                        semi: simulatedSemiAssignments,
+                                        normal: normalAssignments
+                                    };
+                                    hasConsecutiveConflict = hasConsecutiveDuty(dateKey, assignedPerson, groupNum, simulatedAssignments);
                                 }
                                 
                                 // If there's a conflict, swap with person who has same day of week (Monday↔Wednesday, Tuesday↔Thursday)
@@ -7285,68 +7262,17 @@
                                                 return false;
                                             }
                                             
-                                            // Check if swap person has conflict on current day (where they would be swapped to)
-                                            // Calculate day after current day
-                                            const currentDayAfter = new Date(date);
-                                            currentDayAfter.setDate(currentDayAfter.getDate() + 1);
-                                            const currentDayAfterKey = formatDateKey(currentDayAfter);
-                                            const currentAfterType = getDayType(currentDayAfter);
+                                            // Use enhanced hasConsecutiveDuty with simulated assignments
+                                            const simulatedAssignments = {
+                                                special: simulatedSpecialAssignments,
+                                                weekend: simulatedWeekendAssignments,
+                                                semi: simulatedSemiAssignments,
+                                                normal: normalAssignments
+                                            };
                                             
-                                            let swapPersonHasConflict = false;
-                                            
-                                            // Check if swap person has conflict on day after current day
-                                            if (currentAfterType === 'semi-normal-day') {
-                                                const swapPersonAfter = simulatedSemiAssignments[currentDayAfterKey]?.[groupNum];
-                                                if (swapPersonAfter === swapPerson) {
-                                                    swapPersonHasConflict = true;
-                                                }
-                                            }
-                                            
-                                            // Also check day before current day
-                                            const currentDayBefore = new Date(date);
-                                            currentDayBefore.setDate(currentDayBefore.getDate() - 1);
-                                            const currentDayBeforeKey = formatDateKey(currentDayBefore);
-                                            const currentBeforeType = getDayType(currentDayBefore);
-                                            
-                                            if (!swapPersonHasConflict && currentBeforeType === 'semi-normal-day') {
-                                                const swapPersonBefore = simulatedSemiAssignments[currentDayBeforeKey]?.[groupNum];
-                                                if (swapPersonBefore === swapPerson) {
-                                                    swapPersonHasConflict = true;
-                                                }
-                                            }
-                                            
-                                            // Also check if swap person has conflict on swap day (where they currently would be)
-                                            if (!swapPersonHasConflict) {
-                                                const swapDate = new Date(candidateDayKey + 'T00:00:00');
-                                                const swapDayAfter = new Date(swapDate);
-                                                swapDayAfter.setDate(swapDayAfter.getDate() + 1);
-                                                const swapDayAfterKey = formatDateKey(swapDayAfter);
-                                                const swapAfterType = getDayType(swapDayAfter);
-                                                
-                                                if (swapAfterType === 'semi-normal-day') {
-                                                    const swapPersonOnSwapDayAfter = simulatedSemiAssignments[swapDayAfterKey]?.[groupNum];
-                                                    if (swapPersonOnSwapDayAfter === swapPerson) {
-                                                        swapPersonHasConflict = true;
-                                                    }
-                                                }
-                                            }
-                                            
-                                            // Also check if skipped person has conflict on swap day (where they would go)
-                                            let skippedPersonHasConflict = false;
-                                            if (!swapPersonHasConflict) {
-                                                const swapDate = new Date(candidateDayKey + 'T00:00:00');
-                                                const swapDayAfter = new Date(swapDate);
-                                                swapDayAfter.setDate(swapDayAfter.getDate() + 1);
-                                                const swapDayAfterKey = formatDateKey(swapDayAfter);
-                                                const swapAfterType = getDayType(swapDayAfter);
-                                                
-                                                if (swapAfterType === 'semi-normal-day') {
-                                                    const skippedPersonOnSwapDayAfter = simulatedSemiAssignments[swapDayAfterKey]?.[groupNum];
-                                                    if (skippedPersonOnSwapDayAfter === skippedPerson) {
-                                                        skippedPersonHasConflict = true;
-                                                    }
-                                                }
-                                            }
+                                            const swapPersonHasConflict = hasConsecutiveDuty(dateKey, swapPerson, groupNum, simulatedAssignments) ||
+                                                                          hasConsecutiveDuty(candidateDayKey, swapPerson, groupNum, simulatedAssignments);
+                                            const skippedPersonHasConflict = hasConsecutiveDuty(candidateDayKey, skippedPerson, groupNum, simulatedAssignments);
                                             
                                             return !swapPersonHasConflict && !skippedPersonHasConflict;
                                         };
@@ -7440,70 +7366,19 @@
                                         // Store original rotation position before swap (needed to continue rotation correctly)
                                         const originalRotationPosition = rotationPosition;
                                         
-                                        // Check if swap person doesn't have conflict on current day AND swap day (restore full checking)
+                                        // Check if swap person doesn't have conflict on current day AND swap day (use enhanced checking)
                                         if (swapPerson && !isPersonMissingOnDate(swapPerson, groupNum, date)) {
-                                            let swapPersonHasConflict = false;
+                                            // Use enhanced hasConsecutiveDuty with simulated assignments
+                                            const simulatedAssignments = {
+                                                special: simulatedSpecialAssignments,
+                                                weekend: simulatedWeekendAssignments,
+                                                semi: simulatedSemiAssignments,
+                                                normal: normalAssignments
+                                            };
                                             
-                                            // FIRST: Check if swap person has conflict on day BEFORE current day (where they would be swapped to)
-                                            const dayBefore = new Date(date);
-                                            dayBefore.setDate(dayBefore.getDate() - 1);
-                                            const dayBeforeKey = formatDateKey(dayBefore);
-                                            const beforeType = getDayType(dayBefore);
-                                            
-                                            if (beforeType === 'semi-normal-day') {
-                                                const swapPersonBefore = simulatedSemiAssignments[dayBeforeKey]?.[groupNum];
-                                                if (swapPersonBefore === swapPerson) {
-                                                    swapPersonHasConflict = true;
-                                                }
-                                            }
-                                            
-                                            // SECOND: Check if swap person has conflict on current day (where they would be swapped to) - check day AFTER
-                                            if (!swapPersonHasConflict) {
-                                                const dayAfter = new Date(date);
-                                                dayAfter.setDate(dayAfter.getDate() + 1);
-                                                const dayAfterKey = formatDateKey(dayAfter);
-                                                const afterType = getDayType(dayAfter);
-                                                
-                                                if (afterType === 'semi-normal-day') {
-                                                const swapPersonAfter = simulatedSemiAssignments[dayAfterKey]?.[groupNum];
-                                                if (swapPersonAfter === swapPerson) {
-                                                    swapPersonHasConflict = true;
-                                                    }
-                                                }
-                                            }
-                                            
-                                            // THIRD: Check if swap person has conflict on swap day (where they currently would be) - check day AFTER swap day
-                                            if (!swapPersonHasConflict) {
-                                                const swapDate = new Date(swapDayKey + 'T00:00:00');
-                                                const swapDayAfter = new Date(swapDate);
-                                                swapDayAfter.setDate(swapDayAfter.getDate() + 1);
-                                                const swapDayAfterKey = formatDateKey(swapDayAfter);
-                                                const swapAfterType = getDayType(swapDayAfter);
-                                                
-                                                if (swapAfterType === 'semi-normal-day') {
-                                                    const swapPersonOnSwapDayAfter = simulatedSemiAssignments[swapDayAfterKey]?.[groupNum];
-                                                    if (swapPersonOnSwapDayAfter === swapPerson) {
-                                                        swapPersonHasConflict = true;
-                                                    }
-                                                }
-                                            }
-                                            
-                                            // FOURTH: Check if skipped person has conflict on swap day (where they would go) - check day AFTER swap day
-                                            let skippedPersonHasConflict = false;
-                                            if (!swapPersonHasConflict) {
-                                                const swapDate = new Date(swapDayKey + 'T00:00:00');
-                                                const swapDayAfter = new Date(swapDate);
-                                                swapDayAfter.setDate(swapDayAfter.getDate() + 1);
-                                                const swapDayAfterKey = formatDateKey(swapDayAfter);
-                                                const swapAfterType = getDayType(swapDayAfter);
-                                                
-                                                if (swapAfterType === 'semi-normal-day') {
-                                                    const skippedPersonOnSwapDayAfter = simulatedSemiAssignments[swapDayAfterKey]?.[groupNum];
-                                                    if (skippedPersonOnSwapDayAfter === skippedPerson) {
-                                                        skippedPersonHasConflict = true;
-                                                    }
-                                                }
-                                            }
+                                            const swapPersonHasConflict = hasConsecutiveDuty(dateKey, swapPerson, groupNum, simulatedAssignments) ||
+                                                                          hasConsecutiveDuty(swapDayKey, swapPerson, groupNum, simulatedAssignments);
+                                            const skippedPersonHasConflict = hasConsecutiveDuty(swapDayKey, skippedPerson, groupNum, simulatedAssignments);
                                             
                                             if (!swapPersonHasConflict && !skippedPersonHasConflict) {
                                                 // Valid swap: swap person gets current day, skipped person gets swap day
@@ -7560,8 +7435,27 @@
                                             globalNormalRotationPosition[groupNum] = rotationPosition + 1;
                                         }
                                     } else {
-                                        // No swap day found, still assign original person (they'll have conflict but it's unavoidable)
-                                        globalNormalRotationPosition[groupNum] = rotationPosition + 1;
+                                        // No swap day found in current month - try getting person from next month (if at end of month)
+                                        const lastDayOfMonth = new Date(year, month + 1, 0);
+                                        const daysUntilEndOfMonth = lastDayOfMonth.getDate() - date.getDate();
+                                        
+                                        // Only try next month if we're in the last 3 days of the month
+                                        if (daysUntilEndOfMonth <= 3) {
+                                            const nextMonthPerson = getPersonFromNextMonth(dateKey, 'normal', groupNum, month, year, rotationDays, groupPeople);
+                                            if (nextMonthPerson) {
+                                                assignedPerson = nextMonthPerson;
+                                                // Track assignment
+                                                assignedPeoplePreview[monthKey][groupNum].add(nextMonthPerson);
+                                                console.log(`[PREVIEW END OF MONTH] Assigned ${nextMonthPerson} from next month for ${dateKey}`);
+                                                globalNormalRotationPosition[groupNum] = rotationPosition + 1;
+                                            } else {
+                                                // No person from next month available, still assign original person (they'll have conflict)
+                                                globalNormalRotationPosition[groupNum] = rotationPosition + 1;
+                                            }
+                                        } else {
+                                            // Not at end of month, still assign original person (they'll have conflict but it's unavoidable)
+                                            globalNormalRotationPosition[groupNum] = rotationPosition + 1;
+                                        }
                                     }
                                 } else {
                                     // No conflict, assign normally and advance rotation
@@ -8332,11 +8226,7 @@
                                 }
                                 
                             // If expected person has NO conflicts, assign them
-                                // IMPORTANT: Re-check conflict using assignedPeople map to catch same-loop assignments
-                                // This ensures we catch conflicts with assignments made earlier in the same loop iteration
-                                const finalConflictCheck = hasConsecutiveDuty(dayKey, expectedPerson, groupNum, assignedPeople);
-                                
-                                if (!hasConflict && !finalConflictCheck) {
+                                if (!hasConflict) {
                                 assignedPerson = expectedPerson;
                                 // Track that this person is assigned (for normal days)
                                 if (dayTypeCategory === 'normal' && assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
@@ -8354,9 +8244,6 @@
                                 } else {
                                 // Expected person has conflict - mark as skipped and find replacement
                                 skippedPerson = expectedPerson;
-                                if (finalConflictCheck && !hasConflict) {
-                                    console.log(`[CONFLICT DETECTED] Person ${expectedPerson} has conflict on ${dayKey} due to same-loop assignment (detected in final check)`);
-                                }
                                 
                                 // For weekends: track that this person was skipped in this month
                                 if (dayTypeCategory === 'weekend') {
@@ -8701,19 +8588,50 @@
                                         
                                         let candidateHasConflict = false;
                                         
-                                        // Use enhanced hasConsecutiveDuty for comprehensive conflict checking
-                                        // Pass assignedPeople map to check in-progress assignments from same loop
-                                        // This checks all combinations: normal↔semi, normal↔weekend, normal↔special, semi↔weekend, semi↔special
-                                        candidateHasConflict = hasConsecutiveDuty(dayKey, candidate, groupNum, assignedPeople);
-                                        
-                                        // Additional checks for weekend day type
+                                        // Check conflicts for candidate
                                         if (dayTypeCategory === 'weekend') {
                                             // Skip if candidate has special holiday duty in the same month
                                             // OR if they were already skipped in this month
                                             if (hasSpecialHolidayDutyInMonth(candidate, groupNum, month, year) || 
                                                 skippedInMonth[monthKey].has(candidate)) {
+                                                // Continue to next person in rotation - don't assign this candidate
+                                                continue;
+                                            }
+                                        } else if (dayTypeCategory === 'semi') {
+                                            const dayBefore = new Date(dayDate);
+                                            dayBefore.setDate(dayBefore.getDate() - 1);
+                                            const dayAfter = new Date(dayDate);
+                                            dayAfter.setDate(dayAfter.getDate() + 1);
+                                            
+                                            const beforeType = getDayType(dayBefore);
+                                            const afterType = getDayType(dayAfter);
+                                            
+                                            if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
                                                 candidateHasConflict = true;
                                             }
+                                            if ((afterType === 'weekend-holiday' || afterType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayAfter), candidate, groupNum)) {
+                                                candidateHasConflict = true;
+                                            }
+                                        } else if (dayTypeCategory === 'normal') {
+                                            const dayBefore = new Date(dayDate);
+                                            dayBefore.setDate(dayBefore.getDate() - 1);
+                                            const dayAfter = new Date(dayDate);
+                                            dayAfter.setDate(dayAfter.getDate() + 1);
+                                            
+                                            const beforeType = getDayType(dayBefore);
+                                            const afterType = getDayType(dayAfter);
+                                            
+                                            if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
+                                                candidateHasConflict = true;
+                                            }
+                                            if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), candidate, groupNum)) {
+                                                candidateHasConflict = true;
+                                            }
+                                        }
+                                        
+                                        // Use enhanced conflict checking for all day types
+                                        if (dayTypeCategory === 'normal' || dayTypeCategory === 'semi') {
+                                            candidateHasConflict = hasConsecutiveDuty(dayKey, candidate, groupNum);
                                         }
                                         
                                         if (!candidateHasConflict) {
@@ -8764,7 +8682,6 @@
                         }
                         
                         // If still no assignment, try all people in order
-                        // Use enhanced hasConsecutiveDuty for comprehensive conflict checking
                         if (!assignedPerson) {
                             for (let i = 0; i < groupPeople.length; i++) {
                                 const candidate = groupPeople[i];
@@ -8774,22 +8691,44 @@
                                 
                                 let candidateHasConflict = false;
                                 
-                                // Use enhanced conflict checking for all day types
-                                // Pass assignedPeople map to check in-progress assignments from same loop
-                                // This ensures we catch conflicts with assignments made earlier in the same loop iteration
-                                candidateHasConflict = hasConsecutiveDuty(dayKey, candidate, groupNum, assignedPeople);
-                                
-                                // Additional checks for weekend day type
                                 if (dayTypeCategory === 'weekend') {
-                                    // Check for special holiday in same month
                                     if (hasSpecialHolidayDutyInMonth(candidate, groupNum, month, year)) {
+                                        candidateHasConflict = true;
+                                    }
+                                } else if (dayTypeCategory === 'semi') {
+                                    const dayBefore = new Date(dayDate);
+                                    dayBefore.setDate(dayBefore.getDate() - 1);
+                                    const dayAfter = new Date(dayDate);
+                                    dayAfter.setDate(dayAfter.getDate() + 1);
+                                    
+                                    const beforeType = getDayType(dayBefore);
+                                    const afterType = getDayType(dayAfter);
+                                    
+                                    if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
+                                        candidateHasConflict = true;
+                                    }
+                                    if ((afterType === 'weekend-holiday' || afterType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayAfter), candidate, groupNum)) {
+                                        candidateHasConflict = true;
+                                    }
+                                } else if (dayTypeCategory === 'normal') {
+                                    const dayBefore = new Date(dayDate);
+                                    dayBefore.setDate(dayBefore.getDate() - 1);
+                                    const dayAfter = new Date(dayDate);
+                                    dayAfter.setDate(dayAfter.getDate() + 1);
+                                    
+                                    const beforeType = getDayType(dayBefore);
+                                    const afterType = getDayType(dayAfter);
+                                    
+                                    if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
+                                        candidateHasConflict = true;
+                                    }
+                                    if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), candidate, groupNum)) {
                                         candidateHasConflict = true;
                                     }
                                 }
                                 
                                 if (!candidateHasConflict) {
                                     assignedPerson = candidate;
-                                    console.log(`[EMERGENCY FALLBACK] Assigned ${candidate} to ${dayKey} (no conflicts found)`);
                                     break;
                                 }
                             }
@@ -9424,19 +9363,6 @@
             }
             
             const dateKey = formatDateKey(new Date(date + 'T00:00:00'));
-            const dateObj = new Date(date + 'T00:00:00');
-            
-            // Check for conflicts before assigning
-            const hasConflict = hasConsecutiveDuty(dateKey, person, groupNum);
-            
-            if (hasConflict) {
-                const conflictMsg = `Το άτομο ${person} έχει σύγκρουση (συνεχόμενη ημέρα) στις ${dateObj.toLocaleDateString('el-GR')}.\n\nΝα προχωρήσει η ανάθεση παρά τη σύγκρουση;`;
-                if (!confirm(conflictMsg)) {
-                    return; // User cancelled
-                }
-                // User approved - store conflict reason
-                storeAssignmentReason(dateKey, groupNum, person, 'conflict', 'Χειροκίνητη ανάθεση με σύγκρουση');
-            }
             
             // Check if assignment already exists
             if (dutyAssignments[dateKey]) {
@@ -9451,120 +9377,13 @@
                 dutyAssignments[dateKey] = `${person} (Ομάδα ${groupNum})`;
             }
             
-            // Also update day-type-specific assignments
-            setAssignmentForDate(dateKey, dutyAssignments[dateKey]);
-            
             saveData();
             renderCalendar();
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('assignDutyModal'));
             modal.hide();
             
-            if (hasConflict) {
-                alert('Η ανάθεση υπηρεσίας αποθηκεύτηκε με σύγκρουση. Παρακαλώ ελέγξτε το ημερολόγιο.');
-            } else {
-                alert('Η ανάθεση υπηρεσίας αποθηκεύτηκε επιτυχώς!');
-            }
-        }
-        
-        // Function to automatically fix conflicts in existing assignments
-        async function fixConflicts() {
-            if (!confirm('Αυτή η λειτουργία θα αναζητήσει και θα διορθώσει αυτόματα τις συγκρούσεις στις αντιθέσεις.\n\nΝα συνεχίσω;')) {
-                return;
-            }
-            
-            let fixedCount = 0;
-            let checkedCount = 0;
-            
-            // Check all assignments for conflicts
-            const allAssignments = {
-                ...normalDayAssignments,
-                ...semiNormalAssignments,
-                ...weekendAssignments,
-                ...specialHolidayAssignments
-            };
-            
-            for (const dateKey in allAssignments) {
-                if (dateKey === 'lastUpdated' || dateKey === 'updatedBy') continue;
-                
-                const assignment = getAssignmentForDate(dateKey);
-                if (!assignment) continue;
-                
-                const date = new Date(dateKey + 'T00:00:00');
-                if (isNaN(date.getTime())) continue;
-                
-                const dayType = getDayType(date);
-                let dayTypeCategory = 'normal';
-                if (dayType === 'special-holiday') {
-                    dayTypeCategory = 'special';
-                } else if (dayType === 'semi-normal-day') {
-                    dayTypeCategory = 'semi';
-                } else if (dayType === 'weekend-holiday') {
-                    dayTypeCategory = 'weekend';
-                }
-                
-                // Parse assignments to get person-group pairs
-                const personGroups = assignment.split(', ').map(pg => {
-                    const match = pg.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
-                    if (match) {
-                        return { person: match[1].trim(), group: parseInt(match[2]) };
-                    }
-                    return null;
-                }).filter(pg => pg !== null);
-                
-                for (const { person, group } of personGroups) {
-                    checkedCount++;
-                    const hasConflict = hasConsecutiveDuty(dateKey, person, group);
-                    
-                    if (hasConflict) {
-                        // Try to find a replacement
-                        const groupData = groups[group] || {};
-                        let groupPeople = [];
-                        if (dayTypeCategory === 'special') {
-                            groupPeople = groupData.special || [];
-                        } else if (dayTypeCategory === 'weekend') {
-                            groupPeople = groupData.weekend || [];
-                        } else if (dayTypeCategory === 'semi') {
-                            groupPeople = groupData.semi || [];
-                        } else {
-                            groupPeople = groupData.normal || [];
-                        }
-                        
-                        if (groupPeople.length === 0) continue;
-                        
-                        // Find a replacement person without conflicts
-                        let replacement = null;
-                        for (const candidate of groupPeople) {
-                            if (candidate === person) continue;
-                            if (isPersonMissingOnDate(candidate, group, date)) continue;
-                            
-                            const candidateHasConflict = hasConsecutiveDuty(dateKey, candidate, group);
-                            if (!candidateHasConflict) {
-                                replacement = candidate;
-                                break;
-                            }
-                        }
-                        
-                        if (replacement) {
-                            // Replace the conflicted person with the replacement
-                            removePersonFromDay(dateKey, person, group);
-                            assignPersonToDay(dateKey, replacement, group);
-                            fixedCount++;
-                            console.log(`[FIX CONFLICT] Replaced ${person} with ${replacement} on ${dateKey} (Group ${group})`);
-                        } else {
-                            console.log(`[FIX CONFLICT] Could not find replacement for ${person} on ${dateKey} (Group ${group})`);
-                        }
-                    }
-                }
-            }
-            
-            if (fixedCount > 0) {
-                await saveData();
-                renderCalendar();
-                alert(`Διορθώθηκαν ${fixedCount} συγκρούσεις από ${checkedCount} ελέγχους.`);
-            } else {
-                alert(`Δεν βρέθηκαν συγκρούσεις προς διόρθωση (ελέγχθηκαν ${checkedCount} αντιθέσεις).`);
-            }
+            alert('Η ανάθεση υπηρεσίας αποθηκεύτηκε επιτυχώς!');
         }
 
         // Remove duty assignment
