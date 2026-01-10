@@ -25,6 +25,10 @@
         // Track critical assignments from last duties - these must NEVER be deleted
         // Format: { "2025-12-25": ["Person Name (Ομάδα 1)", ...], ... }
         let criticalAssignments = {};
+        // Track cross-month swaps: when a person is swapped from one month to next
+        // Structure: crossMonthSwaps[dateKey][groupNum] = personName
+        // Example: crossMonthSwaps["2026-03-05"][1] = "Person A" means Person A must be assigned to March 5, Group 1
+        let crossMonthSwaps = {};
         
         // Helper functions to get/set assignments based on day type
         function getAssignmentsForDayType(dayTypeCategory) {
@@ -483,6 +487,30 @@
                     console.log('No criticalAssignments document found in Firestore');
                 }
                 
+                // Load cross-month swaps from Firestore
+                const crossMonthSwapsDoc = await db.collection('dutyShifts').doc('crossMonthSwaps').get();
+                if (crossMonthSwapsDoc.exists) {
+                    const data = crossMonthSwapsDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    crossMonthSwaps = data || {};
+                    console.log('Loaded crossMonthSwaps from Firestore:', Object.keys(crossMonthSwaps).length, 'dates');
+                } else {
+                    // Try loading from localStorage as fallback
+                    const localCrossMonth = localStorage.getItem('dutyShiftsCrossMonthSwaps');
+                    if (localCrossMonth) {
+                        try {
+                            crossMonthSwaps = JSON.parse(localCrossMonth);
+                            console.log('Loaded crossMonthSwaps from localStorage');
+                        } catch (e) {
+                            console.error('Error parsing crossMonthSwaps from localStorage:', e);
+                            crossMonthSwaps = {};
+                        }
+                    } else {
+                        crossMonthSwaps = {};
+                    }
+                }
+                
                 // Load assignment reasons (swap/skip indicators)
                 const assignmentReasonsDoc = await db.collection('dutyShifts').doc('assignmentReasons').get();
                 if (assignmentReasonsDoc.exists) {
@@ -732,6 +760,20 @@
                 assignmentReasons = {};
             }
             
+            // Load cross-month swaps from localStorage
+            const savedCrossMonthSwaps = localStorage.getItem('dutyShiftsCrossMonthSwaps');
+            if (savedCrossMonthSwaps) {
+                try {
+                    crossMonthSwaps = JSON.parse(savedCrossMonthSwaps);
+                    console.log('Loaded crossMonthSwaps from localStorage:', Object.keys(crossMonthSwaps).length, 'dates');
+                } catch (e) {
+                    console.error('Error parsing crossMonthSwaps from localStorage:', e);
+                    crossMonthSwaps = {};
+                }
+            } else {
+                crossMonthSwaps = {};
+            }
+            
             // Load rankings
             const savedRankings = localStorage.getItem('dutyShiftsRankings');
             if (savedRankings) {
@@ -939,6 +981,24 @@
                 });
                 } catch (error) {
                     console.error('Error saving criticalAssignments to Firestore:', error);
+                }
+                
+                // Save cross-month swaps separately
+                try {
+                    console.log('Saving crossMonthSwaps to Firestore:', Object.keys(crossMonthSwaps).length, 'dates');
+                    if (Object.keys(crossMonthSwaps).length > 0) {
+                        const sanitizedCrossMonth = sanitizeForFirestore(crossMonthSwaps);
+                        await db.collection('dutyShifts').doc('crossMonthSwaps').set({
+                            ...sanitizedCrossMonth,
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedBy: user.uid
+                        });
+                        console.log('Saved crossMonthSwaps to Firestore successfully');
+                    } else {
+                        console.log('No crossMonthSwaps to save');
+                    }
+                } catch (error) {
+                    console.error('Error saving crossMonthSwaps to Firestore:', error);
                 }
                 
                 // Save assignment reasons (swap/skip indicators) separately
@@ -1152,6 +1212,7 @@
             localStorage.setItem('dutyShiftsAssignments', JSON.stringify(dutyAssignments));
             localStorage.setItem('dutyShiftsCriticalAssignments', JSON.stringify(criticalAssignments));
             localStorage.setItem('dutyShiftsAssignmentReasons', JSON.stringify(assignmentReasons));
+            localStorage.setItem('dutyShiftsCrossMonthSwaps', JSON.stringify(crossMonthSwaps));
             localStorage.setItem('dutyShiftsRankings', JSON.stringify(rankings));
         }
 
@@ -6885,9 +6946,8 @@
             const specialHolidays = dayTypeLists.special || [];
             const weekendHolidays = dayTypeLists.weekend || [];
             
-            // Track cross-month swaps: when a person is swapped from one month to next, store where they should be assigned
-            // Structure: crossMonthSwaps[nextMonthKey][groupNum][personName] = swapDayKey
-            const crossMonthSwaps = {}; // nextMonthKey -> { groupNum -> { personName -> swapDayKey } }
+            // Use global crossMonthSwaps variable (loaded from Firestore/localStorage)
+            // Structure: crossMonthSwaps[dateKey][groupNum] = personName
             
             // First, simulate Step 1 (special holidays)
             const simulatedSpecialAssignments = {}; // monthKey -> { groupNum -> Set of person names }
@@ -7349,22 +7409,21 @@
                                 delete pendingNormalSwaps[monthKey][groupNum];
                                 globalNormalRotationPosition[groupNum] = rotationPosition + 1;
                             } else {
-                                // Check if this day is a cross-month swap assignment (person swapped from previous month)
-                                let isCrossMonthSwapDay = false;
-                                if (crossMonthSwaps[monthKey] && crossMonthSwaps[monthKey][groupNum]) {
-                                    // Check if any person should be assigned to this day
-                                    for (const [personName, swapDayKey] of Object.entries(crossMonthSwaps[monthKey][groupNum])) {
-                                        if (swapDayKey === dateKey) {
-                                            // This person was swapped from previous month and must be assigned to this day
-                                            assignedPerson = personName;
-                                            isCrossMonthSwapDay = true;
-                                            console.log(`[PREVIEW CROSS-MONTH] Assigning ${personName} to ${dateKey} (swapped from previous month)`);
-                                            // Remove from tracking since we're assigning them now
-                                            delete crossMonthSwaps[monthKey][groupNum][personName];
-                                            break;
-                                        }
-                                    }
+                            // Check if this day is a cross-month swap assignment (person swapped from previous month)
+                            // Structure: crossMonthSwaps[dateKey][groupNum] = personName
+                            let isCrossMonthSwapDay = false;
+                            if (crossMonthSwaps[dateKey] && crossMonthSwaps[dateKey][groupNum]) {
+                                // This person was swapped from previous month and must be assigned to this day
+                                assignedPerson = crossMonthSwaps[dateKey][groupNum];
+                                isCrossMonthSwapDay = true;
+                                console.log(`[PREVIEW CROSS-MONTH] Assigning ${assignedPerson} to ${dateKey} (Group ${groupNum}, swapped from previous month)`);
+                                // Remove from tracking since we're assigning them now (will be saved when calculation completes)
+                                delete crossMonthSwaps[dateKey][groupNum];
+                                // If no more groups for this date, remove the date entry
+                                if (Object.keys(crossMonthSwaps[dateKey]).length === 0) {
+                                    delete crossMonthSwaps[dateKey];
                                 }
+                            }
                                 
                                 // Normal assignment logic (only if not a cross-month swap day)
                                 if (!isCrossMonthSwapDay) {
@@ -7666,19 +7725,15 @@
                                                 console.log(`[PREVIEW END OF MONTH] Assigned ${nextMonthResult.person} from next month for ${dateKey} (rotation position: ${rotationPosition})`);
                                                 
                                                 // Store cross-month swap: this person must be assigned to swapDayKey in next month
+                                                // Save to global crossMonthSwaps variable (will be saved to Firestore)
                                                 if (nextMonthResult.swapDayKey) {
-                                                    const nextMonth = month === 11 ? 0 : month + 1;
-                                                    const nextYear = month === 11 ? year + 1 : year;
-                                                    const nextMonthKey = `${nextYear}-${nextMonth}`;
-                                                    
-                                                    if (!crossMonthSwaps[nextMonthKey]) {
-                                                        crossMonthSwaps[nextMonthKey] = {};
+                                                    if (!crossMonthSwaps[nextMonthResult.swapDayKey]) {
+                                                        crossMonthSwaps[nextMonthResult.swapDayKey] = {};
                                                     }
-                                                    if (!crossMonthSwaps[nextMonthKey][groupNum]) {
-                                                        crossMonthSwaps[nextMonthKey][groupNum] = {};
+                                                    if (!crossMonthSwaps[nextMonthResult.swapDayKey][groupNum]) {
+                                                        crossMonthSwaps[nextMonthResult.swapDayKey][groupNum] = nextMonthResult.person;
                                                     }
-                                                    crossMonthSwaps[nextMonthKey][groupNum][nextMonthResult.person] = nextMonthResult.swapDayKey;
-                                                    console.log(`[PREVIEW CROSS-MONTH SWAP] Person ${nextMonthResult.person} must be assigned to ${nextMonthResult.swapDayKey} in ${nextMonthKey}`);
+                                                    console.log(`[PREVIEW CROSS-MONTH SWAP] Person ${nextMonthResult.person} must be assigned to ${nextMonthResult.swapDayKey} (Group ${groupNum})`);
                                                 }
                                                 
                                                 // Advance rotation position for next iteration
@@ -8305,9 +8360,8 @@
                     // Track which people have already been swapped (to prevent swapping them again on subsequent days)
                     const swappedPeople = new Set(); // Set of person names who have already been swapped
                     
-                    // Track cross-month swaps: when a person is swapped from one month to next, store where they should be assigned
-                    // Structure: crossMonthSwaps[nextMonthKey][groupNum][personName] = swapDayKey
-                    const crossMonthSwaps = {}; // nextMonthKey -> { groupNum -> { personName -> swapDayKey } }
+                    // Use global crossMonthSwaps variable (loaded from Firestore/localStorage)
+                    // Structure: crossMonthSwaps[dateKey][groupNum] = personName
                     
                     // Process each day in order
                     days.forEach((dayKey, dayIndex) => {
@@ -8372,20 +8426,19 @@
                         const originalRotationPosition = rotationPosition;
                         
                         // Check if this day is a cross-month swap assignment (person swapped from previous month)
+                        // Structure: crossMonthSwaps[dateKey][groupNum] = personName
                         let isCrossMonthSwapDay = false;
                         let crossMonthPerson = null;
-                        if (crossMonthSwaps[monthKey] && crossMonthSwaps[monthKey][groupNum]) {
-                            // Check if any person should be assigned to this day
-                            for (const [personName, swapDayKey] of Object.entries(crossMonthSwaps[monthKey][groupNum])) {
-                                if (swapDayKey === dayKey) {
-                                    // This person was swapped from previous month and must be assigned to this day
-                                    crossMonthPerson = personName;
-                                    isCrossMonthSwapDay = true;
-                                    console.log(`[CROSS-MONTH] Assigning ${personName} to ${dayKey} (swapped from previous month)`);
-                                    // Remove from tracking since we're assigning them now
-                                    delete crossMonthSwaps[monthKey][groupNum][personName];
-                                    break;
-                                }
+                        if (crossMonthSwaps[dayKey] && crossMonthSwaps[dayKey][groupNum]) {
+                            // This person was swapped from previous month and must be assigned to this day
+                            crossMonthPerson = crossMonthSwaps[dayKey][groupNum];
+                            isCrossMonthSwapDay = true;
+                            console.log(`[CROSS-MONTH] Assigning ${crossMonthPerson} to ${dayKey} (Group ${groupNum}, swapped from previous month)`);
+                            // Remove from tracking since we're assigning them now (will be saved when calculation completes)
+                            delete crossMonthSwaps[dayKey][groupNum];
+                            // If no more groups for this date, remove the date entry
+                            if (Object.keys(crossMonthSwaps[dayKey]).length === 0) {
+                                delete crossMonthSwaps[dayKey];
                             }
                         }
                         
@@ -8439,19 +8492,13 @@
                                         console.log(`[END OF MONTH] Using person from next month: ${nextMonthResult.person} for ${dayKey} (rotation position: ${currentRotPos})`);
                                         
                                         // Store cross-month swap: this person must be assigned to swapDayKey in next month
+                                        // Save to global crossMonthSwaps variable (will be saved to Firestore)
                                         if (nextMonthResult.swapDayKey) {
-                                            const nextMonth = month === 11 ? 0 : month + 1;
-                                            const nextYear = month === 11 ? year + 1 : year;
-                                            const nextMonthKey = `${nextYear}-${nextMonth}`;
-                                            
-                                            if (!crossMonthSwaps[nextMonthKey]) {
-                                                crossMonthSwaps[nextMonthKey] = {};
+                                            if (!crossMonthSwaps[nextMonthResult.swapDayKey]) {
+                                                crossMonthSwaps[nextMonthResult.swapDayKey] = {};
                                             }
-                                            if (!crossMonthSwaps[nextMonthKey][groupNum]) {
-                                                crossMonthSwaps[nextMonthKey][groupNum] = {};
-                                            }
-                                            crossMonthSwaps[nextMonthKey][groupNum][nextMonthResult.person] = nextMonthResult.swapDayKey;
-                                            console.log(`[CROSS-MONTH SWAP] Person ${nextMonthResult.person} must be assigned to ${nextMonthResult.swapDayKey} in ${nextMonthKey}`);
+                                            crossMonthSwaps[nextMonthResult.swapDayKey][groupNum] = nextMonthResult.person;
+                                            console.log(`[CROSS-MONTH SWAP] Person ${nextMonthResult.person} must be assigned to ${nextMonthResult.swapDayKey} (Group ${groupNum})`);
                                         }
                                     }
                                 }
