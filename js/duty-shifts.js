@@ -5725,14 +5725,6 @@
                 calculationSteps.preserveExisting = preserveExisting;
                 calculationSteps.currentStep = 1;
                 
-                // Reset global rotation position variables for new preview simulation
-                // This ensures each preview starts fresh from the beginning of lists
-                globalWeekendRotationPosition = {};
-                globalNormalRotationPosition = {};
-                globalSemiRotationPosition = {};
-                globalSpecialRotationPosition = {};
-                console.log('[PREVIEW] Reset global rotation positions for new simulation');
-                
                 // Close month selection modal
                 const monthModal = bootstrap.Modal.getInstance(document.getElementById('calculateDutiesModal'));
                 if (monthModal) {
@@ -5749,6 +5741,14 @@
         
         // Show step-by-step calculation modal
         function showStepByStepCalculation() {
+            // Reset global rotation position variables for each new preview simulation
+            // This ensures every preview starts fresh from the beginning of lists
+            globalWeekendRotationPosition = {};
+            globalNormalRotationPosition = {};
+            globalSemiRotationPosition = {};
+            globalSpecialRotationPosition = {};
+            console.log('[PREVIEW] Reset global rotation positions for new simulation');
+            
             calculationSteps.currentStep = 1;
             renderCurrentStep();
             const modal = new bootstrap.Modal(document.getElementById('stepByStepCalculationModal'));
