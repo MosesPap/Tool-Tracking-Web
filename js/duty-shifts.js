@@ -8496,8 +8496,8 @@
                                     if (dayTypeCategory === 'normal') {
                                         globalNormalRotationPosition[groupNum] = rotationPosition + 1;
                                     }
-                                    // Skip to next day
-                                    continue;
+                                    // Skip to next day (use return in forEach, not continue)
+                                    return;
                                 }
                             }
                             
