@@ -1,4 +1,4 @@
-﻿        // Data storage - each group has four order lists: special, weekend, semi, normal
+        // Data storage - each group has four order lists: special, weekend, semi, normal
         // Each person also has last duty dates for each type, missing periods, and priorities
         let groups = {
             1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
@@ -327,6 +327,7 @@
                 initializeDefaultSpecialHolidays();
                 
                 // Load assignments from separate documents by day type
+                // Support both old format (flat date keys) and new format (month-organized)
                 const normalDayDoc = await db.collection('dutyShifts').doc('normalDayAssignments').get();
                 if (normalDayDoc.exists) {
                     const data = normalDayDoc.data();
@@ -334,7 +335,18 @@
                     delete data.updatedBy;
                     delete data._migratedFrom;
                     delete data._migrationDate;
-                    normalDayAssignments = data || {};
+                    // Check if data is month-organized (new format) or flat (old format)
+                    const isMonthOrganized = Object.keys(data).some(key => {
+                        // Check if key looks like "Month Year" (e.g., "February 2026")
+                        return /^[A-Za-z]+\s+\d{4}$/.test(key) && typeof data[key] === 'object';
+                    });
+                    if (isMonthOrganized) {
+                        normalDayAssignments = flattenAssignmentsByMonth(data);
+                        console.log('Loaded normalDayAssignments from month-organized format');
+                    } else {
+                        normalDayAssignments = data || {};
+                        console.log('Loaded normalDayAssignments from flat format (legacy)');
+                    }
                 }
                 
                 const semiNormalDoc = await db.collection('dutyShifts').doc('semiNormalAssignments').get();
@@ -344,7 +356,16 @@
                     delete data.updatedBy;
                     delete data._migratedFrom;
                     delete data._migrationDate;
-                    semiNormalAssignments = data || {};
+                    const isMonthOrganized = Object.keys(data).some(key => {
+                        return /^[A-Za-z]+\s+\d{4}$/.test(key) && typeof data[key] === 'object';
+                    });
+                    if (isMonthOrganized) {
+                        semiNormalAssignments = flattenAssignmentsByMonth(data);
+                        console.log('Loaded semiNormalAssignments from month-organized format');
+                    } else {
+                        semiNormalAssignments = data || {};
+                        console.log('Loaded semiNormalAssignments from flat format (legacy)');
+                    }
                 }
                 
                 const weekendDoc = await db.collection('dutyShifts').doc('weekendAssignments').get();
@@ -354,7 +375,16 @@
                     delete data.updatedBy;
                     delete data._migratedFrom;
                     delete data._migrationDate;
-                    weekendAssignments = data || {};
+                    const isMonthOrganized = Object.keys(data).some(key => {
+                        return /^[A-Za-z]+\s+\d{4}$/.test(key) && typeof data[key] === 'object';
+                    });
+                    if (isMonthOrganized) {
+                        weekendAssignments = flattenAssignmentsByMonth(data);
+                        console.log('Loaded weekendAssignments from month-organized format');
+                    } else {
+                        weekendAssignments = data || {};
+                        console.log('Loaded weekendAssignments from flat format (legacy)');
+                    }
                 }
                 
                 const specialHolidayDoc = await db.collection('dutyShifts').doc('specialHolidayAssignments').get();
@@ -364,7 +394,16 @@
                     delete data.updatedBy;
                     delete data._migratedFrom;
                     delete data._migrationDate;
-                    specialHolidayAssignments = data || {};
+                    const isMonthOrganized = Object.keys(data).some(key => {
+                        return /^[A-Za-z]+\s+\d{4}$/.test(key) && typeof data[key] === 'object';
+                    });
+                    if (isMonthOrganized) {
+                        specialHolidayAssignments = flattenAssignmentsByMonth(data);
+                        console.log('Loaded specialHolidayAssignments from month-organized format');
+                    } else {
+                        specialHolidayAssignments = data || {};
+                        console.log('Loaded specialHolidayAssignments from flat format (legacy)');
+                    }
                 }
                 
                 // Also load legacy assignments document for backward compatibility
@@ -781,47 +820,55 @@
                     console.error('Error saving specialHolidays to Firestore:', error);
                 }
                 
-                // Save assignments to separate documents by day type
+                // Save assignments to separate documents by day type, organized by month
                 try {
-                    const sanitizedNormal = sanitizeForFirestore(normalDayAssignments);
+                    const organizedNormal = organizeAssignmentsByMonth(normalDayAssignments);
+                    const sanitizedNormal = sanitizeForFirestore(organizedNormal);
                 await db.collection('dutyShifts').doc('normalDayAssignments').set({
                         ...sanitizedNormal,
                     lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                     updatedBy: user.uid
                 });
+                    console.log('Saved normalDayAssignments organized by month:', Object.keys(organizedNormal).length, 'months');
                 } catch (error) {
                     console.error('Error saving normalDayAssignments to Firestore:', error);
                 }
                 
                 try {
-                    const sanitizedSemi = sanitizeForFirestore(semiNormalAssignments);
+                    const organizedSemi = organizeAssignmentsByMonth(semiNormalAssignments);
+                    const sanitizedSemi = sanitizeForFirestore(organizedSemi);
                 await db.collection('dutyShifts').doc('semiNormalAssignments').set({
                         ...sanitizedSemi,
                     lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                     updatedBy: user.uid
                 });
+                    console.log('Saved semiNormalAssignments organized by month:', Object.keys(organizedSemi).length, 'months');
                 } catch (error) {
                     console.error('Error saving semiNormalAssignments to Firestore:', error);
                 }
                 
                 try {
-                    const sanitizedWeekend = sanitizeForFirestore(weekendAssignments);
+                    const organizedWeekend = organizeAssignmentsByMonth(weekendAssignments);
+                    const sanitizedWeekend = sanitizeForFirestore(organizedWeekend);
                 await db.collection('dutyShifts').doc('weekendAssignments').set({
                         ...sanitizedWeekend,
                     lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                     updatedBy: user.uid
                 });
+                    console.log('Saved weekendAssignments organized by month:', Object.keys(organizedWeekend).length, 'months');
                 } catch (error) {
                     console.error('Error saving weekendAssignments to Firestore:', error);
                 }
                 
                 try {
-                    const sanitizedSpecial = sanitizeForFirestore(specialHolidayAssignments);
+                    const organizedSpecial = organizeAssignmentsByMonth(specialHolidayAssignments);
+                    const sanitizedSpecial = sanitizeForFirestore(organizedSpecial);
                 await db.collection('dutyShifts').doc('specialHolidayAssignments').set({
                         ...sanitizedSpecial,
                     lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                     updatedBy: user.uid
                 });
+                    console.log('Saved specialHolidayAssignments organized by month:', Object.keys(organizedSpecial).length, 'months');
                 } catch (error) {
                     console.error('Error saving specialHolidayAssignments to Firestore:', error);
                 }
@@ -3752,6 +3799,55 @@
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
             return `${year}-${month}-${day}`;
+        }
+
+        // Convert date key (YYYY-MM-DD) to month name (e.g., "February 2026")
+        function getMonthNameFromDateKey(dateKey) {
+            try {
+                const [year, month] = dateKey.split('-').map(Number);
+                const date = new Date(year, month - 1, 1);
+                const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                    'July', 'August', 'September', 'October', 'November', 'December'];
+                return `${monthNames[month - 1]} ${year}`;
+            } catch (error) {
+                console.error('Error converting date key to month name:', dateKey, error);
+                return null;
+            }
+        }
+
+        // Organize assignments by month for Firestore storage
+        function organizeAssignmentsByMonth(assignments) {
+            const organized = {};
+            for (const dateKey in assignments) {
+                if (dateKey === 'lastUpdated' || dateKey === 'updatedBy' || dateKey === '_migratedFrom' || dateKey === '_migrationDate') {
+                    continue;
+                }
+                const monthName = getMonthNameFromDateKey(dateKey);
+                if (monthName) {
+                    if (!organized[monthName]) {
+                        organized[monthName] = {};
+                    }
+                    organized[monthName][dateKey] = assignments[dateKey];
+                }
+            }
+            return organized;
+        }
+
+        // Flatten month-organized assignments back to date-key format
+        function flattenAssignmentsByMonth(organizedAssignments) {
+            const flattened = {};
+            for (const monthName in organizedAssignments) {
+                if (monthName === 'lastUpdated' || monthName === 'updatedBy' || monthName === '_migratedFrom' || monthName === '_migrationDate') {
+                    continue;
+                }
+                const monthData = organizedAssignments[monthName];
+                if (typeof monthData === 'object' && monthData !== null) {
+                    for (const dateKey in monthData) {
+                        flattened[dateKey] = monthData[dateKey];
+                    }
+                }
+            }
+            return flattened;
         }
 
         // Format date for display
