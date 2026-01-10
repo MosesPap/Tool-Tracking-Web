@@ -9447,6 +9447,19 @@
             }
             
             const dateKey = formatDateKey(new Date(date + 'T00:00:00'));
+            const dateObj = new Date(date + 'T00:00:00');
+            
+            // Check for conflicts before assigning
+            const hasConflict = hasConsecutiveDuty(dateKey, person, groupNum);
+            
+            if (hasConflict) {
+                const conflictMsg = `Το άτομο ${person} έχει σύγκρουση (συνεχόμενη ημέρα) στις ${dateObj.toLocaleDateString('el-GR')}.\n\nΝα προχωρήσει η ανάθεση παρά τη σύγκρουση;`;
+                if (!confirm(conflictMsg)) {
+                    return; // User cancelled
+                }
+                // User approved - store conflict reason
+                storeAssignmentReason(dateKey, groupNum, person, 'conflict', 'Χειροκίνητη ανάθεση με σύγκρουση');
+            }
             
             // Check if assignment already exists
             if (dutyAssignments[dateKey]) {
@@ -9461,13 +9474,120 @@
                 dutyAssignments[dateKey] = `${person} (Ομάδα ${groupNum})`;
             }
             
+            // Also update day-type-specific assignments
+            setAssignmentForDate(dateKey, dutyAssignments[dateKey]);
+            
             saveData();
             renderCalendar();
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('assignDutyModal'));
             modal.hide();
             
-            alert('Η ανάθεση υπηρεσίας αποθηκεύτηκε επιτυχώς!');
+            if (hasConflict) {
+                alert('Η ανάθεση υπηρεσίας αποθηκεύτηκε με σύγκρουση. Παρακαλώ ελέγξτε το ημερολόγιο.');
+            } else {
+                alert('Η ανάθεση υπηρεσίας αποθηκεύτηκε επιτυχώς!');
+            }
+        }
+        
+        // Function to automatically fix conflicts in existing assignments
+        async function fixConflicts() {
+            if (!confirm('Αυτή η λειτουργία θα αναζητήσει και θα διορθώσει αυτόματα τις συγκρούσεις στις αντιθέσεις.\n\nΝα συνεχίσω;')) {
+                return;
+            }
+            
+            let fixedCount = 0;
+            let checkedCount = 0;
+            
+            // Check all assignments for conflicts
+            const allAssignments = {
+                ...normalDayAssignments,
+                ...semiNormalAssignments,
+                ...weekendAssignments,
+                ...specialHolidayAssignments
+            };
+            
+            for (const dateKey in allAssignments) {
+                if (dateKey === 'lastUpdated' || dateKey === 'updatedBy') continue;
+                
+                const assignment = getAssignmentForDate(dateKey);
+                if (!assignment) continue;
+                
+                const date = new Date(dateKey + 'T00:00:00');
+                if (isNaN(date.getTime())) continue;
+                
+                const dayType = getDayType(date);
+                let dayTypeCategory = 'normal';
+                if (dayType === 'special-holiday') {
+                    dayTypeCategory = 'special';
+                } else if (dayType === 'semi-normal-day') {
+                    dayTypeCategory = 'semi';
+                } else if (dayType === 'weekend-holiday') {
+                    dayTypeCategory = 'weekend';
+                }
+                
+                // Parse assignments to get person-group pairs
+                const personGroups = assignment.split(', ').map(pg => {
+                    const match = pg.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                    if (match) {
+                        return { person: match[1].trim(), group: parseInt(match[2]) };
+                    }
+                    return null;
+                }).filter(pg => pg !== null);
+                
+                for (const { person, group } of personGroups) {
+                    checkedCount++;
+                    const hasConflict = hasConsecutiveDuty(dateKey, person, group);
+                    
+                    if (hasConflict) {
+                        // Try to find a replacement
+                        const groupData = groups[group] || {};
+                        let groupPeople = [];
+                        if (dayTypeCategory === 'special') {
+                            groupPeople = groupData.special || [];
+                        } else if (dayTypeCategory === 'weekend') {
+                            groupPeople = groupData.weekend || [];
+                        } else if (dayTypeCategory === 'semi') {
+                            groupPeople = groupData.semi || [];
+                        } else {
+                            groupPeople = groupData.normal || [];
+                        }
+                        
+                        if (groupPeople.length === 0) continue;
+                        
+                        // Find a replacement person without conflicts
+                        let replacement = null;
+                        for (const candidate of groupPeople) {
+                            if (candidate === person) continue;
+                            if (isPersonMissingOnDate(candidate, group, date)) continue;
+                            
+                            const candidateHasConflict = hasConsecutiveDuty(dateKey, candidate, group);
+                            if (!candidateHasConflict) {
+                                replacement = candidate;
+                                break;
+                            }
+                        }
+                        
+                        if (replacement) {
+                            // Replace the conflicted person with the replacement
+                            removePersonFromDay(dateKey, person, group);
+                            assignPersonToDay(dateKey, replacement, group);
+                            fixedCount++;
+                            console.log(`[FIX CONFLICT] Replaced ${person} with ${replacement} on ${dateKey} (Group ${group})`);
+                        } else {
+                            console.log(`[FIX CONFLICT] Could not find replacement for ${person} on ${dateKey} (Group ${group})`);
+                        }
+                    }
+                }
+            }
+            
+            if (fixedCount > 0) {
+                await saveData();
+                renderCalendar();
+                alert(`Διορθώθηκαν ${fixedCount} συγκρούσεις από ${checkedCount} ελέγχους.`);
+            } else {
+                alert(`Δεν βρέθηκαν συγκρούσεις προς διόρθωση (ελέγχθηκαν ${checkedCount} αντιθέσεις).`);
+            }
         }
 
         // Remove duty assignment
