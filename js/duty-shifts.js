@@ -4889,10 +4889,12 @@
         }
 
         // Check if a person has duty on consecutive days (day before or day after)
-        // Conflict rules:
+        // Enhanced conflict rules (all combinations checked):
         // - Normal ↔ Semi-normal (before and after)
-        // - Semi-normal ↔ Weekend/Special Holiday (before and after)
-        // - Weekend/Special Holiday ↔ Normal (before and after)
+        // - Normal ↔ Weekend (before and after)
+        // - Normal ↔ Special (before and after)
+        // - Semi-normal ↔ Weekend (before and after)
+        // - Semi-normal ↔ Special (before and after)
         function hasConsecutiveDuty(dayKey, person, groupNum) {
             const date = new Date(dayKey + 'T00:00:00');
             const currentDayType = getDayType(date);
@@ -4906,6 +4908,19 @@
             } else if (currentDayType === 'weekend-holiday') {
                 currentTypeCategory = 'weekend';
             }
+            
+            // Helper function to check if two day types conflict
+            const hasConflict = (type1, type2) => {
+                // Normal conflicts with: semi, weekend, special
+                if (type1 === 'normal' && (type2 === 'semi' || type2 === 'weekend' || type2 === 'special')) return true;
+                if ((type1 === 'semi' || type1 === 'weekend' || type1 === 'special') && type2 === 'normal') return true;
+                
+                // Semi conflicts with: weekend, special
+                if (type1 === 'semi' && (type2 === 'weekend' || type2 === 'special')) return true;
+                if ((type1 === 'weekend' || type1 === 'special') && type2 === 'semi') return true;
+                
+                return false;
+            };
             
             // Check day before
             const dayBefore = new Date(date);
@@ -4924,18 +4939,8 @@
                     beforeTypeCategory = 'weekend';
                 }
                 
-                // Check for conflicts based on specific rules:
-                // 1. Normal ↔ Semi-normal
-                // 2. Semi-normal ↔ Weekend/Special Holiday
-                // 3. Weekend/Special Holiday ↔ Normal
-                const isNormalSemiConflict = (currentTypeCategory === 'normal' && beforeTypeCategory === 'semi') || 
-                                             (currentTypeCategory === 'semi' && beforeTypeCategory === 'normal');
-                const isSemiWeekendSpecialConflict = (currentTypeCategory === 'semi' && (beforeTypeCategory === 'weekend' || beforeTypeCategory === 'special')) ||
-                                                     ((currentTypeCategory === 'weekend' || currentTypeCategory === 'special') && beforeTypeCategory === 'semi');
-                const isWeekendSpecialNormalConflict = ((currentTypeCategory === 'weekend' || currentTypeCategory === 'special') && beforeTypeCategory === 'normal') ||
-                                                        (currentTypeCategory === 'normal' && (beforeTypeCategory === 'weekend' || beforeTypeCategory === 'special'));
-                
-                if (isNormalSemiConflict || isSemiWeekendSpecialConflict || isWeekendSpecialNormalConflict) {
+                // Check all conflict combinations
+                if (hasConflict(currentTypeCategory, beforeTypeCategory)) {
                     return true;
                 }
             }
@@ -4969,18 +4974,8 @@
                     afterTypeCategory = 'weekend';
                 }
                 
-                // Check for conflicts based on specific rules:
-                // 1. Normal ↔ Semi-normal
-                // 2. Semi-normal ↔ Weekend/Special Holiday
-                // 3. Weekend/Special Holiday ↔ Normal
-                const isNormalSemiConflict = (currentTypeCategory === 'normal' && afterTypeCategory === 'semi') || 
-                                             (currentTypeCategory === 'semi' && afterTypeCategory === 'normal');
-                const isSemiWeekendSpecialConflict = (currentTypeCategory === 'semi' && (afterTypeCategory === 'weekend' || afterTypeCategory === 'special')) ||
-                                                     ((currentTypeCategory === 'weekend' || currentTypeCategory === 'special') && afterTypeCategory === 'semi');
-                const isWeekendSpecialNormalConflict = ((currentTypeCategory === 'weekend' || currentTypeCategory === 'special') && afterTypeCategory === 'normal') ||
-                                                        (currentTypeCategory === 'normal' && (afterTypeCategory === 'weekend' || afterTypeCategory === 'special'));
-                
-                if (isNormalSemiConflict || isSemiWeekendSpecialConflict || isWeekendSpecialNormalConflict) {
+                // Check all conflict combinations
+                if (hasConflict(currentTypeCategory, afterTypeCategory)) {
                     return true;
                 }
             }
@@ -5158,6 +5153,77 @@
                 checkDate.setDate(checkDate.getDate() + 1);
             }
             return false;
+        }
+
+        // Helper function to get a person from next month's rotation when conflicts occur at end of month
+        // This temporarily calculates the next month to find a suitable person
+        function getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, currentMonth, currentYear, rotationDays, groupPeople) {
+            // Check if we're in the last 3 days of the month (end of month)
+            const date = new Date(dayKey + 'T00:00:00');
+            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+            const daysUntilEndOfMonth = lastDayOfMonth.getDate() - date.getDate();
+            
+            // Only use next month logic if we're in the last 3 days of the month
+            if (daysUntilEndOfMonth > 3) {
+                return null;
+            }
+            
+            // Calculate next month
+            const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+            const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+            
+            // Get first day of next month of the same day type
+            const firstDayOfNextMonth = new Date(nextYear, nextMonth, 1);
+            const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0);
+            
+            // Find first day of this type in next month
+            let firstDayOfTypeInNextMonth = null;
+            const checkDate = new Date(firstDayOfNextMonth);
+            
+            while (checkDate <= lastDayOfNextMonth) {
+                const checkDayType = getDayType(checkDate);
+                let checkTypeCategory = 'normal';
+                if (checkDayType === 'special-holiday') {
+                    checkTypeCategory = 'special';
+                } else if (checkDayType === 'semi-normal-day') {
+                    checkTypeCategory = 'semi';
+                } else if (checkDayType === 'weekend-holiday') {
+                    checkTypeCategory = 'weekend';
+                }
+                
+                if (checkTypeCategory === dayTypeCategory) {
+                    firstDayOfTypeInNextMonth = new Date(checkDate);
+                    break;
+                }
+                checkDate.setDate(checkDate.getDate() + 1);
+            }
+            
+            if (!firstDayOfTypeInNextMonth) {
+                return null;
+            }
+            
+            // Calculate rotation position for first day of this type in next month
+            const nextMonthDayKey = formatDateKey(firstDayOfTypeInNextMonth);
+            const nextMonthRotationPosition = getRotationPosition(firstDayOfTypeInNextMonth, dayTypeCategory, groupNum) % rotationDays;
+            const nextMonthPerson = groupPeople[nextMonthRotationPosition];
+            
+            // Check if this person from next month has conflicts on the current day
+            if (nextMonthPerson && !isPersonMissingOnDate(nextMonthPerson, groupNum, date)) {
+                const hasConflict = hasConsecutiveDuty(dayKey, nextMonthPerson, groupNum);
+                
+                // Also check if they have special holiday in current month (for weekends)
+                let hasSpecialInCurrentMonth = false;
+                if (dayTypeCategory === 'weekend') {
+                    hasSpecialInCurrentMonth = hasSpecialHolidayDutyInMonth(nextMonthPerson, groupNum, currentMonth, currentYear);
+                }
+                
+                if (!hasConflict && !hasSpecialInCurrentMonth) {
+                    console.log(`[END OF MONTH] Using person from next month: ${nextMonthPerson} for ${dayKey} (end of month conflict resolution)`);
+                    return nextMonthPerson;
+                }
+            }
+            
+            return null;
         }
 
         // Count days of a specific type since last duty for a person
@@ -8221,30 +8287,21 @@
                                 // OR if they were already skipped in this month (their turn came again)
                                 // OR if they have consecutive duty (e.g., normal day the day before or after)
                                 // If yes, skip them and continue with next person in rotation order
+                                // Skip weekend if special holiday exists in current month
                                 if (hasSpecialHolidayDutyInMonth(expectedPerson, groupNum, month, year) || 
                                     skippedInMonth[monthKey].has(expectedPerson) ||
                                     hasConsecutiveDuty(dayKey, expectedPerson, groupNum)) {
                                         hasConflict = true;
                                     }
                                 } else if (dayTypeCategory === 'semi') {
-                                    // Check consecutive day with weekend/holiday
-                                    const dayBefore = new Date(dayDate);
-                                    dayBefore.setDate(dayBefore.getDate() - 1);
-                                    const dayAfter = new Date(dayDate);
-                                    dayAfter.setDate(dayAfter.getDate() + 1);
-                                    
-                                    const beforeType = getDayType(dayBefore);
-                                    const afterType = getDayType(dayAfter);
-                                    
-                                if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), expectedPerson, groupNum)) {
-                                        hasConflict = true;
-                                    }
-                                if ((afterType === 'weekend-holiday' || afterType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayAfter), expectedPerson, groupNum)) {
+                                    // Check consecutive day with weekend, special, or normal
+                                    // Use enhanced hasConsecutiveDuty to check all combinations
+                                    if (hasConsecutiveDuty(dayKey, expectedPerson, groupNum)) {
                                         hasConflict = true;
                                     }
                                 } else if (dayTypeCategory === 'normal') {
-                                    // Check consecutive day with semi-normal OR any other consecutive duty
-                                    // Use hasConsecutiveDuty to catch all consecutive conflicts (semi-normal, weekend, etc.)
+                                    // Check consecutive day with semi-normal, weekend, or special
+                                    // Use hasConsecutiveDuty to catch all consecutive conflicts
                                     if (hasConsecutiveDuty(dayKey, expectedPerson, groupNum)) {
                                         hasConflict = true;
                                         // DEBUG: Log conflict detection
@@ -8656,6 +8713,11 @@
                                             }
                                         }
                                         
+                                        // Use enhanced conflict checking for all day types
+                                        if (dayTypeCategory === 'normal' || dayTypeCategory === 'semi') {
+                                            candidateHasConflict = hasConsecutiveDuty(dayKey, candidate, groupNum);
+                                        }
+                                        
                                         if (!candidateHasConflict) {
                                             assignedPerson = candidate;
                                             foundReplacement = true;
@@ -8670,8 +8732,16 @@
                                     }
                                     
                                     // If we still haven't found a replacement after checking all people in rotation,
-                                    // it means everyone has special holiday in this month - this shouldn't happen,
-                                    // but as fallback, we'll try the emergency fallback below
+                                    // try getting a person from next month (if we're at end of month)
+                                    if (!foundReplacement) {
+                                        const nextMonthPerson = getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, month, year, rotationDays, groupPeople);
+                                        if (nextMonthPerson) {
+                                            assignedPerson = nextMonthPerson;
+                                            foundReplacement = true;
+                                            console.log(`[END OF MONTH] Assigned ${nextMonthPerson} from next month for ${dayKey}`);
+                                        }
+                                    }
+                                    
                                     // Still advance rotation position even if no replacement found
                                     if (!foundReplacement) {
                                         if (dayTypeCategory === 'weekend') {
@@ -8685,6 +8755,17 @@
                         }
                         
                         // Emergency fallback: if still no assignment, try all people in order
+                        // Also try next month person if at end of month
+                        if (!assignedPerson) {
+                            // Try next month person first (if at end of month)
+                            const nextMonthPerson = getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, month, year, rotationDays, groupPeople);
+                            if (nextMonthPerson) {
+                                assignedPerson = nextMonthPerson;
+                                console.log(`[END OF MONTH FALLBACK] Assigned ${nextMonthPerson} from next month for ${dayKey}`);
+                            }
+                        }
+                        
+                        // If still no assignment, try all people in order
                         if (!assignedPerson) {
                             for (let i = 0; i < groupPeople.length; i++) {
                                 const candidate = groupPeople[i];
