@@ -30,6 +30,13 @@
         // Example: crossMonthSwaps["2026-03-05"][1] = "Person A" means Person A must be assigned to March 5, Group 1
         let crossMonthSwaps = {};
         
+        // Track current rotation position globally (continues across months for all day types)
+        // These persist across function calls to ensure rotation continues from previous month
+        let globalWeekendRotationPosition = {}; // groupNum -> global position for weekends
+        let globalNormalRotationPosition = {}; // groupNum -> global position for normal days
+        let globalSemiRotationPosition = {}; // groupNum -> global position for semi-normal days
+        let globalSpecialRotationPosition = {}; // groupNum -> global position for special holidays
+        
         // Helper functions to get/set assignments based on day type
         function getAssignmentsForDayType(dayTypeCategory) {
             if (dayTypeCategory === 'special') {
@@ -6360,8 +6367,7 @@
                 // Track skipped people per month (like the actual calculation)
                 const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
                 
-                // Track current rotation position globally (continues across months)
-                const globalWeekendRotationPosition = {}; // groupNum -> global position
+                // Use global rotation position (declared at top level)
                 
                 // Track weekend assignments as we process them (for consecutive day checking)
                 const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
@@ -6655,7 +6661,7 @@
             // Second, simulate what weekends will be assigned (from Step 2)
             const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
             const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
-            const globalWeekendRotationPosition = {}; // groupNum -> global position (continues across months)
+            // Use global rotation position (declared at top level)
             const sortedWeekends = [...weekendHolidays].sort();
             
             sortedWeekends.forEach((dateKey, weekendIndex) => {
@@ -6757,7 +6763,7 @@
                 
                 // Track assignments for swapping logic
                 const semiAssignments = {}; // dateKey -> { groupNum -> person name }
-                const globalSemiRotationPosition = {}; // groupNum -> global position (continues across months)
+                // Use global rotation position (declared at top level)
                 // Track pending swaps: when Person A is swapped, Person B should be assigned to Person A's next day
                 const pendingSwaps = {}; // monthKey -> { groupNum -> { skippedPerson, swapToPosition } }
                 
@@ -6985,7 +6991,7 @@
             // Second, simulate Step 2 (weekends)
             const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
             const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
-            const globalWeekendRotationPosition = {}; // groupNum -> global position (continues across months)
+            // Use global rotation position (declared at top level)
             const sortedWeekends = [...weekendHolidays].sort();
             // Initialize simulatedSemiAssignments and normalAssignments for consecutive check (will be populated later)
             const simulatedSemiAssignments = {}; // dateKey -> { groupNum -> person name }
@@ -7156,7 +7162,7 @@
             
             // Third, simulate Step 3 (semi-normal days) - including swap logic
             // simulatedSemiAssignments already initialized above
-            const globalSemiRotationPosition = {}; // groupNum -> global position (continues across months)
+            // Use global rotation position (declared at top level)
             const pendingSemiSwaps = {}; // monthKey -> { groupNum -> { skippedPerson, swapToPosition } }
             const sortedSemi = [...semiNormalDays].sort();
             
@@ -7309,7 +7315,7 @@
                 // Track assignments and rotation
                 // NOTE: normalAssignments is already defined at function level (line 7842), don't redeclare it here
                 // const normalAssignments = {}; // REMOVED - use outer scope variable
-                const globalNormalRotationPosition = {}; // groupNum -> global position (continues across months)
+                // Use global rotation position (declared at top level)
                 // Track pending swaps: when Person A is swapped, Person B should be assigned to Person A's next normal day
                 const pendingNormalSwaps = {}; // monthKey -> { groupNum -> { skippedPerson, swapToPosition } }
                 // Track which people have been assigned to which days (to prevent duplicate assignments after swaps)
@@ -8342,13 +8348,8 @@
                     // This helps us know who to skip when their turn comes again
                     const skippedInMonth = {}; // monthKey -> Set of person names
                     
-                    // Track current rotation position globally (continues across months)
-                    // For all day types: tracks position per group globally to continue from previous month
-                    // Initialize to undefined - will be set on first use
-                    const globalWeekendRotationPosition = {}; // groupNum -> global position for weekends
-                    const globalNormalRotationPosition = {}; // groupNum -> global position for normal days
-                    const globalSemiRotationPosition = {}; // groupNum -> global position for semi-normal days
-                    const globalSpecialRotationPosition = {}; // groupNum -> global position for special holidays
+                    // Use global rotation position variables (declared at top level)
+                    // These persist across function calls to ensure rotation continues from previous month
                     
                     // Track days that have been swapped (to skip them in the loop)
                     const swappedDays = {}; // dayKey -> { groupNum -> true }
@@ -8414,9 +8415,6 @@
                             rotationPosition = globalNormalRotationPosition[groupNum] % rotationDays;
                         } else if (dayTypeCategory === 'semi') {
                             // For semi-normal: track rotation position per group globally to continue from previous month
-                            if (!globalSemiRotationPosition) {
-                                globalSemiRotationPosition = {};
-                            }
                             if (globalSemiRotationPosition[groupNum] === undefined) {
                                 // Initialize based on rotation count from February 2026 (first time only)
                                 const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
@@ -8425,9 +8423,6 @@
                             rotationPosition = globalSemiRotationPosition[groupNum] % rotationDays;
                         } else if (dayTypeCategory === 'special') {
                             // For special holidays: track rotation position per group globally to continue from previous month
-                            if (!globalSpecialRotationPosition) {
-                                globalSpecialRotationPosition = {};
-                            }
                             if (globalSpecialRotationPosition[groupNum] === undefined) {
                                 // Initialize based on rotation count from February 2026 (first time only)
                                 const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
