@@ -7455,11 +7455,21 @@
                 // const normalAssignments = {}; // REMOVED - use outer scope variable
                 const globalNormalRotationPosition = {}; // groupNum -> global position (continues across months)
                 // Initialize from lastRotationPositions if available (for preview, we still track but don't save to global)
-                for (let g = 1; g <= 4; g++) {
-                    if (lastRotationPositions.normal[g] !== undefined) {
-                        globalNormalRotationPosition[g] = lastRotationPositions.normal[g];
-                        console.log(`[PREVIEW ROTATION] Initialized normal rotation position for group ${g} from Firestore: ${globalNormalRotationPosition[g]}`);
+                // BUT: If start date is February 2026, always start from position 0 (first person) for all groups
+                const isFebruary2026 = calculationSteps.startDate && 
+                    calculationSteps.startDate.getFullYear() === 2026 && 
+                    calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                
+                if (!isFebruary2026) {
+                    // Only load from Firestore if NOT February 2026
+                    for (let g = 1; g <= 4; g++) {
+                        if (lastRotationPositions.normal[g] !== undefined) {
+                            globalNormalRotationPosition[g] = lastRotationPositions.normal[g];
+                            console.log(`[PREVIEW ROTATION] Initialized normal rotation position for group ${g} from Firestore: ${globalNormalRotationPosition[g]}`);
+                        }
                     }
+                } else {
+                    console.log(`[PREVIEW ROTATION] February 2026 detected - will start all groups from position 0 (first person)`);
                 }
                 // Track pending swaps: when Person A is swapped, Person B should be assigned to Person A's next normal day
                 const pendingNormalSwaps = {}; // monthKey -> { groupNum -> { skippedPerson, swapToPosition } }
