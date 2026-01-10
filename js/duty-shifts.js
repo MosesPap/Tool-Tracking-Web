@@ -7724,16 +7724,14 @@
                                                 assignedPeoplePreview[monthKey][groupNum].add(nextMonthResult.person);
                                                 console.log(`[PREVIEW END OF MONTH] Assigned ${nextMonthResult.person} from next month for ${dateKey} (rotation position: ${rotationPosition})`);
                                                 
-                                                // Store cross-month swap: this person must be assigned to swapDayKey in next month
+                                                // Store cross-month swap: the person with conflict (skippedPerson) must be assigned to swapDayKey in next month
                                                 // Save to global crossMonthSwaps variable (will be saved to Firestore)
-                                                if (nextMonthResult.swapDayKey) {
+                                                if (nextMonthResult.swapDayKey && skippedPerson) {
                                                     if (!crossMonthSwaps[nextMonthResult.swapDayKey]) {
                                                         crossMonthSwaps[nextMonthResult.swapDayKey] = {};
                                                     }
-                                                    if (!crossMonthSwaps[nextMonthResult.swapDayKey][groupNum]) {
-                                                        crossMonthSwaps[nextMonthResult.swapDayKey][groupNum] = nextMonthResult.person;
-                                                    }
-                                                    console.log(`[PREVIEW CROSS-MONTH SWAP] Person ${nextMonthResult.person} must be assigned to ${nextMonthResult.swapDayKey} (Group ${groupNum})`);
+                                                    crossMonthSwaps[nextMonthResult.swapDayKey][groupNum] = skippedPerson;
+                                                    console.log(`[PREVIEW CROSS-MONTH SWAP] Person ${skippedPerson} (had conflict on ${dateKey}) must be assigned to ${nextMonthResult.swapDayKey} (Group ${groupNum})`);
                                                 }
                                                 
                                                 // Advance rotation position for next iteration
@@ -8345,11 +8343,12 @@
                     const skippedInMonth = {}; // monthKey -> Set of person names
                     
                     // Track current rotation position globally (continues across months)
-                    // For weekends: tracks position per group globally to continue from previous month
-                    // For normal days: tracks position per group globally to continue from previous month
+                    // For all day types: tracks position per group globally to continue from previous month
                     // Initialize to undefined - will be set on first use
                     const globalWeekendRotationPosition = {}; // groupNum -> global position for weekends
                     const globalNormalRotationPosition = {}; // groupNum -> global position for normal days
+                    const globalSemiRotationPosition = {}; // groupNum -> global position for semi-normal days
+                    const globalSpecialRotationPosition = {}; // groupNum -> global position for special holidays
                     
                     // Track days that have been swapped (to skip them in the loop)
                     const swappedDays = {}; // dayKey -> { groupNum -> true }
@@ -8413,8 +8412,30 @@
                                 globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
                             }
                             rotationPosition = globalNormalRotationPosition[groupNum] % rotationDays;
+                        } else if (dayTypeCategory === 'semi') {
+                            // For semi-normal: track rotation position per group globally to continue from previous month
+                            if (!globalSemiRotationPosition) {
+                                globalSemiRotationPosition = {};
+                            }
+                            if (globalSemiRotationPosition[groupNum] === undefined) {
+                                // Initialize based on rotation count from February 2026 (first time only)
+                                const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
+                                globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                            }
+                            rotationPosition = globalSemiRotationPosition[groupNum] % rotationDays;
+                        } else if (dayTypeCategory === 'special') {
+                            // For special holidays: track rotation position per group globally to continue from previous month
+                            if (!globalSpecialRotationPosition) {
+                                globalSpecialRotationPosition = {};
+                            }
+                            if (globalSpecialRotationPosition[groupNum] === undefined) {
+                                // Initialize based on rotation count from February 2026 (first time only)
+                                const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
+                                globalSpecialRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                            }
+                            rotationPosition = globalSpecialRotationPosition[groupNum] % rotationDays;
                         } else {
-                            // For special, semi: use rotation count from February 2026 directly
+                            // Fallback: use rotation count from February 2026 directly
                             const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
                             rotationPosition = daysSinceStart % rotationDays;
                         }
@@ -8491,15 +8512,12 @@
                                         rotationPosition = currentRotPos;
                                         console.log(`[END OF MONTH] Using person from next month: ${nextMonthResult.person} for ${dayKey} (rotation position: ${currentRotPos})`);
                                         
-                                        // Store cross-month swap: this person must be assigned to swapDayKey in next month
-                                        // Save to global crossMonthSwaps variable (will be saved to Firestore)
-                                        if (nextMonthResult.swapDayKey) {
-                                            if (!crossMonthSwaps[nextMonthResult.swapDayKey]) {
-                                                crossMonthSwaps[nextMonthResult.swapDayKey] = {};
-                                            }
-                                            crossMonthSwaps[nextMonthResult.swapDayKey][groupNum] = nextMonthResult.person;
-                                            console.log(`[CROSS-MONTH SWAP] Person ${nextMonthResult.person} must be assigned to ${nextMonthResult.swapDayKey} (Group ${groupNum})`);
-                                        }
+                                        // Store cross-month swap: the person with conflict (expectedPerson before swap) must be assigned to swapDayKey in next month
+                                        // Note: We need to track the original expectedPerson before it was replaced with nextMonthResult.person
+                                        // This will be handled in the swap logic below where skippedPerson is available
+                                        // For now, we'll track it in a variable that will be used when skippedPerson is set
+                                        const originalExpectedPersonBeforeSwap = expectedPerson; // Store before replacement
+                                        // This will be saved when skippedPerson is set in the conflict handling below
                                     }
                                 }
                                 
@@ -8557,9 +8575,15 @@
                                 if (assignedPeople[monthKey] && assignedPeople[monthKey][groupNum]) {
                                     assignedPeople[monthKey][groupNum].add(expectedPerson);
                                 }
-                                // Advance rotation position for next iteration
+                                // Advance rotation position for next iteration (continue globally, ignoring swaps)
                                 if (dayTypeCategory === 'normal') {
                                     globalNormalRotationPosition[groupNum] = rotationPosition + 1;
+                                } else if (dayTypeCategory === 'weekend') {
+                                    globalWeekendRotationPosition[groupNum] = rotationPosition + 1;
+                                } else if (dayTypeCategory === 'semi') {
+                                    globalSemiRotationPosition[groupNum] = rotationPosition + 1;
+                                } else if (dayTypeCategory === 'special') {
+                                    globalSpecialRotationPosition[groupNum] = rotationPosition + 1;
                                 }
                             } else if (!isCrossMonthSwapDay) {
                             // Check for conflicts based on day type (only if not already handled as cross-month swap)
@@ -8875,6 +8899,19 @@
                                                 // This ensures the swap happens immediately
                                                 assignPersonToDay(swapDayKey, skippedPerson, groupNum);
                                                 
+                                                // Check if swap day is in next month - if so, save cross-month swap
+                                                const swapDate = new Date(swapDayKey + 'T00:00:00');
+                                                const swapMonth = swapDate.getMonth();
+                                                const swapYear = swapDate.getFullYear();
+                                                if (swapMonth !== month || swapYear !== year) {
+                                                    // Swap day is in next month - save cross-month swap
+                                                    if (!crossMonthSwaps[swapDayKey]) {
+                                                        crossMonthSwaps[swapDayKey] = {};
+                                                    }
+                                                    crossMonthSwaps[swapDayKey][groupNum] = skippedPerson;
+                                                    console.log(`[CROSS-MONTH SWAP] Person ${skippedPerson} (had conflict on ${dayKey}) must be assigned to ${swapDayKey} (Group ${groupNum})`);
+                                                }
+                                                
                                                 // Track that skipped person has been assigned in BOTH months (current day's month AND swap day's month)
                                                 // This prevents them from being assigned again on the next Monday or any other day in either month
                                                 if (dayTypeCategory === 'normal') {
@@ -9030,20 +9067,13 @@
                                             foundReplacement = true;
                                             console.log(`[END OF MONTH] Assigned ${nextMonthResult.person} from next month for ${dayKey} (rotation position: ${currentRotPos})`);
                                             
-                                            // Store cross-month swap: this person must be assigned to swapDayKey in next month
-                                            if (nextMonthResult.swapDayKey) {
-                                                const nextMonth = month === 11 ? 0 : month + 1;
-                                                const nextYear = month === 11 ? year + 1 : year;
-                                                const nextMonthKey = `${nextYear}-${nextMonth}`;
-                                                
-                                                if (!crossMonthSwaps[nextMonthKey]) {
-                                                    crossMonthSwaps[nextMonthKey] = {};
+                                            // Store cross-month swap: the person with conflict (skippedPerson) must be assigned to swapDayKey in next month
+                                            if (nextMonthResult.swapDayKey && skippedPerson) {
+                                                if (!crossMonthSwaps[nextMonthResult.swapDayKey]) {
+                                                    crossMonthSwaps[nextMonthResult.swapDayKey] = {};
                                                 }
-                                                if (!crossMonthSwaps[nextMonthKey][groupNum]) {
-                                                    crossMonthSwaps[nextMonthKey][groupNum] = {};
-                                                }
-                                                crossMonthSwaps[nextMonthKey][groupNum][nextMonthResult.person] = nextMonthResult.swapDayKey;
-                                                console.log(`[CROSS-MONTH SWAP] Person ${nextMonthResult.person} must be assigned to ${nextMonthResult.swapDayKey} in ${nextMonthKey}`);
+                                                crossMonthSwaps[nextMonthResult.swapDayKey][groupNum] = skippedPerson;
+                                                console.log(`[CROSS-MONTH SWAP] Person ${skippedPerson} (had conflict on ${dayKey}) must be assigned to ${nextMonthResult.swapDayKey} (Group ${groupNum})`);
                                             }
                                         }
                                     }
