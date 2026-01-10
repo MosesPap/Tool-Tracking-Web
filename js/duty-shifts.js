@@ -5905,6 +5905,10 @@
                 // Sort special holidays by date
                 const sortedSpecial = [...specialHolidays].sort();
                 
+                // Store assignments and rotation positions for saving when Next is pressed
+                const tempSpecialAssignments = {}; // dateKey -> { groupNum -> personName }
+                const lastSpecialRotationPositions = {}; // groupNum -> last rotation position
+                
                 sortedSpecial.forEach((dateKey, specialIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -5945,9 +5949,21 @@
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
                         } else {
-                            // Use rotation order based on days since February 2026
-                                const rotationDays = groupPeople.length;
-                            const rotationPosition = getRotationPosition(date, 'special', groupNum) % rotationDays;
+                            // Use rotation order based on days since start date
+                            const rotationDays = groupPeople.length;
+                            // If start date is February 2026, always start from first person (position 0)
+                            const isFebruary2026 = calculationSteps.startDate && 
+                                calculationSteps.startDate.getFullYear() === 2026 && 
+                                calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                            
+                            let rotationPosition;
+                            if (isFebruary2026 && specialIndex === 0) {
+                                // First special holiday in February 2026 starts from position 0
+                                rotationPosition = 0;
+                            } else {
+                                rotationPosition = getRotationPosition(date, 'special', groupNum) % rotationDays;
+                            }
+                            
                             let assignedPerson = groupPeople[rotationPosition];
                             
                             // Check if assigned person is missing, if so find next in rotation
@@ -5958,9 +5974,23 @@
                                     const candidate = groupPeople[nextIndex];
                                     if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
                                         assignedPerson = candidate;
+                                        rotationPosition = nextIndex;
                                         break;
                                     }
                                 }
+                            }
+                            
+                            // Store assignment for saving
+                            if (assignedPerson) {
+                                if (!tempSpecialAssignments[dateKey]) {
+                                    tempSpecialAssignments[dateKey] = {};
+                                }
+                                tempSpecialAssignments[dateKey][groupNum] = assignedPerson;
+                                
+                                // Track last rotation position for this group
+                                // Advance position by 1 for next time (or wrap around)
+                                const nextRotationPosition = (rotationPosition + 1) % rotationDays;
+                                lastSpecialRotationPositions[groupNum] = nextRotationPosition;
                             }
                             
                             // Get last duty date and days since for display
@@ -5986,6 +6016,10 @@
                     html += '</tr>';
                 });
                 
+                // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
+                calculationSteps.tempSpecialAssignments = tempSpecialAssignments;
+                calculationSteps.lastSpecialRotationPositions = lastSpecialRotationPositions;
+                
                 html += '</tbody>';
                 html += '</table>';
                 html += '</div>';
@@ -5996,10 +6030,74 @@
         }
 
         // Navigation functions
-        function goToNextStep() {
+        async function goToNextStep() {
             if (calculationSteps.currentStep < calculationSteps.totalSteps) {
+                // If moving from Step 1 (Special Holidays), save assignments to Firestore
+                if (calculationSteps.currentStep === 1) {
+                    await saveStep1_SpecialHolidays();
+                }
+                
                 calculationSteps.currentStep++;
                 renderCurrentStep();
+            }
+        }
+        
+        // Save Step 1 (Special Holidays) assignments to Firestore
+        async function saveStep1_SpecialHolidays() {
+            try {
+                if (!window.db) {
+                    console.log('Firebase not ready, skipping Step 1 save');
+                    return;
+                }
+                
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                
+                if (!user) {
+                    console.log('User not authenticated, skipping Step 1 save');
+                    return;
+                }
+                
+                const tempSpecialAssignments = calculationSteps.tempSpecialAssignments || {};
+                const lastSpecialRotationPositions = calculationSteps.lastSpecialRotationPositions || {};
+                
+                // Save special holiday assignments to Firestore
+                if (Object.keys(tempSpecialAssignments).length > 0) {
+                    // Organize by month
+                    const organizedSpecial = organizeAssignmentsByMonth(tempSpecialAssignments);
+                    const sanitizedSpecial = sanitizeForFirestore(organizedSpecial);
+                    
+                    await db.collection('dutyShifts').doc('specialHolidayAssignments').set({
+                        ...sanitizedSpecial,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    console.log('Saved Step 1 special holiday assignments to Firestore:', Object.keys(tempSpecialAssignments).length, 'dates');
+                    
+                    // Also update local memory
+                    Object.assign(specialHolidayAssignments, tempSpecialAssignments);
+                }
+                
+                // Save last rotation positions for special holidays
+                if (Object.keys(lastSpecialRotationPositions).length > 0) {
+                    // Update lastRotationPositions for special holidays
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        if (lastSpecialRotationPositions[groupNum] !== undefined) {
+                            lastRotationPositions.special[groupNum] = lastSpecialRotationPositions[groupNum];
+                        }
+                    }
+                    
+                    // Save to Firestore
+                    const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                    await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                        ...sanitizedPositions,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    console.log('Saved Step 1 last rotation positions for special holidays to Firestore:', lastSpecialRotationPositions);
+                }
+            } catch (error) {
+                console.error('Error saving Step 1 (Special Holidays) to Firestore:', error);
             }
         }
 
