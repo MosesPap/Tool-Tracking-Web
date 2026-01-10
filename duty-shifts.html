@@ -2103,7 +2103,7 @@
             }
             return sanitized;
         }
-        
+
         // Save data to Firebase Firestore
         async function saveData() {
             try {
@@ -2126,33 +2126,33 @@
                 // Save groups
                 try {
                     const sanitizedGroups = sanitizeForFirestore(groups);
-                    await db.collection('dutyShifts').doc('groups').set({
+                await db.collection('dutyShifts').doc('groups').set({
                         ...sanitizedGroups,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
                 } catch (error) {
                     console.error('Error saving groups to Firestore:', error);
                 }
                 
                 // Save holidays
                 try {
-                    await db.collection('dutyShifts').doc('holidays').set({
+                await db.collection('dutyShifts').doc('holidays').set({
                         list: Array.isArray(holidays) ? holidays : [],
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
                 } catch (error) {
                     console.error('Error saving holidays to Firestore:', error);
                 }
                 
                 // Save special holidays
                 try {
-                    await db.collection('dutyShifts').doc('specialHolidays').set({
+                await db.collection('dutyShifts').doc('specialHolidays').set({
                         list: Array.isArray(specialHolidays) ? specialHolidays : [],
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
                 } catch (error) {
                     console.error('Error saving specialHolidays to Firestore:', error);
                 }
@@ -2160,60 +2160,60 @@
                 // Save assignments to separate documents by day type
                 try {
                     const sanitizedNormal = sanitizeForFirestore(normalDayAssignments);
-                    await db.collection('dutyShifts').doc('normalDayAssignments').set({
+                await db.collection('dutyShifts').doc('normalDayAssignments').set({
                         ...sanitizedNormal,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
                 } catch (error) {
                     console.error('Error saving normalDayAssignments to Firestore:', error);
                 }
                 
                 try {
                     const sanitizedSemi = sanitizeForFirestore(semiNormalAssignments);
-                    await db.collection('dutyShifts').doc('semiNormalAssignments').set({
+                await db.collection('dutyShifts').doc('semiNormalAssignments').set({
                         ...sanitizedSemi,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
                 } catch (error) {
                     console.error('Error saving semiNormalAssignments to Firestore:', error);
                 }
                 
                 try {
                     const sanitizedWeekend = sanitizeForFirestore(weekendAssignments);
-                    await db.collection('dutyShifts').doc('weekendAssignments').set({
+                await db.collection('dutyShifts').doc('weekendAssignments').set({
                         ...sanitizedWeekend,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
                 } catch (error) {
                     console.error('Error saving weekendAssignments to Firestore:', error);
                 }
                 
                 try {
                     const sanitizedSpecial = sanitizeForFirestore(specialHolidayAssignments);
-                    await db.collection('dutyShifts').doc('specialHolidayAssignments').set({
+                await db.collection('dutyShifts').doc('specialHolidayAssignments').set({
                         ...sanitizedSpecial,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
                 } catch (error) {
                     console.error('Error saving specialHolidayAssignments to Firestore:', error);
                 }
                 
                 // Save critical assignments separately
                 try {
-                    console.log('Saving criticalAssignments to Firestore:', Object.keys(criticalAssignments).length, 'dates');
-                    if (Object.keys(criticalAssignments).length > 0) {
-                        console.log('Sample criticalAssignments being saved:', Object.entries(criticalAssignments).slice(0, 3));
-                    }
+                console.log('Saving criticalAssignments to Firestore:', Object.keys(criticalAssignments).length, 'dates');
+                if (Object.keys(criticalAssignments).length > 0) {
+                    console.log('Sample criticalAssignments being saved:', Object.entries(criticalAssignments).slice(0, 3));
+                }
                     const sanitizedCritical = sanitizeForFirestore(criticalAssignments);
-                    await db.collection('dutyShifts').doc('criticalAssignments').set({
+                await db.collection('dutyShifts').doc('criticalAssignments').set({
                         ...sanitizedCritical,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
                 } catch (error) {
                     console.error('Error saving criticalAssignments to Firestore:', error);
                 }
@@ -6881,6 +6881,8 @@
             
             // Load temp assignments from Firestore (use preview logic results)
             let tempAssignments = calculationSteps.tempAssignments;
+            console.log('[CALCULATE DEBUG] Checking for temp assignments in memory:', !!tempAssignments);
+            
             if (!tempAssignments) {
                 // Try to load from Firestore if not in memory
                 if (loadingAlert && loadingAlert.parentNode) {
@@ -6894,13 +6896,25 @@
                         // Remove metadata
                         delete tempAssignments.lastUpdated;
                         delete tempAssignments.updatedBy;
+                        console.log('[CALCULATE DEBUG] Loaded temp assignments from Firestore');
+                        console.log('[CALCULATE DEBUG] Temp assignments keys:', Object.keys(tempAssignments));
+                    } else {
+                        console.warn('[CALCULATE DEBUG] No temp assignments document found in Firestore');
                     }
                 } catch (error) {
-                    console.error('Error loading temp assignments:', error);
+                    console.error('[CALCULATE DEBUG] Error loading temp assignments:', error);
                 }
+            } else {
+                console.log('[CALCULATE DEBUG] Using temp assignments from memory');
+                console.log('[CALCULATE DEBUG] Temp assignments keys:', Object.keys(tempAssignments));
             }
             
             if (tempAssignments) {
+                console.log('[CALCULATE DEBUG] Temp assignments found! Converting to permanent format...');
+                console.log('[CALCULATE DEBUG] Normal assignments count:', Object.keys(tempAssignments.normal || {}).length);
+                console.log('[CALCULATE DEBUG] Semi assignments count:', Object.keys(tempAssignments.semi || {}).length);
+                console.log('[CALCULATE DEBUG] Weekend assignments count:', Object.keys(tempAssignments.weekend || {}).length);
+                console.log('[CALCULATE DEBUG] Special assignments months:', Object.keys(tempAssignments.special || {}).length);
                 // Convert temp assignments to permanent format
                 // Special holidays: monthKey -> { groupNum -> [person names] }
                 // Recalculate assignments per date using the same logic as preview
@@ -7035,11 +7049,21 @@
                     }
                 }
                 
-                console.log('Converted temp assignments to permanent format');
+                console.log('[CALCULATE DEBUG] Converted temp assignments to permanent format');
+                console.log('[CALCULATE DEBUG] Final assignment counts:');
+                console.log('[CALCULATE DEBUG] - normalDayAssignments:', Object.keys(normalDayAssignments).length);
+                console.log('[CALCULATE DEBUG] - semiNormalAssignments:', Object.keys(semiNormalAssignments).length);
+                console.log('[CALCULATE DEBUG] - weekendAssignments:', Object.keys(weekendAssignments).length);
+                console.log('[CALCULATE DEBUG] - specialHolidayAssignments:', Object.keys(specialHolidayAssignments).length);
+                console.log('[CALCULATE DEBUG] Sample normal assignments:', Object.keys(normalDayAssignments).slice(0, 3).map(key => ({ date: key, assignment: normalDayAssignments[key] })));
             } else {
-                // Fallback: use old calculation method if no temp assignments found
-                console.warn('No temp assignments found, using old calculation method');
-                calculateDutiesForDateRange(startDate, endDate, preserveExisting);
+                // No temp assignments found - this should not happen if preview was shown
+                console.error('No temp assignments found! Please go through the preview steps first.');
+                alert('Σφάλμα: Δεν βρέθηκαν προσωρινοί υπολογισμοί. Παρακαλώ πηγαίνετε πρώτα από τα βήματα προεπισκόπησης.');
+                if (loadingAlert && loadingAlert.parentNode) {
+                    document.body.removeChild(loadingAlert);
+                }
+                return;
             }
             
                 // Save all assignments to Firebase
@@ -7412,7 +7436,7 @@
                                         break;
                                     }
                                 }
-                                } else {
+                            } else {
                                 // No person found, still advance rotation position
                                 globalWeekendRotationPosition[groupNum] = rotationPosition + 1;
                             }
@@ -8153,7 +8177,8 @@
                 const sortedNormal = [...normalDays].sort();
                 
                 // Track assignments and rotation
-                const normalAssignments = {}; // dateKey -> { groupNum -> person name }
+                // NOTE: normalAssignments is already defined at function level (line 7842), don't redeclare it here
+                // const normalAssignments = {}; // REMOVED - use outer scope variable
                 const globalNormalRotationPosition = {}; // groupNum -> global position (continues across months)
                 // Track pending swaps: when Person A is swapped, Person B should be assigned to Person A's next normal day
                 const pendingNormalSwaps = {}; // monthKey -> { groupNum -> { skippedPerson, swapToPosition } }
@@ -8273,13 +8298,13 @@
                                     // Check day before and day after for any consecutive duty
                                     const dayBefore = new Date(date);
                                     dayBefore.setDate(dayBefore.getDate() - 1);
-                                    const dayAfter = new Date(date);
-                                    dayAfter.setDate(dayAfter.getDate() + 1);
+                                const dayAfter = new Date(date);
+                                dayAfter.setDate(dayAfter.getDate() + 1);
                                     const dayBeforeKey = formatDateKey(dayBefore);
-                                    const dayAfterKey = formatDateKey(dayAfter);
+                                const dayAfterKey = formatDateKey(dayAfter);
                                     
                                     const beforeType = getDayType(dayBefore);
-                                    const afterType = getDayType(dayAfter);
+                                const afterType = getDayType(dayAfter);
                                     const currentType = getDayType(date);
                                     
                                     // Check if person has duty on day before (from any simulated assignment)
@@ -8438,20 +8463,20 @@
                                         
                                         // STEP 1: Try alternative day in same week (e.g., Monday 12/01/26 → Wednesday 14/01/26)
                                         if (alternativeDayOfWeek !== null) {
-                                            for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
-                                                const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
-                                                const checkDayOfWeek = checkDate.getDay();
-                                                const checkDayType = getDayType(checkDate);
-                                                
-                                                // Must be a normal day and in same week
+                                        for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
+                                            const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
+                                            const checkDayOfWeek = checkDate.getDay();
+                                            const checkDayType = getDayType(checkDate);
+                                            
+                                            // Must be a normal day and in same week
                                                 if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek && isSameWeek(date, checkDate)) {
-                                                    // Check conflicts BEFORE accepting
-                                                    if (checkSwapCandidatePreview(sortedNormal[i], i)) {
-                                                        swapDayKey = sortedNormal[i];
-                                                        swapDayIndex = i;
+                                                // Check conflicts BEFORE accepting
+                                                if (checkSwapCandidatePreview(sortedNormal[i], i)) {
+                                                    swapDayKey = sortedNormal[i];
+                                                    swapDayIndex = i;
                                                         swapFound = true; // Mark that swap was found
                                                         break; // Exit Step 1 loop - swap found, don't proceed to Step 2
-                                                    }
+                                                }
                                                     // If has conflicts, continue to Step 2
                                                 }
                                             }
@@ -8493,13 +8518,13 @@
                                                 
                                                 // Must be a normal day, alternative day of week, and in week AFTER next (not same week, not next week)
                                                 if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek && !isSameWeek(date, checkDate) && isWeekAfterNext(date, checkDate)) {
-                                                    // Check conflicts BEFORE adding to candidates
-                                                    if (checkSwapCandidatePreview(sortedNormal[i], i)) {
-                                                        weekAfterNextCandidates.push({
-                                                            dayKey: sortedNormal[i],
-                                                            dayIndex: i,
-                                                            date: checkDate
-                                                        });
+                                                        // Check conflicts BEFORE adding to candidates
+                                                        if (checkSwapCandidatePreview(sortedNormal[i], i)) {
+                                                            weekAfterNextCandidates.push({
+                                                                dayKey: sortedNormal[i],
+                                                                dayIndex: i,
+                                                                date: checkDate
+                                                            });
                                                     }
                                                 }
                                             }
@@ -8550,9 +8575,9 @@
                                                 const afterType = getDayType(dayAfter);
                                                 
                                                 if (afterType === 'semi-normal-day') {
-                                                    const swapPersonAfter = simulatedSemiAssignments[dayAfterKey]?.[groupNum];
-                                                    if (swapPersonAfter === swapPerson) {
-                                                        swapPersonHasConflict = true;
+                                                const swapPersonAfter = simulatedSemiAssignments[dayAfterKey]?.[groupNum];
+                                                if (swapPersonAfter === swapPerson) {
+                                                    swapPersonHasConflict = true;
                                                     }
                                                 }
                                             }
@@ -8705,6 +8730,13 @@
                 }
             }
             
+            // Debug: Log assignment counts
+            const normalCount = Object.keys(normalAssignments).length;
+            const semiCount = Object.keys(simulatedSemiAssignments).length;
+            const weekendCount = Object.keys(simulatedWeekendAssignments).length;
+            const specialCount = Object.keys(tempSpecialAssignments).length;
+            console.log('[PREVIEW DEBUG] Assignment counts - Normal:', normalCount, 'Semi:', semiCount, 'Weekend:', weekendCount, 'Special months:', specialCount);
+            
             // Store all preview assignments in calculationSteps for later use
             calculationSteps.tempAssignments = {
                 special: tempSpecialAssignments,
@@ -8715,9 +8747,14 @@
                 endDate: endDate.toISOString()
             };
             
+            console.log('[PREVIEW DEBUG] Stored temp assignments in calculationSteps.tempAssignments');
+            console.log('[PREVIEW DEBUG] Sample normal assignments:', Object.keys(normalAssignments).slice(0, 5).map(key => ({ date: key, groups: Object.keys(normalAssignments[key] || {}) })));
+            
             // Save temporarily to Firestore (async, don't wait)
-            saveTempAssignmentsToFirestore(calculationSteps.tempAssignments).catch(error => {
-                console.error('Error saving temp assignments to Firestore:', error);
+            saveTempAssignmentsToFirestore(calculationSteps.tempAssignments).then(() => {
+                console.log('[PREVIEW DEBUG] Temp assignments saved to Firestore successfully');
+            }).catch(error => {
+                console.error('[PREVIEW DEBUG] Error saving temp assignments to Firestore:', error);
             });
         }
         
@@ -8743,7 +8780,13 @@
                     lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                     updatedBy: user.uid
                 });
-                console.log('Temp assignments saved to Firestore');
+                console.log('[TEMP SAVE DEBUG] Temp assignments saved to Firestore successfully');
+                console.log('[TEMP SAVE DEBUG] Saved data structure:', {
+                    normal: Object.keys(tempAssignments.normal || {}).length + ' dates',
+                    semi: Object.keys(tempAssignments.semi || {}).length + ' dates',
+                    weekend: Object.keys(tempAssignments.weekend || {}).length + ' dates',
+                    special: Object.keys(tempAssignments.special || {}).length + ' months'
+                });
             } catch (error) {
                 console.error('Error saving temp assignments:', error);
             }
@@ -9201,161 +9244,13 @@
             }
         }
 
-        // Calculate duties for a specific date range
-        function calculateDutiesForDateRange(startDate, endDate, preserveExisting = true) {
+        // Simplified assignment function for each day type (used by processCascadingSwaps)
+        function assignDutiesForDayType(dayTypeCategory, groupNum, groupData, dayTypeLists) {
+            const days = dayTypeLists[dayTypeCategory];
+            if (days.length === 0) return;
             
-            // Clear intended assignments for the date range being calculated
-            // This ensures fresh tracking for this calculation cycle
-            const dateIterator = new Date(startDate);
-            while (dateIterator <= endDate) {
-                const key = formatDateKey(dateIterator);
-                if (intendedAssignments[key]) {
-                    delete intendedAssignments[key];
-                }
-                dateIterator.setDate(dateIterator.getDate() + 1);
-            }
-            
-            // Process each group
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} };
-                
-                // Ensure priorities exist
-                if (!groupData.priorities) groupData.priorities = {};
-                
-                // Sort each list by priority before calculating (to ensure correct rotation order)
-                const listTypes = ['special', 'weekend', 'semi', 'normal'];
-                listTypes.forEach(listType => {
-                    if (groupData[listType] && groupData[listType].length > 0) {
-                        groupData[listType].sort((a, b) => {
-                            // Get priorities (default to 999 if not set)
-                            const priorityA = groupData.priorities[a]?.[listType] ?? 999;
-                            const priorityB = groupData.priorities[b]?.[listType] ?? 999;
-                            
-                            // First sort by priority (lower number = higher priority)
-                            if (priorityA !== priorityB) {
-                                return priorityA - priorityB;
-                            }
-                            
-                            // If priorities are equal, sort by last duty date (most recent first, no date last)
-                            const dateA = groupData.lastDuties?.[a]?.[listType];
-                            const dateB = groupData.lastDuties?.[b]?.[listType];
-                            
-                            if (!dateA && !dateB) return 0; // Both have no date, maintain order
-                            if (!dateA) return 1; // A has no date, put it last
-                            if (!dateB) return -1; // B has no date, put it last
-                            
-                            // Both have dates, sort by date (most recent first)
-                            return new Date(dateB) - new Date(dateA);
-                        });
-                    }
-                });
-                
-                const specialPeople = groupData.special || [];
-                const weekendPeople = groupData.weekend || [];
-                const semiPeople = groupData.semi || [];
-                const normalPeople = groupData.normal || [];
-                
-                if (specialPeople.length === 0 && weekendPeople.length === 0 && semiPeople.length === 0 && normalPeople.length === 0) continue;
-                
-                // Separate days by type with priority: special > weekend > semi > normal
-                const dayTypeLists = {
-                    special: [],  // Highest priority - special holidays
-                    weekend: [],  // Second priority
-                    semi: [],     // Third priority
-                    normal: []   // Lowest priority
-                };
-                
-                // Build lists of days by type
-                const dateIterator = new Date(startDate);
-                while (dateIterator <= endDate) {
-                    const dayType = getDayType(dateIterator);
-                    const key = formatDateKey(dateIterator);
-                    let typeCategory = 'normal';
-                    
-                    if (dayType === 'special-holiday') {
-                        typeCategory = 'special';
-                    } else if (dayType === 'semi-normal-day') {
-                        typeCategory = 'semi';
-                    } else if (dayType === 'weekend-holiday') {
-                        typeCategory = 'weekend';
-                    }
-                    
-                    dayTypeLists[typeCategory].push(key);
-                    dateIterator.setDate(dateIterator.getDate() + 1);
-                }
-                
-                // Helper function to find next available day for a skipped person
-                function findNextAvailableDayForPerson(person, groupNum, dayTypeCategory, startFromDayKey, dayTypeLists) {
-                    const days = dayTypeLists[dayTypeCategory];
-                    const startIndex = days.indexOf(startFromDayKey);
-                    if (startIndex === -1) return null;
-                    
-                    // Find next day after startFromDayKey where person can be assigned
-                    for (let i = startIndex + 1; i < days.length; i++) {
-                        const dayKey = days[i];
-                        const dayDate = new Date(dayKey + 'T00:00:00');
-                        
-                        // Skip if person is missing on this date
-                        if (isPersonMissingOnDate(person, groupNum, dayDate)) {
-                            continue;
-                        }
-                        
-                        // Skip if day already has assignment for this group
-                        const existingAssignment = getAssignmentForDate(dayKey);
-                        if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
-                            continue;
-                        }
-                        
-                        // Check for conflicts based on day type
-                        let hasConflict = false;
-                        if (dayTypeCategory === 'semi') {
-                            // Check consecutive day with weekend/holiday
-                            const dayBefore = new Date(dayDate);
-                            dayBefore.setDate(dayBefore.getDate() - 1);
-                            const dayAfter = new Date(dayDate);
-                            dayAfter.setDate(dayAfter.getDate() + 1);
-                            
-                            const beforeType = getDayType(dayBefore);
-                            const afterType = getDayType(dayAfter);
-                            
-                            if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), person, groupNum)) {
-                                hasConflict = true;
-                            }
-                            if ((afterType === 'weekend-holiday' || afterType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayAfter), person, groupNum)) {
-                                hasConflict = true;
-                            }
-                        } else if (dayTypeCategory === 'normal') {
-                            // Check consecutive day with semi-normal
-                            const dayBefore = new Date(dayDate);
-                            dayBefore.setDate(dayBefore.getDate() - 1);
-                            const dayAfter = new Date(dayDate);
-                            dayAfter.setDate(dayAfter.getDate() + 1);
-                            
-                            const beforeType = getDayType(dayBefore);
-                            const afterType = getDayType(dayAfter);
-                            
-                            if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), person, groupNum)) {
-                                hasConflict = true;
-                            }
-                            if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), person, groupNum)) {
-                                hasConflict = true;
-                            }
-                        }
-                        
-                        if (!hasConflict) {
-                            return dayKey;
-                        }
-                    }
-                    return null;
-                }
-                
-                // Simplified assignment function for each day type
-                function assignDutiesForDayType(dayTypeCategory) {
-                    const days = dayTypeLists[dayTypeCategory];
-                    if (days.length === 0) return;
-                    
-                    // Use the appropriate list for each day type
-                    let groupPeople;
+            // Use the appropriate list for each day type
+            let groupPeople;
                     if (dayTypeCategory === 'special') {
                         groupPeople = groupData.special || [];
                     } else if (dayTypeCategory === 'weekend') {
@@ -9468,9 +9363,9 @@
                                 const candidate = groupPeople[nextIndex];
                                 
                                 if (!candidate || isPersonMissingOnDate(candidate, groupNum, dayDate)) {
-                                continue;
-                            }
-                            
+                                    continue;
+                                }
+                                
                                 // Check if candidate was already assigned this month
                                 if (assignedPeople[monthKey][groupNum].has(candidate)) {
                                     continue;
@@ -9513,7 +9408,7 @@
                                     globalNormalRotationPosition[groupNum] = rotationPosition + 1;
                                 }
                             } else {
-                                // Check for conflicts based on day type
+                            // Check for conflicts based on day type
                                 let hasConflict = false;
                                 
                                 if (dayTypeCategory === 'special') {
@@ -9585,7 +9480,7 @@
                                     
                                     if (userApproved) {
                                         skippedInMonth[monthKey].add(expectedPerson);
-                                        storeAssignmentReason(dayKey, groupNum, skippedPerson, 'skip', reason);
+                                    storeAssignmentReason(dayKey, groupNum, skippedPerson, 'skip', reason);
                                         // Person will be skipped, so assignedPerson remains null and replacement will be found
                                     } else {
                                         // User rejected skip - assign the person anyway (they'll have conflict but user approved)
@@ -9669,16 +9564,16 @@
                                         
                                         // STEP 1: Try alternative day in same week (e.g., Monday 12/01/26 → Wednesday 14/01/26)
                                         if (alternativeDayOfWeek !== null) {
-                                            for (let i = dayIndex + 1; i < days.length; i++) {
-                                                const checkDayKey = days[i];
-                                                const checkDate = new Date(checkDayKey + 'T00:00:00');
-                                                const checkDayOfWeek = checkDate.getDay();
-                                                const checkDayType = getDayType(checkDate);
-                                                
-                                                // Must be a normal day and in same week
+                                        for (let i = dayIndex + 1; i < days.length; i++) {
+                                            const checkDayKey = days[i];
+                                            const checkDate = new Date(checkDayKey + 'T00:00:00');
+                                            const checkDayOfWeek = checkDate.getDay();
+                                            const checkDayType = getDayType(checkDate);
+                                            
+                                            // Must be a normal day and in same week
                                                 if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek && isSameWeek(dayDate, checkDate)) {
-                                                    // Check conflicts BEFORE accepting
-                                                    if (checkSwapCandidate(checkDayKey, i)) {
+                                                // Check conflicts BEFORE accepting
+                                                if (checkSwapCandidate(checkDayKey, i)) {
                                                         // Ask for permission before same-week swap
                                                         const swapRotationPosition = i % rotationDays;
                                                         const swapPerson = groupPeople[swapRotationPosition];
@@ -9689,11 +9584,11 @@
                                                         const userApproved = askPermissionForConflict('swap', skippedPerson, currentDateStr, reason, swapPerson, swapDateStr);
                                                         
                                                         if (userApproved) {
-                                                            swapDayKey = checkDayKey;
-                                                            swapDayIndex = i;
+                                                    swapDayKey = checkDayKey;
+                                                    swapDayIndex = i;
                                                             swapFound = true; // Mark that swap was found
                                                             break; // Exit Step 1 loop - swap found, don't proceed to Step 2
-                                                        }
+                                                }
                                                         // If user rejected, continue to Step 2
                                                     }
                                                     // If has conflicts, continue to Step 2
@@ -9724,11 +9619,11 @@
                                                         const userApproved = askPermissionForConflict('swap', skippedPerson, currentDateStr, reason, swapPerson, swapDateStr);
                                                         
                                                         if (userApproved) {
-                                                            swapDayKey = checkDayKey;
-                                                            swapDayIndex = i;
+                                                        swapDayKey = checkDayKey;
+                                                        swapDayIndex = i;
                                                             swapFound = true; // Mark that swap was found
-                                                            break;
-                                                        }
+                                                        break;
+                                                    }
                                                         // If user rejected, continue to Step 3
                                                     }
                                                     // If has conflicts, continue to Step 3
@@ -9804,7 +9699,7 @@
                                         if (swapPerson && !isPersonMissingOnDate(swapPerson, groupNum, dayDate) && 
                                             (!assignedPeople[monthKey] || !assignedPeople[monthKey][groupNum] || !assignedPeople[monthKey][groupNum].has(swapPerson))) {
                                             // Ask for permission before performing swap (if not already asked)
-                                            const swapDate = new Date(swapDayKey + 'T00:00:00');
+                                                const swapDate = new Date(swapDayKey + 'T00:00:00');
                                             const isSameMonthSwap = isSameMonth(dayDate, swapDate);
                                             const isSameWeekSwap = isSameWeek(dayDate, swapDate);
                                             const currentDateStr = dayDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -9928,14 +9823,14 @@
                                                 continue;
                                             }
                                         } else if (dayTypeCategory === 'semi') {
-                                    const dayBefore = new Date(dayDate);
-                                    dayBefore.setDate(dayBefore.getDate() - 1);
-                                    const dayAfter = new Date(dayDate);
-                                    dayAfter.setDate(dayAfter.getDate() + 1);
-                                    
-                                    const beforeType = getDayType(dayBefore);
-                                    const afterType = getDayType(dayAfter);
-                                    
+                                            const dayBefore = new Date(dayDate);
+                                            dayBefore.setDate(dayBefore.getDate() - 1);
+                                            const dayAfter = new Date(dayDate);
+                                            dayAfter.setDate(dayAfter.getDate() + 1);
+                                            
+                                            const beforeType = getDayType(dayBefore);
+                                            const afterType = getDayType(dayAfter);
+                                            
                                             if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
                                                 candidateHasConflict = true;
                                             }
@@ -9994,49 +9889,49 @@
                                 if (!candidate || isPersonMissingOnDate(candidate, groupNum, dayDate)) {
                                     continue;
                                 }
-                                        
-                                        let candidateHasConflict = false;
-                                        
-                                        if (dayTypeCategory === 'weekend') {
+                                
+                                let candidateHasConflict = false;
+                                
+                                if (dayTypeCategory === 'weekend') {
                                     if (hasSpecialHolidayDutyInMonth(candidate, groupNum, month, year)) {
-                                                candidateHasConflict = true;
-                                            }
-                                        } else if (dayTypeCategory === 'semi') {
-                                            const dayBefore = new Date(dayDate);
-                                            dayBefore.setDate(dayBefore.getDate() - 1);
-                                            const dayAfter = new Date(dayDate);
-                                            dayAfter.setDate(dayAfter.getDate() + 1);
-                                            
-                                            const beforeType = getDayType(dayBefore);
-                                            const afterType = getDayType(dayAfter);
-                                            
+                                        candidateHasConflict = true;
+                                    }
+                                } else if (dayTypeCategory === 'semi') {
+                                    const dayBefore = new Date(dayDate);
+                                    dayBefore.setDate(dayBefore.getDate() - 1);
+                                    const dayAfter = new Date(dayDate);
+                                    dayAfter.setDate(dayAfter.getDate() + 1);
+                                    
+                                    const beforeType = getDayType(dayBefore);
+                                    const afterType = getDayType(dayAfter);
+                                    
                                     if ((beforeType === 'weekend-holiday' || beforeType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
-                                                candidateHasConflict = true;
-                                            }
+                                        candidateHasConflict = true;
+                                    }
                                     if ((afterType === 'weekend-holiday' || afterType === 'special-holiday') && hasDutyOnDay(formatDateKey(dayAfter), candidate, groupNum)) {
-                                                candidateHasConflict = true;
-                                            }
-                                        } else if (dayTypeCategory === 'normal') {
-                                            const dayBefore = new Date(dayDate);
-                                            dayBefore.setDate(dayBefore.getDate() - 1);
-                                            const dayAfter = new Date(dayDate);
-                                            dayAfter.setDate(dayAfter.getDate() + 1);
-                                            
-                                            const beforeType = getDayType(dayBefore);
-                                            const afterType = getDayType(dayAfter);
-                                            
+                                        candidateHasConflict = true;
+                                    }
+                                } else if (dayTypeCategory === 'normal') {
+                                    const dayBefore = new Date(dayDate);
+                                    dayBefore.setDate(dayBefore.getDate() - 1);
+                                    const dayAfter = new Date(dayDate);
+                                    dayAfter.setDate(dayAfter.getDate() + 1);
+                                    
+                                    const beforeType = getDayType(dayBefore);
+                                    const afterType = getDayType(dayAfter);
+                                    
                                     if (beforeType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayBefore), candidate, groupNum)) {
-                                                candidateHasConflict = true;
-                                            }
+                                        candidateHasConflict = true;
+                                    }
                                     if (afterType === 'semi-normal-day' && hasDutyOnDay(formatDateKey(dayAfter), candidate, groupNum)) {
-                                                candidateHasConflict = true;
-                                            }
-                                        }
-                                        
-                                        if (!candidateHasConflict) {
+                                        candidateHasConflict = true;
+                                    }
+                                }
+                                
+                                if (!candidateHasConflict) {
                                     assignedPerson = candidate;
-                                            break;
-                                        }
+                                    break;
+                                }
                             }
                         }
                         
@@ -10101,28 +9996,28 @@
                                             console.log(`[SWAP ATTEMPT DEBUG] Found alternative day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][alternativeDayOfWeek]}): ${swapDayKey} (${checkDate.toLocaleDateString('el-GR')})`);
                                             break;
                                         }
+                                        }
                                     }
-                                }
-                                
+                                    
                                 // STEP 2: If alternative day not found, try next same day of week (e.g., Monday → next Monday)
                                 if (!swapDayKey && targetDayOfWeek !== null) {
-                                    for (let i = dayIndex + 1; i < days.length; i++) {
-                                        const checkDayKey = days[i];
-                                        const checkDate = new Date(checkDayKey + 'T00:00:00');
-                                        const checkDayOfWeek = checkDate.getDay();
-                                        const checkDayType = getDayType(checkDate);
-                                        
+                                        for (let i = dayIndex + 1; i < days.length; i++) {
+                                            const checkDayKey = days[i];
+                                            const checkDate = new Date(checkDayKey + 'T00:00:00');
+                                            const checkDayOfWeek = checkDate.getDay();
+                                            const checkDayType = getDayType(checkDate);
+                                            
                                         // Must be a normal day with target day of week
                                         if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek) {
-                                            swapDayKey = checkDayKey;
-                                            swapDayIndex = i;
+                                                swapDayKey = checkDayKey;
+                                                swapDayIndex = i;
                                             console.log(`[SWAP ATTEMPT DEBUG] Found next same day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][targetDayOfWeek]}): ${swapDayKey} (${checkDate.toLocaleDateString('el-GR')})`);
-                                            break;
+                                                break;
                                         }
                                     }
                                 }
                                 
-                                    // If found swap day, find which person would be assigned to that day and swap
+                                // If found swap day, find which person would be assigned to that day and swap
                                 if (swapDayKey && swapDayIndex !== null) {
                                     // DEBUG: Log swap day found
                                     let swapDate = new Date(swapDayKey + 'T00:00:00');
@@ -10290,50 +10185,6 @@
                             }
                         }
                     });
-                }
-                
-                // Assign duties in priority order: special > weekend > semi > normal
-                // Priority 1: Special Holidays (highest priority) - simple N-day rotation, no conflicts
-                assignDutiesForDayType('special');
-                
-                // Priority 2: Weekend/Holiday days - N-day rotation, check for special holiday duty in same month
-                assignDutiesForDayType('weekend');
-                
-                // Priority 3: Ημιαργία days - N-day rotation, check consecutive day conflicts with weekends/holidays
-                assignDutiesForDayType('semi');
-                
-                // Priority 4: Καθημερινή days - N-day rotation, check consecutive day conflicts with semi-normal
-                assignDutiesForDayType('normal');
-                
-                // Old loop - replaced with priority-based assignments above
-                /*for (const typeCategory in dayTypeLists) {
-                    const days = dayTypeLists[typeCategory];
-                    if (days.length === 0) continue;
-                    
-                    const rotationDays = groupPeople.length;
-                    let personIndex = 0;
-                    
-                    // Simple rotation: assign person 0 to day 0, person 1 to day 1, etc.
-                    // After rotationDays days, cycle back to person 0
-                    days.forEach((dayKey, dayIndex) => {
-                        // Calculate which person should be on duty
-                        // Every rotationDays days, we cycle through all people
-                        const rotationPosition = dayIndex % rotationDays;
-                        const person = groupPeople[rotationPosition];
-                        
-                        // Allow multiple groups to assign on the same day
-                        if (dutyAssignments[dayKey]) {
-                            dutyAssignments[dayKey] += `, ${person} (Ομάδα ${groupNum})`;
-                        } else {
-                            dutyAssignments[dayKey] = `${person} (Ομάδα ${groupNum})`;
-                        }
-                    });
-                }*/
-            }
-            
-            saveData();
-            renderCalendar();
-            alert('Οι αναθέσεις υπηρεσιών υπολογίστηκαν επιτυχώς για την επιλεγμένη περίοδο!');
         }
 
         // Store current day being edited
@@ -11389,12 +11240,6 @@
                         });
                     }
                 }
-            }
-            
-            // Display violations in modal
-            displayRotationViolations(violations);
-        }
-
         // Display rotation violations in modal
         function displayRotationViolations(violations) {
             const tableBody = document.getElementById('rotationViolationsTableBody');
@@ -11428,7 +11273,7 @@
             const modal = new bootstrap.Modal(document.getElementById('rotationViolationsModal'));
             modal.show();
         }
-        
+
         // Print rotation order lists and rankings
         function printRotationAndRankings() {
             // Create a new window for printing
@@ -11618,4 +11463,3 @@
     </script>
 </body>
 </html>
-
