@@ -5886,9 +5886,26 @@
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
                         } else {
-                            // Use rotation order based on days since February 2026
-                                const rotationDays = groupPeople.length;
-                            const rotationPosition = getRotationPosition(date, 'special', groupNum) % rotationDays;
+                            // Use global rotation position - start at 0 for starting month, continue from global position for subsequent months
+                            const rotationDays = groupPeople.length;
+                            if (globalSpecialRotationPosition[groupNum] === undefined) {
+                                // Determine if this is the starting month
+                                let isStartingMonth = false;
+                                if (calculationSteps && calculationSteps.startDate) {
+                                    const startDate = new Date(calculationSteps.startDate);
+                                    isStartingMonth = (year === startDate.getFullYear() && month === startDate.getMonth());
+                                } else {
+                                    isStartingMonth = (year === 2026 && month === 1); // February 2026
+                                }
+                                // If starting month, begin at position 0, otherwise calculate from start date
+                                if (isStartingMonth) {
+                                    globalSpecialRotationPosition[groupNum] = 0;
+                                } else {
+                                    const daysSinceStart = getRotationPosition(date, 'special', groupNum);
+                                    globalSpecialRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                }
+                            }
+                            const rotationPosition = globalSpecialRotationPosition[groupNum] % rotationDays;
                             let assignedPerson = groupPeople[rotationPosition];
                             
                             // Check if assigned person is missing, if so find next in rotation
@@ -5899,9 +5916,16 @@
                                     const candidate = groupPeople[nextIndex];
                                     if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
                                         assignedPerson = candidate;
+                                        // Update rotation position to the candidate's position
+                                        globalSpecialRotationPosition[groupNum] = nextIndex;
                                         break;
                                     }
                                 }
+                            }
+                            
+                            // Advance rotation position for next special holiday (if person was assigned)
+                            if (assignedPerson) {
+                                globalSpecialRotationPosition[groupNum] = (globalSpecialRotationPosition[groupNum] + 1) % rotationDays;
                             }
                             
                             // Get last duty date and days since for display
@@ -6068,9 +6092,26 @@
                                 // Check if this person is in the temp assignments for this month/group
                                 const tempPeople = tempAssignments.special?.[monthKey]?.[groupNum] || [];
                                 
-                                // Use rotation to determine which person (same logic as preview)
+                                // Use global rotation position - start at 0 for starting month, continue from global position for subsequent months
                                 const rotationDays = groupPeople.length;
-                                const rotationPosition = getRotationPosition(dateIterator, 'special', groupNum) % rotationDays;
+                                // Determine if this is the starting month
+                                let isStartingMonth = false;
+                                if (calculationSteps && calculationSteps.startDate) {
+                                    const startDate = new Date(calculationSteps.startDate);
+                                    isStartingMonth = (year === startDate.getFullYear() && month === startDate.getMonth());
+                                } else {
+                                    isStartingMonth = (year === 2026 && month === 1); // February 2026
+                                }
+                                if (globalSpecialRotationPosition[groupNum] === undefined) {
+                                    // If starting month, begin at position 0, otherwise calculate from start date
+                                    if (isStartingMonth) {
+                                        globalSpecialRotationPosition[groupNum] = 0;
+                                    } else {
+                                        const daysSinceStart = getRotationPosition(dateIterator, 'special', groupNum);
+                                        globalSpecialRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                    }
+                                }
+                                const rotationPosition = globalSpecialRotationPosition[groupNum] % rotationDays;
                                 let assignedPerson = groupPeople[rotationPosition];
                                 
                                 // Check if assigned person is missing, if so find next in rotation
@@ -6087,6 +6128,9 @@
                                 
                                 // Only assign if person is in temp assignments (was calculated in preview)
                                 if (assignedPerson && tempPeople.includes(assignedPerson)) {
+                                    // Advance rotation position for next special holiday
+                                    globalSpecialRotationPosition[groupNum] = (globalSpecialRotationPosition[groupNum] + 1) % rotationDays;
+                                    
                                     if (!specialHolidayAssignments[dateKey]) {
                                         specialHolidayAssignments[dateKey] = '';
                                     }
@@ -6321,7 +6365,25 @@
                     
                     if (groupPeople.length > 0) {
                         const rotationDays = groupPeople.length;
-                        const rotationPosition = getRotationPosition(date, 'special', groupNum) % rotationDays;
+                        // Use global rotation position - start at 0 for starting month, continue from global position for subsequent months
+                        if (globalSpecialRotationPosition[groupNum] === undefined) {
+                            // Determine if this is the starting month
+                            let isStartingMonth = false;
+                            if (calculationSteps && calculationSteps.startDate) {
+                                const startDate = new Date(calculationSteps.startDate);
+                                isStartingMonth = (year === startDate.getFullYear() && month === startDate.getMonth());
+                            } else {
+                                isStartingMonth = (year === 2026 && month === 1); // February 2026
+                            }
+                            // If starting month, begin at position 0, otherwise calculate from start date
+                            if (isStartingMonth) {
+                                globalSpecialRotationPosition[groupNum] = 0;
+                            } else {
+                                const daysSinceStart = getRotationPosition(date, 'special', groupNum);
+                                globalSpecialRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                            }
+                        }
+                        const rotationPosition = globalSpecialRotationPosition[groupNum] % rotationDays;
                         const person = groupPeople[rotationPosition];
                         
                         if (person && !isPersonMissingOnDate(person, groupNum, date)) {
@@ -6329,6 +6391,8 @@
                                 simulatedSpecialAssignments[monthKey][groupNum] = new Set();
                             }
                             simulatedSpecialAssignments[monthKey][groupNum].add(person);
+                            // Advance rotation position for next special holiday
+                            globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                         }
                     }
                 }
@@ -6416,9 +6480,21 @@
                             }
                             const rotationDays = groupPeople.length;
                             if (globalWeekendRotationPosition[groupNum] === undefined) {
-                                // Initialize based on rotation count from February 2026 (first time only)
-                                const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
-                                globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                // Determine if this is the starting month
+                                let isStartingMonth = false;
+                                if (calculationSteps && calculationSteps.startDate) {
+                                    const startDate = new Date(calculationSteps.startDate);
+                                    isStartingMonth = (year === startDate.getFullYear() && month === startDate.getMonth());
+                                } else {
+                                    isStartingMonth = (year === 2026 && month === 1); // February 2026
+                                }
+                                // If starting month, begin at position 0, otherwise calculate from start date
+                                if (isStartingMonth) {
+                                    globalWeekendRotationPosition[groupNum] = 0;
+                                } else {
+                                    const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
+                                    globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                }
                             }
                             
                             // Use the current rotation position (which accounts for previous skips)
@@ -6645,7 +6721,25 @@
                     
                     if (groupPeople.length > 0) {
                         const rotationDays = groupPeople.length;
-                        const rotationPosition = getRotationPosition(date, 'special', groupNum) % rotationDays;
+                        // Use global rotation position - start at 0 for starting month, continue from global position for subsequent months
+                        if (globalSpecialRotationPosition[groupNum] === undefined) {
+                            // Determine if this is the starting month
+                            let isStartingMonth = false;
+                            if (calculationSteps && calculationSteps.startDate) {
+                                const startDate = new Date(calculationSteps.startDate);
+                                isStartingMonth = (year === startDate.getFullYear() && month === startDate.getMonth());
+                            } else {
+                                isStartingMonth = (year === 2026 && month === 1); // February 2026
+                            }
+                            // If starting month, begin at position 0, otherwise calculate from start date
+                            if (isStartingMonth) {
+                                globalSpecialRotationPosition[groupNum] = 0;
+                            } else {
+                                const daysSinceStart = getRotationPosition(date, 'special', groupNum);
+                                globalSpecialRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                            }
+                        }
+                        const rotationPosition = globalSpecialRotationPosition[groupNum] % rotationDays;
                         const person = groupPeople[rotationPosition];
                         
                         if (person && !isPersonMissingOnDate(person, groupNum, date)) {
@@ -6653,6 +6747,8 @@
                                 simulatedSpecialAssignments[monthKey][groupNum] = new Set();
                             }
                             simulatedSpecialAssignments[monthKey][groupNum].add(person);
+                            // Advance rotation position for next special holiday
+                            globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                         }
                     }
                 }
@@ -6793,9 +6889,21 @@
                         } else {
                             const rotationDays = groupPeople.length;
                             if (globalSemiRotationPosition[groupNum] === undefined) {
-                                // Initialize based on rotation count from February 2026 (first time only)
-                                const daysSinceStart = getRotationPosition(date, 'semi', groupNum);
-                                globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                // Determine if this is the starting month
+                                let isStartingMonth = false;
+                                if (calculationSteps && calculationSteps.startDate) {
+                                    const startDate = new Date(calculationSteps.startDate);
+                                    isStartingMonth = (year === startDate.getFullYear() && month === startDate.getMonth());
+                                } else {
+                                    isStartingMonth = (year === 2026 && month === 1); // February 2026
+                                }
+                                // If starting month, begin at position 0, otherwise calculate from start date
+                                if (isStartingMonth) {
+                                    globalSemiRotationPosition[groupNum] = 0;
+                                } else {
+                                    const daysSinceStart = getRotationPosition(date, 'semi', groupNum);
+                                    globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                }
                             }
                             
                             let rotationPosition = globalSemiRotationPosition[groupNum] % rotationDays;
@@ -6975,7 +7083,25 @@
                     
                     if (groupPeople.length > 0) {
                         const rotationDays = groupPeople.length;
-                        const rotationPosition = getRotationPosition(date, 'special', groupNum) % rotationDays;
+                        // Use global rotation position - start at 0 for starting month, continue from global position for subsequent months
+                        if (globalSpecialRotationPosition[groupNum] === undefined) {
+                            // Determine if this is the starting month
+                            let isStartingMonth = false;
+                            if (calculationSteps && calculationSteps.startDate) {
+                                const startDate = new Date(calculationSteps.startDate);
+                                isStartingMonth = (year === startDate.getFullYear() && month === startDate.getMonth());
+                            } else {
+                                isStartingMonth = (year === 2026 && month === 1); // February 2026
+                            }
+                            // If starting month, begin at position 0, otherwise calculate from start date
+                            if (isStartingMonth) {
+                                globalSpecialRotationPosition[groupNum] = 0;
+                            } else {
+                                const daysSinceStart = getRotationPosition(date, 'special', groupNum);
+                                globalSpecialRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                            }
+                        }
+                        const rotationPosition = globalSpecialRotationPosition[groupNum] % rotationDays;
                         const person = groupPeople[rotationPosition];
                         
                         if (person && !isPersonMissingOnDate(person, groupNum, date)) {
@@ -6983,6 +7109,8 @@
                                 simulatedSpecialAssignments[monthKey][groupNum] = new Set();
                             }
                             simulatedSpecialAssignments[monthKey][groupNum].add(person);
+                            // Advance rotation position for next special holiday
+                            globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                         }
                     }
                 }
@@ -7366,9 +7494,21 @@
                             
                             const rotationDays = groupPeople.length;
                             if (globalNormalRotationPosition[groupNum] === undefined) {
-                                // Initialize based on rotation count from February 2026 (first time only)
-                                const daysSinceStart = getRotationPosition(date, 'normal', groupNum);
-                                globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                // Determine if this is the starting month
+                                let isStartingMonth = false;
+                                if (calculationSteps && calculationSteps.startDate) {
+                                    const startDate = new Date(calculationSteps.startDate);
+                                    isStartingMonth = (year === startDate.getFullYear() && month === startDate.getMonth());
+                                } else {
+                                    isStartingMonth = (year === 2026 && month === 1); // February 2026
+                                }
+                                // If starting month, begin at position 0, otherwise calculate from start date
+                                if (isStartingMonth) {
+                                    globalNormalRotationPosition[groupNum] = 0;
+                                } else {
+                                    const daysSinceStart = getRotationPosition(date, 'normal', groupNum);
+                                    globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                }
                             }
                             
                             let rotationPosition = globalNormalRotationPosition[groupNum] % rotationDays;
@@ -8394,45 +8534,75 @@
                             assignedPeople[monthKey][groupNum] = new Set();
                         }
                         
-                        // Calculate rotation position - continue from previous month
+                        // Determine if this is the starting month (February or the start date month)
+                        let isStartingMonth = false;
+                        if (calculationSteps && calculationSteps.startDate) {
+                            const startDate = new Date(calculationSteps.startDate);
+                            isStartingMonth = (year === startDate.getFullYear() && month === startDate.getMonth());
+                        } else {
+                            // Default: February 2026 is the starting month
+                            isStartingMonth = (year === 2026 && month === 1); // month 1 = February (0-indexed)
+                        }
+                        
+                        // Calculate rotation position - start from 0 in starting month, continue from global position in subsequent months
                         let rotationPosition;
                         
                         if (dayTypeCategory === 'weekend') {
                             // For weekends: track rotation position per group globally to continue from previous month
                             if (globalWeekendRotationPosition[groupNum] === undefined) {
-                                // Initialize based on rotation count from February 2026 (first time only)
-                                const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
-                                globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                // If starting month, begin at position 0, otherwise calculate from start date
+                                if (isStartingMonth) {
+                                    globalWeekendRotationPosition[groupNum] = 0;
+                                } else {
+                                    const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
+                                    globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                }
                             }
                             rotationPosition = globalWeekendRotationPosition[groupNum] % rotationDays;
                         } else if (dayTypeCategory === 'normal') {
                             // For normal days: track rotation position per group globally to continue from previous month
                             if (globalNormalRotationPosition[groupNum] === undefined) {
-                                // Initialize based on rotation count from February 2026 (first time only)
-                                const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
-                                globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                // If starting month, begin at position 0, otherwise calculate from start date
+                                if (isStartingMonth) {
+                                    globalNormalRotationPosition[groupNum] = 0;
+                                } else {
+                                    const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
+                                    globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                }
                             }
                             rotationPosition = globalNormalRotationPosition[groupNum] % rotationDays;
                         } else if (dayTypeCategory === 'semi') {
                             // For semi-normal: track rotation position per group globally to continue from previous month
                             if (globalSemiRotationPosition[groupNum] === undefined) {
-                                // Initialize based on rotation count from February 2026 (first time only)
-                                const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
-                                globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                // If starting month, begin at position 0, otherwise calculate from start date
+                                if (isStartingMonth) {
+                                    globalSemiRotationPosition[groupNum] = 0;
+                                } else {
+                                    const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
+                                    globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                }
                             }
                             rotationPosition = globalSemiRotationPosition[groupNum] % rotationDays;
                         } else if (dayTypeCategory === 'special') {
                             // For special holidays: track rotation position per group globally to continue from previous month
                             if (globalSpecialRotationPosition[groupNum] === undefined) {
-                                // Initialize based on rotation count from February 2026 (first time only)
-                                const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
-                                globalSpecialRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                // If starting month, begin at position 0, otherwise calculate from start date
+                                if (isStartingMonth) {
+                                    globalSpecialRotationPosition[groupNum] = 0;
+                                } else {
+                                    const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
+                                    globalSpecialRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                }
                             }
                             rotationPosition = globalSpecialRotationPosition[groupNum] % rotationDays;
                         } else {
-                            // Fallback: use rotation count from February 2026 directly
-                            const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
-                            rotationPosition = daysSinceStart % rotationDays;
+                            // Fallback: if starting month, start at 0, otherwise calculate from start date
+                            if (isStartingMonth) {
+                                rotationPosition = 0;
+                            } else {
+                                const daysSinceStart = getRotationPosition(dayDate, dayTypeCategory, groupNum);
+                                rotationPosition = daysSinceStart % rotationDays;
+                            }
                         }
                         
                         let assignedPerson = null;
