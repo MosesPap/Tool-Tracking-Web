@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Ξβ€ΞΞ‰ΞΒ±Ξβ€΅ΞΒµΞβ€•ΞΒΞΞ‰ΞΖ’ΞΒ· ΞΒ¥Ξβ‚¬ΞΒ·ΞΒΞΒµΞΖ’ΞΞ‰ΞΒΞΒ½ v1.72 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.72 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -687,11 +687,11 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Ξβ€ΞΞ‰ΞΒ±Ξβ€΅ΞΒµΞβ€•ΞΒΞΞ‰ΞΖ’ΞΒ· ΞΒ¥Ξβ‚¬ΞΒ·ΞΒΞΒµΞΖ’ΞΞ‰ΞΒΞΒ½ <span style="font-size: 0.7em; opacity: 0.8;">v1.72</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.72</span></h4>
             </div>
             <div>
-                <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Ξβ€ΞΞ‰ΞΒ±Ξβ€΅ΞΒµΞβ€•ΞΒΞΞ‰ΞΖ’ΞΒ· Ξβ„ΆΞΒµΞΒΞΒ±ΞΒΞβ€΅Ξβ€•ΞΒ±Ξβ€">
-                    <i class="fas fa-sort-numeric-down me-1"></i>Ξβ„ΆΞΒµΞΒΞΒ±ΞΒΞβ€΅Ξβ€•ΞΒ±
+                <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
+                    <i class="fas fa-sort-numeric-down me-1"></i>Ιεραρχία
                 </button>
             </div>
         </div>
@@ -700,15 +700,15 @@
     <div class="container-fluid">
         <!-- Statistics Card -->
         <div class="stats-card">
-            <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>ΞΒ£Ξβ€ΞΒ±Ξβ€ΞΞ‰ΞΖ’Ξβ€ΞΞ‰ΞΞΞΒ¬ Ξβ€ΆΞΒ½ΞΒ±ΞΒ»ΞΒ»ΞΒ±ΞΒ³ΞΒ®Ξβ€</h5>
+            <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Στατιστικά Εναλλαγής</h5>
             <div class="stats-grid">
                 <div class="stat-item">
                     <div class="stat-value" id="totalPeople">0</div>
-                    <div class="stat-label">ΞΒ£Ξβ€¦ΞΒ½ΞΞΞΒ»ΞΞ‰ΞΞΞΒ ΞΒ ΞΒΞΞΞΖ’Ξβ€°Ξβ‚¬ΞΞ‰ΞΞΞΒ</div>
+                    <div class="stat-label">Συνολικό Προσωπικό</div>
                 </div>
                 <div class="stat-item">
                     <div class="stat-value" id="avgRotation">0</div>
-                    <div class="stat-label">ΞΒΞΒ­ΞΖ’ΞΒµΞβ€ Ξβ€”ΞΞΞΒ­ΞΒΞΒµΞβ€ Ξβ€ΆΞΒ½ΞΒ±ΞΒ»ΞΒ»ΞΒ±ΞΒ³ΞΒ®Ξβ€</div>
+                    <div class="stat-label">Μέσες Ημέρες Εναλλαγής</div>
                 </div>
             </div>
         </div>
@@ -719,7 +719,7 @@
                 <div class="group-card">
                     <div class="group-header">
                         <div class="group-title">
-                            <span class="group-badge group-1">Ξβ€ΆΞΒ Ξβ„ΆΞΒΞβ€ΆΞΒ¦Ξβ€Ξβ€ΊΞβ€”ΞΒ£-Ξβ€ΞΒ¥ΞΒ</span>
+                            <span class="group-badge group-1">ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</span>
                         </div>
                         <button class="btn btn-sm btn-outline-primary" onclick="addPerson(1)">
                             <i class="fas fa-plus"></i>
@@ -727,7 +727,7 @@
                     </div>
                     <div id="group1People"></div>
                     <div class="mt-2">
-                        <small class="text-muted">Ξβ€ΆΞΒ½ΞΒ±ΞΒ»ΞΒ»ΞΒ±ΞΒ³ΞΒ®: <span id="group1Rotation">-</span> ΞΒ·ΞΞΞΒ­ΞΒΞΒµΞβ€</small>
+                        <small class="text-muted">Εναλλαγή: <span id="group1Rotation">-</span> ημέρες</small>
                     </div>
                 </div>
             </div>
@@ -736,7 +736,7 @@
                 <div class="group-card">
                     <div class="group-header">
                         <div class="group-title">
-                            <span class="group-badge group-2">ΞΒΞβ€”ΞΒ§Ξβ€ΞΒΞβ„ΆΞΒΞΒΞΒ£-ΞΒΞΒ Ξβ€ΊΞΒΞΒ¥ΞΞ…Ξβ€ΞΒΞΒ£-ΞΒΞβ€Ξβ€”Ξβ€ΞΒΞΒ£</span>
+                            <span class="group-badge group-2">ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</span>
                         </div>
                         <button class="btn btn-sm btn-outline-primary" onclick="addPerson(2)">
                             <i class="fas fa-plus"></i>
@@ -744,7 +744,7 @@
                     </div>
                     <div id="group2People"></div>
                     <div class="mt-2">
-                        <small class="text-muted">Ξβ€ΆΞΒ½ΞΒ±ΞΒ»ΞΒ»ΞΒ±ΞΒ³ΞΒ®: <span id="group2Rotation">-</span> ΞΒ·ΞΞΞΒ­ΞΒΞΒµΞβ€</small>
+                        <small class="text-muted">Εναλλαγή: <span id="group2Rotation">-</span> ημέρες</small>
                     </div>
                 </div>
             </div>
@@ -753,7 +753,7 @@
                 <div class="group-card">
                     <div class="group-header">
                         <div class="group-title">
-                            <span class="group-badge group-3">ΞΒ¤Ξβ€ΆΞΒ§ΞΒΞβ„ΆΞΒΞΒΞΒ£ Ξβ€Ά/ΞΒ  AW139</span>
+                            <span class="group-badge group-3">ΤΕΧΝΙΚΟΣ Ε/Π AW139</span>
                         </div>
                         <button class="btn btn-sm btn-outline-primary" onclick="addPerson(3)">
                             <i class="fas fa-plus"></i>
@@ -761,7 +761,7 @@
                     </div>
                     <div id="group3People"></div>
                     <div class="mt-2">
-                        <small class="text-muted">Ξβ€ΆΞΒ½ΞΒ±ΞΒ»ΞΒ»ΞΒ±ΞΒ³ΞΒ®: <span id="group3Rotation">-</span> ΞΒ·ΞΞΞΒ­ΞΒΞΒµΞβ€</small>
+                        <small class="text-muted">Εναλλαγή: <span id="group3Rotation">-</span> ημέρες</small>
                     </div>
                 </div>
             </div>
@@ -770,7 +770,7 @@
                 <div class="group-card">
                     <div class="group-header">
                         <div class="group-title">
-                            <span class="group-badge group-4">ΞΒ¤Ξβ€ΆΞΒ§ΞΒΞβ„ΆΞΒΞΒΞΒ£ Ξβ€ΆΞΒ Ξβ„ΆΞβ€Ξβ€ΆΞβ„ΆΞΒ©ΞΒ ΞΒΞβ€ΆΞΒ£ΞΒ©ΞΒ</span>
+                            <span class="group-badge group-4">ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</span>
                         </div>
                         <button class="btn btn-sm btn-outline-primary" onclick="addPerson(4)">
                             <i class="fas fa-plus"></i>
@@ -778,7 +778,7 @@
                     </div>
                     <div id="group4People"></div>
                     <div class="mt-2">
-                        <small class="text-muted">Ξβ€ΆΞΒ½ΞΒ±ΞΒ»ΞΒ»ΞΒ±ΞΒ³ΞΒ®: <span id="group4Rotation">-</span> ΞΒ·ΞΞΞΒ­ΞΒΞΒµΞβ€</small>
+                        <small class="text-muted">Εναλλαγή: <span id="group4Rotation">-</span> ημέρες</small>
                     </div>
                 </div>
             </div>
@@ -787,18 +787,18 @@
         <!-- Special Holidays Configuration -->
         <div class="holiday-list">
             <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('specialHolidaysContent', 'specialHolidaysChevron')">
-                <h5 class="mb-0"><i class="fas fa-star me-2"></i>Ξβ€ΆΞΞ‰ΞΞ„ΞΞ‰ΞΞΞΒ­Ξβ€ Ξβ€ΞΒΞΒ³Ξβ€•ΞΒµΞβ€</h5>
+                <h5 class="mb-0"><i class="fas fa-star me-2"></i>Ειδικές Αργίες</h5>
                 <i id="specialHolidaysChevron" class="fas fa-chevron-down"></i>
             </div>
             <div id="specialHolidaysContent" class="collapse">
                 <div class="d-flex justify-content-end mb-3">
                     <button class="btn btn-warning btn-sm" onclick="event.stopPropagation(); addRecurringHoliday()">
-                        <i class="fas fa-plus me-1"></i>ΞΒ ΞΒΞΞΞΖ’ΞΞΞΒ®ΞΞΞΒ· Ξβ€ΆΞΞ‰ΞΞ„ΞΞ‰ΞΞΞΒ®Ξβ€ Ξβ€ΞΒΞΒ³Ξβ€•ΞΒ±Ξβ€
+                        <i class="fas fa-plus me-1"></i>Προσθήκη Ειδικής Αργίας
                     </button>
                 </div>
                 <div class="alert alert-info">
                     <i class="fas fa-info-circle me-2"></i>
-                    <small>ΞΒΞΒΞβ€•ΞΖ’Ξβ€ΞΒµ ΞΒ±ΞΒΞΒ³Ξβ€•ΞΒµΞβ€ Ξβ‚¬ΞΞΞβ€¦ ΞΒµΞβ‚¬ΞΒ±ΞΒ½ΞΒ±ΞΒ»ΞΒ±ΞΞΞΒ²ΞΒ¬ΞΒ½ΞΞΞΒ½Ξβ€ΞΒ±ΞΞ‰ ΞΞΞΒ¬ΞΞΞΒµ Ξβ€΅ΞΒΞΒΞΒ½ΞΞ (Ξβ‚¬.Ξβ€΅., 25 Ξβ€ΞΒµΞΞΞΒµΞΞΞΒ²ΞΒΞβ€•ΞΞΞβ€¦, 1 Ξβ„ΆΞΒ±ΞΒ½ΞΞΞβ€¦ΞΒ±ΞΒΞβ€•ΞΞΞβ€¦) ΞΒ® ΞΖ’Ξβ€΅ΞΒµΞβ€Ξβ€•ΞΒ¶ΞΞΞΒ½Ξβ€ΞΒ±ΞΞ‰ ΞΞΞΒµ Ξβ€ΞΞ ΞΒ ΞΒ¬ΞΖ’Ξβ€΅ΞΒ± (Ξβ‚¬.Ξβ€΅., ΞΒΞΒµΞΒ³ΞΒ¬ΞΒ»ΞΞ ΞΒ£ΞΒ¬ΞΒ²ΞΒ²ΞΒ±Ξβ€ΞΞ). ΞΒΞΞ‰ ΞΒµΞΞ‰ΞΞ„ΞΞ‰ΞΞΞΒ­Ξβ€ ΞΒ±ΞΒΞΒ³Ξβ€•ΞΒµΞβ€ ΞΒ­Ξβ€΅ΞΞΞβ€¦ΞΒ½ Ξβ€ΞΒ·ΞΒ½ Ξβ€¦ΞΒΞΒ·ΞΒ»ΞΒΞβ€ΞΒµΞΒΞΒ· Ξβ‚¬ΞΒΞΞΞβ€ΞΒµΞΒΞΒ±ΞΞ‰ΞΒΞβ€ΞΒ·Ξβ€ΞΒ± ΞΞΞΒ±ΞΞ‰ Ξβ€΅ΞΒΞΒ·ΞΖ’ΞΞ‰ΞΞΞΞΞβ‚¬ΞΞΞΞ‰ΞΞΞΒΞΒ½ Ξβ€ΞΒ· ΞΖ’ΞΒµΞΞ‰ΞΒΞΒ¬ ΞΒµΞΞ‰ΞΞ„ΞΞ‰ΞΞΞΒΞΒ½ ΞΒ±ΞΒΞΒ³ΞΞ‰ΞΒΞΒ½ ΞΞΞΒ¬ΞΞΞΒµ ΞΞΞΞΞΒ¬ΞΞ„ΞΒ±Ξβ€.</small>
+                    <small>Ορίστε αργίες που επαναλαμβάνονται κάθε χρόνο (π.χ., 25 Δεκεμβρίου, 1 Ιανουαρίου) ή σχετίζονται με το Πάσχα (π.χ., Μεγάλο Σάββατο). Οι ειδικές αργίες έχουν την υψηλότερη προτεραιότητα και χρησιμοποιούν τη σειρά ειδικών αργιών κάθε ομάδας.</small>
                 </div>
                 <div id="recurringHolidaysList"></div>
             </div>
@@ -807,13 +807,13 @@
         <!-- Regular Holidays Section -->
         <div class="holiday-list">
             <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('regularHolidaysContent', 'regularHolidaysChevron')">
-                <h5 class="mb-0"><i class="fas fa-calendar-times me-2"></i>ΞΒΞΒ±ΞΒ½ΞΞΞΒ½ΞΞ‰ΞΞΞΒ­Ξβ€ Ξβ€ΞΒΞΒ³Ξβ€•ΞΒµΞβ€</h5>
+                <h5 class="mb-0"><i class="fas fa-calendar-times me-2"></i>Κανονικές Αργίες</h5>
                 <i id="regularHolidaysChevron" class="fas fa-chevron-down"></i>
             </div>
             <div id="regularHolidaysContent" class="collapse">
                 <div class="d-flex justify-content-end mb-3">
                     <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); addHoliday()">
-                        <i class="fas fa-plus me-1"></i>ΞΒ ΞΒΞΞΞΖ’ΞΞΞΒ®ΞΞΞΒ· Ξβ€ΞΒΞΒ³Ξβ€•ΞΒ±Ξβ€
+                        <i class="fas fa-plus me-1"></i>Προσθήκη Αργίας
                     </button>
                 </div>
                 <div id="holidaysList"></div>
@@ -823,7 +823,7 @@
         <!-- Calendar Section -->
         <div class="calendar-section">
             <div class="calendar-header">
-                <h5><i class="fas fa-calendar-alt me-2"></i>Ξβ€”ΞΞΞΒµΞΒΞΞΞΒ»ΞΒΞΒ³ΞΞ‰ΞΞ ΞΒ¥Ξβ‚¬ΞΒ·ΞΒΞΒµΞΖ’ΞΞ‰ΞΒΞΒ½</h5>
+                <h5><i class="fas fa-calendar-alt me-2"></i>Ημερολόγιο Υπηρεσιών</h5>
                 <div class="calendar-nav">
                     <button class="btn btn-sm btn-outline-secondary" onclick="previousMonth()">
                         <i class="fas fa-chevron-left"></i>
@@ -833,22 +833,22 @@
                         <i class="fas fa-chevron-right"></i>
                     </button>
                     <button class="btn btn-sm btn-success ms-2" onclick="openAssignDutyModalForDate()">
-                        <i class="fas fa-user-plus me-1"></i>ΞΒ§ΞΒµΞΞ‰ΞΒΞΞΞΞΞβ€•ΞΒ½ΞΒ·Ξβ€ΞΒ· Ξβ€ΞΒ½ΞΒ¬ΞΞΞΒµΞΖ’ΞΒ·
+                        <i class="fas fa-user-plus me-1"></i>Χειροκίνητη Ανάθεση
                     </button>
                     <button class="btn btn-sm btn-primary ms-2" onclick="openCalculateDutiesModal()">
-                        <i class="fas fa-calculator me-1"></i>ΞΒ¥Ξβ‚¬ΞΞΞΒ»ΞΞΞΒ³ΞΞ‰ΞΖ’ΞΞΞΒΞβ€ ΞΒ¥Ξβ‚¬ΞΒ·ΞΒΞΒµΞΖ’ΞΞ‰ΞΒΞΒ½
+                        <i class="fas fa-calculator me-1"></i>Υπολογισμός Υπηρεσιών
                     </button>
                     <button class="btn btn-sm btn-success ms-2" onclick="showExcelPreview()">
-                        <i class="fas fa-file-excel me-1"></i>Ξβ€ΞΒ·ΞΞΞΞ‰ΞΞΞβ€¦ΞΒΞΒ³Ξβ€•ΞΒ± Excel
+                        <i class="fas fa-file-excel me-1"></i>Δημιουργία Excel
                     </button>
                     <button class="btn btn-sm btn-warning ms-2" onclick="migrateAssignmentsByDayType()">
-                        <i class="fas fa-exchange-alt me-1"></i>ΞΒΞΒµΞβ€ΞΒ±Ξβ€ ΞΞΞΒΞΒ¬ Ξβ€ΞΒ½ΞΒ¬ ΞΒ¤ΞΒΞβ‚¬ΞΞ Ξβ€”ΞΞΞΒ­ΞΒΞΒ±Ξβ€
+                        <i class="fas fa-exchange-alt me-1"></i>Μεταφορά Ανά Τύπο Ημέρας
                     </button>
                     <button class="btn btn-sm btn-warning ms-2" onclick="analyzeRotationViolations()">
-                        <i class="fas fa-exclamation-triangle me-1"></i>ΞΒΞΒ»ΞΒµΞΒ³Ξβ€΅ΞΞΞβ€ Ξβ€ΞΒ½ΞΒ±ΞΞΞΒ­ΞΖ’ΞΒµΞβ€°ΞΒ½ ΞΒ¥Ξβ‚¬ΞΒ·ΞΒΞΒµΞΖ’ΞΞ‰ΞΒΞΒ½
+                        <i class="fas fa-exclamation-triangle me-1"></i>Έλεγχος Αναθέσεων Υπηρεσιών
                     </button>
                     <button class="btn btn-sm btn-info ms-2" onclick="printRotationAndRankings()">
-                        <i class="fas fa-print me-1"></i>Ξβ€ΆΞΞΞβ€ΞΒΞβ‚¬Ξβ€°ΞΖ’ΞΒ· ΞΒ£ΞΒµΞΞ‰ΞΒΞΒΞΒ½ & Ξβ„ΆΞΒµΞΒΞΒ±ΞΒΞβ€΅Ξβ€•ΞΒ±Ξβ€
+                        <i class="fas fa-print me-1"></i>Εκτύπωση Σειρών & Ιεραρχίας
                     </button>
                 </div>
             </div>
@@ -861,60 +861,60 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><span id="modalTitle">ΞΒ ΞΒΞΞΞΖ’ΞΞΞΒ®ΞΞΞΒ· Ξβ€Ξβ€ΞΒΞΞΞΞΞβ€¦ ΞΖ’Ξβ€ΞΒ·ΞΒ½ ΞΒΞΞΞΒ¬ΞΞ„ΞΒ± <span id="modalGroupNumber"></span></span></h5>
+                    <h5 class="modal-title"><span id="modalTitle">Προσθήκη Ατόμου στην Ομάδα <span id="modalGroupNumber"></span></span></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="personName" class="form-label">ΞΒΞΒ½ΞΞΞΞΞΒ±</label>
-                        <input type="text" class="form-control" id="personName" placeholder="Ξβ€ΆΞΞ‰ΞΖ’ΞΒ¬ΞΒ³ΞΒµΞβ€ΞΒµ Ξβ€ΞΞ ΞΒΞΒ½ΞΞΞΞΞΒ¬ Ξβ€ΞΞΞβ€¦ ΞΒ±Ξβ€ΞΒΞΞΞΞΞβ€¦">
+                        <label for="personName" class="form-label">Όνομα</label>
+                        <input type="text" class="form-control" id="personName" placeholder="Εισάγετε το όνομά του ατόμου">
                     </div>
                     <div class="alert alert-info">
-                        <small><i class="fas fa-info-circle me-1"></i>Ξβ€ΆΞΞ‰ΞΖ’ΞΒ¬ΞΒ³ΞΒµΞβ€ΞΒµ Ξβ€ΞΒ·ΞΒ½ Ξβ€ΞΒµΞΒ»ΞΒµΞβ€¦Ξβ€ΞΒ±Ξβ€•ΞΒ± ΞΒ·ΞΞΞΒµΞΒΞΞΞΞΞΒ·ΞΒ½Ξβ€•ΞΒ± Ξβ€¦Ξβ‚¬ΞΒ·ΞΒΞΒµΞΖ’Ξβ€•ΞΒ±Ξβ€ ΞΒ³ΞΞ‰ΞΒ± ΞΞΞΒ¬ΞΞΞΒµ Ξβ€ΞΒΞβ‚¬ΞΞ ΞΒ·ΞΞΞΒ­ΞΒΞΒ±Ξβ€ (Ξβ‚¬ΞΒΞΞΞΒ±ΞΞ‰ΞΒΞΒµΞβ€ΞΞ‰ΞΞΞΒ)</small>
+                        <small><i class="fas fa-info-circle me-1"></i>Εισάγετε την τελευταία ημερομηνία υπηρεσίας για κάθε τύπο ημέρας (προαιρετικό)</small>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label for="lastSpecialDuty" class="form-label">ΞΒ¤ΞΒµΞΒ»ΞΒµΞβ€¦Ξβ€ΞΒ±Ξβ€•ΞΒ± Ξβ€ΆΞΞ‰ΞΞ„ΞΞ‰ΞΞΞΒ® Ξβ€ΞΒΞΒ³Ξβ€•ΞΒ±</label>
+                            <label for="lastSpecialDuty" class="form-label">Τελευταία Ειδική Αργία</label>
                             <input type="date" class="form-control" id="lastSpecialDuty">
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="lastWeekendDuty" class="form-label">ΞΒ¤ΞΒµΞΒ»ΞΒµΞβ€¦Ξβ€ΞΒ±Ξβ€•ΞΒ± ΞΒ£ΞΒ±ΞΒ²ΞΒ²ΞΒ±Ξβ€ΞΞΞΞΞΒΞΒΞΞ‰ΞΒ±ΞΞΞΞ/Ξβ€ΞΒΞΒ³Ξβ€•ΞΒ±</label>
+                            <label for="lastWeekendDuty" class="form-label">Τελευταία Σαββατοκύριακο/Αργία</label>
                             <input type="date" class="form-control" id="lastWeekendDuty">
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="lastSemiDuty" class="form-label">ΞΒ¤ΞΒµΞΒ»ΞΒµΞβ€¦Ξβ€ΞΒ±Ξβ€•ΞΒ± Ξβ€”ΞΞΞΞ‰ΞΒ±ΞΒΞΒ³Ξβ€•ΞΒ±</label>
+                            <label for="lastSemiDuty" class="form-label">Τελευταία Ημιαργία</label>
                             <input type="date" class="form-control" id="lastSemiDuty">
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="lastNormalDuty" class="form-label">ΞΒ¤ΞΒµΞΒ»ΞΒµΞβ€¦Ξβ€ΞΒ±Ξβ€•ΞΒ± ΞΒΞΒ±ΞΞΞΒ·ΞΞΞΒµΞΒΞΞ‰ΞΒ½ΞΒ®</label>
+                            <label for="lastNormalDuty" class="form-label">Τελευταία Καθημερινή</label>
                             <input type="date" class="form-control" id="lastNormalDuty">
                         </div>
                     </div>
                     <div class="alert alert-warning mt-3">
-                        <small><i class="fas fa-sort-numeric-up me-1"></i>ΞΒ ΞΒΞΞΞβ€ΞΒµΞΒΞΒ±ΞΞ‰ΞΒΞβ€ΞΒ·Ξβ€ΞΒ± ΞΒ£ΞΒµΞΞ‰ΞΒΞΒ¬Ξβ€ Ξβ€ΆΞΒ½ΞΒ±ΞΒ»ΞΒ»ΞΒ±ΞΒ³ΞΒ®Ξβ€ (ΞΞΞΞ‰ΞΞΞΒΞΒΞβ€ΞΒµΞΒΞΞΞβ€ ΞΒ±ΞΒΞΞ‰ΞΞΞΞΞΒΞβ€ = Ξβ‚¬ΞΒΞΒΞβ€ΞΞΞβ€ ΞΖ’Ξβ€ΞΒ· ΞΖ’ΞΒµΞΞ‰ΞΒΞΒ¬)</small>
+                        <small><i class="fas fa-sort-numeric-up me-1"></i>Προτεραιότητα Σειράς Εναλλαγής (μικρότερος αριθμός = πρώτος στη σειρά)</small>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label for="prioritySpecial" class="form-label">ΞΒ ΞΒΞΞΞβ€ΞΒµΞΒΞΒ±ΞΞ‰ΞΒΞβ€ΞΒ·Ξβ€ΞΒ± Ξβ€ΆΞΞ‰ΞΞ„ΞΞ‰ΞΞΞΒΞΒ½ Ξβ€ΞΒΞΒ³ΞΞ‰ΞΒΞΒ½</label>
+                            <label for="prioritySpecial" class="form-label">Προτεραιότητα Ειδικών Αργιών</label>
                             <input type="number" class="form-control" id="prioritySpecial" min="1" placeholder="1">
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="priorityWeekend" class="form-label">ΞΒ ΞΒΞΞΞβ€ΞΒµΞΒΞΒ±ΞΞ‰ΞΒΞβ€ΞΒ·Ξβ€ΞΒ± ΞΒ£ΞΒ±ΞΒ²ΞΒ²ΞΒ±Ξβ€ΞΞΞΞΞΒΞΒΞΞ‰ΞΒ±ΞΞΞβ€°ΞΒ½/Ξβ€ΞΒΞΒ³ΞΞ‰ΞΒΞΒ½</label>
+                            <label for="priorityWeekend" class="form-label">Προτεραιότητα Σαββατοκύριακων/Αργιών</label>
                             <input type="number" class="form-control" id="priorityWeekend" min="1" placeholder="1">
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="prioritySemi" class="form-label">ΞΒ ΞΒΞΞΞβ€ΞΒµΞΒΞΒ±ΞΞ‰ΞΒΞβ€ΞΒ·Ξβ€ΞΒ± Ξβ€”ΞΞΞΞ‰ΞΒ±ΞΒΞΒ³ΞΞ‰ΞΒΞΒ½</label>
+                            <label for="prioritySemi" class="form-label">Προτεραιότητα Ημιαργιών</label>
                             <input type="number" class="form-control" id="prioritySemi" min="1" placeholder="1">
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="priorityNormal" class="form-label">ΞΒ ΞΒΞΞΞβ€ΞΒµΞΒΞΒ±ΞΞ‰ΞΒΞβ€ΞΒ·Ξβ€ΞΒ± ΞΒΞΒ±ΞΞΞΒ·ΞΞΞΒµΞΒΞΞ‰ΞΒ½ΞΒΞΒ½</label>
+                            <label for="priorityNormal" class="form-label">Προτεραιότητα Καθημερινών</label>
                             <input type="number" class="form-control" id="priorityNormal" min="1" placeholder="1">
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ξβ€ΞΞΞΒΞΒΞβ€°ΞΖ’ΞΒ·</button>
-                    <button type="button" class="btn btn-primary" onclick="savePerson()" id="savePersonButton">ΞΒ ΞΒΞΞΞΖ’ΞΞΞΒ®ΞΞΞΒ· Ξβ€Ξβ€ΞΒΞΞΞΞΞβ€¦</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-primary" onclick="savePerson()" id="savePersonButton">Προσθήκη Ατόμου</button>
                 </div>
             </div>
         </div>
@@ -925,26 +925,26 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-warning">
-                    <h5 class="modal-title"><i class="fas fa-star me-2"></i>ΞΒ ΞΒΞΞΞΖ’ΞΞΞΒ®ΞΞΞΒ· Ξβ€ΆΞΞ‰ΞΞ„ΞΞ‰ΞΞΞΒ®Ξβ€ Ξβ€ΞΒΞΒ³Ξβ€•ΞΒ±Ξβ€</h5>
+                    <h5 class="modal-title"><i class="fas fa-star me-2"></i>Προσθήκη Ειδικής Αργίας</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <small>ΞΒΞΞ‰ ΞΒµΞΞ‰ΞΞ„ΞΞ‰ΞΞΞΒ­Ξβ€ ΞΒ±ΞΒΞΒ³Ξβ€•ΞΒµΞβ€ ΞΒ­Ξβ€΅ΞΞΞβ€¦ΞΒ½ Ξβ€ΞΒ·ΞΒ½ Ξβ€¦ΞΒΞΒ·ΞΒ»ΞΒΞβ€ΞΒµΞΒΞΒ· Ξβ‚¬ΞΒΞΞΞβ€ΞΒµΞΒΞΒ±ΞΞ‰ΞΒΞβ€ΞΒ·Ξβ€ΞΒ± ΞΞΞΒ±ΞΞ‰ Ξβ€΅ΞΒΞΒ·ΞΖ’ΞΞ‰ΞΞΞΞΞβ‚¬ΞΞΞΞ‰ΞΞΞΒΞΒ½ Ξβ€ΞΒ· ΞΖ’ΞΒµΞΞ‰ΞΒΞΒ¬ ΞΒµΞΞ‰ΞΞ„ΞΞ‰ΞΞΞΒΞΒ½ ΞΒ±ΞΒΞΒ³ΞΞ‰ΞΒΞΒ½ ΞΞΞΒ¬ΞΞΞΒµ ΞΞΞΞΞΒ¬ΞΞ„ΞΒ±Ξβ€.</small>
+                        <small>Οι ειδικές αργίες έχουν την υψηλότερη προτεραιότητα και χρησιμοποιούν τη σειρά ειδικών αργιών κάθε ομάδας.</small>
                     </div>
                     <div class="mb-3">
-                        <label for="specialHolidayDate" class="form-label">Ξβ€”ΞΞΞΒµΞΒΞΞΞΞΞΒ·ΞΒ½Ξβ€•ΞΒ±</label>
+                        <label for="specialHolidayDate" class="form-label">Ημερομηνία</label>
                         <input type="date" class="form-control" id="specialHolidayDate" required>
                     </div>
                     <div class="mb-3">
-                        <label for="specialHolidayName" class="form-label">ΞΒΞΒ½ΞΞΞΞΞΒ± Ξβ€ΆΞΞ‰ΞΞ„ΞΞ‰ΞΞΞΒ®Ξβ€ Ξβ€ΞΒΞΒ³Ξβ€•ΞΒ±Ξβ€ (ΞΒ ΞΒΞΞΞΒ±ΞΞ‰ΞΒΞΒµΞβ€ΞΞ‰ΞΞΞΒ)</label>
-                        <input type="text" class="form-control" id="specialHolidayName" placeholder="Ξβ‚¬.Ξβ€΅., ΞΒ§ΞΒΞΞ‰ΞΖ’Ξβ€ΞΞΞΒΞΒ³ΞΒµΞΒ½ΞΒ½ΞΒ±, ΞΒ ΞΒ¬ΞΖ’Ξβ€΅ΞΒ±, ΞΒ ΞΒΞβ€°Ξβ€ΞΞΞβ€΅ΞΒΞΞΞΒ½ΞΞ‰ΞΒ¬">
+                        <label for="specialHolidayName" class="form-label">Όνομα Ειδικής Αργίας (Προαιρετικό)</label>
+                        <input type="text" class="form-control" id="specialHolidayName" placeholder="π.χ., Χριστούγεννα, Πάσχα, Πρωτοχρονιά">
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ξβ€ΞΞΞΒΞΒΞβ€°ΞΖ’ΞΒ·</button>
-                    <button type="button" class="btn btn-warning" onclick="saveSpecialHoliday()">ΞΒ ΞΒΞΞΞΖ’ΞΞΞΒ®ΞΞΞΒ· Ξβ€ΆΞΞ‰ΞΞ„ΞΞ‰ΞΞΞΒ®Ξβ€ Ξβ€ΞΒΞΒ³Ξβ€•ΞΒ±Ξβ€</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-warning" onclick="saveSpecialHoliday()">Προσθήκη Ειδικής Αργίας</button>
                 </div>
             </div>
         </div>
@@ -955,52 +955,52 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-info">
-                    <h5 class="modal-title"><i class="fas fa-repeat me-2"></i>ΞΒ ΞΒΞΞΞΖ’ΞΞΞΒ®ΞΞΞΒ· Ξβ€ΆΞβ‚¬ΞΒ±ΞΒ½ΞΒ±ΞΒ»ΞΒ±ΞΞΞΒ²ΞΒ±ΞΒ½ΞΒΞΞΞΒµΞΒ½ΞΒ·Ξβ€ Ξβ€ΞΒΞΒ³Ξβ€•ΞΒ±Ξβ€</h5>
+                    <h5 class="modal-title"><i class="fas fa-repeat me-2"></i>Προσθήκη Επαναλαμβανόμενης Αργίας</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="recurringHolidayType" class="form-label">ΞΒ¤ΞΒΞβ‚¬ΞΞΞβ€</label>
+                        <label for="recurringHolidayType" class="form-label">Τύπος</label>
                         <select class="form-control" id="recurringHolidayType" onchange="toggleRecurringHolidayFields()">
-                            <option value="fixed">ΞΒ£Ξβ€ΞΒ±ΞΞΞΒµΞΒΞΒ® Ξβ€”ΞΞΞΒµΞΒΞΞΞΞΞΒ·ΞΒ½Ξβ€•ΞΒ± (Ξβ‚¬.Ξβ€΅., 25 Ξβ€ΞΒµΞΞΞΒµΞΞΞΒ²ΞΒΞβ€•ΞΞΞβ€¦)</option>
-                            <option value="easter-relative">ΞΒ£Ξβ€΅ΞΒµΞβ€ΞΞ‰ΞΞΞΒ® ΞΞΞΒµ ΞΒ ΞΒ¬ΞΖ’Ξβ€΅ΞΒ± (Ξβ‚¬.Ξβ€΅., ΞΒΞΒµΞΒ³ΞΒ¬ΞΒ»ΞΞ ΞΒ£ΞΒ¬ΞΒ²ΞΒ²ΞΒ±Ξβ€ΞΞ)</option>
+                            <option value="fixed">Σταθερή Ημερομηνία (π.χ., 25 Δεκεμβρίου)</option>
+                            <option value="easter-relative">Σχετική με Πάσχα (π.χ., Μεγάλο Σάββατο)</option>
                         </select>
                     </div>
                     <div class="mb-3" id="fixedDateFields">
-                        <label for="recurringHolidayMonth" class="form-label">ΞΒΞΒ®ΞΒ½ΞΒ±Ξβ€</label>
+                        <label for="recurringHolidayMonth" class="form-label">Μήνας</label>
                         <select class="form-control" id="recurringHolidayMonth">
-                            <option value="">Ξβ€ΆΞβ‚¬ΞΞ‰ΞΒ»ΞΒ­ΞΞΞβ€ΞΒµ...</option>
-                            <option value="1">Ξβ„ΆΞΒ±ΞΒ½ΞΞΞβ€¦ΞΒ¬ΞΒΞΞ‰ΞΞΞβ€</option>
-                            <option value="2">ΞΒ¦ΞΒµΞΒ²ΞΒΞΞΞβ€¦ΞΒ¬ΞΒΞΞ‰ΞΞΞβ€</option>
-                            <option value="3">ΞΒΞΒ¬ΞΒΞβ€ΞΞ‰ΞΞΞβ€</option>
-                            <option value="4">Ξβ€Ξβ‚¬ΞΒΞβ€•ΞΒ»ΞΞ‰ΞΞΞβ€</option>
-                            <option value="5">ΞΒΞΒ¬ΞΞ‰ΞΞΞβ€</option>
-                            <option value="6">Ξβ„ΆΞΞΞΒΞΒ½ΞΞ‰ΞΞΞβ€</option>
-                            <option value="7">Ξβ„ΆΞΞΞΒΞΒ»ΞΞ‰ΞΞΞβ€</option>
-                            <option value="8">Ξβ€ΞΒΞΒ³ΞΞΞβ€¦ΞΖ’Ξβ€ΞΞΞβ€</option>
-                            <option value="9">ΞΒ£ΞΒµΞβ‚¬Ξβ€ΞΒ­ΞΞΞΒ²ΞΒΞΞ‰ΞΞΞβ€</option>
-                            <option value="10">ΞΒΞΞΞβ€ΞΒΞΒ²ΞΒΞΞ‰ΞΞΞβ€</option>
-                            <option value="11">ΞΒΞΞΞΒ­ΞΞΞΒ²ΞΒΞΞ‰ΞΞΞβ€</option>
-                            <option value="12">Ξβ€ΞΒµΞΞΞΒ­ΞΞΞΒ²ΞΒΞΞ‰ΞΞΞβ€</option>
+                            <option value="">Επιλέξτε...</option>
+                            <option value="1">Ιανουάριος</option>
+                            <option value="2">Φεβρουάριος</option>
+                            <option value="3">Μάρτιος</option>
+                            <option value="4">Απρίλιος</option>
+                            <option value="5">Μάιος</option>
+                            <option value="6">Ιούνιος</option>
+                            <option value="7">Ιούλιος</option>
+                            <option value="8">Αύγουστος</option>
+                            <option value="9">Σεπτέμβριος</option>
+                            <option value="10">Οκτώβριος</option>
+                            <option value="11">Νοέμβριος</option>
+                            <option value="12">Δεκέμβριος</option>
                         </select>
                     </div>
                     <div class="mb-3" id="fixedDayFields">
-                        <label for="recurringHolidayDay" class="form-label">Ξβ€”ΞΞΞΒ­ΞΒΞΒ±</label>
+                        <label for="recurringHolidayDay" class="form-label">Ημέρα</label>
                         <input type="number" class="form-control" id="recurringHolidayDay" min="1" max="31">
                     </div>
                     <div class="mb-3" id="easterOffsetFields" style="display: none;">
-                        <label for="recurringHolidayEasterOffset" class="form-label">Ξβ€”ΞΞΞΒ­ΞΒΞΒµΞβ€ ΞΒ±Ξβ‚¬ΞΒ Ξβ€ΞΞ ΞΒ ΞΒ¬ΞΖ’Ξβ€΅ΞΒ±</label>
+                        <label for="recurringHolidayEasterOffset" class="form-label">Ημέρες από το Πάσχα</label>
                         <input type="number" class="form-control" id="recurringHolidayEasterOffset" value="0">
-                        <small class="text-muted">0 = ΞΒ ΞΒ¬ΞΖ’Ξβ€΅ΞΒ±, -1 = 1 ΞΒ·ΞΞΞΒ­ΞΒΞΒ± Ξβ‚¬ΞΒΞΞ‰ΞΒ½, 1 = 1 ΞΒ·ΞΞΞΒ­ΞΒΞΒ± ΞΞΞΒµΞβ€ΞΒ¬, ΞΞΞβ€ΞΒ».</small>
+                        <small class="text-muted">0 = Πάσχα, -1 = 1 ημέρα πριν, 1 = 1 ημέρα μετά, κτλ.</small>
                     </div>
                     <div class="mb-3">
-                        <label for="recurringHolidayName" class="form-label">ΞΒΞΒ½ΞΞΞΞΞΒ± Ξβ€ΞΒΞΒ³Ξβ€•ΞΒ±Ξβ€</label>
-                        <input type="text" class="form-control" id="recurringHolidayName" placeholder="Ξβ‚¬.Ξβ€΅., ΞΒ§ΞΒΞΞ‰ΞΖ’Ξβ€ΞΞΞΒΞΒ³ΞΒµΞΒ½ΞΒ½ΞΒ±, ΞΒΞΒµΞΒ³ΞΒ¬ΞΒ»ΞΞ ΞΒ£ΞΒ¬ΞΒ²ΞΒ²ΞΒ±Ξβ€ΞΞ">
+                        <label for="recurringHolidayName" class="form-label">Όνομα Αργίας</label>
+                        <input type="text" class="form-control" id="recurringHolidayName" placeholder="π.χ., Χριστούγεννα, Μεγάλο Σάββατο">
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ξβ€ΞΞΞΒΞΒΞβ€°ΞΖ’ΞΒ·</button>
-                    <button type="button" class="btn btn-info" onclick="saveRecurringHoliday()">Ξβ€Ξβ‚¬ΞΞΞΞΞΒ®ΞΞΞΒµΞβ€¦ΞΖ’ΞΒ·</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-info" onclick="saveRecurringHoliday()">Αποθήκευση</button>
                 </div>
             </div>
         </div>
@@ -1011,34 +1011,34 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-primary">
-                    <h5 class="modal-title"><i class="fas fa-calculator me-2"></i>ΞΒ¥Ξβ‚¬ΞΞΞΒ»ΞΞΞΒ³ΞΞ‰ΞΖ’ΞΞΞΒΞβ€ ΞΒ¥Ξβ‚¬ΞΒ·ΞΒΞΒµΞΖ’ΞΞ‰ΞΒΞΒ½</h5>
+                    <h5 class="modal-title"><i class="fas fa-calculator me-2"></i>Υπολογισμός Υπηρεσιών</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <small>Ξβ€ΆΞβ‚¬ΞΞ‰ΞΒ»ΞΒ­ΞΞΞβ€ΞΒµ Ξβ€ΞΞΞΒ½ ΞΞΞΒ®ΞΒ½ΞΒ± ΞΒ® Ξβ€ΞΞΞβ€¦Ξβ€ ΞΞΞΒ®ΞΒ½ΞΒµΞβ€ ΞΒ³ΞΞ‰ΞΒ± Ξβ€ΞΞΞβ€¦Ξβ€ ΞΞΞβ‚¬ΞΞΞβ€•ΞΞΞβ€¦Ξβ€ ΞΞΞΒ­ΞΒ»ΞΒµΞβ€ΞΒµ ΞΒ½ΞΒ± Ξβ€¦Ξβ‚¬ΞΞΞΒ»ΞΞΞΒ³ΞΞ‰ΞΖ’Ξβ€ΞΞΞΒΞΒ½ ΞΞΞΞ‰ Ξβ€¦Ξβ‚¬ΞΒ·ΞΒΞΒµΞΖ’Ξβ€•ΞΒµΞβ€. ΞΒΞΞ‰ Ξβ€¦Ξβ‚¬ΞΒ·ΞΒΞΒµΞΖ’Ξβ€•ΞΒµΞβ€ Ξβ‚¬ΞΒΞΞΞΒ·ΞΒ³ΞΞΞΒΞΞΞΒµΞΒ½Ξβ€°ΞΒ½ ΞΞΞΒ·ΞΒ½ΞΒΞΒ½ ΞΞ„ΞΒµΞΒ½ ΞΞΞΒ± ΞΒµΞβ‚¬ΞΒ·ΞΒΞΒµΞΒ±ΞΖ’Ξβ€ΞΞΞΒΞΒ½.</small>
+                        <small>Επιλέξτε τον μήνα ή τους μήνες για τους οποίους θέλετε να υπολογιστούν οι υπηρεσίες. Οι υπηρεσίες προηγούμενων μηνών δεν θα επηρεαστούν.</small>
                     </div>
                     <div class="mb-3">
-                        <label for="calculateStartMonth" class="form-label">Ξβ€Ξβ‚¬ΞΒ ΞΒΞΒ®ΞΒ½ΞΒ±</label>
+                        <label for="calculateStartMonth" class="form-label">Από Μήνα</label>
                         <input type="month" class="form-control" id="calculateStartMonth" required>
                     </div>
                     <div class="mb-3">
-                        <label for="calculateEndMonth" class="form-label">ΞΒΞβ€°Ξβ€ ΞΒΞΒ®ΞΒ½ΞΒ± (ΞΒ ΞΒΞΞΞΒ±ΞΞ‰ΞΒΞΒµΞβ€ΞΞ‰ΞΞΞΒ)</label>
+                        <label for="calculateEndMonth" class="form-label">Έως Μήνα (Προαιρετικό)</label>
                         <input type="month" class="form-control" id="calculateEndMonth">
-                        <small class="text-muted">Ξβ€Ξβ€ ΞΒ®ΞΖ’Ξβ€ΞΒµ ΞΞΞΒµΞΒ½ΞΒ ΞΒ³ΞΞ‰ΞΒ± Ξβ€¦Ξβ‚¬ΞΞΞΒ»ΞΞΞΒ³ΞΞ‰ΞΖ’ΞΞΞΒ ΞΞΞΒΞΒ½ΞΞ Ξβ€ΞΞΞβ€¦ ΞΒµΞβ‚¬ΞΞ‰ΞΒ»ΞΒµΞΒ³ΞΞΞΒ­ΞΒ½ΞΞΞβ€¦ ΞΞΞΒ®ΞΒ½ΞΒ±</small>
+                        <small class="text-muted">Αφήστε κενό για υπολογισμό μόνο του επιλεγμένου μήνα</small>
                     </div>
                     <div class="form-check mb-3">
                         <input class="form-check-input" type="checkbox" id="preserveExistingAssignments" checked>
                         <label class="form-check-label" for="preserveExistingAssignments">
-                            Ξβ€ΞΞ‰ΞΒ±Ξβ€ΞΒ®ΞΒΞΒ·ΞΖ’ΞΒ· Ξβ€¦Ξβ‚¬ΞΒ±ΞΒΞβ€΅ΞΞΞβ€¦ΞΖ’ΞΒΞΒ½ ΞΒ±ΞΒ½ΞΒ±ΞΞΞΒ­ΞΖ’ΞΒµΞβ€°ΞΒ½ (ΞΞΞΒ· ΞΒ±ΞΒ½Ξβ€ΞΞ‰ΞΞΞΒ±Ξβ€ΞΒ¬ΞΖ’Ξβ€ΞΒ±ΞΖ’ΞΒ·)
+                            Διατήρηση υπαρχουσών αναθέσεων (μη αντικατάσταση)
                         </label>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ξβ€ΞΞΞΒΞΒΞβ€°ΞΖ’ΞΒ·</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
                     <button type="button" class="btn btn-primary" id="calculateDutiesButton" onclick="calculateDutiesForSelectedMonths()">
-                        <i class="fas fa-calculator me-1"></i>ΞΒ¥Ξβ‚¬ΞΞΞΒ»ΞΞΞΒ³ΞΞ‰ΞΖ’ΞΞΞΒΞβ€
+                        <i class="fas fa-calculator me-1"></i>Υπολογισμός
                     </button>
                 </div>
             </div>
@@ -1051,7 +1051,7 @@
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title">
-                        <i class="fas fa-calculator me-2"></i>ΞΒ¥Ξβ‚¬ΞΞΞΒ»ΞΞΞΒ³ΞΞ‰ΞΖ’ΞΞΞΒΞβ€ ΞΒ¥Ξβ‚¬ΞΒ·ΞΒΞΒµΞΖ’ΞΞ‰ΞΒΞΒ½ - Ξβ€™ΞΒ®ΞΞΞΒ± <span id="currentStepNumber">1</span>
+                        <i class="fas fa-calculator me-2"></i>Υπολογισμός Υπηρεσιών - Βήμα <span id="currentStepNumber">1</span>
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
@@ -1060,14 +1060,14 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" id="backButton" onclick="goToPreviousStep()" style="display: none;">
-                        <i class="fas fa-arrow-left me-1"></i>ΞΒ Ξβ€•ΞΖ’Ξβ€°
+                        <i class="fas fa-arrow-left me-1"></i>Πίσω
                     </button>
-                    <button type="button" class="btn btn-secondary" onclick="cancelStepByStepCalculation()">Ξβ€ΞΞΞΒΞΒΞβ€°ΞΖ’ΞΒ·</button>
+                    <button type="button" class="btn btn-secondary" onclick="cancelStepByStepCalculation()">Ακύρωση</button>
                     <button type="button" class="btn btn-primary" id="nextButton" onclick="goToNextStep()">
-                        <i class="fas fa-arrow-right me-1"></i>Ξβ€ΆΞβ‚¬ΞΒΞΞΞΒµΞΒ½ΞΞ
+                        <i class="fas fa-arrow-right me-1"></i>Επόμενο
                     </button>
                     <button type="button" class="btn btn-success" id="calculateButton" onclick="executeCalculation()" style="display: none;">
-                        <i class="fas fa-check me-1"></i>ΞΒ¥Ξβ‚¬ΞΞΞΒ»ΞΞΞΒ³ΞΞ‰ΞΖ’ΞΞΞΒΞβ€
+                        <i class="fas fa-check me-1"></i>Υπολογισμός
                     </button>
                 </div>
             </div>
@@ -1079,22 +1079,22 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">ΞΒ ΞΒΞΞΞΖ’ΞΞΞΒ®ΞΞΞΒ· Ξβ€ΞΒΞΒ³Ξβ€•ΞΒ±Ξβ€</h5>
+                    <h5 class="modal-title">Προσθήκη Αργίας</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="holidayDate" class="form-label">Ξβ€”ΞΞΞΒµΞΒΞΞΞΞΞΒ·ΞΒ½Ξβ€•ΞΒ±</label>
+                        <label for="holidayDate" class="form-label">Ημερομηνία</label>
                         <input type="date" class="form-control" id="holidayDate">
                     </div>
                     <div class="mb-3">
-                        <label for="holidayName" class="form-label">ΞΒΞΒ½ΞΞΞΞΞΒ± Ξβ€ΞΒΞΒ³Ξβ€•ΞΒ±Ξβ€ (ΞΒ ΞΒΞΞΞΒ±ΞΞ‰ΞΒΞΒµΞβ€ΞΞ‰ΞΞΞΒ)</label>
-                        <input type="text" class="form-control" id="holidayName" placeholder="Ξβ‚¬.Ξβ€΅., ΞΒ§ΞΒΞΞ‰ΞΖ’Ξβ€ΞΞΞΒΞΒ³ΞΒµΞΒ½ΞΒ½ΞΒ±, ΞΒ ΞΒΞβ€°Ξβ€ΞΞΞβ€΅ΞΒΞΞΞΒ½ΞΞ‰ΞΒ¬">
+                        <label for="holidayName" class="form-label">Όνομα Αργίας (Προαιρετικό)</label>
+                        <input type="text" class="form-control" id="holidayName" placeholder="π.χ., Χριστούγεννα, Πρωτοχρονιά">
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ξβ€ΞΞΞΒΞΒΞβ€°ΞΖ’ΞΒ·</button>
-                    <button type="button" class="btn btn-primary" onclick="saveHoliday()">ΞΒ ΞΒΞΞΞΖ’ΞΞΞΒ®ΞΞΞΒ· Ξβ€ΞΒΞΒ³Ξβ€•ΞΒ±Ξβ€</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-primary" onclick="saveHoliday()">Προσθήκη Αργίας</button>
                 </div>
             </div>
         </div>
@@ -1105,41 +1105,41 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header bg-warning">
-                    <h5 class="modal-title"><i class="fas fa-calendar-times me-2"></i>Ξβ€ΞΞ‰ΞΒ±Ξβ€΅ΞΒµΞβ€•ΞΒΞΞ‰ΞΖ’ΞΒ· ΞΒ ΞΒµΞΒΞΞ‰ΞΒΞΞ„Ξβ€°ΞΒ½ Ξβ€Ξβ‚¬ΞΞΞβ€¦ΞΖ’Ξβ€•ΞΒ±Ξβ€</h5>
+                    <h5 class="modal-title"><i class="fas fa-calendar-times me-2"></i>Διαχείριση Περιόδων Απουσίας</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <strong>Ξβ€ Ξβ€ΞΞΞΞΞΞ:</strong> <span id="missingPeriodPersonName"></span>
+                        <strong>Άτομο:</strong> <span id="missingPeriodPersonName"></span>
                     </div>
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <small>ΞΒΞΒ±Ξβ€ΞΒ¬ Ξβ€ΞΒ·ΞΒ½ Ξβ‚¬ΞΒµΞΒΞβ€•ΞΞΞΞ„ΞΞ ΞΒ±Ξβ‚¬ΞΞΞβ€¦ΞΖ’Ξβ€•ΞΒ±Ξβ€, Ξβ€ΞΞ ΞΒ¬Ξβ€ΞΞΞΞΞΞ ΞΞΞΒ± Ξβ‚¬ΞΒ±ΞΒΞΒ±ΞΒ»ΞΒµΞβ€•Ξβ‚¬ΞΒµΞβ€ΞΒ±ΞΞ‰ ΞΒ±Ξβ‚¬ΞΒ Ξβ€ΞΞ‰Ξβ€ ΞΒ±ΞΒ½ΞΒ±ΞΞΞΒ­ΞΖ’ΞΒµΞΞ‰Ξβ€ Ξβ€¦Ξβ‚¬ΞΒ·ΞΒΞΒµΞΖ’ΞΞ‰ΞΒΞΒ½, ΞΒ±ΞΒ»ΞΒ»ΞΒ¬ ΞΒ· ΞΒµΞΒ½ΞΒ±ΞΒ»ΞΒ»ΞΒ±ΞΒ³ΞΒ® ΞΞΞΒ± ΞΖ’Ξβ€¦ΞΒ½ΞΒµΞβ€΅Ξβ€•ΞΒ¶ΞΒµΞΞ‰ ΞΒ½ΞΒ± Ξβ€¦Ξβ‚¬ΞΞΞΒ»ΞΞΞΒ³Ξβ€•ΞΒ¶ΞΒµΞβ€ΞΒ±ΞΞ‰ ΞΞΞΒ±ΞΒ½ΞΞΞΒ½ΞΞ‰ΞΞΞΒ¬.</small>
+                        <small>Κατά την περίοδο απουσίας, το άτομο θα παραλείπεται από τις αναθέσεις υπηρεσιών, αλλά η εναλλαγή θα συνεχίζει να υπολογίζεται κανονικά.</small>
                     </div>
                     <div class="mb-3">
-                        <h6>ΞΒ ΞΒΞΞΞΖ’ΞΞΞΒ®ΞΞΞΒ· ΞΒΞΒ­ΞΒ±Ξβ€ ΞΒ ΞΒµΞΒΞΞ‰ΞΒΞΞ„ΞΞΞβ€¦ Ξβ€Ξβ‚¬ΞΞΞβ€¦ΞΖ’Ξβ€•ΞΒ±Ξβ€</h6>
+                        <h6>Προσθήκη Νέας Περιόδου Απουσίας</h6>
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label for="missingPeriodStart" class="form-label">Ξβ€”ΞΞΞΒµΞΒΞΞΞΞΞΒ·ΞΒ½Ξβ€•ΞΒ± ΞΒΞΒ½ΞΒ±ΞΒΞΞΞΒ·Ξβ€</label>
+                                <label for="missingPeriodStart" class="form-label">Ημερομηνία Έναρξης</label>
                                 <input type="date" class="form-control" id="missingPeriodStart" required>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label for="missingPeriodEnd" class="form-label">Ξβ€”ΞΞΞΒµΞΒΞΞΞΞΞΒ·ΞΒ½Ξβ€•ΞΒ± Ξβ€ΊΞΒ®ΞΞΞΒ·Ξβ€</label>
+                                <label for="missingPeriodEnd" class="form-label">Ημερομηνία Λήξης</label>
                                 <input type="date" class="form-control" id="missingPeriodEnd" required>
                             </div>
                         </div>
                         <button type="button" class="btn btn-primary" onclick="addMissingPeriod()">
-                            <i class="fas fa-plus me-1"></i>ΞΒ ΞΒΞΞΞΖ’ΞΞΞΒ®ΞΞΞΒ· ΞΒ ΞΒµΞΒΞΞ‰ΞΒΞΞ„ΞΞΞβ€¦
+                            <i class="fas fa-plus me-1"></i>Προσθήκη Περιόδου
                         </button>
                     </div>
                     <hr>
                     <div class="mb-3">
-                        <h6>ΞΒ¥Ξβ‚¬ΞΒ¬ΞΒΞβ€΅ΞΞΞβ€¦ΞΖ’ΞΒµΞβ€ ΞΒ ΞΒµΞΒΞβ€•ΞΞΞΞ„ΞΞΞΞ‰ Ξβ€Ξβ‚¬ΞΞΞβ€¦ΞΖ’Ξβ€•ΞΒ±Ξβ€</h6>
+                        <h6>Υπάρχουσες Περίοδοι Απουσίας</h6>
                         <div id="missingPeriodsList"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ΞΒΞΒ»ΞΒµΞβ€•ΞΖ’ΞΞ‰ΞΞΞΞ</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
                 </div>
             </div>
         </div>
@@ -1150,24 +1150,24 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header bg-primary">
-                    <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>ΞΒ¤ΞΞΞβ‚¬ΞΞΞΞΞΒ­Ξβ€ΞΒ·ΞΖ’ΞΒ· Ξβ€Ξβ€ΞΒΞΞΞΞΞβ€¦ ΞΖ’ΞΒµ ΞΒΞΒ­ΞΒ± ΞΒΞΞΞΒ¬ΞΞ„ΞΒ±</h5>
+                    <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Τοποθέτηση Ατόμου σε Νέα Ομάδα</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <small>Ξβ€™ΞΒΞΒµΞβ€•Ξβ€ΞΒµ ΞΒ¬Ξβ€ΞΞΞΞΞΒ± ΞΒ±Ξβ‚¬ΞΒ Ξβ€ΞΒ·ΞΒ½ ΞΒ½ΞΒ­ΞΒ± ΞΞΞΞΞΒ¬ΞΞ„ΞΒ± Ξβ‚¬ΞΞΞβ€¦ ΞΒµΞβ€•Ξβ€΅ΞΒ±ΞΒ½ Ξβ€¦Ξβ‚¬ΞΒ·ΞΒΞΒµΞΖ’Ξβ€•ΞΒ± Ξβ€ΞΒ·ΞΒ½ Ξβ€•ΞΞ„ΞΞ‰ΞΒ± ΞΒ·ΞΞΞΒ­ΞΒΞΒ± ΞΞΞΒµ Ξβ€ΞΞ ΞΒ¬Ξβ€ΞΞΞΞΞΞ Ξβ‚¬ΞΞΞβ€¦ ΞΞΞΒµΞβ€ΞΒ±Ξβ€ ΞΒ­ΞΒΞΒµΞβ€ΞΒ±ΞΞ‰ ΞΞΞΒ±ΞΞ‰ Ξβ€ΞΞΞβ‚¬ΞΞΞΞΞΒµΞβ€ΞΒ®ΞΖ’Ξβ€ΞΒµ Ξβ€ΞΞ Ξβ‚¬ΞΒ¬ΞΒ½Ξβ€° ΞΒ® ΞΞΞΒ¬Ξβ€Ξβ€° ΞΒ±Ξβ‚¬ΞΒ ΞΒ±Ξβ€¦Ξβ€ΞΒ¬ ΞΖ’ΞΒµ ΞΞΞΒ¬ΞΞΞΒµ ΞΒ»Ξβ€•ΞΖ’Ξβ€ΞΒ±.</small>
+                        <small>Βρείτε άτομα από την νέα ομάδα που είχαν υπηρεσία την ίδια ημέρα με το άτομο που μεταφέρεται και τοποθετήστε το πάνω ή κάτω από αυτά σε κάθε λίστα.</small>
                     </div>
                     <div class="mb-3">
-                        <strong>Ξβ€ Ξβ€ΞΞΞΞΞΞ Ξβ‚¬ΞΞΞβ€¦ ΞΞΞΒµΞβ€ΞΒ±Ξβ€ ΞΒ­ΞΒΞΒµΞβ€ΞΒ±ΞΞ‰:</strong> <span id="transferPersonName"></span><br>
-                        <strong>Ξβ€Ξβ‚¬ΞΒ ΞΒΞΞΞΒ¬ΞΞ„ΞΒ±:</strong> <span id="transferFromGroup"></span> Ξ²β€ β€™ <strong>ΞΒ£ΞΒµ ΞΒΞΞΞΒ¬ΞΞ„ΞΒ±:</strong> <span id="transferToGroup"></span>
+                        <strong>Άτομο που μεταφέρεται:</strong> <span id="transferPersonName"></span><br>
+                        <strong>Από Ομάδα:</strong> <span id="transferFromGroup"></span> → <strong>Σε Ομάδα:</strong> <span id="transferToGroup"></span>
                     </div>
                     <div id="transferPositionLists"></div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ξβ€ΞΞΞΒΞΒΞβ€°ΞΖ’ΞΒ·</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
                     <button type="button" class="btn btn-primary" onclick="completeTransfer()">
-                        <i class="fas fa-check me-1"></i>ΞΒΞΒ»ΞΞΞΞΞΒ»ΞΒ®ΞΒΞβ€°ΞΖ’ΞΒ· ΞΒΞΒµΞβ€ΞΒ±Ξβ€ ΞΞΞΒΞΒ¬Ξβ€
+                        <i class="fas fa-check me-1"></i>Ολοκλήρωση Μεταφοράς
                     </button>
                 </div>
             </div>
@@ -1179,31 +1179,31 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-primary">
-                    <h5 class="modal-title"><i class="fas fa-user me-2"></i>Ξβ€ΆΞΒ½ΞΒ­ΞΒΞΒ³ΞΒµΞΞ‰ΞΒµΞβ€ Ξβ€Ξβ€ΞΒΞΞΞΞΞβ€¦</h5>
+                    <h5 class="modal-title"><i class="fas fa-user me-2"></i>Ενέργειες Ατόμου</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <h6><strong>Ξβ€ Ξβ€ΞΞΞΞΞΞ:</strong> <span id="personActionsName"></span></h6>
-                        <p class="text-muted"><strong>ΞΒΞΞΞΒ¬ΞΞ„ΞΒ±:</strong> <span id="personActionsGroup"></span></p>
+                        <h6><strong>Άτομο:</strong> <span id="personActionsName"></span></h6>
+                        <p class="text-muted"><strong>Ομάδα:</strong> <span id="personActionsGroup"></span></p>
                     </div>
                     <div class="d-grid gap-2">
                         <button type="button" class="btn btn-outline-info" onclick="openEditPersonFromActions()">
-                            <i class="fas fa-edit me-2"></i>Ξβ€ΆΞβ‚¬ΞΒµΞΞΞΒµΞΒΞΒ³ΞΒ±ΞΖ’Ξβ€•ΞΒ± ΞΒ£Ξβ€ΞΞΞΞ‰Ξβ€΅ΞΒµΞβ€•Ξβ€°ΞΒ½
+                            <i class="fas fa-edit me-2"></i>Επεξεργασία Στοιχείων
                         </button>
                         <button type="button" class="btn btn-outline-warning" onclick="openMissingPeriodFromActions()">
-                            <i class="fas fa-calendar-times me-2"></i>Ξβ€ΞΞ‰ΞΒ±Ξβ€΅ΞΒµΞβ€•ΞΒΞΞ‰ΞΖ’ΞΒ· ΞΒ ΞΒµΞΒΞΞ‰ΞΒΞΞ„Ξβ€°ΞΒ½ Ξβ€Ξβ‚¬ΞΞΞβ€¦ΞΖ’Ξβ€•ΞΒ±Ξβ€
+                            <i class="fas fa-calendar-times me-2"></i>Διαχείριση Περιόδων Απουσίας
                         </button>
                         <button type="button" class="btn btn-outline-primary" onclick="openTransferFromActions()">
-                            <i class="fas fa-exchange-alt me-2"></i>Ξβ€ΞΒ»ΞΒ»ΞΒ±ΞΒ³ΞΒ® ΞΒΞΞΞΒ¬ΞΞ„ΞΒ±Ξβ€
+                            <i class="fas fa-exchange-alt me-2"></i>Αλλαγή Ομάδας
                         </button>
                         <button type="button" class="btn btn-outline-danger" onclick="deletePersonFromActions()">
-                            <i class="fas fa-trash me-2"></i>Ξβ€ΞΞ‰ΞΒ±ΞΒ³ΞΒΞΒ±Ξβ€ ΞΒ® Ξβ€Ξβ€ΞΒΞΞΞΞΞβ€¦
+                            <i class="fas fa-trash me-2"></i>Διαγραφή Ατόμου
                         </button>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ΞΒΞΒ»ΞΒµΞβ€•ΞΖ’ΞΞ‰ΞΞΞΞ</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
                 </div>
             </div>
         </div>
@@ -1215,13 +1215,13 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header bg-info">
-                    <h5 class="modal-title"><i class="fas fa-sort-numeric-down me-2"></i>Ξβ€ΞΞ‰ΞΒ±Ξβ€΅ΞΒµΞβ€•ΞΒΞΞ‰ΞΖ’ΞΒ· Ξβ„ΆΞΒµΞΒΞΒ±ΞΒΞβ€΅Ξβ€•ΞΒ±Ξβ€ ΞΒΞΒΞΒ³ΞΒ±ΞΒ½ΞΞ‰ΞΖ’ΞΞΞΞΞΒ</h5>
+                    <h5 class="modal-title"><i class="fas fa-sort-numeric-down me-2"></i>Διαχείριση Ιεραρχίας Οργανισμού</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <p class="text-muted mb-3">
                         <i class="fas fa-info-circle me-1"></i>
-                        ΞΒ£ΞΒΞΒΞΒµΞβ€ΞΒµ ΞΞΞΒ±ΞΞ‰ ΞΒ±Ξβ€ ΞΒ®ΞΖ’Ξβ€ΞΒµ Ξβ€ΞΒ± ΞΒ¬Ξβ€ΞΞΞΞΞΒ± ΞΒ³ΞΞ‰ΞΒ± ΞΒ½ΞΒ± ΞΒ±ΞΒ»ΞΒ»ΞΒ¬ΞΞΞΒµΞβ€ΞΒµ Ξβ€ΞΒ· ΞΖ’ΞΒµΞΞ‰ΞΒΞΒ¬ ΞΞ‰ΞΒµΞΒΞΒ±ΞΒΞβ€΅Ξβ€•ΞΒ±Ξβ€, ΞΒ® ΞΞΞΒ¬ΞΒ½Ξβ€ΞΒµ ΞΞΞΒ»ΞΞ‰ΞΞ ΞΖ’Ξβ€ΞΞ ΞΒΞΒ½ΞΞΞΞΞΒ± ΞΒ³ΞΞ‰ΞΒ± ΞΒ½ΞΒ± ΞΒµΞΞ‰ΞΖ’ΞΒ¬ΞΒ³ΞΒµΞβ€ΞΒµ Ξβ€ΞΒ·ΞΒ½ ΞΞ‰ΞΒµΞΒΞΒ±ΞΒΞβ€΅Ξβ€•ΞΒ± Ξβ€΅ΞΒµΞΞ‰ΞΒΞΞΞΞΞβ€•ΞΒ½ΞΒ·Ξβ€ΞΒ±. <strong>ΞΒΞΞ‰ ΞΒ±ΞΒ»ΞΒ»ΞΒ±ΞΒ³ΞΒ­Ξβ€ ΞΒµΞβ€•ΞΒ½ΞΒ±ΞΞ‰ Ξβ‚¬ΞΒΞΞΞΖ’Ξβ€°ΞΒΞΞ‰ΞΒ½ΞΒ­Ξβ€ ΞΞΞΒ­Ξβ€΅ΞΒΞΞ‰ ΞΒ½ΞΒ± Ξβ‚¬ΞΒ±Ξβ€ΞΒ®ΞΖ’ΞΒµΞβ€ΞΒµ "Ξβ€Ξβ‚¬ΞΞΞΞΞΒ®ΞΞΞΒµΞβ€¦ΞΖ’ΞΒ·"</strong>. Ξβ€” ΞΞ‰ΞΒµΞΒΞΒ±ΞΒΞβ€΅Ξβ€•ΞΒ± ΞΒµΞβ€•ΞΒ½ΞΒ±ΞΞ‰ ΞΞΞΒµΞβ€΅Ξβ€°ΞΒΞΞ‰ΞΖ’Ξβ€ΞΒ® ΞΒ±Ξβ‚¬ΞΒ Ξβ€ΞΒ·ΞΒ½ Ξβ‚¬ΞΒΞΞΞβ€ΞΒµΞΒΞΒ±ΞΞ‰ΞΒΞβ€ΞΒ·Ξβ€ΞΒ± ΞΞΞΒ±ΞΞ‰ ΞΞ„ΞΒµΞΒ½ ΞΒµΞβ‚¬ΞΒ·ΞΒΞΒµΞΒ¬ΞΒ¶ΞΒµΞΞ‰ Ξβ€ΞΒ· ΞΖ’ΞΒµΞΞ‰ΞΒΞΒ¬ Ξβ€Ξβ€°ΞΒ½ ΞΒ»ΞΞ‰ΞΖ’Ξβ€ΞΒΞΒ½.
+                        Σύρετε και αφήστε τα άτομα για να αλλάξετε τη σειρά ιεραρχίας, ή κάντε κλικ στο όνομα για να εισάγετε την ιεραρχία χειροκίνητα. <strong>Οι αλλαγές είναι προσωρινές μέχρι να πατήσετε "Αποθήκευση"</strong>. Η ιεραρχία είναι ξεχωριστή από την προτεραιότητα και δεν επηρεάζει τη σειρά των λιστών.
                     </p>
                     <div id="rankingsListContainer" style="max-height: 500px; overflow-y: auto; position: relative;">
                         <div id="rankingsListBody">
@@ -1231,9 +1231,9 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-primary" onclick="saveRankings()">
-                        <i class="fas fa-save me-1"></i>Ξβ€Ξβ‚¬ΞΞΞΞΞΒ®ΞΞΞΒµΞβ€¦ΞΖ’ΞΒ·
+                        <i class="fas fa-save me-1"></i>Αποθήκευση
                     </button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ΞΒΞΒ»ΞΒµΞβ€•ΞΖ’ΞΞ‰ΞΞΞΞ</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
                 </div>
             </div>
         </div>
@@ -1250,9 +1250,9 @@
                 <div class="modal-body modal-day-details" id="dayDetailsContent"></div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-primary" onclick="saveDayAssignments()">
-                        <i class="fas fa-save me-1"></i>Ξβ€Ξβ‚¬ΞΞΞΞΞΒ®ΞΞΞΒµΞβ€¦ΞΖ’ΞΒ· Ξβ€ΞΒ»ΞΒ»ΞΒ±ΞΒ³ΞΒΞΒ½
+                        <i class="fas fa-save me-1"></i>Αποθήκευση Αλλαγών
                     </button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ΞΒΞΒ»ΞΒµΞβ€•ΞΖ’ΞΞ‰ΞΞΞΞ</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
                 </div>
             </div>
         </div>
@@ -1263,34 +1263,34 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Ξβ€ΞΒ½ΞΒ¬ΞΞΞΒµΞΖ’ΞΒ· ΞΒ¥Ξβ‚¬ΞΒ·ΞΒΞΒµΞΖ’Ξβ€•ΞΒ±Ξβ€</h5>
+                    <h5 class="modal-title">Ανάθεση Υπηρεσίας</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="assignDutyDate" class="form-label">Ξβ€”ΞΞΞΒµΞΒΞΞΞΞΞΒ·ΞΒ½Ξβ€•ΞΒ±</label>
+                        <label for="assignDutyDate" class="form-label">Ημερομηνία</label>
                         <input type="date" class="form-control" id="assignDutyDate" required>
                     </div>
                     <div class="mb-3">
-                        <label for="assignDutyGroup" class="form-label">ΞΒΞΞΞΒ¬ΞΞ„ΞΒ±</label>
+                        <label for="assignDutyGroup" class="form-label">Ομάδα</label>
                         <select class="form-control" id="assignDutyGroup" required>
-                            <option value="">Ξβ€ΆΞβ‚¬ΞΞ‰ΞΒ»ΞΒ­ΞΞΞβ€ΞΒµ ΞΒΞΞΞΒ¬ΞΞ„ΞΒ±</option>
-                            <option value="1">Ξβ€ΆΞΒ Ξβ„ΆΞΒΞβ€ΆΞΒ¦Ξβ€Ξβ€ΊΞβ€”ΞΒ£-Ξβ€ΞΒ¥ΞΒ</option>
-                            <option value="2">ΞΒΞβ€”ΞΒ§Ξβ€ΞΒΞβ„ΆΞΒΞΒΞΒ£-ΞΒΞΒ Ξβ€ΊΞΒΞΒ¥ΞΞ…Ξβ€ΞΒΞΒ£-ΞΒΞβ€Ξβ€”Ξβ€ΞΒΞΒ£</option>
-                            <option value="3">ΞΒ¤Ξβ€ΆΞΒ§ΞΒΞβ„ΆΞΒΞΒΞΒ£ Ξβ€Ά/ΞΒ  AW139</option>
-                            <option value="4">ΞΒ¤Ξβ€ΆΞΒ§ΞΒΞβ„ΆΞΒΞΒΞΒ£ Ξβ€ΆΞΒ Ξβ„ΆΞβ€Ξβ€ΆΞβ„ΆΞΒ©ΞΒ ΞΒΞβ€ΆΞΒ£ΞΒ©ΞΒ</option>
+                            <option value="">Επιλέξτε Ομάδα</option>
+                            <option value="1">ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</option>
+                            <option value="2">ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</option>
+                            <option value="3">ΤΕΧΝΙΚΟΣ Ε/Π AW139</option>
+                            <option value="4">ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</option>
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label for="assignDutyPerson" class="form-label">Ξβ€ Ξβ€ΞΞΞΞΞΞ</label>
+                        <label for="assignDutyPerson" class="form-label">Άτομο</label>
                         <select class="form-control" id="assignDutyPerson" required>
-                            <option value="">Ξβ€ΆΞβ‚¬ΞΞ‰ΞΒ»ΞΒ­ΞΞΞβ€ΞΒµ Ξβ€ Ξβ€ΞΞΞΞΞΞ</option>
+                            <option value="">Επιλέξτε Άτομο</option>
                         </select>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ξβ€ΞΞΞΒΞΒΞβ€°ΞΖ’ΞΒ·</button>
-                    <button type="button" class="btn btn-primary" onclick="saveManualDuty()">Ξβ€Ξβ‚¬ΞΞΞΞΞΒ®ΞΞΞΒµΞβ€¦ΞΖ’ΞΒ·</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-primary" onclick="saveManualDuty()">Αποθήκευση</button>
                 </div>
             </div>
         </div>
@@ -1301,23 +1301,23 @@
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header bg-warning">
-                    <h5 class="modal-title"><i class="fas fa-exclamation-triangle me-2"></i>ΞΒ ΞΒ±ΞΒΞΒ±ΞΒ²ΞΞ‰ΞΒ¬ΞΖ’ΞΒµΞΞ‰Ξβ€ Ξβ€ΞΒ½ΞΒ±ΞΞΞΒ­ΞΖ’ΞΒµΞβ€°ΞΒ½ ΞΒ¥Ξβ‚¬ΞΒ·ΞΒΞΒµΞΖ’ΞΞ‰ΞΒΞΒ½</h5>
+                    <h5 class="modal-title"><i class="fas fa-exclamation-triangle me-2"></i>Παραβιάσεις Αναθέσεων Υπηρεσιών</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <small>Ξβ€Ξβ€¦Ξβ€ΞΒ® ΞΒ· ΞΒ»Ξβ€•ΞΖ’Ξβ€ΞΒ± ΞΒµΞΞΞβ€ ΞΒ±ΞΒ½Ξβ€•ΞΒ¶ΞΒµΞΞ‰ ΞΒΞΒ»ΞΒµΞβ€ Ξβ€ΞΞ‰Ξβ€ ΞΒ±ΞΒ½ΞΒ±ΞΞΞΒ­ΞΖ’ΞΒµΞΞ‰Ξβ€ Ξβ€ΞΞΞβ€¦ Ξβ€ΞΒΞΒ­Ξβ€΅ΞΞΞΒ½Ξβ€ΞΞΞβ€ ΞΞΞΒ®ΞΒ½ΞΒ± Ξβ‚¬ΞΞΞβ€¦ ΞΞ„ΞΒµΞΒ½ ΞΒ±ΞΞΞΞΞΒ»ΞΞΞΒΞΞΞΒ·ΞΖ’ΞΒ±ΞΒ½ Ξβ€ΞΒ·ΞΒ½ ΞΒ±Ξβ€¦ΞΖ’Ξβ€ΞΒ·ΞΒΞΒ® N-ΞΒ·ΞΞΞΒ­ΞΒΞΒµΞβ€ Ξβ‚¬ΞΒµΞΒΞΞ‰ΞΖ’Ξβ€ΞΒΞΞΞβ€ ΞΒ®, ΞΞΞΒ±ΞΒ¶Ξβ€• ΞΞΞΒµ Ξβ€ΞΞΞΒ½ ΞΒ»ΞΒΞΒ³ΞΞ ΞΒ³ΞΞ‰ΞΒ± Ξβ€ΞΞΞΒ½ ΞΞΞβ‚¬ΞΞΞβ€•ΞΞ Ξβ€ΞΞ ΞΒ¬Ξβ€ΞΞΞΞΞΞ ΞΞΞΒµΞβ€ΞΒ±ΞΞΞΞ‰ΞΒ½ΞΒ®ΞΞΞΒ·ΞΞΞΒµ.</small>
+                        <small>Αυτή η λίστα εμφανίζει όλες τις αναθέσεις του τρέχοντος μήνα που δεν ακολούθησαν την αυστηρή N-ημέρες περιστροφή, μαζί με τον λόγο για τον οποίο το άτομο μετακινήθηκε.</small>
                     </div>
                     <div id="rotationViolationsList" class="table-responsive">
                         <table class="table table-striped table-hover">
                             <thead>
                                 <tr>
-                                    <th>Ξβ€”ΞΞΞΒµΞΒΞΞΞΞΞΒ·ΞΒ½Ξβ€•ΞΒ±</th>
-                                    <th>ΞΒΞΞΞΒ¬ΞΞ„ΞΒ±</th>
-                                    <th>Ξβ€ Ξβ€ΞΞΞΞΞΞ Ξβ‚¬ΞΞΞβ€¦ Ξβ€ΞΒ½ΞΒ­ΞΞΞΒµΞβ€ΞΒ±ΞΞ‰</th>
-                                    <th>Ξβ€ Ξβ€ΞΞΞΞΞΞ Ξβ‚¬ΞΞΞβ€¦ ΞΒΞβ‚¬ΞΒΞΒµΞβ‚¬ΞΒµ ΞΒ½ΞΒ± Ξβ€ΞΒ½ΞΒ­ΞΞΞΒµΞβ€ΞΒ±ΞΞ‰</th>
-                                    <th>Ξβ€ΊΞΒΞΒ³ΞΞΞβ€</th>
+                                    <th>Ημερομηνία</th>
+                                    <th>Ομάδα</th>
+                                    <th>Άτομο που Ανέθεται</th>
+                                    <th>Άτομο που Έπρεπε να Ανέθεται</th>
+                                    <th>Λόγος</th>
                                 </tr>
                             </thead>
                             <tbody id="rotationViolationsTableBody">
@@ -1326,11 +1326,11 @@
                         </table>
                     </div>
                     <div id="noViolationsMessage" class="alert alert-success" style="display: none;">
-                        <i class="fas fa-check-circle me-2"></i>Ξβ€ΞΒµΞΒ½ ΞΒ²ΞΒΞΒ­ΞΞΞΒ·ΞΞΞΒ±ΞΒ½ Ξβ‚¬ΞΒ±ΞΒΞΒ±ΞΒ²ΞΞ‰ΞΒ¬ΞΖ’ΞΒµΞΞ‰Ξβ€! ΞΒΞΒ»ΞΒµΞβ€ ΞΞΞΞ‰ ΞΒ±ΞΒ½ΞΒ±ΞΞΞΒ­ΞΖ’ΞΒµΞΞ‰Ξβ€ ΞΒ±ΞΞΞΞΞΒ»ΞΞΞβ€¦ΞΞΞΞΞΒΞΒ½ Ξβ€ΞΒ·ΞΒ½ ΞΒ±Ξβ€¦ΞΖ’Ξβ€ΞΒ·ΞΒΞΒ® N-ΞΒ·ΞΞΞΒ­ΞΒΞΒµΞβ€ Ξβ‚¬ΞΒµΞΒΞΞ‰ΞΖ’Ξβ€ΞΒΞΞΞβ€ ΞΒ®.
+                        <i class="fas fa-check-circle me-2"></i>Δεν βρέθηκαν παραβιάσεις! Όλες οι αναθέσεις ακολουθούν την αυστηρή N-ημέρες περιστροφή.
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ΞΒΞΒ»ΞΒµΞβ€•ΞΖ’ΞΞ‰ΞΞΞΞ</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
                 </div>
             </div>
         </div>
@@ -1341,22 +1341,22 @@
         <div class="modal-dialog modal-fullscreen">
             <div class="modal-content">
                 <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title"><i class="fas fa-file-excel me-2"></i>ΞΒ ΞΒΞΞΞΒµΞβ‚¬ΞΞ‰ΞΖ’ΞΞΞΒΞβ‚¬ΞΒ·ΞΖ’ΞΒ· Excel Ξβ€ΞΒΞβ€΅ΞΒµΞβ€•Ξβ€°ΞΒ½</h5>
+                    <h5 class="modal-title"><i class="fas fa-file-excel me-2"></i>Προεπισκόπηση Excel Αρχείων</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body" style="max-height: calc(100vh - 200px); overflow-y: auto;">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <small>ΞΒ ΞΒ±ΞΒΞΒ±ΞΞΞΒ¬Ξβ€Ξβ€° ΞΒµΞΞΞβ€ ΞΒ±ΞΒ½Ξβ€•ΞΒ¶ΞΒµΞβ€ΞΒ±ΞΞ‰ ΞΒ· Ξβ‚¬ΞΒΞΞΞΒµΞβ‚¬ΞΞ‰ΞΖ’ΞΞΞΒΞβ‚¬ΞΒ·ΞΖ’ΞΒ· Ξβ€Ξβ€°ΞΒ½ Excel ΞΒ±ΞΒΞβ€΅ΞΒµΞβ€•Ξβ€°ΞΒ½ Ξβ‚¬ΞΞΞβ€¦ ΞΞΞΒ± ΞΞ„ΞΒ·ΞΞΞΞ‰ΞΞΞβ€¦ΞΒΞΒ³ΞΒ·ΞΞΞΞΞΒΞΒ½. ΞΒΞΒ¬ΞΞΞΒµ ΞΞΞΞΞΒ¬ΞΞ„ΞΒ± ΞΞΞΒ± ΞΒ­Ξβ€΅ΞΒµΞΞ‰ Ξβ€ΞΞ ΞΞ„ΞΞ‰ΞΞΞΒ Ξβ€ΞΒ·Ξβ€ ΞΒ±ΞΒΞβ€΅ΞΒµΞβ€•ΞΞ.</small>
+                        <small>Παρακάτω εμφανίζεται η προεπισκόπηση των Excel αρχείων που θα δημιουργηθούν. Κάθε ομάδα θα έχει το δικό της αρχείο.</small>
                     </div>
                     <div id="excelPreviewContent">
                         <!-- Preview content will be inserted here -->
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ξβ€ΞΞΞΒΞΒΞβ€°ΞΖ’ΞΒ·</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
                     <button type="button" class="btn btn-success" id="generateExcelBtn" onclick="generateExcelFilesForCurrentMonth(true)">
-                        <i class="fas fa-download me-1"></i>Ξβ€ΞΒ·ΞΞΞΞ‰ΞΞΞβ€¦ΞΒΞΒ³Ξβ€•ΞΒ± Excel Ξβ€ΞΒΞβ€΅ΞΒµΞβ€•Ξβ€°ΞΒ½
+                        <i class="fas fa-download me-1"></i>Δημιουργία Excel Αρχείων
                     </button>
                 </div>
             </div>
@@ -1373,6 +1373,11 @@
     <script src="js/common.js"></script>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="js/duty-shifts.js"></script>
+    <script src="js/duty-shifts.js" charset="UTF-8"></script>
+    <script>
+        // NOTE: Main JavaScript code has been moved to js/duty-shifts.js to reduce memory usage
+        // This inline script block is kept minimal for any page-specific initialization if needed
+        console.log('Duty shifts page loaded - main code in external file');
+    </script>
 </body>
 </html>
