@@ -4890,33 +4890,52 @@
                                     );
                                     
                                     if (!alreadyDisplayed) {
-                                        // This person was swapped out but is not in current assignment - show them with swap indicator
-                                        const indicatorIcon = '<i class="fas fa-exchange-alt text-info" title="Αλλαγή" style="font-size: 0.9em;"></i> ';
-                                        const styleClass = 'duty-person-swapped';
-                                        const title = reason.reason || 'Αλλαγή';
+                                        // IMPORTANT: Only show swap reason if this swap actually applies to this date
+                                        // A swap reason exists, but we need to verify:
+                                        // 1. The person they swapped with is actually assigned here (regular swap - this person was swapped out), OR
+                                        // 2. This person is in crossMonthSwaps for this date (cross-month swap - they were swapped here from previous month)
                                         
-                                        // Apply color based on swap pair ID
-                                        let swapPairStyle = '';
-                                        if (reason.swapPairId !== null && reason.swapPairId !== undefined) {
-                                            // Ensure swapPairId is a number (Firestore might return it as string)
-                                            const swapPairId = typeof reason.swapPairId === 'number' ? reason.swapPairId : parseInt(reason.swapPairId);
-                                            if (!isNaN(swapPairId)) {
-                                                const swapColors = [
-                                                    { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.15)' }, // Bright Red
-                                                    { border: '#00E676', bg: 'rgba(0, 230, 118, 0.15)' }, // Bright Green
-                                                    { border: '#FFD600', bg: 'rgba(255, 214, 0, 0.15)' }, // Bright Yellow
-                                                    { border: '#00B0FF', bg: 'rgba(0, 176, 255, 0.15)' }, // Bright Blue
-                                                    { border: '#D500F9', bg: 'rgba(213, 0, 249, 0.15)' }, // Bright Purple
-                                                    { border: '#FF6D00', bg: 'rgba(255, 109, 0, 0.15)' }, // Bright Orange
-                                                    { border: '#00E5FF', bg: 'rgba(0, 229, 255, 0.15)' }, // Bright Cyan
-                                                    { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.15)' }  // Bright Pink
-                                                ];
-                                                const swapColor = swapColors[swapPairId % swapColors.length];
-                                                swapPairStyle = `border: 2px solid ${swapColor.border}; background-color: ${swapColor.bg};`;
+                                        const swappedWithPerson = reason.swappedWith;
+                                        const swappedWithIsHere = swappedWithPerson && personGroups.some(({ name, group }) => 
+                                            name === swappedWithPerson && parseInt(group || 0) === groupNumForReason
+                                        );
+                                        
+                                        // Check if this person was supposed to be here (cross-month swap from previous month)
+                                        const wasSupposedToBeHere = crossMonthSwaps[key]?.[groupNumForReason] === personName;
+                                        
+                                        // Only show swap indicator if:
+                                        // - The person they swapped with is actually assigned here (proves the swap happened), OR
+                                        // - This person was supposed to be here according to crossMonthSwaps (cross-month swap)
+                                        if (swappedWithIsHere || wasSupposedToBeHere) {
+                                            // This person was swapped out but is not in current assignment - show them with swap indicator
+                                            const indicatorIcon = '<i class="fas fa-exchange-alt text-info" title="Αλλαγή" style="font-size: 0.9em;"></i> ';
+                                            const styleClass = 'duty-person-swapped';
+                                            const title = reason.reason || 'Αλλαγή';
+                                            
+                                            // Apply color based on swap pair ID
+                                            let swapPairStyle = '';
+                                            if (reason.swapPairId !== null && reason.swapPairId !== undefined) {
+                                                // Ensure swapPairId is a number (Firestore might return it as string)
+                                                const swapPairId = typeof reason.swapPairId === 'number' ? reason.swapPairId : parseInt(reason.swapPairId);
+                                                if (!isNaN(swapPairId)) {
+                                                    const swapColors = [
+                                                        { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.15)' }, // Bright Red
+                                                        { border: '#00E676', bg: 'rgba(0, 230, 118, 0.15)' }, // Bright Green
+                                                        { border: '#FFD600', bg: 'rgba(255, 214, 0, 0.15)' }, // Bright Yellow
+                                                        { border: '#00B0FF', bg: 'rgba(0, 176, 255, 0.15)' }, // Bright Blue
+                                                        { border: '#D500F9', bg: 'rgba(213, 0, 249, 0.15)' }, // Bright Purple
+                                                        { border: '#FF6D00', bg: 'rgba(255, 109, 0, 0.15)' }, // Bright Orange
+                                                        { border: '#00E5FF', bg: 'rgba(0, 229, 255, 0.15)' }, // Bright Cyan
+                                                        { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.15)' }  // Bright Pink
+                                                    ];
+                                                    const swapColor = swapColors[swapPairId % swapColors.length];
+                                                    swapPairStyle = `border: 2px solid ${swapColor.border}; background-color: ${swapColor.bg};`;
+                                                }
                                             }
+                                            
+                                            displayAssignmentHtml += `<div class="${styleClass}" style="${swapPairStyle}" title="${title}">${indicatorIcon}${personName}</div>`;
                                         }
-                                        
-                                        displayAssignmentHtml += `<div class="${styleClass}" style="${swapPairStyle}" title="${title}">${indicatorIcon}${personName}</div>`;
+                                        // If neither condition is true, don't show the swap indicator (the swap reason exists but doesn't apply to this date yet)
                                     }
                                 }
                             }
