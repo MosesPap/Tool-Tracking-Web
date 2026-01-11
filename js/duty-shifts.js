@@ -6921,6 +6921,12 @@
                                 // Perform the swap: conflicted person goes to swap date, swapped person goes to conflicted date
                                 updatedAssignments[dateKey][groupNum] = swapCandidate;
                                 updatedAssignments[swapDateKey][groupNum] = currentPerson;
+                                
+                                // Store assignment reasons for both swapped people
+                                const swapDateStr = new Date(swapDateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                storeAssignmentReason(dateKey, groupNum, swapCandidate, 'swap', `Αλλαγή με ${currentPerson} (${currentDateStr})`, currentPerson);
+                                storeAssignmentReason(swapDateKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${swapCandidate} (${swapDateStr})`, swapCandidate);
                             } else {
                                 // No swap found in current month - try cross-month swap
                                 // For semi-normal, check next month throughout the entire month (not just last 3 days)
@@ -6973,6 +6979,11 @@
                                         }
                                         crossMonthSwaps[swapDayKey][groupNum] = currentPerson;
                                         console.log(`[CROSS-MONTH SWAP SEMI] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${swapDayKey} (Group ${groupNum})`);
+                                        
+                                        // Store assignment reasons for cross-month swap
+                                        const swapDateStr = new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                        const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                        storeAssignmentReason(dateKey, groupNum, nextMonthPerson, 'swap', `Αλλαγή με ${currentPerson} (${currentDateStr} → ${swapDateStr})`, currentPerson);
                                     }
                                 }
                             }
@@ -7099,6 +7110,21 @@
                     
                     // Update local memory
                     Object.assign(semiNormalAssignments, formattedAssignments);
+                    
+                    // Save assignment reasons to Firestore
+                    try {
+                        if (Object.keys(assignmentReasons).length > 0) {
+                            const sanitizedReasons = sanitizeForFirestore(assignmentReasons);
+                            await db.collection('dutyShifts').doc('assignmentReasons').set({
+                                ...sanitizedReasons,
+                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                updatedBy: user.uid
+                            });
+                            console.log('Saved assignmentReasons to Firestore after semi-normal swaps');
+                        }
+                    } catch (error) {
+                        console.error('Error saving assignmentReasons after semi-normal swaps:', error);
+                    }
                 }
             } catch (error) {
                 console.error('Error saving final semi-normal assignments:', error);
@@ -7410,6 +7436,10 @@
                                 
                                 // Update assignment
                                 updatedAssignments[dateKey][groupNum] = swappedPerson;
+                                
+                                // Store assignment reason for swapped person
+                                const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                storeAssignmentReason(dateKey, groupNum, swappedPerson, 'swap', `Αλλαγή με ${currentPerson} (${dateStr})`, currentPerson);
                             }
                         }
                     }
@@ -7540,6 +7570,21 @@
                     
                     // Update local memory
                     Object.assign(normalDayAssignments, formattedAssignments);
+                    
+                    // Save assignment reasons to Firestore
+                    try {
+                        if (Object.keys(assignmentReasons).length > 0) {
+                            const sanitizedReasons = sanitizeForFirestore(assignmentReasons);
+                            await db.collection('dutyShifts').doc('assignmentReasons').set({
+                                ...sanitizedReasons,
+                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                updatedBy: user.uid
+                            });
+                            console.log('Saved assignmentReasons to Firestore after normal swaps');
+                        }
+                    } catch (error) {
+                        console.error('Error saving assignmentReasons after normal swaps:', error);
+                    }
                 }
             } catch (error) {
                 console.error('Error saving final normal assignments:', error);
