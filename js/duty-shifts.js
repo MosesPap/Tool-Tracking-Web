@@ -5853,8 +5853,9 @@
             
             // Show/hide navigation buttons
             backButton.style.display = calculationSteps.currentStep > 1 ? 'inline-block' : 'none';
-            nextButton.style.display = calculationSteps.currentStep < calculationSteps.totalSteps ? 'inline-block' : 'none';
-            calculateButton.style.display = calculationSteps.currentStep === calculationSteps.totalSteps ? 'inline-block' : 'none';
+            // Step 4 uses "Next" button to save pre-logic and run swap logic, not "Save" button
+            nextButton.style.display = calculationSteps.currentStep <= calculationSteps.totalSteps ? 'inline-block' : 'none';
+            calculateButton.style.display = 'none'; // Never show calculate button - Step 4 uses Next instead
             
             // Render step content
             switch(calculationSteps.currentStep) {
@@ -6084,6 +6085,14 @@
                 // NOTE: Step 4 will be rendered after OK is pressed in the modal
                 if (calculationSteps.currentStep === 3) {
                     await saveStep3_SemiNormal();
+                    // Don't increment step here - it will be done when OK is pressed in modal
+                    return;
+                }
+                
+                // If moving from Step 4 (Normal), save assignments and run swap logic
+                // NOTE: Final save will happen after OK is pressed in the modal
+                if (calculationSteps.currentStep === 4) {
+                    await saveStep4_Normal();
                     // Don't increment step here - it will be done when OK is pressed in modal
                     return;
                 }
@@ -6899,6 +6908,381 @@
                 }
             } catch (error) {
                 console.error('Error saving final semi-normal assignments:', error);
+            }
+        }
+
+        // Save Step 4 (Normal) assignments to Firestore and run swap logic
+        async function saveStep4_Normal() {
+            try {
+                if (!window.db) {
+                    console.log('Firebase not ready, skipping Step 4 save');
+                    return;
+                }
+                
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                
+                if (!user) {
+                    console.log('User not authenticated, skipping Step 4 save');
+                    return;
+                }
+                
+                const tempNormalAssignments = calculationSteps.tempNormalAssignments || {};
+                const lastNormalRotationPositions = calculationSteps.lastNormalRotationPositions || {};
+                
+                // First, save normal assignments to assignments document (pre-logic)
+                if (Object.keys(tempNormalAssignments).length > 0) {
+                    // Convert to format: dateKey -> "Person (Ομάδα 1), Person (Ομάδα 2), ..."
+                    const formattedAssignments = {};
+                    for (const dateKey in tempNormalAssignments) {
+                        const groups = tempNormalAssignments[dateKey];
+                        const parts = [];
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            if (groups[groupNum]) {
+                                parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
+                            }
+                        }
+                        if (parts.length > 0) {
+                            formattedAssignments[dateKey] = parts.join(', ');
+                        }
+                    }
+                    
+                    // Save to assignments document (pre-logic) - merge with existing data
+                    const organizedAssignments = organizeAssignmentsByMonth(formattedAssignments);
+                    const sanitizedAssignments = sanitizeForFirestore(organizedAssignments);
+                    
+                    // Load existing assignments to merge
+                    const existingAssignmentsDoc = await db.collection('dutyShifts').doc('assignments').get();
+                    let existingAssignments = {};
+                    if (existingAssignmentsDoc.exists) {
+                        const existingData = existingAssignmentsDoc.data();
+                        // Remove metadata fields
+                        delete existingData.lastUpdated;
+                        delete existingData.updatedBy;
+                        existingAssignments = existingData || {};
+                    }
+                    
+                    // Deep merge: merge at month level, then at date level
+                    const mergedAssignments = { ...existingAssignments };
+                    for (const monthKey in sanitizedAssignments) {
+                        if (!mergedAssignments[monthKey]) {
+                            mergedAssignments[monthKey] = {};
+                        }
+                        // Merge date assignments within this month
+                        mergedAssignments[monthKey] = { ...mergedAssignments[monthKey], ...sanitizedAssignments[monthKey] };
+                    }
+                    
+                    await db.collection('dutyShifts').doc('assignments').set({
+                        ...mergedAssignments,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    console.log('Saved Step 4 normal assignments (pre-logic) to assignments document (merged with existing):', Object.keys(tempNormalAssignments).length, 'dates');
+                    
+                    // Also update local memory
+                    Object.assign(normalDayAssignments, formattedAssignments);
+                }
+                
+                // Save last rotation positions for normal days
+                if (Object.keys(lastNormalRotationPositions).length > 0) {
+                    // Update lastRotationPositions for normal days
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        if (lastNormalRotationPositions[groupNum] !== undefined) {
+                            lastRotationPositions.normal[groupNum] = lastNormalRotationPositions[groupNum];
+                        }
+                    }
+                    
+                    // Save to Firestore
+                    const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                    await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                        ...sanitizedPositions,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    console.log('Saved Step 4 last rotation positions for normal days to Firestore:', lastNormalRotationPositions);
+                }
+                
+                // Now run swap logic and show popup
+                await runNormalSwapLogic();
+            } catch (error) {
+                console.error('Error saving Step 4 (Normal) to Firestore:', error);
+            }
+        }
+        
+        // Run swap logic for normal days and show popup with results
+        async function runNormalSwapLogic() {
+            try {
+                const dayTypeLists = calculationSteps.dayTypeLists || { normal: [], semi: [], special: [], weekend: [] };
+                const normalDays = dayTypeLists.normal || [];
+                const specialHolidays = dayTypeLists.special || [];
+                const weekendHolidays = dayTypeLists.weekend || [];
+                const semiNormalDays = dayTypeLists.semi || [];
+                
+                // Load special holiday assignments from saved data
+                const simulatedSpecialAssignments = {}; // monthKey -> { groupNum -> Set of person names }
+                const sortedSpecial = [...specialHolidays].sort();
+                
+                sortedSpecial.forEach((dateKey) => {
+                    const date = new Date(dateKey + 'T00:00:00');
+                    const month = date.getMonth();
+                    const year = date.getFullYear();
+                    const monthKey = `${year}-${month}`;
+                    
+                    if (!simulatedSpecialAssignments[monthKey]) {
+                        simulatedSpecialAssignments[monthKey] = {};
+                    }
+                    
+                    const assignment = specialHolidayAssignments[dateKey];
+                    if (assignment) {
+                        const parts = assignment.split(',').map(p => p.trim());
+                        parts.forEach(part => {
+                            const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                            if (match) {
+                                const personName = match[1].trim();
+                                const groupNum = parseInt(match[2]);
+                                if (!simulatedSpecialAssignments[monthKey][groupNum]) {
+                                    simulatedSpecialAssignments[monthKey][groupNum] = new Set();
+                                }
+                                simulatedSpecialAssignments[monthKey][groupNum].add(personName);
+                            }
+                        });
+                    }
+                });
+                
+                // Load weekend assignments from saved data
+                const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
+                for (const dateKey in weekendAssignments) {
+                    const assignment = weekendAssignments[dateKey];
+                    const parts = assignment.split(',').map(p => p.trim());
+                    parts.forEach(part => {
+                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                        if (match) {
+                            const personName = match[1].trim();
+                            const groupNum = parseInt(match[2]);
+                            if (!simulatedWeekendAssignments[dateKey]) {
+                                simulatedWeekendAssignments[dateKey] = {};
+                            }
+                            simulatedWeekendAssignments[dateKey][groupNum] = personName;
+                        }
+                    });
+                }
+                
+                // Load semi-normal assignments from saved data
+                const simulatedSemiAssignments = {}; // dateKey -> { groupNum -> person name }
+                for (const dateKey in semiNormalAssignments) {
+                    const assignment = semiNormalAssignments[dateKey];
+                    const parts = assignment.split(',').map(p => p.trim());
+                    parts.forEach(part => {
+                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                        if (match) {
+                            const personName = match[1].trim();
+                            const groupNum = parseInt(match[2]);
+                            if (!simulatedSemiAssignments[dateKey]) {
+                                simulatedSemiAssignments[dateKey] = {};
+                            }
+                            simulatedSemiAssignments[dateKey][groupNum] = personName;
+                        }
+                    });
+                }
+                
+                // Track swapped people and replacements
+                const swappedPeople = []; // Array of { date, groupNum, skippedPerson, swappedPerson }
+                const sortedNormal = [...normalDays].sort();
+                const updatedAssignments = {}; // dateKey -> { groupNum -> personName }
+                
+                // Load current normal assignments from tempNormalAssignments
+                const tempNormalAssignments = calculationSteps.tempNormalAssignments || {};
+                for (const dateKey in tempNormalAssignments) {
+                    const groups = tempNormalAssignments[dateKey];
+                    updatedAssignments[dateKey] = { ...groups };
+                }
+                
+                // Run swap logic (check for consecutive conflicts)
+                sortedNormal.forEach((dateKey) => {
+                    const date = new Date(dateKey + 'T00:00:00');
+                    
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        const groupData = groups[groupNum] || { normal: [] };
+                        const groupPeople = groupData.normal || [];
+                        
+                        if (groupPeople.length === 0) continue;
+                        
+                        const currentPerson = updatedAssignments[dateKey]?.[groupNum];
+                        if (!currentPerson) continue;
+                        
+                        // Check for consecutive conflicts using enhanced hasConsecutiveDuty
+                        const simulatedAssignments = {
+                            special: simulatedSpecialAssignments,
+                            weekend: simulatedWeekendAssignments,
+                            semi: simulatedSemiAssignments,
+                            normal: updatedAssignments
+                        };
+                        
+                        const hasConsecutiveConflict = hasConsecutiveDuty(dateKey, currentPerson, groupNum, simulatedAssignments);
+                        
+                        if (hasConsecutiveConflict) {
+                            // Find replacement
+                            const rotationDays = groupPeople.length;
+                            const currentIndex = groupPeople.indexOf(currentPerson);
+                            let swappedPerson = null;
+                            
+                            for (let offset = 1; offset < rotationDays; offset++) {
+                                const nextIndex = (currentIndex + offset) % rotationDays;
+                                const candidate = groupPeople[nextIndex];
+                                
+                                if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) {
+                                    continue;
+                                }
+                                
+                                // Check if candidate has conflict
+                                const candidateHasConflict = hasConsecutiveDuty(dateKey, candidate, groupNum, simulatedAssignments);
+                                
+                                if (!candidateHasConflict) {
+                                    swappedPerson = candidate;
+                                    break;
+                                }
+                            }
+                            
+                            if (swappedPerson) {
+                                swappedPeople.push({
+                                    date: dateKey,
+                                    dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                    groupNum: groupNum,
+                                    skippedPerson: currentPerson,
+                                    swappedPerson: swappedPerson
+                                });
+                                
+                                // Update assignment
+                                updatedAssignments[dateKey][groupNum] = swappedPerson;
+                            }
+                        }
+                    }
+                });
+                
+                // Store final assignments (after swap logic) for saving when OK is pressed
+                calculationSteps.finalNormalAssignments = updatedAssignments;
+                
+                // Show popup with results (will save when OK is pressed)
+                showNormalSwapResults(swappedPeople, updatedAssignments);
+            } catch (error) {
+                console.error('Error running normal swap logic:', error);
+            }
+        }
+        
+        // Show popup with normal swap results
+        function showNormalSwapResults(swappedPeople, updatedAssignments) {
+            let message = '';
+            
+            if (swappedPeople.length === 0) {
+                message = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>Κανένας δεν αλλάχθηκε!</strong><br>Δεν βρέθηκαν συνεχόμενες ημέρες που να απαιτούν αλλαγή.</div>';
+            } else {
+                message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Αλλάχθηκαν ' + swappedPeople.length + ' άτομα:</strong><br><br>';
+                message += '<table class="table table-sm table-bordered">';
+                message += '<thead><tr><th>Ημερομηνία</th><th>Ομάδα</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th></tr></thead><tbody>';
+                
+                swappedPeople.forEach(item => {
+                    const groupName = getGroupName(item.groupNum);
+                    message += `<tr><td>${item.dateStr}</td><td>${groupName}</td><td><strong>${item.skippedPerson}</strong></td><td><strong>${item.swappedPerson}</strong></td></tr>`;
+                });
+                
+                message += '</tbody></table></div>';
+            }
+            
+            // Create and show modal
+            const modalHtml = `
+                <div class="modal fade" id="normalSwapResultsModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Αποτελέσματα Αλλαγών Καθημερινών</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                ${message}
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-primary" id="normalSwapOkButton" data-bs-dismiss="modal">OK</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Remove existing modal if any
+            const existingModal = document.getElementById('normalSwapResultsModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            // Add modal to body
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('normalSwapResultsModal'));
+            modal.show();
+            
+            // When OK is pressed, save final assignments and close modal
+            const okButton = document.getElementById('normalSwapOkButton');
+            if (okButton) {
+                okButton.addEventListener('click', async function() {
+                    await saveFinalNormalAssignments(updatedAssignments);
+                    // Close the step-by-step calculation modal
+                    const stepModal = bootstrap.Modal.getInstance(document.getElementById('stepByStepCalculationModal'));
+                    if (stepModal) {
+                        stepModal.hide();
+                    }
+                    // Reload calendar to show results
+                    location.reload();
+                });
+            }
+        }
+        
+        // Save final normal assignments (after swap logic) to normalDayAssignments document
+        async function saveFinalNormalAssignments(updatedAssignments) {
+            try {
+                if (!window.db) {
+                    console.log('Firebase not ready, skipping final normal assignments save');
+                    return;
+                }
+                
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                
+                if (!user) {
+                    console.log('User not authenticated, skipping final normal assignments save');
+                    return;
+                }
+                
+                if (Object.keys(updatedAssignments).length > 0) {
+                    const formattedAssignments = {};
+                    for (const dateKey in updatedAssignments) {
+                        const groups = updatedAssignments[dateKey];
+                        const parts = [];
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            if (groups[groupNum]) {
+                                parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
+                            }
+                        }
+                        if (parts.length > 0) {
+                            formattedAssignments[dateKey] = parts.join(', ');
+                        }
+                    }
+                    
+                    const organizedNormal = organizeAssignmentsByMonth(formattedAssignments);
+                    const sanitizedNormal = sanitizeForFirestore(organizedNormal);
+                    
+                    await db.collection('dutyShifts').doc('normalDayAssignments').set({
+                        ...sanitizedNormal,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    console.log('Saved Step 4 final normal assignments (after swap logic) to normalDayAssignments document');
+                    
+                    // Update local memory
+                    Object.assign(normalDayAssignments, formattedAssignments);
+                }
+            } catch (error) {
+                console.error('Error saving final normal assignments:', error);
             }
         }
 
@@ -8028,6 +8412,9 @@
                 }
             });
             
+            // Declare at function level to avoid scope issues
+            const globalNormalRotationPosition = {}; // groupNum -> global position (continues across months)
+            
             let html = '<div class="step-content">';
             html += '<h6 class="mb-3"><i class="fas fa-calendar-day text-primary me-2"></i>Βήμα 4: Καθημερινές</h6>';
             
@@ -8061,7 +8448,6 @@
                 // Track assignments and rotation
                 // NOTE: normalAssignments is already defined at function level (line 7842), don't redeclare it here
                 // const normalAssignments = {}; // REMOVED - use outer scope variable
-                const globalNormalRotationPosition = {}; // groupNum -> global position (continues across months)
                 // Initialize from lastRotationPositions if available (for preview, we still track but don't save to global)
                 // BUT: If start date is February 2026, always start from position 0 (first person) for all groups
                 const isFebruary2026 = calculationSteps.startDate && 
