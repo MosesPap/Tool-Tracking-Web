@@ -4787,13 +4787,15 @@
                         const reason = getAssignmentReason(key, parseInt(group || 0), name);
                         let indicatorIcon = '';
                         let indicatorTitle = '';
+                        let isSwapped = false;
                         if (reason) {
                             if (reason.type === 'skip') {
                                 indicatorIcon = '<i class="fas fa-arrow-right text-warning" title="Παραλείφθηκε"></i> ';
                                 indicatorTitle = reason.reason;
                             } else if (reason.type === 'swap') {
-                                indicatorIcon = '<i class="fas fa-exchange-alt text-info" title="Αλλαγή"></i> ';
+                                indicatorIcon = '<i class="fas fa-exchange-alt text-info" title="Αλλαγή" style="font-size: 0.9em;"></i> ';
                                 indicatorTitle = reason.reason;
+                                isSwapped = true;
                             }
                         }
                         
@@ -4829,11 +4831,22 @@
                             }
                         }
                         
-                        // Apply red bold styling for critical assignments
-                        const styleClass = isCritical ? 'duty-person-critical' : 'duty-person';
+                        // Apply styling: critical assignments get red, swapped assignments get round border
+                        let styleClass = 'duty-person';
+                        if (isCritical) {
+                            styleClass = 'duty-person-critical';
+                        } else if (isSwapped) {
+                            styleClass = 'duty-person-swapped';
+                        }
+                        
                         // Display name with indicator icon and conflict icon
                         const combinedTitle = indicatorTitle || conflictTitle || '';
-                        displayAssignmentHtml += `<div class="${styleClass}" style="display: flex; align-items: center; gap: 4px;" title="${combinedTitle}">${indicatorIcon}${name}${conflictIcon}</div>`;
+                        // For swapped people, the icon and name are already in the round border, so don't add extra flex styling
+                        if (isSwapped) {
+                            displayAssignmentHtml += `<div class="${styleClass}" title="${combinedTitle}">${indicatorIcon}${name}</div>`;
+                        } else {
+                            displayAssignmentHtml += `<div class="${styleClass}" style="display: flex; align-items: center; gap: 4px;" title="${combinedTitle}">${indicatorIcon}${name}${conflictIcon}</div>`;
+                        }
                     });
                     displayAssignmentHtml += '</div>';
                 }
