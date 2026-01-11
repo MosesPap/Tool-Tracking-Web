@@ -6092,7 +6092,13 @@
                 // If moving from Step 4 (Normal), save assignments and run swap logic
                 // NOTE: Final save will happen after OK is pressed in the modal
                 if (calculationSteps.currentStep === 4) {
-                    await saveStep4_Normal();
+                    console.log('[STEP 4] Next button pressed, calling saveStep4_Normal()');
+                    try {
+                        await saveStep4_Normal();
+                        console.log('[STEP 4] saveStep4_Normal() completed');
+                    } catch (error) {
+                        console.error('[STEP 4] Error in saveStep4_Normal():', error);
+                    }
                     // Don't increment step here - it will be done when OK is pressed in modal
                     return;
                 }
@@ -6913,9 +6919,10 @@
 
         // Save Step 4 (Normal) assignments to Firestore and run swap logic
         async function saveStep4_Normal() {
+            console.log('[STEP 4] saveStep4_Normal() called');
             try {
                 if (!window.db) {
-                    console.log('Firebase not ready, skipping Step 4 save');
+                    console.log('[STEP 4] Firebase not ready, skipping Step 4 save');
                     return;
                 }
                 
@@ -6923,12 +6930,15 @@
                 const user = window.auth?.currentUser;
                 
                 if (!user) {
-                    console.log('User not authenticated, skipping Step 4 save');
+                    console.log('[STEP 4] User not authenticated, skipping Step 4 save');
                     return;
                 }
                 
                 const tempNormalAssignments = calculationSteps.tempNormalAssignments || {};
                 const lastNormalRotationPositions = calculationSteps.lastNormalRotationPositions || {};
+                
+                console.log('[STEP 4] tempNormalAssignments keys:', Object.keys(tempNormalAssignments).length);
+                console.log('[STEP 4] lastNormalRotationPositions:', lastNormalRotationPositions);
                 
                 // First, save normal assignments to assignments document (pre-logic)
                 if (Object.keys(tempNormalAssignments).length > 0) {
@@ -7003,14 +7013,17 @@
                 }
                 
                 // Now run swap logic and show popup
+                console.log('[STEP 4] Calling runNormalSwapLogic()');
                 await runNormalSwapLogic();
+                console.log('[STEP 4] runNormalSwapLogic() completed');
             } catch (error) {
-                console.error('Error saving Step 4 (Normal) to Firestore:', error);
+                console.error('[STEP 4] Error saving Step 4 (Normal) to Firestore:', error);
             }
         }
         
         // Run swap logic for normal days and show popup with results
         async function runNormalSwapLogic() {
+            console.log('[STEP 4] runNormalSwapLogic() called');
             try {
                 const dayTypeLists = calculationSteps.dayTypeLists || { normal: [], semi: [], special: [], weekend: [] };
                 const normalDays = dayTypeLists.normal || [];
@@ -7162,15 +7175,19 @@
                 // Store final assignments (after swap logic) for saving when OK is pressed
                 calculationSteps.finalNormalAssignments = updatedAssignments;
                 
+                console.log('[STEP 4] Swap logic completed. Swapped people:', swappedPeople.length);
+                console.log('[STEP 4] Calling showNormalSwapResults()');
+                
                 // Show popup with results (will save when OK is pressed)
                 showNormalSwapResults(swappedPeople, updatedAssignments);
             } catch (error) {
-                console.error('Error running normal swap logic:', error);
+                console.error('[STEP 4] Error running normal swap logic:', error);
             }
         }
         
         // Show popup with normal swap results
         function showNormalSwapResults(swappedPeople, updatedAssignments) {
+            console.log('[STEP 4] showNormalSwapResults() called with', swappedPeople.length, 'swapped people');
             let message = '';
             
             if (swappedPeople.length === 0) {
@@ -8165,6 +8182,9 @@
             const endDate = calculationSteps.endDate;
             const dayTypeLists = calculationSteps.dayTypeLists || { normal: [], semi: [], special: [], weekend: [] };
             
+            // Declare at function level to avoid scope issues
+            const globalNormalRotationPosition = {}; // groupNum -> global position (continues across months)
+            
             // Check for normal days
             const normalDays = dayTypeLists.normal || [];
             const semiNormalDays = dayTypeLists.semi || [];
@@ -8411,9 +8431,6 @@
                     });
                 }
             });
-            
-            // Declare at function level to avoid scope issues
-            const globalNormalRotationPosition = {}; // groupNum -> global position (continues across months)
             
             let html = '<div class="step-content">';
             html += '<h6 class="mb-3"><i class="fas fa-calendar-day text-primary me-2"></i>Βήμα 4: Καθημερινές</h6>';
