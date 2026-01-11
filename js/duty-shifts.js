@@ -7757,12 +7757,17 @@
                                                     swapDayIndex = -1; // Not in normalDays array
                                                     swapFound = true;
                                                     
-                                                    // Store cross-month swap info
+                                                    // Store cross-month swap info AND the swap candidate for later use
                                                     if (!crossMonthSwaps[nextMonthSwapDayKey]) {
                                                         crossMonthSwaps[nextMonthSwapDayKey] = {};
                                                     }
                                                     crossMonthSwaps[nextMonthSwapDayKey][groupNum] = currentPerson;
-                                                    console.log(`[CROSS-MONTH SWAP NORMAL Step 1a] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${nextMonthSwapDayKey} (Group ${groupNum})`);
+                                                    // Also store the swap candidate in a temporary location for the swap execution
+                                                    if (!updatedAssignments[swapDayKey]) {
+                                                        updatedAssignments[swapDayKey] = {};
+                                                    }
+                                                    updatedAssignments[swapDayKey][groupNum] = swapCandidate; // Store candidate for swap execution
+                                                    console.log(`[CROSS-MONTH SWAP NORMAL Step 1a] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${nextMonthSwapDayKey} (Group ${groupNum}), swap candidate: ${swapCandidate}`);
                                                 }
                                             }
                                         }
@@ -7927,8 +7932,16 @@
                             }
                             
                             // Perform swap if found - STOP after finding valid swap (don't continue to other steps)
-                            if (swapFound && swapDayKey && swapDayIndex !== null && swapDayIndex >= 0) {
-                                const swapCandidate = updatedAssignments[swapDayKey][groupNum];
+                            // Note: swapDayIndex can be -1 for cross-month swaps (not in normalDays array)
+                            if (swapFound && swapDayKey) {
+                                // Get swap candidate - for cross-month swaps, it should already be stored in updatedAssignments
+                                const swapCandidate = updatedAssignments[swapDayKey]?.[groupNum];
+                                
+                                if (!swapCandidate) {
+                                    // If we can't find the candidate, skip this swap
+                                    console.warn(`[SWAP WARNING] Could not find swap candidate for ${swapDayKey} (Group ${groupNum})`);
+                                    continue;
+                                }
                                 
                                 // Generate unique swap pair ID for color coding
                                 const swapPairId = swapPairCounter++;
