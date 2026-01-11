@@ -7362,8 +7362,9 @@
                     });
                     console.log('Saved Step 4 normal assignments (pre-logic) to assignments document (merged with existing):', Object.keys(tempNormalAssignments).length, 'dates');
                     
-                    // Also update local memory
-                    Object.assign(normalDayAssignments, formattedAssignments);
+                    // DO NOT update normalDayAssignments here - wait until after swap logic completes
+                    // This prevents the calendar from showing pre-logic assignments
+                    // Object.assign(normalDayAssignments, formattedAssignments);
                 }
                 
                 // Save last rotation positions for normal days
@@ -7854,11 +7855,27 @@
                 // Store final assignments (after swap logic) for saving when OK is pressed
                 calculationSteps.finalNormalAssignments = updatedAssignments;
                 
-                console.log('[STEP 4] Swap logic completed. Swapped people:', swappedPeople.length);
+                // Merge preview swaps with actual swaps (remove duplicates)
+                const previewSwaps = calculationSteps.previewNormalSwaps || [];
+                const allSwappedPeople = [...swappedPeople];
+                
+                // Add preview swaps that aren't already in swappedPeople
+                previewSwaps.forEach(previewSwap => {
+                    const exists = allSwappedPeople.some(swap => 
+                        swap.date === previewSwap.date && 
+                        swap.groupNum === previewSwap.groupNum && 
+                        swap.skippedPerson === previewSwap.skippedPerson
+                    );
+                    if (!exists) {
+                        allSwappedPeople.push(previewSwap);
+                    }
+                });
+                
+                console.log('[STEP 4] Swap logic completed. Swapped people:', allSwappedPeople.length, '(Preview:', previewSwaps.length, ', Actual:', swappedPeople.length, ')');
                 console.log('[STEP 4] Calling showNormalSwapResults()');
                 
                 // Show popup with results (will save when OK is pressed)
-                showNormalSwapResults(swappedPeople, updatedAssignments);
+                showNormalSwapResults(allSwappedPeople, updatedAssignments);
             } catch (error) {
                 console.error('[STEP 4] Error running normal swap logic:', error);
             }
@@ -9236,10 +9253,10 @@
                                     // Also DO NOT assign the next person in rotation to this day
                                     if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date)) {
                                         // Build simulated assignments for conflict checking
-                                        const simulatedAssignments = {
-                                            special: simulatedSpecialAssignments,
-                                            weekend: simulatedWeekendAssignments,
-                                            semi: simulatedSemiAssignments,
+                                    const simulatedAssignments = {
+                                        special: simulatedSpecialAssignments,
+                                        weekend: simulatedWeekendAssignments,
+                                        semi: simulatedSemiAssignments,
                                             normal: normalAssignments,
                                             normalRotationPositions: globalNormalRotationPosition // Pass current rotation positions for conflict checking
                                         };
@@ -9308,6 +9325,9 @@
             // NOW APPLY SWAP LOGIC IN PREVIEW (Monday-Wednesday and Tuesday-Thursday rules)
             // This ensures preview shows exactly what will be saved
             // Only apply swap logic if there are normal days
+            // Track swaps for popup display
+            const previewSwappedPeople = []; // Array of { date, groupNum, skippedPerson, swappedPerson, swapDate, swapDateStr }
+            
             if (normalDays.length > 0 && sortedNormal) {
                 const swappedPeopleSet = new Set(); // Format: "dateKey:groupNum:personName"
                 
@@ -9331,13 +9351,13 @@
                     }
                     
                     // Check for consecutive conflicts
-                    const simulatedAssignments = {
-                        special: simulatedSpecialAssignments,
-                        weekend: simulatedWeekendAssignments,
-                        semi: simulatedSemiAssignments,
-                        normal: normalAssignments
-                    };
-                    
+                                            const simulatedAssignments = {
+                                                special: simulatedSpecialAssignments,
+                                                weekend: simulatedWeekendAssignments,
+                                                semi: simulatedSemiAssignments,
+                                                normal: normalAssignments
+                                            };
+                                            
                     const hasConsecutiveConflict = hasConsecutiveDuty(dateKey, currentPerson, groupNum, simulatedAssignments);
                     
                     if (hasConsecutiveConflict) {
@@ -9365,7 +9385,7 @@
                                     !hasConsecutiveDuty(sameWeekKey, swapCandidate, groupNum, simulatedAssignments) &&
                                     !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                     swapDayKey = sameWeekKey;
-                                    swapFound = true;
+                                                        swapFound = true;
                                 }
                             }
                             
@@ -9380,7 +9400,7 @@
                                             !hasConsecutiveDuty(nextSameDayKey, swapCandidate, groupNum, simulatedAssignments) &&
                                             !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                             swapDayKey = nextSameDayKey;
-                                            swapFound = true;
+                                                            swapFound = true;
                                         }
                                     }
                                 }
@@ -9402,7 +9422,7 @@
                                         !hasConsecutiveDuty(weekAfterNextKey, swapCandidate, groupNum, simulatedAssignments) &&
                                         !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                         swapDayKey = weekAfterNextKey;
-                                        swapFound = true;
+                                                            swapFound = true;
                                     }
                                 }
                                 
@@ -9420,12 +9440,12 @@
                                                 !hasConsecutiveDuty(nextMonthKey, swapCandidate, groupNum, simulatedAssignments) &&
                                                 !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 swapDayKey = nextMonthKey;
-                                                swapFound = true;
+                                                            swapFound = true;
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
-                                    }
-                                }
-                            }
                         }
                         // TUESDAY/THURSDAY - Separate logic block
                         else if (dayOfWeek === 2 || dayOfWeek === 4) {
@@ -9529,6 +9549,17 @@
                         if (swapFound && swapDayKey) {
                             const swapCandidate = normalAssignments[swapDayKey][groupNum];
                             
+                            // Track swap for popup display
+                            previewSwappedPeople.push({
+                                date: dateKey,
+                                dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                groupNum: groupNum,
+                                skippedPerson: currentPerson,
+                                swappedPerson: swapCandidate,
+                                swapDate: swapDayKey,
+                                swapDateStr: new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                            });
+                            
                             // Perform the swap
                             normalAssignments[dateKey][groupNum] = swapCandidate;
                             normalAssignments[swapDayKey][groupNum] = currentPerson;
@@ -9571,29 +9602,29 @@
                                 rowHtml += '<td class="text-muted">-</td>';
                             } else {
                                 const assignedPerson = normalAssignments[dateKey]?.[groupNum];
+                            
+                            // Get last duty date and days since for display
+                            let lastDutyInfo = '';
+                            let daysCountInfo = '';
+                            if (assignedPerson) {
+                                const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'normal', dayTypeLists, startDate);
+                                const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'normal', groupPeople.length);
+                                lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
                                 
-                                // Get last duty date and days since for display
-                                let lastDutyInfo = '';
-                                let daysCountInfo = '';
-                                if (assignedPerson) {
-                                    const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'normal', dayTypeLists, startDate);
-                                    const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'normal', groupPeople.length);
-                                    lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
-                                    
-                                    if (daysSince !== null && daysSince !== Infinity) {
-                                        daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} ημέρες)</span>`;
-                                    } else if (daysSince === Infinity) {
-                                        daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
-                                    }
+                                if (daysSince !== null && daysSince !== Infinity) {
+                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} ημέρες)</span>`;
+                                } else if (daysSince === Infinity) {
+                                    daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
                                 }
-                                
-                                rowHtml += `<td>${assignedPerson || '-'}${daysCountInfo}${lastDutyInfo}</td>`;
                             }
+                            
+                                rowHtml += `<td>${assignedPerson || '-'}${daysCountInfo}${lastDutyInfo}</td>`;
                         }
-                        
+                    }
+                    
                         rowHtml += '</tr>';
                         tableBody.innerHTML += rowHtml;
-                    });
+                });
                 }
             }
             
@@ -9632,6 +9663,9 @@
                     calculationSteps.lastNormalRotationPositions[g] = globalNormalRotationPosition[g];
                 }
             }
+            
+            // Store preview swaps so they can be shown in popup (will be merged with runNormalSwapLogic results)
+            calculationSteps.previewNormalSwaps = previewSwappedPeople;
             
             console.log('[PREVIEW DEBUG] Stored temp assignments in calculationSteps.tempAssignments');
             console.log('[PREVIEW DEBUG] Sample normal assignments:', Object.keys(normalAssignments).slice(0, 5).map(key => ({ date: key, groups: Object.keys(normalAssignments[key] || {}) })));
