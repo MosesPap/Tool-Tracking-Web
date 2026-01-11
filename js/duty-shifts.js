@@ -6188,16 +6188,37 @@
                         }
                     }
                     
-                    // Save to assignments document (pre-skip)
+                    // Save to assignments document (pre-skip) - merge with existing data
                     const organizedAssignments = organizeAssignmentsByMonth(formattedAssignments);
                     const sanitizedAssignments = sanitizeForFirestore(organizedAssignments);
                     
+                    // Load existing assignments to merge
+                    const existingAssignmentsDoc = await db.collection('dutyShifts').doc('assignments').get();
+                    let existingAssignments = {};
+                    if (existingAssignmentsDoc.exists) {
+                        const existingData = existingAssignmentsDoc.data();
+                        // Remove metadata fields
+                        delete existingData.lastUpdated;
+                        delete existingData.updatedBy;
+                        existingAssignments = existingData || {};
+                    }
+                    
+                    // Deep merge: merge at month level, then at date level
+                    const mergedAssignments = { ...existingAssignments };
+                    for (const monthKey in sanitizedAssignments) {
+                        if (!mergedAssignments[monthKey]) {
+                            mergedAssignments[monthKey] = {};
+                        }
+                        // Merge date assignments within this month
+                        mergedAssignments[monthKey] = { ...mergedAssignments[monthKey], ...sanitizedAssignments[monthKey] };
+                    }
+                    
                     await db.collection('dutyShifts').doc('assignments').set({
-                        ...sanitizedAssignments,
+                        ...mergedAssignments,
                         lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                         updatedBy: user.uid
                     });
-                    console.log('Saved Step 2 weekend assignments (pre-skip) to assignments document:', Object.keys(tempWeekendAssignments).length, 'dates');
+                    console.log('Saved Step 2 weekend assignments (pre-skip) to assignments document (merged with existing):', Object.keys(tempWeekendAssignments).length, 'dates');
                     
                     // Also update local memory
                     Object.assign(weekendAssignments, formattedAssignments);
@@ -6518,16 +6539,37 @@
                         }
                     }
                     
-                    // Save to assignments document (pre-logic)
+                    // Save to assignments document (pre-logic) - merge with existing data
                     const organizedAssignments = organizeAssignmentsByMonth(formattedAssignments);
                     const sanitizedAssignments = sanitizeForFirestore(organizedAssignments);
                     
+                    // Load existing assignments to merge
+                    const existingAssignmentsDoc = await db.collection('dutyShifts').doc('assignments').get();
+                    let existingAssignments = {};
+                    if (existingAssignmentsDoc.exists) {
+                        const existingData = existingAssignmentsDoc.data();
+                        // Remove metadata fields
+                        delete existingData.lastUpdated;
+                        delete existingData.updatedBy;
+                        existingAssignments = existingData || {};
+                    }
+                    
+                    // Deep merge: merge at month level, then at date level
+                    const mergedAssignments = { ...existingAssignments };
+                    for (const monthKey in sanitizedAssignments) {
+                        if (!mergedAssignments[monthKey]) {
+                            mergedAssignments[monthKey] = {};
+                        }
+                        // Merge date assignments within this month
+                        mergedAssignments[monthKey] = { ...mergedAssignments[monthKey], ...sanitizedAssignments[monthKey] };
+                    }
+                    
                     await db.collection('dutyShifts').doc('assignments').set({
-                        ...sanitizedAssignments,
+                        ...mergedAssignments,
                         lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                         updatedBy: user.uid
                     });
-                    console.log('Saved Step 3 semi-normal assignments (pre-logic) to assignments document:', Object.keys(tempSemiAssignments).length, 'dates');
+                    console.log('Saved Step 3 semi-normal assignments (pre-logic) to assignments document (merged with existing):', Object.keys(tempSemiAssignments).length, 'dates');
                     
                     // Also update local memory
                     Object.assign(semiNormalAssignments, formattedAssignments);
@@ -8073,18 +8115,6 @@
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
                         } else {
-                            // Check if this day was already assigned due to a swap
-                            if (swappedDaysPreview[dateKey] && swappedDaysPreview[dateKey][groupNum]) {
-                                // This day was swapped, use the already-assigned person
-                                const swappedPerson = normalAssignments[dateKey]?.[groupNum];
-                                if (swappedPerson) {
-                                    html += `<td>${swappedPerson}</td>`;
-                                } else {
-                                    html += '<td class="text-muted">-</td>';
-                                }
-                                continue; // Skip to next group
-                            }
-                            
                             const rotationDays = groupPeople.length;
                             if (globalNormalRotationPosition[groupNum] === undefined) {
                                 // If start date is February 2026, always start from first person (position 0)
@@ -8166,344 +8196,28 @@
                                 }
                             }
                                 
-                                // Normal assignment logic (only if not a cross-month swap day)
+                                // PREVIEW MODE: Just show basic rotation WITHOUT swap logic
+                                // Swap logic will run when Next is pressed
                                 if (!isCrossMonthSwapDay) {
-                                    // Initialize conflict flag outside the if/else blocks so it's accessible later
-                                    let hasConsecutiveConflict = false;
-                                
-                                // If this person was already swapped, skip conflict check and assign them normally
-                                // This prevents swapping the same person multiple times
-                                if (assignedPerson && swappedPeoplePreview.has(assignedPerson)) {
-                                    // Person was already swapped - assign them without checking for conflicts
-                                    // Track that this person is assigned
-                                    assignedPeoplePreview[monthKey][groupNum].add(assignedPerson);
-                                    // Advance rotation position for next iteration
-                                    globalNormalRotationPosition[groupNum] = rotationPosition + 1;
-                                } else if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                                    // Use enhanced hasConsecutiveDuty with simulated assignments
-                                    const simulatedAssignments = {
-                                        special: simulatedSpecialAssignments,
-                                        weekend: simulatedWeekendAssignments,
-                                        semi: simulatedSemiAssignments,
-                                        normal: normalAssignments
-                                    };
-                                    hasConsecutiveConflict = hasConsecutiveDuty(dateKey, assignedPerson, groupNum, simulatedAssignments);
+                                    // Check if assigned person is missing, if so find next in rotation
+                                    if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
+                                        // Find next person in rotation who is not missing
+                                        for (let offset = 1; offset < rotationDays; offset++) {
+                                            const nextIndex = (rotationPosition + offset) % rotationDays;
+                                            const candidate = groupPeople[nextIndex];
+                                            if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
+                                                assignedPerson = candidate;
+                                                rotationPosition = nextIndex;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Advance rotation position
+                                    globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                 }
                                 
-                                // If there's a conflict, swap with person who has same day of week (Monday↔Wednesday, Tuesday↔Thursday)
-                                if (hasConsecutiveConflict && assignedPerson) {
-                                    const skippedPerson = assignedPerson;
-                                    const currentDayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
-                                    
-                                    // Determine swap day pairs: Monday↔Wednesday (1↔3), Tuesday↔Thursday (2↔4)
-                                    // Logic: Tuesday tries next Tuesday first, then nearest Thursday
-                                    //        Thursday tries next Thursday first, then nearest Tuesday
-                                    let targetDayOfWeek = null;
-                                    let alternativeDayOfWeek = null;
-                                    let tryTargetFirst = false; // Flag to indicate if we should try target day first
-                                    
-                                    if (currentDayOfWeek === 1) { // Monday
-                                        targetDayOfWeek = 1; // Next Monday
-                                        alternativeDayOfWeek = 3; // Wednesday (try first)
-                                    } else if (currentDayOfWeek === 2) { // Tuesday
-                                        targetDayOfWeek = 2; // Next Tuesday (try FIRST)
-                                        alternativeDayOfWeek = 4; // Thursday (then nearest)
-                                        tryTargetFirst = true;
-                                    } else if (currentDayOfWeek === 3) { // Wednesday
-                                        targetDayOfWeek = 3; // Next Wednesday
-                                        alternativeDayOfWeek = 1; // Monday (try first)
-                                    } else if (currentDayOfWeek === 4) { // Thursday
-                                        targetDayOfWeek = 4; // Next Thursday (try FIRST)
-                                        alternativeDayOfWeek = 2; // Tuesday (then nearest)
-                                        tryTargetFirst = true;
-                                    }
-                                    
-                                    // Find next normal day with same day of week (or alternative)
-                                    let swapDayKey = null;
-                                    let swapDayIndex = null;
-                                    let swapFound = false; // Flag to track if a swap was found in any step
-                                    
-                                    if (targetDayOfWeek !== null) {
-                                        // Helper function to check if a swap candidate is valid (no conflicts) - for preview
-                                        const checkSwapCandidatePreview = (candidateDayKey, candidateDayIndex) => {
-                                            if (!candidateDayKey) return false;
-                                            
-                                            const swapRotationPosition = candidateDayIndex % rotationDays;
-                                            const swapPerson = groupPeople[swapRotationPosition];
-                                            
-                                            if (!swapPerson || isPersonMissingOnDate(swapPerson, groupNum, date)) {
-                                                return false;
-                                            }
-                                            
-                                            // Check if swap person was already assigned this month (due to previous swap)
-                                            if (assignedPeoplePreview[monthKey] && assignedPeoplePreview[monthKey][groupNum] && assignedPeoplePreview[monthKey][groupNum].has(swapPerson)) {
-                                                return false;
-                                            }
-                                            
-                                            // Use enhanced hasConsecutiveDuty with simulated assignments
-                                            const simulatedAssignments = {
-                                                special: simulatedSpecialAssignments,
-                                                weekend: simulatedWeekendAssignments,
-                                                semi: simulatedSemiAssignments,
-                                                normal: normalAssignments
-                                            };
-                                            
-                                            const swapPersonHasConflict = hasConsecutiveDuty(dateKey, swapPerson, groupNum, simulatedAssignments) ||
-                                                                          hasConsecutiveDuty(candidateDayKey, swapPerson, groupNum, simulatedAssignments);
-                                            const skippedPersonHasConflict = hasConsecutiveDuty(candidateDayKey, skippedPerson, groupNum, simulatedAssignments);
-                                            
-                                            return !swapPersonHasConflict && !skippedPersonHasConflict;
-                                        };
-                                        
-                                        // For Tuesday/Thursday: STEP 1 - Try next same day of week FIRST
-                                        if (tryTargetFirst && targetDayOfWeek !== null) {
-                                            for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
-                                                const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
-                                                const checkDayOfWeek = checkDate.getDay();
-                                                const checkDayType = getDayType(checkDate);
-                                                
-                                                // Must be a normal day, same day of week, and in same month
-                                                if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameMonth(date, checkDate)) {
-                                                    // Check conflicts BEFORE accepting
-                                                    if (checkSwapCandidatePreview(sortedNormal[i], i)) {
-                                                        swapDayKey = sortedNormal[i];
-                                                        swapDayIndex = i;
-                                                        swapFound = true;
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                            
-                                            // STEP 2: If same day not found, try alternative (nearest Thursday/Tuesday)
-                                            if (!swapFound && alternativeDayOfWeek !== null) {
-                                                for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
-                                                    const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
-                                                    const checkDayOfWeek = checkDate.getDay();
-                                                    const checkDayType = getDayType(checkDate);
-                                                    
-                                                    // Must be a normal day with alternative day of week
-                                                    if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek) {
-                                                        // Check conflicts BEFORE accepting
-                                                        if (checkSwapCandidatePreview(sortedNormal[i], i)) {
-                                                            swapDayKey = sortedNormal[i];
-                                                            swapDayIndex = i;
-                                                            swapFound = true;
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        } else {
-                                            // For Monday/Wednesday: STEP 1 - Try alternative day in same week first
-                                            if (alternativeDayOfWeek !== null) {
-                                                for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
-                                                    const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
-                                                    const checkDayOfWeek = checkDate.getDay();
-                                                    const checkDayType = getDayType(checkDate);
-                                                    
-                                                    // Must be a normal day and in same week
-                                                    if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek && isSameWeek(date, checkDate)) {
-                                                        // Check conflicts BEFORE accepting
-                                                        if (checkSwapCandidatePreview(sortedNormal[i], i)) {
-                                                            swapDayKey = sortedNormal[i];
-                                                            swapDayIndex = i;
-                                                            swapFound = true;
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            
-                                            // STEP 2: If Step 1 not possible, try NEXT SAME day of week in SAME MONTH
-                                            if (!swapFound && targetDayOfWeek !== null) {
-                                                for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
-                                                    const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
-                                                    const checkDayOfWeek = checkDate.getDay();
-                                                    const checkDayType = getDayType(checkDate);
-                                                    
-                                                    // Must be a normal day, same day of week, and in same month
-                                                    if (checkDayType === 'normal-day' && checkDayOfWeek === targetDayOfWeek && isSameMonth(date, checkDate)) {
-                                                        // Check conflicts BEFORE accepting
-                                                        if (checkSwapCandidatePreview(sortedNormal[i], i)) {
-                                                            swapDayKey = sortedNormal[i];
-                                                            swapDayIndex = i;
-                                                            swapFound = true;
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        
-                                        // STEP 3: If Step 1 and Step 2 not possible, try alternative day in week AFTER next
-                                        // For Tuesday/Thursday: try alternative (Thursday/Tuesday) in week after next
-                                        // For Monday/Wednesday: try alternative (Wednesday/Monday) in week after next
-                                        // Only proceed if Step 1 and Step 2 did NOT find a valid swap
-                                        if (!swapFound && swapDayKey === null && swapDayIndex === null && alternativeDayOfWeek !== null) {
-                                            const weekAfterNextCandidates = [];
-                                            
-                                            // Collect all week-after-next candidates for alternative day
-                                            for (let i = normalIndex + 1; i < sortedNormal.length; i++) {
-                                                const checkDate = new Date(sortedNormal[i] + 'T00:00:00');
-                                                const checkDayOfWeek = checkDate.getDay();
-                                                const checkDayType = getDayType(checkDate);
-                                                
-                                                // Must be a normal day, alternative day of week, and in week AFTER next (not same week, not next week)
-                                                if (checkDayType === 'normal-day' && checkDayOfWeek === alternativeDayOfWeek && !isSameWeek(date, checkDate) && isWeekAfterNext(date, checkDate)) {
-                                                    // Check conflicts BEFORE adding to candidates
-                                                    if (checkSwapCandidatePreview(sortedNormal[i], i)) {
-                                                        weekAfterNextCandidates.push({
-                                                            dayKey: sortedNormal[i],
-                                                            dayIndex: i,
-                                                            date: checkDate
-                                                        });
-                                                    }
-                                                }
-                                            }
-                                            
-                                            // Sort candidates by date (earliest first) and pick the first one
-                                            // NOTE: In preview, we don't ask for permission (it's just a preview)
-                                            // Permission will be asked in the actual calculation
-                                            if (weekAfterNextCandidates.length > 0) {
-                                                weekAfterNextCandidates.sort((a, b) => a.date - b.date);
-                                                const earliestCandidate = weekAfterNextCandidates[0];
-                                                swapDayKey = earliestCandidate.dayKey;
-                                                swapDayIndex = earliestCandidate.dayIndex;
-                                                swapFound = true; // Mark that swap was found
-                                            }
-                                        }
-                                    }
-                                    
-                                    // If found swap day, verify conflicts one more time (restore duplicate checking for safety)
-                                    if (swapDayKey !== null && swapDayIndex !== null) {
-                                        // Calculate rotation position for swap day
-                                        const swapRotationPosition = swapDayIndex % rotationDays;
-                                        const swapPerson = groupPeople[swapRotationPosition];
-                                        // Store original rotation position before swap (needed to continue rotation correctly)
-                                        const originalRotationPosition = rotationPosition;
-                                        
-                                        // Check if swap person doesn't have conflict on current day AND swap day (use enhanced checking)
-                                        if (swapPerson && !isPersonMissingOnDate(swapPerson, groupNum, date)) {
-                                            // Use enhanced hasConsecutiveDuty with simulated assignments
-                                            const simulatedAssignments = {
-                                                special: simulatedSpecialAssignments,
-                                                weekend: simulatedWeekendAssignments,
-                                                semi: simulatedSemiAssignments,
-                                                normal: normalAssignments
-                                            };
-                                            
-                                            const swapPersonHasConflict = hasConsecutiveDuty(dateKey, swapPerson, groupNum, simulatedAssignments) ||
-                                                                          hasConsecutiveDuty(swapDayKey, swapPerson, groupNum, simulatedAssignments);
-                                            const skippedPersonHasConflict = hasConsecutiveDuty(swapDayKey, skippedPerson, groupNum, simulatedAssignments);
-                                            
-                                            if (!swapPersonHasConflict && !skippedPersonHasConflict) {
-                                                // Valid swap: swap person gets current day, skipped person gets swap day
-                                                assignedPerson = swapPerson;
-                                                // Ensure skippedPerson is set
-                                                if (!skippedPerson) skippedPerson = assignedPerson; // Fallback
-                                                
-                                                // DIRECTLY assign skipped person to swap day in preview (same as actual calculation)
-                                                if (!normalAssignments[swapDayKey]) {
-                                                    normalAssignments[swapDayKey] = {};
-                                                }
-                                                normalAssignments[swapDayKey][groupNum] = skippedPerson;
-                                                
-                                                // Mark that swap day is already assigned, so we use the assigned person when we reach it
-                                                if (!swappedDaysPreview[swapDayKey]) {
-                                                    swappedDaysPreview[swapDayKey] = {};
-                                                }
-                                                swappedDaysPreview[swapDayKey][groupNum] = true;
-                                                
-                                                // Track that both people have been assigned (to prevent duplicate assignment later)
-                                                assignedPeoplePreview[monthKey][groupNum].add(swapPerson);
-                                                assignedPeoplePreview[monthKey][groupNum].add(skippedPerson);
-                                                
-                                                // Mark both people as swapped to prevent swapping them again on subsequent days
-                                                swappedPeoplePreview.add(skippedPerson);
-                                                swappedPeoplePreview.add(swapPerson);
-                                                
-                                                // Advance rotation to original expected person's position + 1
-                                                // This ensures rotation continues normally: if Person 5 swaps with Person 2,
-                                                // rotation continues from Person 3 (position 2), not from Person 6 (position 5)
-                                                // This is the "normal" rotation position (what it would be if no swaps occurred)
-                                                const nextRotationPosition = (originalRotationPosition + 1) % rotationDays;
-                                                globalNormalRotationPosition[groupNum] = nextRotationPosition;
-                                                lastRotationPositions.normal[groupNum] = nextRotationPosition;
-                                                
-                                                // Store swap reason for display
-                                                const swapDate = new Date(swapDayKey + 'T00:00:00');
-                                                const isSameMonthSwap = isSameMonth(date, swapDate);
-                                                const isSameWeekSwap = isSameWeek(date, swapDate);
-                                                let reason;
-                                                if (isSameMonthSwap) {
-                                                    reason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδιος μήνας)`;
-                                                } else if (isSameWeekSwap) {
-                                                    reason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (ίδια εβδομάδα)`;
-                                                } else {
-                                                    reason = `Αλλαγή με ${swapPerson} λόγω συνεχόμενης Ημιαργίας (εβδομάδα μετά την επόμενη)`;
-                                                }
-                                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'swap', reason, skippedPerson);
-                                                storeAssignmentReason(swapDayKey, groupNum, skippedPerson, 'swap', `Αλλαγή με ${assignedPerson} λόγω συνεχόμενης Ημιαργίας`, assignedPerson);
-                                            } else {
-                                                // Swap person or skipped person has conflict, can't swap - try alternative
-                                                // (The code will continue to try alternative day of week)
-                                                globalNormalRotationPosition[groupNum] = rotationPosition + 1;
-                                            }
-                                        } else {
-                                            // Swap person is missing, can't swap
-                                            globalNormalRotationPosition[groupNum] = rotationPosition + 1;
-                                        }
-                                    } else {
-                                        // No swap day found in current month - try getting person from next month (if at end of month)
-                                        const lastDayOfMonth = new Date(year, month + 1, 0);
-                                        const daysUntilEndOfMonth = lastDayOfMonth.getDate() - date.getDate();
-                                        
-                                        // Only try next month if we're in the last 3 days of the month
-                                        if (daysUntilEndOfMonth <= 3) {
-                                            // Pass current rotation position so next month calculation continues from where we are
-                                            const nextMonthResult = getPersonFromNextMonth(dateKey, 'normal', groupNum, month, year, rotationDays, groupPeople, rotationPosition);
-                                            if (nextMonthResult && nextMonthResult.person) {
-                                                assignedPerson = nextMonthResult.person;
-                                                // Track assignment
-                                                assignedPeoplePreview[monthKey][groupNum].add(nextMonthResult.person);
-                                                console.log(`[PREVIEW END OF MONTH] Assigned ${nextMonthResult.person} from next month for ${dateKey} (rotation position: ${rotationPosition})`);
-                                                
-                                                // Store cross-month swap: the person with conflict (skippedPerson) must be assigned to swapDayKey in next month
-                                                // Save to global crossMonthSwaps variable (will be saved to Firestore)
-                                                if (nextMonthResult.swapDayKey && skippedPerson) {
-                                                    if (!crossMonthSwaps[nextMonthResult.swapDayKey]) {
-                                                        crossMonthSwaps[nextMonthResult.swapDayKey] = {};
-                                                    }
-                                                    crossMonthSwaps[nextMonthResult.swapDayKey][groupNum] = skippedPerson;
-                                                    console.log(`[PREVIEW CROSS-MONTH SWAP] Person ${skippedPerson} (had conflict on ${dateKey}) must be assigned to ${nextMonthResult.swapDayKey} (Group ${groupNum})`);
-                                                }
-                                                
-                                                // Advance rotation position for next iteration
-                                                // This is the "normal" rotation position (what it would be if no swaps occurred)
-                                                const nextRotationPosition = (rotationPosition + 1) % rotationDays;
-                                                globalNormalRotationPosition[groupNum] = nextRotationPosition;
-                                                // Track last rotation position (normal rotation, ignoring swaps) - for preview, we track but don't save to global lastRotationPositions
-                                                // The actual saving happens in the calculation function
-                                            } else {
-                                                // No person from next month available, still assign original person (they'll have conflict)
-                                                const nextRotationPosition = (rotationPosition + 1) % rotationDays;
-                                                globalNormalRotationPosition[groupNum] = nextRotationPosition;
-                                            }
-                                        } else {
-                                            // Not at end of month, still assign original person (they'll have conflict but it's unavoidable)
-                                            const nextRotationPosition = (rotationPosition + 1) % rotationDays;
-                                            globalNormalRotationPosition[groupNum] = nextRotationPosition;
-                                        }
-                                    }
-                                } else {
-                                    // No conflict, assign normally and advance rotation
-                                    // This is the "normal" rotation position (what it would be if no swaps occurred)
-                                    const nextRotationPosition = (rotationPosition + 1) % rotationDays;
-                                    globalNormalRotationPosition[groupNum] = nextRotationPosition;
-                                    // Track last rotation position (normal rotation, ignoring swaps) - for preview, we track but don't save to global lastRotationPositions
-                                    // The actual saving happens in the calculation function
-                                }
-                                } // End of !isCrossMonthSwapDay check
+                                // END OF PREVIEW MODE - Swap logic removed, will be applied when Next is pressed
                             }
                             
                             // Store assignment
@@ -8573,6 +8287,15 @@
                 startDate: startDate.toISOString(),
                 endDate: endDate.toISOString()
             };
+            
+            // Store normal assignments and rotation positions for saving when Next is pressed
+            calculationSteps.tempNormalAssignments = normalAssignments;
+            calculationSteps.lastNormalRotationPositions = {};
+            for (let g = 1; g <= 4; g++) {
+                if (globalNormalRotationPosition[g] !== undefined) {
+                    calculationSteps.lastNormalRotationPositions[g] = globalNormalRotationPosition[g];
+                }
+            }
             
             console.log('[PREVIEW DEBUG] Stored temp assignments in calculationSteps.tempAssignments');
             console.log('[PREVIEW DEBUG] Sample normal assignments:', Object.keys(normalAssignments).slice(0, 5).map(key => ({ date: key, groups: Object.keys(normalAssignments[key] || {}) })));
