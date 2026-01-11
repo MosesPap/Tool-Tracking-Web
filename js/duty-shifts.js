@@ -6067,42 +6067,46 @@
 
         // Navigation functions
         async function goToNextStep() {
+            // If moving from Step 1 (Special Holidays), save assignments to Firestore
+            if (calculationSteps.currentStep === 1) {
+                await saveStep1_SpecialHolidays();
+                calculationSteps.currentStep++;
+                renderCurrentStep();
+                return;
+            }
+            
+            // If moving from Step 2 (Weekends), save assignments and run skip logic
+            // NOTE: Step 3 will be rendered after OK is pressed in the modal
+            if (calculationSteps.currentStep === 2) {
+                await saveStep2_Weekends();
+                // Don't increment step here - it will be done when OK is pressed in modal
+                return;
+            }
+            
+            // If moving from Step 3 (Semi-Normal), save assignments and run swap logic
+            // NOTE: Step 4 will be rendered after OK is pressed in the modal
+            if (calculationSteps.currentStep === 3) {
+                await saveStep3_SemiNormal();
+                // Don't increment step here - it will be done when OK is pressed in modal
+                return;
+            }
+            
+            // If moving from Step 4 (Normal), save assignments and run swap logic
+            // NOTE: Final save will happen after OK is pressed in the modal
+            if (calculationSteps.currentStep === 4) {
+                console.log('[STEP 4] Next button pressed, calling saveStep4_Normal()');
+                try {
+                    await saveStep4_Normal();
+                    console.log('[STEP 4] saveStep4_Normal() completed');
+                } catch (error) {
+                    console.error('[STEP 4] Error in saveStep4_Normal():', error);
+                }
+                // Don't increment step here - it will be done when OK is pressed in modal
+                return;
+            }
+            
+            // For any other step, just increment and render
             if (calculationSteps.currentStep < calculationSteps.totalSteps) {
-                // If moving from Step 1 (Special Holidays), save assignments to Firestore
-                if (calculationSteps.currentStep === 1) {
-                    await saveStep1_SpecialHolidays();
-                }
-                
-                // If moving from Step 2 (Weekends), save assignments and run skip logic
-                // NOTE: Step 3 will be rendered after OK is pressed in the modal
-                if (calculationSteps.currentStep === 2) {
-                    await saveStep2_Weekends();
-                    // Don't increment step here - it will be done when OK is pressed in modal
-                    return;
-                }
-                
-                // If moving from Step 3 (Semi-Normal), save assignments and run swap logic
-                // NOTE: Step 4 will be rendered after OK is pressed in the modal
-                if (calculationSteps.currentStep === 3) {
-                    await saveStep3_SemiNormal();
-                    // Don't increment step here - it will be done when OK is pressed in modal
-                    return;
-                }
-                
-                // If moving from Step 4 (Normal), save assignments and run swap logic
-                // NOTE: Final save will happen after OK is pressed in the modal
-                if (calculationSteps.currentStep === 4) {
-                    console.log('[STEP 4] Next button pressed, calling saveStep4_Normal()');
-                    try {
-                        await saveStep4_Normal();
-                        console.log('[STEP 4] saveStep4_Normal() completed');
-                    } catch (error) {
-                        console.error('[STEP 4] Error in saveStep4_Normal():', error);
-                    }
-                    // Don't increment step here - it will be done when OK is pressed in modal
-                    return;
-                }
-                
                 calculationSteps.currentStep++;
                 renderCurrentStep();
             }
