@@ -6826,6 +6826,11 @@
         }
 
         function goToPreviousStep() {
+            if (calculationSteps.currentStep > 1) {
+                calculationSteps.currentStep--;
+                renderCurrentStep();
+            }
+        }
 
         // Cancel step-by-step calculation
         function cancelStepByStepCalculation() {
