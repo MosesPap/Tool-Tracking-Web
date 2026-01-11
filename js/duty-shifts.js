@@ -4833,21 +4833,42 @@
                             }
                         }
                         
-                        // Apply styling: critical assignments get red, swapped assignments get round border
+                        // Apply styling: critical assignments get red, swapped assignments get round border with color coding
                         let styleClass = 'duty-person';
+                        let swapPairStyle = '';
                         if (isCritical) {
                             styleClass = 'duty-person-critical';
                         } else if (isSwapped) {
                             styleClass = 'duty-person-swapped';
+                            // Get swap pair ID and apply color
+                            if (reason && reason.swapPairId !== null && reason.swapPairId !== undefined) {
+                                // Ensure swapPairId is a number (Firestore might return it as string)
+                                const swapPairId = typeof reason.swapPairId === 'number' ? reason.swapPairId : parseInt(reason.swapPairId);
+                                if (!isNaN(swapPairId)) {
+                                    // Generate colors for swap pairs (same as in runNormalSwapLogic)
+                                    const swapColors = [
+                                        { border: '#17a2b8', bg: 'rgba(23, 162, 184, 0.1)' }, // Cyan
+                                        { border: '#28a745', bg: 'rgba(40, 167, 69, 0.1)' }, // Green
+                                        { border: '#ffc107', bg: 'rgba(255, 193, 7, 0.1)' }, // Yellow
+                                        { border: '#dc3545', bg: 'rgba(220, 53, 69, 0.1)' }, // Red
+                                        { border: '#6f42c1', bg: 'rgba(111, 66, 193, 0.1)' }, // Purple
+                                        { border: '#fd7e14', bg: 'rgba(253, 126, 20, 0.1)' }, // Orange
+                                        { border: '#20c997', bg: 'rgba(32, 201, 151, 0.1)' }, // Teal
+                                        { border: '#e83e8c', bg: 'rgba(232, 62, 140, 0.1)' }  // Pink
+                                    ];
+                                    const swapColor = swapColors[swapPairId % swapColors.length];
+                                    swapPairStyle = `border: 2px solid ${swapColor.border}; background-color: ${swapColor.bg};`;
+                                }
+                            }
                         }
                         
                         // Display name with indicator icon and conflict icon
                         const combinedTitle = indicatorTitle || conflictTitle || '';
                         // For swapped people, the icon and name are already in the round border, so don't add extra flex styling
                         if (isSwapped) {
-                            displayAssignmentHtml += `<div class="${styleClass}" title="${combinedTitle}">${indicatorIcon}${name}</div>`;
+                            displayAssignmentHtml += `<div class="${styleClass}" style="${swapPairStyle}" title="${combinedTitle}">${indicatorIcon}${name}</div>`;
                         } else {
-                            displayAssignmentHtml += `<div class="${styleClass}" style="display: flex; align-items: center; gap: 4px;" title="${combinedTitle}">${indicatorIcon}${name}${conflictIcon}</div>`;
+                        displayAssignmentHtml += `<div class="${styleClass}" style="display: flex; align-items: center; gap: 4px;" title="${combinedTitle}">${indicatorIcon}${name}${conflictIcon}</div>`;
                         }
                     });
                     
@@ -4873,7 +4894,29 @@
                                         const indicatorIcon = '<i class="fas fa-exchange-alt text-info" title="Αλλαγή" style="font-size: 0.9em;"></i> ';
                                         const styleClass = 'duty-person-swapped';
                                         const title = reason.reason || 'Αλλαγή';
-                                        displayAssignmentHtml += `<div class="${styleClass}" title="${title}">${indicatorIcon}${personName}</div>`;
+                                        
+                                        // Apply color based on swap pair ID
+                                        let swapPairStyle = '';
+                                        if (reason.swapPairId !== null && reason.swapPairId !== undefined) {
+                                            // Ensure swapPairId is a number (Firestore might return it as string)
+                                            const swapPairId = typeof reason.swapPairId === 'number' ? reason.swapPairId : parseInt(reason.swapPairId);
+                                            if (!isNaN(swapPairId)) {
+                                                const swapColors = [
+                                                    { border: '#17a2b8', bg: 'rgba(23, 162, 184, 0.1)' }, // Cyan
+                                                    { border: '#28a745', bg: 'rgba(40, 167, 69, 0.1)' }, // Green
+                                                    { border: '#ffc107', bg: 'rgba(255, 193, 7, 0.1)' }, // Yellow
+                                                    { border: '#dc3545', bg: 'rgba(220, 53, 69, 0.1)' }, // Red
+                                                    { border: '#6f42c1', bg: 'rgba(111, 66, 193, 0.1)' }, // Purple
+                                                    { border: '#fd7e14', bg: 'rgba(253, 126, 20, 0.1)' }, // Orange
+                                                    { border: '#20c997', bg: 'rgba(32, 201, 151, 0.1)' }, // Teal
+                                                    { border: '#e83e8c', bg: 'rgba(232, 62, 140, 0.1)' }  // Pink
+                                                ];
+                                                const swapColor = swapColors[swapPairId % swapColors.length];
+                                                swapPairStyle = `border: 2px solid ${swapColor.border}; background-color: ${swapColor.bg};`;
+                                            }
+                                        }
+                                        
+                                        displayAssignmentHtml += `<div class="${styleClass}" style="${swapPairStyle}" title="${title}">${indicatorIcon}${personName}</div>`;
                                     }
                                 }
                             }
@@ -5038,7 +5081,7 @@
         }
         
         // Helper function to store assignment reason
-        function storeAssignmentReason(dateKey, groupNum, personName, type, reason, swappedWith = null) {
+        function storeAssignmentReason(dateKey, groupNum, personName, type, reason, swappedWith = null, swapPairId = null) {
             if (!assignmentReasons[dateKey]) {
                 assignmentReasons[dateKey] = {};
             }
@@ -5048,7 +5091,8 @@
             assignmentReasons[dateKey][groupNum][personName] = {
                 type: type, // 'skip' or 'swap'
                 reason: reason,
-                swappedWith: swappedWith
+                swappedWith: swappedWith,
+                swapPairId: swapPairId // For color coding swap pairs
             };
         }
         
@@ -5424,12 +5468,12 @@
             // For semi-normal days and normal days, allow cross-month swaps throughout the entire month
             // For other day types (weekend, special), only check in last 3 days
             if (dayTypeCategory !== 'semi' && dayTypeCategory !== 'normal') {
-                const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
-                const daysUntilEndOfMonth = lastDayOfMonth.getDate() - date.getDate();
-                
-                // Only use next month logic if we're in the last 3 days of the month
-                if (daysUntilEndOfMonth > 3) {
-                    return null;
+            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+            const daysUntilEndOfMonth = lastDayOfMonth.getDate() - date.getDate();
+            
+            // Only use next month logic if we're in the last 3 days of the month
+            if (daysUntilEndOfMonth > 3) {
+                return null;
                 }
             }
             
@@ -6788,6 +6832,34 @@
                 const sortedSemi = [...semiNormalDays].sort();
                 const updatedAssignments = {}; // dateKey -> { groupNum -> personName }
                 
+                // Track swap pairs for color coding
+                // Find maximum existing swapPairId to ensure unique IDs
+                let maxSwapPairId = -1;
+                for (const dateKey in assignmentReasons) {
+                    for (const groupNumStr in assignmentReasons[dateKey]) {
+                        for (const personName in assignmentReasons[dateKey][groupNumStr]) {
+                            const reason = assignmentReasons[dateKey][groupNumStr][personName];
+                            if (reason && reason.swapPairId !== null && reason.swapPairId !== undefined) {
+                                const id = typeof reason.swapPairId === 'number' ? reason.swapPairId : parseInt(reason.swapPairId);
+                                if (!isNaN(id) && id > maxSwapPairId) {
+                                    maxSwapPairId = id;
+                                }
+                            }
+                        }
+                    }
+                }
+                let swapPairCounter = maxSwapPairId + 1; // Start from max + 1 to ensure uniqueness
+                const swapColors = [
+                    { border: '#17a2b8', bg: 'rgba(23, 162, 184, 0.1)' }, // Cyan
+                    { border: '#28a745', bg: 'rgba(40, 167, 69, 0.1)' }, // Green
+                    { border: '#ffc107', bg: 'rgba(255, 193, 7, 0.1)' }, // Yellow
+                    { border: '#dc3545', bg: 'rgba(220, 53, 69, 0.1)' }, // Red
+                    { border: '#6f42c1', bg: 'rgba(111, 66, 193, 0.1)' }, // Purple
+                    { border: '#fd7e14', bg: 'rgba(253, 126, 20, 0.1)' }, // Orange
+                    { border: '#20c997', bg: 'rgba(32, 201, 151, 0.1)' }, // Teal
+                    { border: '#e83e8c', bg: 'rgba(232, 62, 140, 0.1)' }  // Pink
+                ];
+                
                 // Load current semi-normal assignments from preview (tempSemiAssignments)
                 const tempSemiAssignments = calculationSteps.tempSemiAssignments || {};
                 for (const dateKey in tempSemiAssignments) {
@@ -6938,6 +7010,9 @@
                             }
                             
                             if (swapCandidate && swapDateKey) {
+                                // Generate unique swap pair ID for color coding
+                                const swapPairId = swapPairCounter++;
+                                
                                 swappedPeople.push({
                                     date: dateKey,
                                     dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
@@ -6945,18 +7020,23 @@
                                     conflictedPerson: currentPerson,
                                     swappedPerson: swapCandidate,
                                     swapDate: swapDateKey,
-                                    swapDateStr: new Date(swapDateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                    swapDateStr: new Date(swapDateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                    swapPairId: swapPairId
                                 });
                                 
                                 // Perform the swap: conflicted person goes to swap date, swapped person goes to conflicted date
                                 updatedAssignments[dateKey][groupNum] = swapCandidate;
                                 updatedAssignments[swapDateKey][groupNum] = currentPerson;
                                 
-                                // Store assignment reasons for both swapped people
+                                // Store assignment reasons for both swapped people with swap pair ID
                                 const swapDateStr = new Date(swapDateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                 const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                storeAssignmentReason(dateKey, groupNum, swapCandidate, 'swap', `Αλλαγή με ${currentPerson} (${currentDateStr})`, currentPerson);
-                                storeAssignmentReason(swapDateKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${swapCandidate} (${swapDateStr})`, swapCandidate);
+                                storeAssignmentReason(dateKey, groupNum, swapCandidate, 'swap', `Αλλαγή με ${currentPerson} (${currentDateStr})`, currentPerson, swapPairId);
+                                storeAssignmentReason(swapDateKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${swapCandidate} (${swapDateStr})`, swapCandidate, swapPairId);
+                                
+                                // IMPORTANT: Stop processing this conflict - swap found, don't try cross-month swap
+                                // Break out of the loop to prevent unnecessary swaps
+                                break;
                             } else {
                                 // No swap found in current month - try cross-month swap
                                 // For semi-normal, check next month throughout the entire month (not just last 3 days)
@@ -6990,6 +7070,9 @@
                                     
                                     if (!nextMonthPersonHasConflict) {
                                         // Valid cross-month swap found
+                                        // Generate unique swap pair ID for color coding
+                                        const swapPairId = swapPairCounter++;
+                                        
                                         swappedPeople.push({
                                             date: dateKey,
                                             dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
@@ -6997,7 +7080,8 @@
                                             conflictedPerson: currentPerson,
                                             swappedPerson: nextMonthPerson,
                                             swapDate: swapDayKey,
-                                            swapDateStr: new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                            swapDateStr: new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                            swapPairId: swapPairId
                                         });
                                         
                                         // Assign next month person to current day
@@ -7010,14 +7094,20 @@
                                         crossMonthSwaps[swapDayKey][groupNum] = currentPerson;
                                         console.log(`[CROSS-MONTH SWAP SEMI] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${swapDayKey} (Group ${groupNum})`);
                                         
-                                        // Store assignment reasons for BOTH people in cross-month swap
+                                        // Store assignment reasons for BOTH people in cross-month swap with swap pair ID
                                         const swapDateStr = new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                         const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                         // Mark the person from next month who was swapped in (now assigned to current date)
-                                        storeAssignmentReason(dateKey, groupNum, nextMonthPerson, 'swap', `Αλλαγή με ${currentPerson} (${currentDateStr} → ${swapDateStr})`, currentPerson);
+                                        storeAssignmentReason(dateKey, groupNum, nextMonthPerson, 'swap', `Αλλαγή με ${currentPerson} (${currentDateStr} → ${swapDateStr})`, currentPerson, swapPairId);
                                         // Also mark the conflicted person who will be assigned to next month (cross-month swap)
                                         // Note: This will be marked when the next month is calculated, but we can pre-mark it here
-                                        storeAssignmentReason(swapDayKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${nextMonthPerson} (${currentDateStr} → ${swapDateStr})`, nextMonthPerson);
+                                        storeAssignmentReason(swapDayKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${nextMonthPerson} (${currentDateStr} → ${swapDateStr})`, nextMonthPerson, swapPairId);
+                                        
+                                        // IMPORTANT: Stop processing this conflict - swap found
+                                        break;
+                                        
+                                        // IMPORTANT: Stop processing this conflict - swap found
+                                        break;
                                     }
                                 }
                             }
@@ -7406,12 +7496,46 @@
                 const sortedNormal = [...normalDays].sort();
                 const updatedAssignments = {}; // dateKey -> { groupNum -> personName }
                 
+                // Track swap pairs for color coding: swapPairId -> { color, person1, person2, date1, date2 }
+                // Find maximum existing swapPairId to ensure unique IDs
+                let maxSwapPairId = -1;
+                for (const dateKey in assignmentReasons) {
+                    for (const groupNumStr in assignmentReasons[dateKey]) {
+                        for (const personName in assignmentReasons[dateKey][groupNumStr]) {
+                            const reason = assignmentReasons[dateKey][groupNumStr][personName];
+                            if (reason && reason.swapPairId !== null && reason.swapPairId !== undefined) {
+                                const id = typeof reason.swapPairId === 'number' ? reason.swapPairId : parseInt(reason.swapPairId);
+                                if (!isNaN(id) && id > maxSwapPairId) {
+                                    maxSwapPairId = id;
+                                }
+                            }
+                        }
+                    }
+                }
+                let swapPairCounter = maxSwapPairId + 1; // Start from max + 1 to ensure uniqueness
+                const swapPairs = {}; // swapPairId -> { color, people: [{dateKey, groupNum, personName}, ...] }
+                
+                // Generate colors for swap pairs (different colors for each pair)
+                const swapColors = [
+                    { border: '#17a2b8', bg: 'rgba(23, 162, 184, 0.1)' }, // Cyan
+                    { border: '#28a745', bg: 'rgba(40, 167, 69, 0.1)' }, // Green
+                    { border: '#ffc107', bg: 'rgba(255, 193, 7, 0.1)' }, // Yellow
+                    { border: '#dc3545', bg: 'rgba(220, 53, 69, 0.1)' }, // Red
+                    { border: '#6f42c1', bg: 'rgba(111, 66, 193, 0.1)' }, // Purple
+                    { border: '#fd7e14', bg: 'rgba(253, 126, 20, 0.1)' }, // Orange
+                    { border: '#20c997', bg: 'rgba(32, 201, 151, 0.1)' }, // Teal
+                    { border: '#e83e8c', bg: 'rgba(232, 62, 140, 0.1)' }  // Pink
+                ];
+                
                 // Load current normal assignments from tempNormalAssignments
                 const tempNormalAssignments = calculationSteps.tempNormalAssignments || {};
                 for (const dateKey in tempNormalAssignments) {
                     const groups = tempNormalAssignments[dateKey];
                     updatedAssignments[dateKey] = { ...groups };
                 }
+                
+                // Track people who have already been swapped to prevent re-swapping
+                const swappedPeopleSet = new Set(); // Format: "dateKey:groupNum:personName"
                 
                 // Run swap logic (check for consecutive conflicts)
                 sortedNormal.forEach((dateKey) => {
@@ -7425,6 +7549,12 @@
                         
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (!currentPerson) continue;
+                        
+                        // Skip if this person has already been swapped (prevent re-swapping)
+                        const swapKey = `${dateKey}:${groupNum}:${currentPerson}`;
+                        if (swappedPeopleSet.has(swapKey)) {
+                            continue; // Already swapped, skip
+                        }
                         
                         // Check for consecutive conflicts using enhanced hasConsecutiveDuty
                         const simulatedAssignments = {
@@ -7445,12 +7575,12 @@
                             let swapDayIndex = null;
                             let swapFound = false;
                             
-                            // Determine swap logic based on day of week
+                            // SEPARATE LOGIC: Monday/Wednesday vs Tuesday/Thursday
+                            // Monday (1) or Wednesday (3) - Monday ↔ Wednesday logic
                             if (dayOfWeek === 1 || dayOfWeek === 3) {
-                                // Monday (1) or Wednesday (3) - Monday ↔ Wednesday
                                 const alternativeDayOfWeek = dayOfWeek === 1 ? 3 : 1; // Monday ↔ Wednesday
                                 
-                                // Step 1: Try alternative day in same week
+                                // MONDAY/WEDNESDAY - Step 1: Try alternative day in same week
                                 const sameWeekDate = new Date(date);
                                 const daysToAdd = alternativeDayOfWeek - dayOfWeek;
                                 sameWeekDate.setDate(date.getDate() + daysToAdd);
@@ -7467,7 +7597,7 @@
                                     }
                                 }
                                 
-                                // Step 2: If Step 1 fails, try same day of week in same month
+                                // MONDAY/WEDNESDAY - Step 2: ONLY if Step 1 failed, try same day of week in same month
                                 if (!swapFound) {
                                     const nextSameDay = new Date(year, month, date.getDate() + 7);
                                     if (nextSameDay.getMonth() === month) {
@@ -7485,11 +7615,15 @@
                                     }
                                 }
                                 
-                                // Step 3: If Step 2 fails, try alternative day in week after next OR next month
+                                // MONDAY/WEDNESDAY - Step 3: ONLY if Step 2 failed, try alternative day in week after next OR next month
                                 if (!swapFound) {
-                                    // Try week after next (2 weeks later)
+                                    // Try week after next (2 weeks later) - alternative day
                                     const weekAfterNextDate = new Date(date);
                                     weekAfterNextDate.setDate(date.getDate() + 14);
+                                    // Adjust to alternative day of week
+                                    const currentDayOfWeek = weekAfterNextDate.getDay();
+                                    const daysToAdjust = alternativeDayOfWeek - currentDayOfWeek;
+                                    weekAfterNextDate.setDate(weekAfterNextDate.getDate() + daysToAdjust);
                                     const weekAfterNextKey = formatDateKey(weekAfterNextDate);
                                     
                                     if (isWeekAfterNext(date, weekAfterNextDate) && updatedAssignments[weekAfterNextKey]?.[groupNum]) {
@@ -7503,12 +7637,15 @@
                                         }
                                     }
                                     
-                                    // If still not found, try next month
+                                    // If still not found, try next month - alternative day
                                     if (!swapFound) {
                                         const nextMonthDate = new Date(year, month + 1, date.getDate());
-                                        if (nextMonthDate.getDate() === date.getDate()) { // Ensure valid date
+                                        // Adjust to alternative day of week
+                                        while (nextMonthDate.getDay() !== alternativeDayOfWeek && nextMonthDate.getDate() <= 31) {
+                                            nextMonthDate.setDate(nextMonthDate.getDate() + 1);
+                                        }
+                                        if (nextMonthDate.getDate() <= 31) {
                                             const nextMonthKey = formatDateKey(nextMonthDate);
-                                            // Check if this date exists in normalDays (might be calculated)
                                             if (normalDays.includes(nextMonthKey) && updatedAssignments[nextMonthKey]?.[groupNum]) {
                                                 const swapCandidate = updatedAssignments[nextMonthKey][groupNum];
                                                 if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthDate) &&
@@ -7522,11 +7659,12 @@
                                         }
                                     }
                                 }
-                            } else if (dayOfWeek === 2 || dayOfWeek === 4) {
-                                // Tuesday (2) or Thursday (4) - Tuesday ↔ Thursday
+                            }
+                            // TUESDAY/THURSDAY - Separate logic block
+                            else if (dayOfWeek === 2 || dayOfWeek === 4) {
                                 const alternativeDayOfWeek = dayOfWeek === 2 ? 4 : 2; // Tuesday ↔ Thursday
                                 
-                                // Step 1a: Try next same day of week in same month
+                                // TUESDAY/THURSDAY - Step 1a: Try next same day of week in same month
                                 const nextSameDay = new Date(year, month, date.getDate() + 7);
                                 if (nextSameDay.getMonth() === month) {
                                     const nextSameDayKey = formatDateKey(nextSameDay);
@@ -7542,7 +7680,7 @@
                                     }
                                 }
                                 
-                                // Step 1b: If Step 1a fails, try next same day of week in next month (cross-month)
+                                // TUESDAY/THURSDAY - Step 1b: ONLY if Step 1a failed, try next same day of week in next month (cross-month)
                                 if (!swapFound) {
                                     const nextMonthSameDay = new Date(year, month + 1, date.getDate());
                                     if (nextMonthSameDay.getDate() === date.getDate()) {
@@ -7560,7 +7698,7 @@
                                     }
                                 }
                                 
-                                // Step 2: If Step 1 fails, try alternative day in same week
+                                // TUESDAY/THURSDAY - Step 2: ONLY if Step 1 failed, try alternative day in same week
                                 if (!swapFound) {
                                     const sameWeekDate = new Date(date);
                                     const daysToAdd = alternativeDayOfWeek - dayOfWeek;
@@ -7579,7 +7717,7 @@
                                     }
                                 }
                                 
-                                // Step 3: If Step 2 fails, try next alternative day in same month
+                                // TUESDAY/THURSDAY - Step 3: ONLY if Step 2 failed, try next alternative day in same month
                                 if (!swapFound) {
                                     // Find next occurrence of alternative day (Tuesday/Thursday) in same month
                                     let nextAlternativeDay = new Date(date);
@@ -7603,12 +7741,12 @@
                                     }
                                 }
                                 
-                                // Step 4: If Step 3 fails, try next alternative day in next month (cross-month)
+                                // TUESDAY/THURSDAY - Step 4: ONLY if Step 3 failed, try next alternative day in next month (cross-month)
                                 if (!swapFound) {
                                     // Find next occurrence of alternative day in next month
                                     let nextMonthAlternative = new Date(year, month + 1, date.getDate());
                                     // Adjust to the correct day of week
-                                    while (nextMonthAlternative.getDay() !== alternativeDayOfWeek) {
+                                    while (nextMonthAlternative.getDay() !== alternativeDayOfWeek && nextMonthAlternative.getDate() <= 31) {
                                         nextMonthAlternative.setDate(nextMonthAlternative.getDate() + 1);
                                     }
                                     
@@ -7628,9 +7766,22 @@
                                 }
                             }
                             
-                            // Perform swap if found
+                            // Perform swap if found - STOP after finding valid swap (don't continue to other steps)
                             if (swapFound && swapDayKey && swapDayIndex !== null && swapDayIndex >= 0) {
                                 const swapCandidate = updatedAssignments[swapDayKey][groupNum];
+                                
+                                // Generate unique swap pair ID for color coding
+                                const swapPairId = swapPairCounter++;
+                                const swapColor = swapColors[swapPairId % swapColors.length];
+                                
+                                // Store swap pair information
+                                swapPairs[swapPairId] = {
+                                    color: swapColor,
+                                    people: [
+                                        { dateKey: dateKey, groupNum: groupNum, personName: currentPerson },
+                                        { dateKey: swapDayKey, groupNum: groupNum, personName: swapCandidate }
+                                    ]
+                                };
                                 
                                 swappedPeople.push({
                                     date: dateKey,
@@ -7639,18 +7790,27 @@
                                     skippedPerson: currentPerson,
                                     swappedPerson: swapCandidate,
                                     swapDate: swapDayKey,
-                                    swapDateStr: new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                    swapDateStr: new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                    swapPairId: swapPairId
                                 });
                                 
                                 // Perform the swap: conflicted person goes to swap date, swapped person goes to conflicted date
                                 updatedAssignments[dateKey][groupNum] = swapCandidate;
                                 updatedAssignments[swapDayKey][groupNum] = currentPerson;
                                 
-                                // Store assignment reasons for BOTH people involved in the swap
+                                // Store assignment reasons for BOTH people involved in the swap with swap pair ID
                                 const swapDateStr = new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                 const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                storeAssignmentReason(dateKey, groupNum, swapCandidate, 'swap', `Αλλαγή με ${currentPerson} (${currentDateStr})`, currentPerson);
-                                storeAssignmentReason(swapDayKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${swapCandidate} (${swapDateStr})`, swapCandidate);
+                                storeAssignmentReason(dateKey, groupNum, swapCandidate, 'swap', `Αλλαγή με ${currentPerson} (${currentDateStr})`, currentPerson, swapPairId);
+                                storeAssignmentReason(swapDayKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${swapCandidate} (${swapDateStr})`, swapCandidate, swapPairId);
+                                
+                                // Mark both people as swapped to prevent re-swapping
+                                swappedPeopleSet.add(`${dateKey}:${groupNum}:${currentPerson}`);
+                                swappedPeopleSet.add(`${swapDayKey}:${groupNum}:${swapCandidate}`);
+                                
+                                // IMPORTANT: Stop processing this conflict - swap found, don't try other steps
+                                // Continue to next group/person - swap is complete
+                                continue;
                             }
                         }
                     }
@@ -8488,20 +8648,20 @@
                         // Check if assigned person is missing, if so find next in rotation
                         if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
                             // Find next person in rotation who is not missing
-                            for (let offset = 1; offset < rotationDays; offset++) {
-                                const nextIndex = (rotationPosition + offset) % rotationDays;
-                                const candidate = groupPeople[nextIndex];
+                                for (let offset = 1; offset < rotationDays; offset++) {
+                                    const nextIndex = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[nextIndex];
                                 if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
-                                    assignedPerson = candidate;
+                                        assignedPerson = candidate;
                                     rotationPosition = nextIndex;
-                                    break;
+                                        break;
+                                    }
                                 }
-                            }
                         }
                         
                         // Advance rotation position
                         if (assignedPerson) {
-                            globalWeekendRotationPosition[groupNum] = rotationPosition + 1;
+                                globalWeekendRotationPosition[groupNum] = rotationPosition + 1;
                         } else {
                             globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                         }
@@ -8636,11 +8796,11 @@
                                             break;
                                         }
                                     }
-                                }
+                                    }
                                     
                                 // Advance rotation position
                                 globalSemiRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                            } else {
+                                } else {
                                 // For cross-month swap, advance from the assigned person's position
                                 const assignedIndex = groupPeople.indexOf(assignedPerson);
                                 if (assignedIndex !== -1) {
@@ -8800,20 +8960,20 @@
                         // Check if assigned person is missing, if so find next in rotation
                         if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
                             // Find next person in rotation who is not missing
-                            for (let offset = 1; offset < rotationDays; offset++) {
-                                const nextIndex = (rotationPosition + offset) % rotationDays;
-                                const candidate = groupPeople[nextIndex];
+                                for (let offset = 1; offset < rotationDays; offset++) {
+                                    const nextIndex = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[nextIndex];
                                 if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
-                                    assignedPerson = candidate;
+                                        assignedPerson = candidate;
                                     rotationPosition = nextIndex;
-                                    break;
+                                        break;
+                                    }
                                 }
-                            }
                         }
                         
                         // Advance rotation position
                         if (assignedPerson) {
-                            globalWeekendRotationPosition[groupNum] = rotationPosition + 1;
+                                globalWeekendRotationPosition[groupNum] = rotationPosition + 1;
                         } else {
                             globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                         }
@@ -9671,7 +9831,7 @@
                             // Ensure existingAssignment is a string
                             const assignmentStr = typeof existingAssignment === 'string' ? existingAssignment : String(existingAssignment);
                             if (assignmentStr.includes(`(Ομάδα ${groupNum})`)) {
-                                return;
+                            return;
                             }
                         }
                         
