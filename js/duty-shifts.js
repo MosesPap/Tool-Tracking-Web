@@ -7602,6 +7602,11 @@
                         
                         const hasConsecutiveConflict = hasConsecutiveDuty(dateKey, currentPerson, groupNum, simulatedAssignments);
                         
+                        // Debug logging to help identify why conflicts aren't detected
+                        if (hasConsecutiveConflict) {
+                            console.log(`[SWAP DEBUG] Found conflict for ${currentPerson} on ${dateKey} (Group ${groupNum})`);
+                        }
+                        
                         if (hasConsecutiveConflict) {
                             const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                             const month = date.getMonth();
@@ -9265,9 +9270,10 @@
                                         const hasConflict = hasConsecutiveDuty(dateKey, assignedPerson, groupNum, simulatedAssignments);
                                         
                                         if (hasConflict) {
-                                            // Person has conflict - DO NOT assign them or the next person
-                                            // Leave this day empty for swap logic to handle
-                                            assignedPerson = null;
+                                            // Person has conflict - STORE THEM so swap logic can process them
+                                            // The preview should show the exact rotation order (who would be assigned)
+                                            // even if they have a conflict. Swap logic will handle swapping them.
+                                            // DO NOT set to null - we need to know who has the conflict to swap them
                                             // Still advance rotation position so next person gets their correct turn
                                             globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                         } else {
@@ -9355,7 +9361,8 @@
                                                 special: simulatedSpecialAssignments,
                                                 weekend: simulatedWeekendAssignments,
                                                 semi: simulatedSemiAssignments,
-                                                normal: normalAssignments
+                                                normal: normalAssignments,
+                                                normalRotationPositions: globalNormalRotationPosition // Pass current rotation positions for conflict checking
                                             };
                                             
                     const hasConsecutiveConflict = hasConsecutiveDuty(dateKey, currentPerson, groupNum, simulatedAssignments);
