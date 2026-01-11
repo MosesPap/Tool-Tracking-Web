@@ -9775,7 +9775,30 @@
                         
                         // Perform swap if found
                         if (swapFound && swapDayKey) {
-                            const swapCandidate = normalAssignments[swapDayKey][groupNum];
+                            // For cross-month swaps, swapCandidate might not be in normalAssignments yet
+                            // Get it from the stored value or from getPersonFromNextMonth
+                            let swapCandidate;
+                            if (normalAssignments[swapDayKey] && normalAssignments[swapDayKey][groupNum]) {
+                                // Regular swap within calculation range
+                                swapCandidate = normalAssignments[swapDayKey][groupNum];
+                            } else {
+                                // Cross-month swap - get candidate from getPersonFromNextMonth
+                                const rotationDays = groupPeople.length;
+                                const currentRotationPosition = globalNormalRotationPosition[groupNum];
+                                const nextMonthResult = getPersonFromNextMonth(dateKey, 'normal', groupNum, month, year, rotationDays, groupPeople, currentRotationPosition);
+                                if (nextMonthResult && nextMonthResult.person && nextMonthResult.swapDayKey === swapDayKey) {
+                                    swapCandidate = nextMonthResult.person;
+                                    // Store it in normalAssignments for the swap execution
+                                    if (!normalAssignments[swapDayKey]) {
+                                        normalAssignments[swapDayKey] = {};
+                                    }
+                                    normalAssignments[swapDayKey][groupNum] = swapCandidate;
+                                } else {
+                                    // Can't find candidate - skip this swap
+                                    console.warn(`[PREVIEW SWAP WARNING] Could not find swap candidate for cross-month swap ${swapDayKey} (Group ${groupNum})`);
+                                    continue; // Skip to next iteration
+                                }
+                            }
                             
                             // Generate unique swap pair ID for color coding
                             const swapPairId = previewSwapPairCounter++;
