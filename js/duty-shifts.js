@@ -7807,8 +7807,10 @@
                 // Get assignment from saved special holiday assignments
                 const assignment = specialHolidayAssignments[dateKey];
                 if (assignment) {
+                    // Ensure assignment is a string (it might be an object if data wasn't flattened correctly)
+                    const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
                     // assignment is a string like "Person Name (Ομάδα 1), Person Name (Ομάδα 2), ..."
-                    const parts = assignment.split(',').map(p => p.trim());
+                    const parts = assignmentStr.split(',').map(p => p.trim());
                     parts.forEach(part => {
                         const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
                         if (match) {
