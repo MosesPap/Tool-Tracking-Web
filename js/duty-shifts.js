@@ -7437,46 +7437,220 @@
                         const hasConsecutiveConflict = hasConsecutiveDuty(dateKey, currentPerson, groupNum, simulatedAssignments);
                         
                         if (hasConsecutiveConflict) {
-                            // Find replacement
-                            const rotationDays = groupPeople.length;
-                            const currentIndex = groupPeople.indexOf(currentPerson);
-                            let swappedPerson = null;
+                            const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
+                            const month = date.getMonth();
+                            const year = date.getFullYear();
                             
-                            for (let offset = 1; offset < rotationDays; offset++) {
-                                const nextIndex = (currentIndex + offset) % rotationDays;
-                                const candidate = groupPeople[nextIndex];
+                            let swapDayKey = null;
+                            let swapDayIndex = null;
+                            let swapFound = false;
+                            
+                            // Determine swap logic based on day of week
+                            if (dayOfWeek === 1 || dayOfWeek === 3) {
+                                // Monday (1) or Wednesday (3) - Monday ↔ Wednesday
+                                const alternativeDayOfWeek = dayOfWeek === 1 ? 3 : 1; // Monday ↔ Wednesday
                                 
-                                if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) {
-                                    continue;
+                                // Step 1: Try alternative day in same week
+                                const sameWeekDate = new Date(date);
+                                const daysToAdd = alternativeDayOfWeek - dayOfWeek;
+                                sameWeekDate.setDate(date.getDate() + daysToAdd);
+                                const sameWeekKey = formatDateKey(sameWeekDate);
+                                
+                                if (isSameWeek(date, sameWeekDate) && updatedAssignments[sameWeekKey]?.[groupNum]) {
+                                    const swapCandidate = updatedAssignments[sameWeekKey][groupNum];
+                                    if (!isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate) &&
+                                        !hasConsecutiveDuty(sameWeekKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                        !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                        swapDayKey = sameWeekKey;
+                                        swapDayIndex = normalDays.indexOf(sameWeekKey);
+                                        swapFound = true;
+                                    }
                                 }
                                 
-                                // Check if candidate has conflict
-                                const candidateHasConflict = hasConsecutiveDuty(dateKey, candidate, groupNum, simulatedAssignments);
+                                // Step 2: If Step 1 fails, try same day of week in same month
+                                if (!swapFound) {
+                                    const nextSameDay = new Date(year, month, date.getDate() + 7);
+                                    if (nextSameDay.getMonth() === month) {
+                                        const nextSameDayKey = formatDateKey(nextSameDay);
+                                        if (updatedAssignments[nextSameDayKey]?.[groupNum]) {
+                                            const swapCandidate = updatedAssignments[nextSameDayKey][groupNum];
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay) &&
+                                                !hasConsecutiveDuty(nextSameDayKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                                swapDayKey = nextSameDayKey;
+                                                swapDayIndex = normalDays.indexOf(nextSameDayKey);
+                                                swapFound = true;
+                                            }
+                                        }
+                                    }
+                                }
                                 
-                                if (!candidateHasConflict) {
-                                    swappedPerson = candidate;
-                                    break;
+                                // Step 3: If Step 2 fails, try alternative day in week after next OR next month
+                                if (!swapFound) {
+                                    // Try week after next (2 weeks later)
+                                    const weekAfterNextDate = new Date(date);
+                                    weekAfterNextDate.setDate(date.getDate() + 14);
+                                    const weekAfterNextKey = formatDateKey(weekAfterNextDate);
+                                    
+                                    if (isWeekAfterNext(date, weekAfterNextDate) && updatedAssignments[weekAfterNextKey]?.[groupNum]) {
+                                        const swapCandidate = updatedAssignments[weekAfterNextKey][groupNum];
+                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, weekAfterNextDate) &&
+                                            !hasConsecutiveDuty(weekAfterNextKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                            !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                            swapDayKey = weekAfterNextKey;
+                                            swapDayIndex = normalDays.indexOf(weekAfterNextKey);
+                                            swapFound = true;
+                                        }
+                                    }
+                                    
+                                    // If still not found, try next month
+                                    if (!swapFound) {
+                                        const nextMonthDate = new Date(year, month + 1, date.getDate());
+                                        if (nextMonthDate.getDate() === date.getDate()) { // Ensure valid date
+                                            const nextMonthKey = formatDateKey(nextMonthDate);
+                                            // Check if this date exists in normalDays (might be calculated)
+                                            if (normalDays.includes(nextMonthKey) && updatedAssignments[nextMonthKey]?.[groupNum]) {
+                                                const swapCandidate = updatedAssignments[nextMonthKey][groupNum];
+                                                if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthDate) &&
+                                                    !hasConsecutiveDuty(nextMonthKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                                    !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                                    swapDayKey = nextMonthKey;
+                                                    swapDayIndex = normalDays.indexOf(nextMonthKey);
+                                                    swapFound = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if (dayOfWeek === 2 || dayOfWeek === 4) {
+                                // Tuesday (2) or Thursday (4) - Tuesday ↔ Thursday
+                                const alternativeDayOfWeek = dayOfWeek === 2 ? 4 : 2; // Tuesday ↔ Thursday
+                                
+                                // Step 1a: Try next same day of week in same month
+                                const nextSameDay = new Date(year, month, date.getDate() + 7);
+                                if (nextSameDay.getMonth() === month) {
+                                    const nextSameDayKey = formatDateKey(nextSameDay);
+                                    if (updatedAssignments[nextSameDayKey]?.[groupNum]) {
+                                        const swapCandidate = updatedAssignments[nextSameDayKey][groupNum];
+                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay) &&
+                                            !hasConsecutiveDuty(nextSameDayKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                            !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                            swapDayKey = nextSameDayKey;
+                                            swapDayIndex = normalDays.indexOf(nextSameDayKey);
+                                            swapFound = true;
+                                        }
+                                    }
+                                }
+                                
+                                // Step 1b: If Step 1a fails, try next same day of week in next month (cross-month)
+                                if (!swapFound) {
+                                    const nextMonthSameDay = new Date(year, month + 1, date.getDate());
+                                    if (nextMonthSameDay.getDate() === date.getDate()) {
+                                        const nextMonthKey = formatDateKey(nextMonthSameDay);
+                                        if (normalDays.includes(nextMonthKey) && updatedAssignments[nextMonthKey]?.[groupNum]) {
+                                            const swapCandidate = updatedAssignments[nextMonthKey][groupNum];
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSameDay) &&
+                                                !hasConsecutiveDuty(nextMonthKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                                swapDayKey = nextMonthKey;
+                                                swapDayIndex = normalDays.indexOf(nextMonthKey);
+                                                swapFound = true;
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Step 2: If Step 1 fails, try alternative day in same week
+                                if (!swapFound) {
+                                    const sameWeekDate = new Date(date);
+                                    const daysToAdd = alternativeDayOfWeek - dayOfWeek;
+                                    sameWeekDate.setDate(date.getDate() + daysToAdd);
+                                    const sameWeekKey = formatDateKey(sameWeekDate);
+                                    
+                                    if (isSameWeek(date, sameWeekDate) && updatedAssignments[sameWeekKey]?.[groupNum]) {
+                                        const swapCandidate = updatedAssignments[sameWeekKey][groupNum];
+                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate) &&
+                                            !hasConsecutiveDuty(sameWeekKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                            !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                            swapDayKey = sameWeekKey;
+                                            swapDayIndex = normalDays.indexOf(sameWeekKey);
+                                            swapFound = true;
+                                        }
+                                    }
+                                }
+                                
+                                // Step 3: If Step 2 fails, try next alternative day in same month
+                                if (!swapFound) {
+                                    // Find next occurrence of alternative day (Tuesday/Thursday) in same month
+                                    let nextAlternativeDay = new Date(date);
+                                    let daysToAdd = alternativeDayOfWeek - dayOfWeek;
+                                    if (daysToAdd < 0) daysToAdd += 7; // If alternative is earlier in week, go to next week
+                                    if (daysToAdd === 0) daysToAdd = 7; // If same day, go to next week
+                                    nextAlternativeDay.setDate(date.getDate() + daysToAdd);
+                                    
+                                    if (nextAlternativeDay.getMonth() === month) {
+                                        const nextAlternativeKey = formatDateKey(nextAlternativeDay);
+                                        if (updatedAssignments[nextAlternativeKey]?.[groupNum]) {
+                                            const swapCandidate = updatedAssignments[nextAlternativeKey][groupNum];
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextAlternativeDay) &&
+                                                !hasConsecutiveDuty(nextAlternativeKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                                swapDayKey = nextAlternativeKey;
+                                                swapDayIndex = normalDays.indexOf(nextAlternativeKey);
+                                                swapFound = true;
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Step 4: If Step 3 fails, try next alternative day in next month (cross-month)
+                                if (!swapFound) {
+                                    // Find next occurrence of alternative day in next month
+                                    let nextMonthAlternative = new Date(year, month + 1, date.getDate());
+                                    // Adjust to the correct day of week
+                                    while (nextMonthAlternative.getDay() !== alternativeDayOfWeek) {
+                                        nextMonthAlternative.setDate(nextMonthAlternative.getDate() + 1);
+                                    }
+                                    
+                                    if (nextMonthAlternative.getDate() > 0 && nextMonthAlternative.getDate() <= 31) {
+                                        const nextMonthAltKey = formatDateKey(nextMonthAlternative);
+                                        if (normalDays.includes(nextMonthAltKey) && updatedAssignments[nextMonthAltKey]?.[groupNum]) {
+                                            const swapCandidate = updatedAssignments[nextMonthAltKey][groupNum];
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthAlternative) &&
+                                                !hasConsecutiveDuty(nextMonthAltKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                                swapDayKey = nextMonthAltKey;
+                                                swapDayIndex = normalDays.indexOf(nextMonthAltKey);
+                                                swapFound = true;
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             
-                            if (swappedPerson) {
+                            // Perform swap if found
+                            if (swapFound && swapDayKey && swapDayIndex !== null && swapDayIndex >= 0) {
+                                const swapCandidate = updatedAssignments[swapDayKey][groupNum];
+                                
                                 swappedPeople.push({
                                     date: dateKey,
                                     dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
                                     groupNum: groupNum,
                                     skippedPerson: currentPerson,
-                                    swappedPerson: swappedPerson
+                                    swappedPerson: swapCandidate,
+                                    swapDate: swapDayKey,
+                                    swapDateStr: new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
                                 });
                                 
-                                // Update assignment
-                                updatedAssignments[dateKey][groupNum] = swappedPerson;
+                                // Perform the swap: conflicted person goes to swap date, swapped person goes to conflicted date
+                                updatedAssignments[dateKey][groupNum] = swapCandidate;
+                                updatedAssignments[swapDayKey][groupNum] = currentPerson;
                                 
                                 // Store assignment reasons for BOTH people involved in the swap
-                                const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                // Mark the person who was swapped in (now assigned to this date)
-                                storeAssignmentReason(dateKey, groupNum, swappedPerson, 'swap', `Αλλαγή με ${currentPerson} (${dateStr})`, currentPerson);
-                                // Also mark the person who was swapped out (removed from this date)
-                                storeAssignmentReason(dateKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${swappedPerson} (${dateStr})`, swappedPerson);
+                                const swapDateStr = new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                storeAssignmentReason(dateKey, groupNum, swapCandidate, 'swap', `Αλλαγή με ${currentPerson} (${currentDateStr})`, currentPerson);
+                                storeAssignmentReason(swapDayKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${swapCandidate} (${swapDateStr})`, swapCandidate);
                             }
                         }
                     }
@@ -7505,11 +7679,12 @@
             } else {
                 message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Αλλάχθηκαν ' + swappedPeople.length + ' άτομα:</strong><br><br>';
                 message += '<table class="table table-sm table-bordered">';
-                message += '<thead><tr><th>Ημερομηνία</th><th>Ομάδα</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th></tr></thead><tbody>';
+                message += '<thead><tr><th>Ημερομηνία</th><th>Ομάδα</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th></tr></thead><tbody>';
                 
                 swappedPeople.forEach(item => {
                     const groupName = getGroupName(item.groupNum);
-                    message += `<tr><td>${item.dateStr}</td><td>${groupName}</td><td><strong>${item.skippedPerson}</strong></td><td><strong>${item.swappedPerson}</strong></td></tr>`;
+                    const swapDateStr = item.swapDateStr || item.dateStr;
+                    message += `<tr><td>${item.dateStr}</td><td>${groupName}</td><td><strong>${item.skippedPerson}</strong></td><td><strong>${item.swappedPerson}</strong></td><td>${swapDateStr}</td></tr>`;
                 });
                 
                 message += '</tbody></table></div>';
