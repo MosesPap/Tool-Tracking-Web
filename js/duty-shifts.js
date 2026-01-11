@@ -6045,6 +6045,14 @@
                     return;
                 }
                 
+                // If moving from Step 3 (Semi-Normal), save assignments and run swap logic
+                // NOTE: Step 4 will be rendered after OK is pressed in the modal
+                if (calculationSteps.currentStep === 3) {
+                    await saveStep3_SemiNormal();
+                    // Don't increment step here - it will be done when OK is pressed in modal
+                    return;
+                }
+                
                 calculationSteps.currentStep++;
                 renderCurrentStep();
             }
@@ -6438,13 +6446,386 @@
                 console.error('Error saving final weekend assignments:', error);
             }
         }
-
-        function goToPreviousStep() {
-            if (calculationSteps.currentStep > 1) {
-                calculationSteps.currentStep--;
-                renderCurrentStep();
+        
+        // Save Step 3 (Semi-Normal) assignments to Firestore and run swap logic
+        async function saveStep3_SemiNormal() {
+            try {
+                if (!window.db) {
+                    console.log('Firebase not ready, skipping Step 3 save');
+                    return;
+                }
+                
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                
+                if (!user) {
+                    console.log('User not authenticated, skipping Step 3 save');
+                    return;
+                }
+                
+                const tempSemiAssignments = calculationSteps.tempSemiAssignments || {};
+                const lastSemiRotationPositions = calculationSteps.lastSemiRotationPositions || {};
+                
+                // First, save semi-normal assignments to assignments document (pre-logic)
+                if (Object.keys(tempSemiAssignments).length > 0) {
+                    // Convert to format: dateKey -> "Person (Ομάδα 1), Person (Ομάδα 2), ..."
+                    const formattedAssignments = {};
+                    for (const dateKey in tempSemiAssignments) {
+                        const groups = tempSemiAssignments[dateKey];
+                        const parts = [];
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            if (groups[groupNum]) {
+                                parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
+                            }
+                        }
+                        if (parts.length > 0) {
+                            formattedAssignments[dateKey] = parts.join(', ');
+                        }
+                    }
+                    
+                    // Save to assignments document (pre-logic)
+                    const organizedAssignments = organizeAssignmentsByMonth(formattedAssignments);
+                    const sanitizedAssignments = sanitizeForFirestore(organizedAssignments);
+                    
+                    await db.collection('dutyShifts').doc('assignments').set({
+                        ...sanitizedAssignments,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    console.log('Saved Step 3 semi-normal assignments (pre-logic) to assignments document:', Object.keys(tempSemiAssignments).length, 'dates');
+                    
+                    // Also update local memory
+                    Object.assign(semiNormalAssignments, formattedAssignments);
+                }
+                
+                // Save last rotation positions for semi-normal
+                if (Object.keys(lastSemiRotationPositions).length > 0) {
+                    // Update lastRotationPositions for semi-normal
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        if (lastSemiRotationPositions[groupNum] !== undefined) {
+                            lastRotationPositions.semi[groupNum] = lastSemiRotationPositions[groupNum];
+                        }
+                    }
+                    
+                    // Save to Firestore
+                    const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                    await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                        ...sanitizedPositions,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    console.log('Saved Step 3 last rotation positions for semi-normal to Firestore:', lastSemiRotationPositions);
+                }
+                
+                // Now run swap logic and show popup
+                await runSemiNormalSwapLogic();
+            } catch (error) {
+                console.error('Error saving Step 3 (Semi-Normal) to Firestore:', error);
             }
         }
+        
+        // Run swap logic for semi-normal days and show popup with results
+        async function runSemiNormalSwapLogic() {
+            try {
+                const dayTypeLists = calculationSteps.dayTypeLists || { semi: [], special: [], weekend: [] };
+                const semiNormalDays = dayTypeLists.semi || [];
+                const specialHolidays = dayTypeLists.special || [];
+                const weekendHolidays = dayTypeLists.weekend || [];
+                
+                // Load special holiday assignments from saved data
+                const simulatedSpecialAssignments = {}; // monthKey -> { groupNum -> Set of person names }
+                const sortedSpecial = [...specialHolidays].sort();
+                
+                sortedSpecial.forEach((dateKey) => {
+                    const date = new Date(dateKey + 'T00:00:00');
+                    const month = date.getMonth();
+                    const year = date.getFullYear();
+                    const monthKey = `${year}-${month}`;
+                    
+                    if (!simulatedSpecialAssignments[monthKey]) {
+                        simulatedSpecialAssignments[monthKey] = {};
+                    }
+                    
+                    const assignment = specialHolidayAssignments[dateKey];
+                    if (assignment) {
+                        const parts = assignment.split(',').map(p => p.trim());
+                        parts.forEach(part => {
+                            const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                            if (match) {
+                                const personName = match[1].trim();
+                                const groupNum = parseInt(match[2]);
+                                if (!simulatedSpecialAssignments[monthKey][groupNum]) {
+                                    simulatedSpecialAssignments[monthKey][groupNum] = new Set();
+                                }
+                                simulatedSpecialAssignments[monthKey][groupNum].add(personName);
+                            }
+                        });
+                    }
+                });
+                
+                // Load weekend assignments from saved data
+                const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
+                for (const dateKey in weekendAssignments) {
+                    const assignment = weekendAssignments[dateKey];
+                    const parts = assignment.split(',').map(p => p.trim());
+                    parts.forEach(part => {
+                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                        if (match) {
+                            const personName = match[1].trim();
+                            const groupNum = parseInt(match[2]);
+                            if (!simulatedWeekendAssignments[dateKey]) {
+                                simulatedWeekendAssignments[dateKey] = {};
+                            }
+                            simulatedWeekendAssignments[dateKey][groupNum] = personName;
+                        }
+                    });
+                }
+                
+                // Track swapped people and replacements
+                const swappedPeople = []; // Array of { date, groupNum, skippedPerson, swappedPerson }
+                const sortedSemi = [...semiNormalDays].sort();
+                const updatedAssignments = {}; // dateKey -> { groupNum -> personName }
+                
+                // Load current semi-normal assignments
+                for (const dateKey in semiNormalAssignments) {
+                    const assignment = semiNormalAssignments[dateKey];
+                    const parts = assignment.split(',').map(p => p.trim());
+                    parts.forEach(part => {
+                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                        if (match) {
+                            const personName = match[1].trim();
+                            const groupNum = parseInt(match[2]);
+                            if (!updatedAssignments[dateKey]) {
+                                updatedAssignments[dateKey] = {};
+                            }
+                            updatedAssignments[dateKey][groupNum] = personName;
+                        }
+                    });
+                }
+                
+                // Run swap logic (check for consecutive conflicts with weekend or special holiday)
+                sortedSemi.forEach((dateKey) => {
+                    const date = new Date(dateKey + 'T00:00:00');
+                    const month = date.getMonth();
+                    const year = date.getFullYear();
+                    const monthKey = `${year}-${month}`;
+                    
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        const groupData = groups[groupNum] || { semi: [] };
+                        const groupPeople = groupData.semi || [];
+                        
+                        if (groupPeople.length === 0) continue;
+                        
+                        const currentPerson = updatedAssignments[dateKey]?.[groupNum];
+                        if (!currentPerson) continue;
+                        
+                        // Check for consecutive conflicts with weekend or special holiday
+                        const dayBefore = new Date(date);
+                        dayBefore.setDate(dayBefore.getDate() - 1);
+                        const dayAfter = new Date(date);
+                        dayAfter.setDate(dayAfter.getDate() + 1);
+                        
+                        const dayBeforeKey = formatDateKey(dayBefore);
+                        const dayAfterKey = formatDateKey(dayAfter);
+                        
+                        const beforeType = getDayType(dayBefore);
+                        const afterType = getDayType(dayAfter);
+                        
+                        let hasConsecutiveConflict = false;
+                        
+                        // Check day before
+                        if (beforeType === 'weekend-holiday' || beforeType === 'special-holiday') {
+                            const personBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] || 
+                                               (beforeType === 'special-holiday' ? 
+                                                (simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(currentPerson) ? currentPerson : null) : null);
+                            if (personBefore === currentPerson) {
+                                hasConsecutiveConflict = true;
+                            }
+                        }
+                        
+                        // Check day after
+                        if (!hasConsecutiveConflict && (afterType === 'weekend-holiday' || afterType === 'special-holiday')) {
+                            const personAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] || 
+                                               (afterType === 'special-holiday' ? 
+                                                (simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(currentPerson) ? currentPerson : null) : null);
+                            if (personAfter === currentPerson) {
+                                hasConsecutiveConflict = true;
+                            }
+                        }
+                        
+                        if (hasConsecutiveConflict) {
+                            // Find replacement
+                            const rotationDays = groupPeople.length;
+                            const currentIndex = groupPeople.indexOf(currentPerson);
+                            let swappedPerson = null;
+                            
+                            for (let offset = 1; offset < rotationDays; offset++) {
+                                const nextIndex = (currentIndex + offset) % rotationDays;
+                                const candidate = groupPeople[nextIndex];
+                                
+                                if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) {
+                                    continue;
+                                }
+                                
+                                // Check if candidate has consecutive conflict
+                                let candidateHasConflict = false;
+                                const candidateBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] || 
+                                                       (beforeType === 'special-holiday' ? 
+                                                        (simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(candidate) ? candidate : null) : null);
+                                const candidateAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] || 
+                                                      (afterType === 'special-holiday' ? 
+                                                       (simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(candidate) ? candidate : null) : null);
+                                
+                                if (candidateBefore === candidate || candidateAfter === candidate) {
+                                    candidateHasConflict = true;
+                                }
+                                
+                                if (!candidateHasConflict) {
+                                    swappedPerson = candidate;
+                                    break;
+                                }
+                            }
+                            
+                            if (swappedPerson) {
+                                swappedPeople.push({
+                                    date: dateKey,
+                                    dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                    groupNum: groupNum,
+                                    skippedPerson: currentPerson,
+                                    swappedPerson: swappedPerson
+                                });
+                                
+                                // Update assignment
+                                updatedAssignments[dateKey][groupNum] = swappedPerson;
+                            }
+                        }
+                    }
+                });
+                
+                // Store final assignments (after swap logic) for saving when OK is pressed
+                calculationSteps.finalSemiAssignments = updatedAssignments;
+                
+                // Show popup with results (will save when OK is pressed)
+                showSemiNormalSwapResults(swappedPeople, updatedAssignments);
+            } catch (error) {
+                console.error('Error running semi-normal swap logic:', error);
+            }
+        }
+        
+        // Show popup with semi-normal swap results
+        function showSemiNormalSwapResults(swappedPeople, updatedAssignments) {
+            let message = '';
+            
+            if (swappedPeople.length === 0) {
+                message = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>Κανένας δεν αλλάχθηκε!</strong><br>Δεν βρέθηκαν συνεχόμενες ημέρες που να απαιτούν αλλαγή.</div>';
+            } else {
+                message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Αλλάχθηκαν ' + swappedPeople.length + ' άτομα:</strong><br><br>';
+                message += '<table class="table table-sm table-bordered">';
+                message += '<thead><tr><th>Ημερομηνία</th><th>Ομάδα</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th></tr></thead><tbody>';
+                
+                swappedPeople.forEach(item => {
+                    const groupName = getGroupName(item.groupNum);
+                    message += `<tr><td>${item.dateStr}</td><td>${groupName}</td><td><strong>${item.skippedPerson}</strong></td><td><strong>${item.swappedPerson}</strong></td></tr>`;
+                });
+                
+                message += '</tbody></table></div>';
+            }
+            
+            // Create and show modal
+            const modalHtml = `
+                <div class="modal fade" id="semiNormalSwapResultsModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Αποτελέσματα Αλλαγών Ημιαργιών</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                ${message}
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-primary" id="semiNormalSwapOkButton" data-bs-dismiss="modal">OK</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Remove existing modal if any
+            const existingModal = document.getElementById('semiNormalSwapResultsModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            // Add modal to body
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('semiNormalSwapResultsModal'));
+            modal.show();
+            
+            // When OK is pressed, save final assignments and proceed to Step 4
+            const okButton = document.getElementById('semiNormalSwapOkButton');
+            if (okButton) {
+                okButton.addEventListener('click', async function() {
+                    await saveFinalSemiNormalAssignments(updatedAssignments);
+                    // Proceed to Step 4
+                    calculationSteps.currentStep = 4;
+                    renderCurrentStep();
+                });
+            }
+        }
+        
+        // Save final semi-normal assignments (after swap logic) to semiNormalAssignments document
+        async function saveFinalSemiNormalAssignments(updatedAssignments) {
+            try {
+                if (!window.db) {
+                    console.log('Firebase not ready, skipping final semi-normal assignments save');
+                    return;
+                }
+                
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                
+                if (!user) {
+                    console.log('User not authenticated, skipping final semi-normal assignments save');
+                    return;
+                }
+                
+                if (Object.keys(updatedAssignments).length > 0) {
+                    const formattedAssignments = {};
+                    for (const dateKey in updatedAssignments) {
+                        const groups = updatedAssignments[dateKey];
+                        const parts = [];
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            if (groups[groupNum]) {
+                                parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
+                            }
+                        }
+                        if (parts.length > 0) {
+                            formattedAssignments[dateKey] = parts.join(', ');
+                        }
+                    }
+                    
+                    const organizedSemi = organizeAssignmentsByMonth(formattedAssignments);
+                    const sanitizedSemi = sanitizeForFirestore(organizedSemi);
+                    
+                    await db.collection('dutyShifts').doc('semiNormalAssignments').set({
+                        ...sanitizedSemi,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    console.log('Saved Step 3 final semi-normal assignments (after swap logic) to semiNormalAssignments document');
+                    
+                    // Update local memory
+                    Object.assign(semiNormalAssignments, formattedAssignments);
+                }
+            } catch (error) {
+                console.error('Error saving final semi-normal assignments:', error);
+            }
+        }
+
+        function goToPreviousStep() {
 
         // Cancel step-by-step calculation
         function cancelStepByStepCalculation() {
@@ -7294,6 +7675,15 @@
                     html += '</tr>';
                 });
                 
+                // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
+                calculationSteps.tempSemiAssignments = semiAssignments;
+                calculationSteps.lastSemiRotationPositions = {};
+                for (let g = 1; g <= 4; g++) {
+                    if (globalSemiRotationPosition[g] !== undefined) {
+                        calculationSteps.lastSemiRotationPositions[g] = globalSemiRotationPosition[g];
+                    }
+                }
+                
                 html += '</tbody>';
                 html += '</table>';
                 html += '</div>';
@@ -7534,136 +7924,25 @@
                 }
             });
             
-            // Third, simulate Step 3 (semi-normal days) - including swap logic
-            // simulatedSemiAssignments already initialized above
-            const globalSemiRotationPosition = {}; // groupNum -> global position (continues across months)
-            const pendingSemiSwaps = {}; // monthKey -> { groupNum -> { skippedPerson, swapToPosition } }
+            // Third, load Step 3 (semi-normal days) from saved data
+            // Load semi-normal assignments from saved data (after swap logic from Step 3)
             const sortedSemi = [...semiNormalDays].sort();
             
-            sortedSemi.forEach((dateKey, semiIndex) => {
-                const date = new Date(dateKey + 'T00:00:00');
-                const month = date.getMonth();
-                const year = date.getFullYear();
-                const monthKey = `${year}-${month}`;
-                
-                if (!pendingSemiSwaps[monthKey]) {
-                    pendingSemiSwaps[monthKey] = {};
-                }
-                
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupData = groups[groupNum] || { semi: [] };
-                    const groupPeople = groupData.semi || [];
-                    
-                    if (groupPeople.length > 0) {
-                        const rotationDays = groupPeople.length;
-                        if (globalSemiRotationPosition[groupNum] === undefined) {
-                            // If start date is February 2026, always start from first person (position 0)
-                            const isFebruary2026 = calculationSteps.startDate && 
-                                calculationSteps.startDate.getFullYear() === 2026 && 
-                                calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
-                            
-                            if (isFebruary2026) {
-                                // Always start from first person for February 2026
-                                globalSemiRotationPosition[groupNum] = 0;
-                                console.log(`[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} semi - February 2026`);
-                            } else {
-                                // Initialize based on rotation count from start date
-                                const daysSinceStart = getRotationPosition(date, 'semi', groupNum);
-                                globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
-                            }
-                        }
-                        
-                        let rotationPosition = globalSemiRotationPosition[groupNum] % rotationDays;
-                        let assignedPerson = groupPeople[rotationPosition];
-                        
-                        // Check if there's a pending swap for this position
-                        if (pendingSemiSwaps[monthKey][groupNum] && pendingSemiSwaps[monthKey][groupNum].swapToPosition === rotationPosition) {
-                            assignedPerson = pendingSemiSwaps[monthKey][groupNum].skippedPerson;
-                            delete pendingSemiSwaps[monthKey][groupNum];
-                            globalSemiRotationPosition[groupNum] = rotationPosition + 1;
-                        } else {
-                            // Check for consecutive conflicts with weekend or special holiday
-                            const dayBefore = new Date(date);
-                            dayBefore.setDate(dayBefore.getDate() - 1);
-                            const dayAfter = new Date(date);
-                            dayAfter.setDate(dayAfter.getDate() + 1);
-                            
-                            const dayBeforeKey = formatDateKey(dayBefore);
-                            const dayAfterKey = formatDateKey(dayAfter);
-                            
-                            const beforeType = getDayType(dayBefore);
-                            const afterType = getDayType(dayAfter);
-                            
-                            let hasConsecutiveConflict = false;
-                            if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                                if (beforeType === 'weekend-holiday' || beforeType === 'special-holiday') {
-                                    const personBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] || 
-                                                       (beforeType === 'special-holiday' ? 
-                                                        (simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(assignedPerson) ? assignedPerson : null) : null);
-                                    if (personBefore === assignedPerson) {
-                                        hasConsecutiveConflict = true;
-                                    }
-                                }
-                                
-                                if (!hasConsecutiveConflict && (afterType === 'weekend-holiday' || afterType === 'special-holiday')) {
-                                    const personAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] || 
-                                                       (afterType === 'special-holiday' ? 
-                                                        (simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(assignedPerson) ? assignedPerson : null) : null);
-                                    if (personAfter === assignedPerson) {
-                                        hasConsecutiveConflict = true;
-                                    }
-                                }
-                            }
-                            
-                            if (hasConsecutiveConflict && assignedPerson) {
-                                const skippedPerson = assignedPerson;
-                                
-                                for (let offset = 1; offset < rotationDays; offset++) {
-                                    const nextIndex = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[nextIndex];
-                                    
-                                    if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) {
-                                        continue;
-                                    }
-                                    
-                                    let candidateHasConflict = false;
-                                    const candidateBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] || 
-                                                           (beforeType === 'special-holiday' ? 
-                                                            (simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(candidate) ? candidate : null) : null);
-                                    const candidateAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] || 
-                                                          (afterType === 'special-holiday' ? 
-                                                           (simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(candidate) ? candidate : null) : null);
-                                    
-                                    if (candidateBefore === candidate || candidateAfter === candidate) {
-                                        candidateHasConflict = true;
-                                    }
-                                    
-                                    if (!candidateHasConflict) {
-                                        assignedPerson = candidate;
-                                        pendingSemiSwaps[monthKey][groupNum] = {
-                                            skippedPerson: skippedPerson,
-                                            swapToPosition: nextIndex
-                                        };
-                                        globalSemiRotationPosition[groupNum] = nextIndex;
-                                        break;
-                                    }
-                                }
-                                
-                                if (!assignedPerson || assignedPerson === skippedPerson) {
-                                    globalSemiRotationPosition[groupNum] = rotationPosition + 1;
-                                }
-                            } else {
-                                globalSemiRotationPosition[groupNum] = rotationPosition + 1;
-                            }
-                        }
-                        
-                        if (assignedPerson) {
+            sortedSemi.forEach((dateKey) => {
+                const assignment = semiNormalAssignments[dateKey];
+                if (assignment) {
+                    const parts = assignment.split(',').map(p => p.trim());
+                    parts.forEach(part => {
+                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                        if (match) {
+                            const personName = match[1].trim();
+                            const groupNum = parseInt(match[2]);
                             if (!simulatedSemiAssignments[dateKey]) {
                                 simulatedSemiAssignments[dateKey] = {};
                             }
-                            simulatedSemiAssignments[dateKey][groupNum] = assignedPerson;
+                            simulatedSemiAssignments[dateKey][groupNum] = personName;
                         }
-                    }
+                    });
                 }
             });
             
