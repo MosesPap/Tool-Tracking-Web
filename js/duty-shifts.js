@@ -9327,82 +9327,89 @@
                                 }
                             }
                             
-                            let rotationPosition = globalNormalRotationPosition[groupNum] % rotationDays;
-                            let assignedPerson = groupPeople[rotationPosition];
-                            
-                            // Initialize assigned people set for this group if needed
-                            if (!assignedPeoplePreview[monthKey][groupNum]) {
-                                assignedPeoplePreview[monthKey][groupNum] = new Set();
-                            }
-                            
-                            // If assigned person was already assigned this month (due to swap), skip to next person
-                            if (assignedPerson && assignedPeoplePreview[monthKey][groupNum].has(assignedPerson)) {
-                                // This person was already assigned (swapped), find next available person in rotation
-                                let foundReplacement = false;
-                                for (let offset = 1; offset < rotationDays && !foundReplacement; offset++) {
-                                    const nextIndex = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[nextIndex];
-                                    
-                                    if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) {
-                                        continue;
-                                    }
-                                    
-                                    // Check if candidate was already assigned this month
-                                    if (assignedPeoplePreview[monthKey][groupNum].has(candidate)) {
-                                        continue;
-                                    }
-                                    
-                                    // Found available person
-                                    assignedPerson = candidate;
-                                    rotationPosition = nextIndex;
-                                    foundReplacement = true;
-                                }
-                                
-                                // If no replacement found, skip this day
-                                if (!foundReplacement) {
-                                    assignedPerson = null;
-                                }
-                            }
-                            
-                            // Check if there's a pending swap for this position
-                            if (pendingNormalSwaps[monthKey][groupNum] && pendingNormalSwaps[monthKey][groupNum].swapToPosition === rotationPosition) {
-                                // This is the position where the skipped person should be assigned
-                                assignedPerson = pendingNormalSwaps[monthKey][groupNum].skippedPerson;
-                                delete pendingNormalSwaps[monthKey][groupNum];
-                                globalNormalRotationPosition[groupNum] = rotationPosition + 1;
-                            } else {
-                            // Check if this day is a cross-month swap assignment (person swapped from previous month)
-                            // Structure: crossMonthSwaps[dateKey][groupNum] = personName
+                            // IMPORTANT: Check cross-month swaps FIRST (before rotation calculation)
+                            // If a person was swapped from previous month, assign them and skip the normal rotation person
                             let isCrossMonthSwapDay = false;
+                            let assignedPerson = null;
+                            let rotationPosition = globalNormalRotationPosition[groupNum] % rotationDays;
+                            
                             if (crossMonthSwaps[dateKey] && crossMonthSwaps[dateKey][groupNum]) {
                                 // This person was swapped from previous month and must be assigned to this day
                                 assignedPerson = crossMonthSwaps[dateKey][groupNum];
                                 isCrossMonthSwapDay = true;
                                 console.log(`[PREVIEW CROSS-MONTH] Assigning ${assignedPerson} to ${dateKey} (Group ${groupNum}, swapped from previous month)`);
+                                
+                                // Skip the person who would normally be assigned (they were swapped to previous month)
+                                // Advance rotation position by 1 to skip the normal person
+                                globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                
                                 // Remove from tracking since we're assigning them now (will be saved when calculation completes)
                                 delete crossMonthSwaps[dateKey][groupNum];
                                 // If no more groups for this date, remove the date entry
                                 if (Object.keys(crossMonthSwaps[dateKey]).length === 0) {
                                     delete crossMonthSwaps[dateKey];
                                 }
-                            }
+                            } else {
+                                // No cross-month swap - use normal rotation
+                                assignedPerson = groupPeople[rotationPosition];
+                                
+                                // Initialize assigned people set for this group if needed
+                                if (!assignedPeoplePreview[monthKey][groupNum]) {
+                                    assignedPeoplePreview[monthKey][groupNum] = new Set();
+                                }
+                                
+                                // If assigned person was already assigned this month (due to swap), skip to next person
+                                if (assignedPerson && assignedPeoplePreview[monthKey][groupNum].has(assignedPerson)) {
+                                    // This person was already assigned (swapped), find next available person in rotation
+                                    let foundReplacement = false;
+                                    for (let offset = 1; offset < rotationDays && !foundReplacement; offset++) {
+                                        const nextIndex = (rotationPosition + offset) % rotationDays;
+                                        const candidate = groupPeople[nextIndex];
+                                        
+                                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) {
+                                            continue;
+                                        }
+                                        
+                                        // Check if candidate was already assigned this month
+                                        if (assignedPeoplePreview[monthKey][groupNum].has(candidate)) {
+                                            continue;
+                                        }
+                                        
+                                        // Found available person
+                                        assignedPerson = candidate;
+                                        rotationPosition = nextIndex;
+                                        foundReplacement = true;
+                                    }
+                                    
+                                    // If no replacement found, skip this day
+                                    if (!foundReplacement) {
+                                        assignedPerson = null;
+                                    }
+                                }
+                                
+                                // Check if there's a pending swap for this position
+                                if (pendingNormalSwaps[monthKey][groupNum] && pendingNormalSwaps[monthKey][groupNum].swapToPosition === rotationPosition) {
+                                    // This is the position where the skipped person should be assigned
+                                    assignedPerson = pendingNormalSwaps[monthKey][groupNum].skippedPerson;
+                                    delete pendingNormalSwaps[monthKey][groupNum];
+                                    globalNormalRotationPosition[groupNum] = rotationPosition + 1;
+                                }
                                 
                                 // PREVIEW MODE: Just show basic rotation WITHOUT swap logic
                                 // Swap logic will run when Next is pressed
-                                if (!isCrossMonthSwapDay) {
-                                    // Check if assigned person is missing, if so find next in rotation
-                                    if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                                        // Find next person in rotation who is not missing
-                                        for (let offset = 1; offset < rotationDays; offset++) {
-                                            const nextIndex = (rotationPosition + offset) % rotationDays;
-                                            const candidate = groupPeople[nextIndex];
-                                            if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
-                                                assignedPerson = candidate;
-                                                rotationPosition = nextIndex;
-                                                break;
-                                            }
+                                // Check if assigned person is missing, if so find next in rotation
+                                if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
+                                    // Find next person in rotation who is not missing
+                                    for (let offset = 1; offset < rotationDays; offset++) {
+                                        const nextIndex = (rotationPosition + offset) % rotationDays;
+                                        const candidate = groupPeople[nextIndex];
+                                        if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
+                                            assignedPerson = candidate;
+                                            rotationPosition = nextIndex;
+                                            break;
                                         }
                                     }
+                                }
                                     
                                     // Check if assigned person has a conflict (will be swapped later)
                                     // If so, DO NOT assign anyone to this day - leave it for swap logic to handle
@@ -9435,8 +9442,6 @@
                                         // Person is missing or no person assigned - advance rotation position
                                         globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                     }
-                                }
-                                
                             }
                             
                             // Store assignment (before swap logic)
