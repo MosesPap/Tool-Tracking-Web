@@ -9014,6 +9014,9 @@
             let html = '<div class="step-content">';
             html += '<h6 class="mb-3"><i class="fas fa-calendar-day text-primary me-2"></i>Βήμα 4: Καθημερινές</h6>';
             
+            // Sort normal days by date (define at function scope so it's accessible for swap logic)
+            const sortedNormal = [...normalDays].sort();
+            
             if (normalDays.length === 0) {
                 html += '<div class="alert alert-info">';
                 html += '<i class="fas fa-info-circle me-2"></i>';
@@ -9037,9 +9040,6 @@
                 html += '</tr>';
                 html += '</thead>';
                 html += '<tbody>';
-                
-                // Sort normal days by date
-                const sortedNormal = [...normalDays].sort();
                 
                 // First, build all assignments (before swap logic)
                 // Track assignments and rotation
@@ -9271,10 +9271,12 @@
             
             // NOW APPLY SWAP LOGIC IN PREVIEW (Monday-Wednesday and Tuesday-Thursday rules)
             // This ensures preview shows exactly what will be saved
-            const swappedPeopleSet = new Set(); // Format: "dateKey:groupNum:personName"
-            
-            // Apply swap logic to normalAssignments BEFORE displaying
-            sortedNormal.forEach((dateKey) => {
+            // Only apply swap logic if there are normal days
+            if (normalDays.length > 0 && sortedNormal) {
+                const swappedPeopleSet = new Set(); // Format: "dateKey:groupNum:personName"
+                
+                // Apply swap logic to normalAssignments BEFORE displaying
+                sortedNormal.forEach((dateKey) => {
                 const date = new Date(dateKey + 'T00:00:00');
                 
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -9501,60 +9503,63 @@
                         }
                     }
                 }
-            });
-            
-            // Now regenerate HTML with swapped assignments
-            // Find the table body and update it
-            const tableBody = stepContent.querySelector('tbody');
-            if (tableBody) {
-                // Clear existing rows
-                tableBody.innerHTML = '';
-                
-                // Regenerate rows with swapped assignments
-                sortedNormal.forEach((dateKey, normalIndex) => {
-                    const date = new Date(dateKey + 'T00:00:00');
-                    const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                    const dayName = getGreekDayName(date);
-                    
-                    let rowHtml = '<tr>';
-                    rowHtml += `<td><strong>${dateStr}</strong></td>`;
-                    rowHtml += `<td>${dayName}</td>`;
-                    
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const groupData = groups[groupNum] || { normal: [] };
-                        const groupPeople = groupData.normal || [];
-                        const rotationDays = groupPeople.length;
-                        
-                        if (groupPeople.length === 0) {
-                            rowHtml += '<td class="text-muted">-</td>';
-                        } else {
-                            const assignedPerson = normalAssignments[dateKey]?.[groupNum];
-                            
-                            // Get last duty date and days since for display
-                            let lastDutyInfo = '';
-                            let daysCountInfo = '';
-                            if (assignedPerson) {
-                                const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'normal', dayTypeLists, startDate);
-                                const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'normal', groupPeople.length);
-                                lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
-                                
-                                if (daysSince !== null && daysSince !== Infinity) {
-                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} ημέρες)</span>`;
-                                } else if (daysSince === Infinity) {
-                                    daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
-                                }
-                            }
-                            
-                            rowHtml += `<td>${assignedPerson || '-'}${daysCountInfo}${lastDutyInfo}</td>`;
-                        }
-                    }
-                    
-                    rowHtml += '</tr>';
-                    tableBody.innerHTML += rowHtml;
                 });
             }
             
             stepContent.innerHTML = html;
+            
+            // Now regenerate HTML with swapped assignments (only if there are normal days)
+            if (normalDays.length > 0 && sortedNormal) {
+                // Find the table body and update it (after HTML is set)
+                const tableBody = stepContent.querySelector('tbody');
+                if (tableBody) {
+                    // Clear existing rows
+                    tableBody.innerHTML = '';
+                    
+                    // Regenerate rows with swapped assignments
+                    sortedNormal.forEach((dateKey, normalIndex) => {
+                        const date = new Date(dateKey + 'T00:00:00');
+                        const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        const dayName = getGreekDayName(date);
+                        
+                        let rowHtml = '<tr>';
+                        rowHtml += `<td><strong>${dateStr}</strong></td>`;
+                        rowHtml += `<td>${dayName}</td>`;
+                        
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            const groupData = groups[groupNum] || { normal: [] };
+                            const groupPeople = groupData.normal || [];
+                            const rotationDays = groupPeople.length;
+                            
+                            if (groupPeople.length === 0) {
+                                rowHtml += '<td class="text-muted">-</td>';
+                            } else {
+                                const assignedPerson = normalAssignments[dateKey]?.[groupNum];
+                                
+                                // Get last duty date and days since for display
+                                let lastDutyInfo = '';
+                                let daysCountInfo = '';
+                                if (assignedPerson) {
+                                    const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'normal', dayTypeLists, startDate);
+                                    const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'normal', groupPeople.length);
+                                    lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
+                                    
+                                    if (daysSince !== null && daysSince !== Infinity) {
+                                        daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} ημέρες)</span>`;
+                                    } else if (daysSince === Infinity) {
+                                        daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
+                                    }
+                                }
+                                
+                                rowHtml += `<td>${assignedPerson || '-'}${daysCountInfo}${lastDutyInfo}</td>`;
+                            }
+                        }
+                        
+                        rowHtml += '</tr>';
+                        tableBody.innerHTML += rowHtml;
+                    });
+                }
+            }
             
             // Store preview assignments and save them temporarily to Firestore
             // Convert Sets to arrays for serialization
