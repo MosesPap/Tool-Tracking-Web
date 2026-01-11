@@ -4850,6 +4850,36 @@
                             displayAssignmentHtml += `<div class="${styleClass}" style="display: flex; align-items: center; gap: 4px;" title="${combinedTitle}">${indicatorIcon}${name}${conflictIcon}</div>`;
                         }
                     });
+                    
+                    // Also check for people who were swapped out (have swap reason but not in current assignment)
+                    // This ensures both people involved in a swap are marked
+                    if (assignmentReasons[key]) {
+                        for (const groupNumStr in assignmentReasons[key]) {
+                            const groupNumForReason = parseInt(groupNumStr);
+                            if (isNaN(groupNumForReason)) continue;
+                            
+                            for (const personName in assignmentReasons[key][groupNumForReason]) {
+                                const reason = assignmentReasons[key][groupNumForReason][personName];
+                                
+                                // Only show swap reasons for people not already displayed
+                                if (reason && reason.type === 'swap') {
+                                    // Check if this person is already in the displayed assignment
+                                    const alreadyDisplayed = personGroups.some(({ name, group }) => 
+                                        name === personName && parseInt(group || 0) === groupNumForReason
+                                    );
+                                    
+                                    if (!alreadyDisplayed) {
+                                        // This person was swapped out but is not in current assignment - show them with swap indicator
+                                        const indicatorIcon = '<i class="fas fa-exchange-alt text-info" title="Αλλαγή" style="font-size: 0.9em;"></i> ';
+                                        const styleClass = 'duty-person-swapped';
+                                        const title = reason.reason || 'Αλλαγή';
+                                        displayAssignmentHtml += `<div class="${styleClass}" title="${title}">${indicatorIcon}${personName}</div>`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
                     displayAssignmentHtml += '</div>';
                 }
                 
@@ -6980,10 +7010,14 @@
                                         crossMonthSwaps[swapDayKey][groupNum] = currentPerson;
                                         console.log(`[CROSS-MONTH SWAP SEMI] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${swapDayKey} (Group ${groupNum})`);
                                         
-                                        // Store assignment reasons for cross-month swap
+                                        // Store assignment reasons for BOTH people in cross-month swap
                                         const swapDateStr = new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                         const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                        // Mark the person from next month who was swapped in (now assigned to current date)
                                         storeAssignmentReason(dateKey, groupNum, nextMonthPerson, 'swap', `Αλλαγή με ${currentPerson} (${currentDateStr} → ${swapDateStr})`, currentPerson);
+                                        // Also mark the conflicted person who will be assigned to next month (cross-month swap)
+                                        // Note: This will be marked when the next month is calculated, but we can pre-mark it here
+                                        storeAssignmentReason(swapDayKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${nextMonthPerson} (${currentDateStr} → ${swapDateStr})`, nextMonthPerson);
                                     }
                                 }
                             }
@@ -7437,9 +7471,12 @@
                                 // Update assignment
                                 updatedAssignments[dateKey][groupNum] = swappedPerson;
                                 
-                                // Store assignment reason for swapped person
+                                // Store assignment reasons for BOTH people involved in the swap
                                 const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                // Mark the person who was swapped in (now assigned to this date)
                                 storeAssignmentReason(dateKey, groupNum, swappedPerson, 'swap', `Αλλαγή με ${currentPerson} (${dateStr})`, currentPerson);
+                                // Also mark the person who was swapped out (removed from this date)
+                                storeAssignmentReason(dateKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${swappedPerson} (${dateStr})`, swappedPerson);
                             }
                         }
                     }
