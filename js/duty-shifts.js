@@ -6219,7 +6219,24 @@
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempSpecialAssignments = tempSpecialAssignments;
-                calculationSteps.lastSpecialRotationPositions = lastSpecialRotationPositions;
+                // Find the last assigned person for each group (store person name, not position)
+                calculationSteps.lastSpecialRotationPositions = {};
+                for (let g = 1; g <= 4; g++) {
+                    // Find the last special holiday assignment for this group
+                    // Use sortedSpecial (already sorted) to find the last date with an assignment
+                    let lastAssignedPerson = null;
+                    for (let i = sortedSpecial.length - 1; i >= 0; i--) {
+                        const dateKey = sortedSpecial[i];
+                        if (tempSpecialAssignments[dateKey] && tempSpecialAssignments[dateKey][g]) {
+                            lastAssignedPerson = tempSpecialAssignments[dateKey][g];
+                            break;
+                        }
+                    }
+                    if (lastAssignedPerson) {
+                        calculationSteps.lastSpecialRotationPositions[g] = lastAssignedPerson;
+                        console.log(`[SPECIAL ROTATION] Storing last person ${lastAssignedPerson} for group ${g}`);
+                    }
+                }
                 
                 html += '</tbody>';
                 html += '</table>';
@@ -10149,9 +10166,21 @@
             // Store normal assignments and rotation positions for saving when Next is pressed
             calculationSteps.tempNormalAssignments = normalAssignments;
             calculationSteps.lastNormalRotationPositions = {};
+            // Find the last assigned person for each group (store person name, not position)
             for (let g = 1; g <= 4; g++) {
-                if (globalNormalRotationPosition[g] !== undefined) {
-                    calculationSteps.lastNormalRotationPositions[g] = globalNormalRotationPosition[g];
+                // Find the last normal day assignment for this group
+                const sortedNormalKeys = [...normalDays].sort();
+                let lastAssignedPerson = null;
+                for (let i = sortedNormalKeys.length - 1; i >= 0; i--) {
+                    const dateKey = sortedNormalKeys[i];
+                    if (normalAssignments[dateKey] && normalAssignments[dateKey][g]) {
+                        lastAssignedPerson = normalAssignments[dateKey][g];
+                        break;
+                    }
+                }
+                if (lastAssignedPerson) {
+                    calculationSteps.lastNormalRotationPositions[g] = lastAssignedPerson;
+                    console.log(`[NORMAL ROTATION] Storing last person ${lastAssignedPerson} for group ${g}`);
                 }
             }
             
