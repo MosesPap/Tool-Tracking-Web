@@ -4729,8 +4729,10 @@
                 // Parse assignment and display each person on a separate line (no commas)
                 let displayAssignmentHtml = '';
                 if (assignment) {
+                    // Ensure assignment is a string (it might be an object if data wasn't flattened correctly)
+                    const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
                     // Split by comma first, then extract person-group info from each part
-                    const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
+                    const parts = assignmentStr.split(',').map(p => p.trim()).filter(p => p);
                     const personGroups = [];
                     
                     parts.forEach(part => {
