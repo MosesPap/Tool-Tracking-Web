@@ -8165,6 +8165,24 @@
                     } catch (error) {
                         console.error('Error saving assignmentReasons after normal swaps:', error);
                     }
+                    
+                    // IMPORTANT: Save cross-month swaps to Firestore after swap logic completes
+                    try {
+                        console.log('[STEP 4] Saving crossMonthSwaps to Firestore:', Object.keys(crossMonthSwaps).length, 'dates');
+                        if (Object.keys(crossMonthSwaps).length > 0) {
+                            const sanitizedCrossMonth = sanitizeForFirestore(crossMonthSwaps);
+                            await db.collection('dutyShifts').doc('crossMonthSwaps').set({
+                                ...sanitizedCrossMonth,
+                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                updatedBy: user.uid
+                            });
+                            console.log('[STEP 4] Saved crossMonthSwaps to Firestore successfully');
+                        } else {
+                            console.log('[STEP 4] No crossMonthSwaps to save');
+                        }
+                    } catch (error) {
+                        console.error('[STEP 4] Error saving crossMonthSwaps to Firestore:', error);
+                    }
                 }
             } catch (error) {
                 console.error('Error saving final normal assignments:', error);
