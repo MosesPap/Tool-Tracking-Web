@@ -425,7 +425,23 @@
                     const data = assignmentsDoc.data();
                     delete data.lastUpdated;
                     delete data.updatedBy;
-                    dutyAssignments = data || {};
+                    
+                    // Check if data is organized by month and flatten if needed
+                    const isMonthOrganized = data && typeof data === 'object' && Object.keys(data).some(key => {
+                        const val = data[key];
+                        return typeof val === 'object' && val !== null && !Array.isArray(val) && 
+                               !(key === 'lastUpdated' || key === 'updatedBy' || key === '_migratedFrom' || key === '_migrationDate') &&
+                               Object.keys(val).some(k => /^\d{4}-\d{2}-\d{2}$/.test(k));
+                    });
+                    
+                    if (isMonthOrganized) {
+                        dutyAssignments = flattenAssignmentsByMonth(data);
+                        console.log('Loaded dutyAssignments from month-organized format');
+                    } else {
+                        dutyAssignments = data || {};
+                        console.log('Loaded dutyAssignments from flat format (legacy)');
+                    }
+                    
                     // Merge legacy assignments into day-type-specific documents if they don't exist
                     for (const dateKey in dutyAssignments) {
                         if (dateKey === 'lastUpdated' || dateKey === 'updatedBy') continue;
@@ -4533,8 +4549,27 @@
         function extractAllPersonNames(assignment) {
             if (!assignment) return [];
             
+            // Ensure assignment is a string - convert if needed
+            let assignmentStr = assignment;
+            if (typeof assignment !== 'string') {
+                // If it's an object, try to convert it
+                if (typeof assignment === 'object' && assignment !== null) {
+                    // If it's an array, join it
+                    if (Array.isArray(assignment)) {
+                        assignmentStr = assignment.join(', ');
+                    } else {
+                        // If it's an object, try to stringify or return empty
+                        console.warn('extractAllPersonNames: assignment is an object, cannot parse:', assignment);
+                        return [];
+                    }
+                } else {
+                    // Try to convert to string
+                    assignmentStr = String(assignment);
+                }
+            }
+            
             // Match all patterns like "Name (Ομάδα X)"
-            const matches = assignment.matchAll(/([^(]+)\s*\(Ομάδα\s*(\d+)\)/g);
+            const matches = assignmentStr.matchAll(/([^(]+)\s*\(Ομάδα\s*(\d+)\)/g);
             const persons = [];
             
             for (const match of matches) {
