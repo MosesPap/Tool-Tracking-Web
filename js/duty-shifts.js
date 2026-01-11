@@ -9335,13 +9335,31 @@
                             
                             if (crossMonthSwaps[dateKey] && crossMonthSwaps[dateKey][groupNum]) {
                                 // This person was swapped from previous month and must be assigned to this day
-                                assignedPerson = crossMonthSwaps[dateKey][groupNum];
+                                const crossMonthPerson = crossMonthSwaps[dateKey][groupNum];
+                                assignedPerson = crossMonthPerson;
                                 isCrossMonthSwapDay = true;
-                                console.log(`[PREVIEW CROSS-MONTH] Assigning ${assignedPerson} to ${dateKey} (Group ${groupNum}, swapped from previous month)`);
+                                console.log(`[PREVIEW CROSS-MONTH] Assigning ${crossMonthPerson} to ${dateKey} (Group ${groupNum}, swapped from previous month)`);
                                 
-                                // Skip the person who would normally be assigned (they were swapped to previous month)
-                                // Advance rotation position by 1 to skip the normal person
-                                globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                // Check if the cross-month person is the same as the normal rotation person
+                                const normalRotationPerson = groupPeople[rotationPosition];
+                                if (normalRotationPerson === crossMonthPerson) {
+                                    // The cross-month person IS the normal rotation person - just advance rotation
+                                    // No need to skip anyone, just continue normally
+                                    console.log(`[PREVIEW CROSS-MONTH] Cross-month person ${crossMonthPerson} matches normal rotation - no skip needed`);
+                                } else {
+                                    // The cross-month person is different from normal rotation person
+                                    // Skip the person who would normally be assigned (they were swapped to previous month)
+                                    // Advance rotation position by 1 to skip the normal person
+                                    globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                    console.log(`[PREVIEW CROSS-MONTH] Skipping normal rotation person ${normalRotationPerson} (swapped to previous month)`);
+                                }
+                                
+                                // IMPORTANT: Mark this person as assigned to prevent duplicate assignment
+                                // Initialize assigned people set for this group if needed
+                                if (!assignedPeoplePreview[monthKey][groupNum]) {
+                                    assignedPeoplePreview[monthKey][groupNum] = new Set();
+                                }
+                                assignedPeoplePreview[monthKey][groupNum].add(crossMonthPerson);
                                 
                                 // Remove from tracking since we're assigning them now (will be saved when calculation completes)
                                 delete crossMonthSwaps[dateKey][groupNum];
