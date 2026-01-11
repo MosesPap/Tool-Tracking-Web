@@ -3114,7 +3114,9 @@
             // Get all days where person had duty
             const personDutyDays = [];
             for (const [dayKey, assignment] of Object.entries(dutyAssignments)) {
-                if (assignment.includes(`${person} (Ομάδα ${fromGroup})`)) {
+                // Ensure assignment is a string
+                const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment || '');
+                if (assignmentStr.includes(`${person} (Ομάδα ${fromGroup})`)) {
                     personDutyDays.push(dayKey);
                 }
             }
@@ -3142,9 +3144,11 @@
                 // Check if anyone from target group had duty on this day
                 const assignment = dutyAssignments[dayKey];
                 if (assignment) {
+                    // Ensure assignment is a string
+                    const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
                     const targetGroupPeople = targetGroupData[dayTypeCategory] || [];
                     targetGroupPeople.forEach(targetPerson => {
-                        if (assignment.includes(`${targetPerson} (Ομάδα ${toGroup})`)) {
+                        if (assignmentStr.includes(`${targetPerson} (Ομάδα ${toGroup})`)) {
                             if (!sameDayPeople[dayTypeCategory].includes(targetPerson)) {
                                 sameDayPeople[dayTypeCategory].push(targetPerson);
                             }
@@ -5046,8 +5050,10 @@
             
             if (!assignment) return false;
             
+            // Ensure assignment is a string
+            const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
             const personGroupStr = `${person} (Ομάδα ${groupNum})`;
-            return assignment.includes(personGroupStr);
+            return assignmentStr.includes(personGroupStr);
         }
 
         // Check if a person has duty on consecutive days (day before or day after)
@@ -8781,12 +8787,14 @@
             const personGroupStr = `${person} (Ομάδα ${groupNum})`;
             
             if (existingAssignment) {
-                if (!existingAssignment.includes(personGroupStr)) {
+                // Ensure existingAssignment is a string
+                const assignmentStr = typeof existingAssignment === 'string' ? existingAssignment : String(existingAssignment);
+                if (!assignmentStr.includes(personGroupStr)) {
                     // Add to existing assignment
-                    setAssignmentForDate(dayKey, existingAssignment + `, ${personGroupStr}`);
+                    setAssignmentForDate(dayKey, assignmentStr + `, ${personGroupStr}`);
                 } else {
                     // Replace existing assignment for this group
-                    const parts = existingAssignment.split(',').map(p => p.trim()).filter(p => p);
+                    const parts = assignmentStr.split(',').map(p => p.trim()).filter(p => p);
                     const filtered = parts.filter(p => !p.includes(`(Ομάδα ${groupNum})`));
                     filtered.push(personGroupStr);
                     setAssignmentForDate(dayKey, filtered.join(', '));
@@ -9271,8 +9279,12 @@
                     days.forEach((dayKey, dayIndex) => {
                         // Skip if day already has assignment for this group (critical assignments or swapped days)
                         const existingAssignment = getAssignmentForDate(dayKey);
-                        if (existingAssignment && existingAssignment.includes(`(Ομάδα ${groupNum})`)) {
-                            return;
+                        if (existingAssignment) {
+                            // Ensure existingAssignment is a string
+                            const assignmentStr = typeof existingAssignment === 'string' ? existingAssignment : String(existingAssignment);
+                            if (assignmentStr.includes(`(Ομάδα ${groupNum})`)) {
+                                return;
+                            }
                         }
                         
                         // Skip if this day was already assigned due to a swap
@@ -10233,8 +10245,10 @@
             if (dutyAssignments[dateKey]) {
                 // Update existing assignment
                 const existing = dutyAssignments[dateKey];
+                // Ensure existing is a string
+                const existingStr = typeof existing === 'string' ? existing : String(existing || '');
                 // Remove old assignment for this group if exists
-                const updated = existing.split(', ').filter(a => !a.includes(`Ομάδα ${groupNum}`));
+                const updated = existingStr.split(', ').filter(a => !a.includes(`Ομάδα ${groupNum}`));
                 updated.push(`${person} (Ομάδα ${groupNum})`);
                 dutyAssignments[dateKey] = updated.join(', ');
             } else {
