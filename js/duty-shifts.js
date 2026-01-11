@@ -6286,7 +6286,9 @@
                 const weekendHolidays = dayTypeLists.weekend || [];
                 const specialHolidays = dayTypeLists.special || [];
                 
-                // Load special holiday assignments from saved data
+                // Load special holiday assignments from Step 1 saved data (tempSpecialAssignments)
+                // Use tempSpecialAssignments directly instead of reading from global specialHolidayAssignments
+                const tempSpecialAssignments = calculationSteps.tempSpecialAssignments || {};
                 const simulatedSpecialAssignments = {}; // monthKey -> { groupNum -> Set of person names }
                 const sortedSpecial = [...specialHolidays].sort();
                 
@@ -6300,7 +6302,25 @@
                         simulatedSpecialAssignments[monthKey] = {};
                     }
                     
-                    const assignment = specialHolidayAssignments[dateKey];
+                    // Check tempSpecialAssignments first (from Step 1), then fall back to specialHolidayAssignments
+                    let assignment = null;
+                    if (tempSpecialAssignments[dateKey]) {
+                        // tempSpecialAssignments is in format: { dateKey: { groupNum: personName } }
+                        // Convert to string format for parsing
+                        const groups = tempSpecialAssignments[dateKey];
+                        const parts = [];
+                        for (const groupNum in groups) {
+                            const personName = groups[groupNum];
+                            if (personName) {
+                                parts.push(`${personName} (Ομάδα ${groupNum})`);
+                            }
+                        }
+                        assignment = parts.join(', ');
+                    } else {
+                        // Fall back to global specialHolidayAssignments (for backward compatibility)
+                        assignment = specialHolidayAssignments[dateKey];
+                    }
+                    
                     if (assignment) {
                         // Ensure assignment is a string (it might be an object if data wasn't flattened correctly)
                         const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
@@ -6630,7 +6650,8 @@
                 const specialHolidays = dayTypeLists.special || [];
                 const weekendHolidays = dayTypeLists.weekend || [];
                 
-                // Load special holiday assignments from saved data
+                // Load special holiday assignments from Step 1 saved data (tempSpecialAssignments)
+                const tempSpecialAssignments = calculationSteps.tempSpecialAssignments || {};
                 const simulatedSpecialAssignments = {}; // monthKey -> { groupNum -> Set of person names }
                 const sortedSpecial = [...specialHolidays].sort();
                 
@@ -6644,9 +6665,29 @@
                         simulatedSpecialAssignments[monthKey] = {};
                     }
                     
-                    const assignment = specialHolidayAssignments[dateKey];
+                    // Check tempSpecialAssignments first (from Step 1), then fall back to specialHolidayAssignments
+                    let assignment = null;
+                    if (tempSpecialAssignments[dateKey]) {
+                        // tempSpecialAssignments is in format: { dateKey: { groupNum: personName } }
+                        // Convert to string format for parsing
+                        const groups = tempSpecialAssignments[dateKey];
+                        const parts = [];
+                        for (const groupNum in groups) {
+                            const personName = groups[groupNum];
+                            if (personName) {
+                                parts.push(`${personName} (Ομάδα ${groupNum})`);
+                            }
+                        }
+                        assignment = parts.join(', ');
+                    } else {
+                        // Fall back to global specialHolidayAssignments (for backward compatibility)
+                        assignment = specialHolidayAssignments[dateKey];
+                    }
+                    
                     if (assignment) {
-                        const parts = assignment.split(',').map(p => p.trim());
+                        // Ensure assignment is a string (it might be an object if data wasn't flattened correctly)
+                        const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
+                        const parts = assignmentStr.split(',').map(p => p.trim());
                         parts.forEach(part => {
                             const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
                             if (match) {
@@ -6661,22 +6702,40 @@
                     }
                 });
                 
-                // Load weekend assignments from saved data
+                // Load weekend assignments from Step 2 final results (finalWeekendAssignments)
+                // Use finalWeekendAssignments directly instead of reading from global weekendAssignments
+                const finalWeekendAssignments = calculationSteps.finalWeekendAssignments || {};
                 const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
+                
+                // finalWeekendAssignments is in format: { dateKey: { groupNum: personName } }
+                for (const dateKey in finalWeekendAssignments) {
+                    const groups = finalWeekendAssignments[dateKey];
+                    if (groups && typeof groups === 'object') {
+                        simulatedWeekendAssignments[dateKey] = { ...groups };
+                    }
+                }
+                
+                // Also check global weekendAssignments for any dates not in finalWeekendAssignments (backward compatibility)
                 for (const dateKey in weekendAssignments) {
-                    const assignment = weekendAssignments[dateKey];
-                    const parts = assignment.split(',').map(p => p.trim());
-                    parts.forEach(part => {
-                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
-                        if (match) {
-                            const personName = match[1].trim();
-                            const groupNum = parseInt(match[2]);
-                            if (!simulatedWeekendAssignments[dateKey]) {
-                                simulatedWeekendAssignments[dateKey] = {};
-                            }
-                            simulatedWeekendAssignments[dateKey][groupNum] = personName;
+                    if (!simulatedWeekendAssignments[dateKey]) {
+                        const assignment = weekendAssignments[dateKey];
+                        if (assignment) {
+                            // Ensure assignment is a string (it might be an object if data wasn't flattened correctly)
+                            const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
+                            const parts = assignmentStr.split(',').map(p => p.trim());
+                            parts.forEach(part => {
+                                const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                                if (match) {
+                                    const personName = match[1].trim();
+                                    const groupNum = parseInt(match[2]);
+                                    if (!simulatedWeekendAssignments[dateKey]) {
+                                        simulatedWeekendAssignments[dateKey] = {};
+                                    }
+                                    simulatedWeekendAssignments[dateKey][groupNum] = personName;
+                                }
+                            });
                         }
-                    });
+                    }
                 }
                 
                 // Track swapped people and replacements
@@ -7145,7 +7204,8 @@
                 const weekendHolidays = dayTypeLists.weekend || [];
                 const semiNormalDays = dayTypeLists.semi || [];
                 
-                // Load special holiday assignments from saved data
+                // Load special holiday assignments from Step 1 saved data (tempSpecialAssignments)
+                const tempSpecialAssignments = calculationSteps.tempSpecialAssignments || {};
                 const simulatedSpecialAssignments = {}; // monthKey -> { groupNum -> Set of person names }
                 const sortedSpecial = [...specialHolidays].sort();
                 
@@ -7159,9 +7219,29 @@
                         simulatedSpecialAssignments[monthKey] = {};
                     }
                     
-                    const assignment = specialHolidayAssignments[dateKey];
+                    // Check tempSpecialAssignments first (from Step 1), then fall back to specialHolidayAssignments
+                    let assignment = null;
+                    if (tempSpecialAssignments[dateKey]) {
+                        // tempSpecialAssignments is in format: { dateKey: { groupNum: personName } }
+                        // Convert to string format for parsing
+                        const groups = tempSpecialAssignments[dateKey];
+                        const parts = [];
+                        for (const groupNum in groups) {
+                            const personName = groups[groupNum];
+                            if (personName) {
+                                parts.push(`${personName} (Ομάδα ${groupNum})`);
+                            }
+                        }
+                        assignment = parts.join(', ');
+                    } else {
+                        // Fall back to global specialHolidayAssignments (for backward compatibility)
+                        assignment = specialHolidayAssignments[dateKey];
+                    }
+                    
                     if (assignment) {
-                        const parts = assignment.split(',').map(p => p.trim());
+                        // Ensure assignment is a string (it might be an object if data wasn't flattened correctly)
+                        const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
+                        const parts = assignmentStr.split(',').map(p => p.trim());
                         parts.forEach(part => {
                             const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
                             if (match) {
@@ -7176,40 +7256,74 @@
                     }
                 });
                 
-                // Load weekend assignments from saved data
+                // Load weekend assignments from Step 2 final results (finalWeekendAssignments)
+                const finalWeekendAssignments = calculationSteps.finalWeekendAssignments || {};
                 const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
-                for (const dateKey in weekendAssignments) {
-                    const assignment = weekendAssignments[dateKey];
-                    const parts = assignment.split(',').map(p => p.trim());
-                    parts.forEach(part => {
-                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
-                        if (match) {
-                            const personName = match[1].trim();
-                            const groupNum = parseInt(match[2]);
-                            if (!simulatedWeekendAssignments[dateKey]) {
-                                simulatedWeekendAssignments[dateKey] = {};
-                            }
-                            simulatedWeekendAssignments[dateKey][groupNum] = personName;
-                        }
-                    });
+                
+                // finalWeekendAssignments is in format: { dateKey: { groupNum: personName } }
+                for (const dateKey in finalWeekendAssignments) {
+                    const groups = finalWeekendAssignments[dateKey];
+                    if (groups && typeof groups === 'object') {
+                        simulatedWeekendAssignments[dateKey] = { ...groups };
+                    }
                 }
                 
-                // Load semi-normal assignments from saved data
-                const simulatedSemiAssignments = {}; // dateKey -> { groupNum -> person name }
-                for (const dateKey in semiNormalAssignments) {
-                    const assignment = semiNormalAssignments[dateKey];
-                    const parts = assignment.split(',').map(p => p.trim());
-                    parts.forEach(part => {
-                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
-                        if (match) {
-                            const personName = match[1].trim();
-                            const groupNum = parseInt(match[2]);
-                            if (!simulatedSemiAssignments[dateKey]) {
-                                simulatedSemiAssignments[dateKey] = {};
-                            }
-                            simulatedSemiAssignments[dateKey][groupNum] = personName;
+                // Also check global weekendAssignments for any dates not in finalWeekendAssignments (backward compatibility)
+                for (const dateKey in weekendAssignments) {
+                    if (!simulatedWeekendAssignments[dateKey]) {
+                        const assignment = weekendAssignments[dateKey];
+                        if (assignment) {
+                            // Ensure assignment is a string (it might be an object if data wasn't flattened correctly)
+                            const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
+                            const parts = assignmentStr.split(',').map(p => p.trim());
+                            parts.forEach(part => {
+                                const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                                if (match) {
+                                    const personName = match[1].trim();
+                                    const groupNum = parseInt(match[2]);
+                                    if (!simulatedWeekendAssignments[dateKey]) {
+                                        simulatedWeekendAssignments[dateKey] = {};
+                                    }
+                                    simulatedWeekendAssignments[dateKey][groupNum] = personName;
+                                }
+                            });
                         }
-                    });
+                    }
+                }
+                
+                // Load semi-normal assignments from Step 3 final results (finalSemiAssignments)
+                const finalSemiAssignments = calculationSteps.finalSemiAssignments || {};
+                const simulatedSemiAssignments = {}; // dateKey -> { groupNum -> person name }
+                
+                // finalSemiAssignments is in format: { dateKey: { groupNum: personName } }
+                for (const dateKey in finalSemiAssignments) {
+                    const groups = finalSemiAssignments[dateKey];
+                    if (groups && typeof groups === 'object') {
+                        simulatedSemiAssignments[dateKey] = { ...groups };
+                    }
+                }
+                
+                // Also check global semiNormalAssignments for any dates not in finalSemiAssignments (backward compatibility)
+                for (const dateKey in semiNormalAssignments) {
+                    if (!simulatedSemiAssignments[dateKey]) {
+                        const assignment = semiNormalAssignments[dateKey];
+                        if (assignment) {
+                            // Ensure assignment is a string (it might be an object if data wasn't flattened correctly)
+                            const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
+                            const parts = assignmentStr.split(',').map(p => p.trim());
+                            parts.forEach(part => {
+                                const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                                if (match) {
+                                    const personName = match[1].trim();
+                                    const groupNum = parseInt(match[2]);
+                                    if (!simulatedSemiAssignments[dateKey]) {
+                                        simulatedSemiAssignments[dateKey] = {};
+                                    }
+                                    simulatedSemiAssignments[dateKey][groupNum] = personName;
+                                }
+                            });
+                        }
+                    }
                 }
                 
                 // Track swapped people and replacements
