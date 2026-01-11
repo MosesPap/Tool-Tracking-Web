@@ -9190,13 +9190,40 @@
                                             if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
                                                 assignedPerson = candidate;
                                                 rotationPosition = nextIndex;
-                                                        break;
-                                                    }
-                                                }
+                                                break;
                                             }
-                                            
-                                    // Advance rotation position
-                                    globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                        }
+                                    }
+                                    
+                                    // Check if assigned person has a conflict (will be swapped later)
+                                    // If so, DO NOT assign anyone to this day - leave it for swap logic to handle
+                                    // Also DO NOT assign the next person in rotation to this day
+                                    if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date)) {
+                                        // Build simulated assignments for conflict checking
+                                        const simulatedAssignments = {
+                                            special: simulatedSpecialAssignments,
+                                            weekend: simulatedWeekendAssignments,
+                                            semi: simulatedSemiAssignments,
+                                            normal: normalAssignments
+                                        };
+                                        
+                                        // Check for consecutive conflict
+                                        const hasConflict = hasConsecutiveDuty(dateKey, assignedPerson, groupNum, simulatedAssignments);
+                                        
+                                        if (hasConflict) {
+                                            // Person has conflict - DO NOT assign them or the next person
+                                            // Leave this day empty for swap logic to handle
+                                            assignedPerson = null;
+                                            // Still advance rotation position so next person gets their correct turn
+                                            globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                        } else {
+                                            // No conflict - assign person and advance rotation
+                                            globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                        }
+                                    } else {
+                                        // Person is missing or no person assigned - advance rotation position
+                                        globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                    }
                                 }
                                 
                                 // END OF PREVIEW MODE - Swap logic removed, will be applied when Next is pressed
