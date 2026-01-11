@@ -5368,14 +5368,18 @@
         // This temporarily calculates the next month to find the correct person according to rotation logic
         // For normal days, follows swap logic: Monday↔Wednesday, Tuesday↔Thursday
         function getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, currentMonth, currentYear, rotationDays, groupPeople, currentRotationPosition = null) {
-            // Check if we're in the last 3 days of the month (end of month)
             const date = new Date(dayKey + 'T00:00:00');
-            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
-            const daysUntilEndOfMonth = lastDayOfMonth.getDate() - date.getDate();
             
-            // Only use next month logic if we're in the last 3 days of the month
-            if (daysUntilEndOfMonth > 3) {
-                return null;
+            // For semi-normal days, allow cross-month swaps throughout the entire month
+            // For other day types (normal, weekend, special), only check in last 3 days
+            if (dayTypeCategory !== 'semi') {
+                const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+                const daysUntilEndOfMonth = lastDayOfMonth.getDate() - date.getDate();
+                
+                // Only use next month logic if we're in the last 3 days of the month
+                if (daysUntilEndOfMonth > 3) {
+                    return null;
+                }
             }
             
             // Calculate next month
@@ -6668,25 +6672,15 @@
                 }
                 
                 // Track swapped people and replacements
-                const swappedPeople = []; // Array of { date, groupNum, skippedPerson, swappedPerson }
+                const swappedPeople = []; // Array of { date, groupNum, conflictedPerson, swappedPerson, swapDate }
                 const sortedSemi = [...semiNormalDays].sort();
                 const updatedAssignments = {}; // dateKey -> { groupNum -> personName }
                 
-                // Load current semi-normal assignments
-                for (const dateKey in semiNormalAssignments) {
-                    const assignment = semiNormalAssignments[dateKey];
-                    const parts = assignment.split(',').map(p => p.trim());
-                    parts.forEach(part => {
-                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
-                        if (match) {
-                            const personName = match[1].trim();
-                            const groupNum = parseInt(match[2]);
-                            if (!updatedAssignments[dateKey]) {
-                                updatedAssignments[dateKey] = {};
-                            }
-                            updatedAssignments[dateKey][groupNum] = personName;
-                        }
-                    });
+                // Load current semi-normal assignments from preview (tempSemiAssignments)
+                const tempSemiAssignments = calculationSteps.tempSemiAssignments || {};
+                for (const dateKey in tempSemiAssignments) {
+                    const groups = tempSemiAssignments[dateKey];
+                    updatedAssignments[dateKey] = { ...groups };
                 }
                 
                 // Run swap logic (check for consecutive conflicts with weekend or special holiday)
@@ -6740,11 +6734,14 @@
                         }
                         
                         if (hasConsecutiveConflict) {
-                            // Find replacement
+                            // Find a person to swap with (not just replace)
+                            // Need to find where the swapped person is assigned and swap both
                             const rotationDays = groupPeople.length;
                             const currentIndex = groupPeople.indexOf(currentPerson);
-                            let swappedPerson = null;
+                            let swapCandidate = null;
+                            let swapDateKey = null;
                             
+                            // First, find a candidate who doesn't have conflict on current day
                             for (let offset = 1; offset < rotationDays; offset++) {
                                 const nextIndex = (currentIndex + offset) % rotationDays;
                                 const candidate = groupPeople[nextIndex];
@@ -6753,7 +6750,7 @@
                                     continue;
                                 }
                                 
-                                // Check if candidate has consecutive conflict
+                                // Check if candidate has consecutive conflict on current day
                                 let candidateHasConflict = false;
                                 const candidateBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] || 
                                                        (beforeType === 'special-holiday' ? 
@@ -6767,22 +6764,135 @@
                                 }
                                 
                                 if (!candidateHasConflict) {
-                                    swappedPerson = candidate;
-                                    break;
+                                    // Found a candidate - now find where they are assigned
+                                    for (const checkDateKey in updatedAssignments) {
+                                        if (updatedAssignments[checkDateKey]?.[groupNum] === candidate) {
+                                            const checkDate = new Date(checkDateKey + 'T00:00:00');
+                                            const checkDayType = getDayType(checkDate);
+                                            
+                                            // Must be a semi-normal day
+                                            if (checkDayType === 'semi-normal-day') {
+                                                // Check if conflicted person can be assigned to candidate's day
+                                                const checkDayBefore = new Date(checkDate);
+                                                checkDayBefore.setDate(checkDayBefore.getDate() - 1);
+                                                const checkDayAfter = new Date(checkDate);
+                                                checkDayAfter.setDate(checkDayAfter.getDate() + 1);
+                                                
+                                                const checkDayBeforeKey = formatDateKey(checkDayBefore);
+                                                const checkDayAfterKey = formatDateKey(checkDayAfter);
+                                                
+                                                const checkBeforeType = getDayType(checkDayBefore);
+                                                const checkAfterType = getDayType(checkDayAfter);
+                                                
+                                                let conflictedPersonCanSwap = true;
+                                                
+                                                // Check if conflicted person has conflict on candidate's day
+                                                if (checkBeforeType === 'weekend-holiday' || checkBeforeType === 'special-holiday') {
+                                                    const personBefore = simulatedWeekendAssignments[checkDayBeforeKey]?.[groupNum] || 
+                                                                       (checkBeforeType === 'special-holiday' ? 
+                                                                        (simulatedSpecialAssignments[`${checkDayBefore.getFullYear()}-${checkDayBefore.getMonth()}`]?.[groupNum]?.has(currentPerson) ? currentPerson : null) : null);
+                                                    if (personBefore === currentPerson) {
+                                                        conflictedPersonCanSwap = false;
+                                                    }
+                                                }
+                                                
+                                                if (conflictedPersonCanSwap && (checkAfterType === 'weekend-holiday' || checkAfterType === 'special-holiday')) {
+                                                    const personAfter = simulatedWeekendAssignments[checkDayAfterKey]?.[groupNum] || 
+                                                                       (checkAfterType === 'special-holiday' ? 
+                                                                        (simulatedSpecialAssignments[`${checkDayAfter.getFullYear()}-${checkDayAfter.getMonth()}`]?.[groupNum]?.has(currentPerson) ? currentPerson : null) : null);
+                                                    if (personAfter === currentPerson) {
+                                                        conflictedPersonCanSwap = false;
+                                                    }
+                                                }
+                                                
+                                                // Also check if conflicted person is missing on candidate's day
+                                                if (conflictedPersonCanSwap && isPersonMissingOnDate(currentPerson, groupNum, checkDate)) {
+                                                    conflictedPersonCanSwap = false;
+                                                }
+                                                
+                                                if (conflictedPersonCanSwap) {
+                                                    swapCandidate = candidate;
+                                                    swapDateKey = checkDateKey;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    if (swapCandidate && swapDateKey) {
+                                        break; // Found valid swap
+                                    }
                                 }
                             }
                             
-                            if (swappedPerson) {
+                            if (swapCandidate && swapDateKey) {
                                 swappedPeople.push({
                                     date: dateKey,
                                     dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
                                     groupNum: groupNum,
-                                    skippedPerson: currentPerson,
-                                    swappedPerson: swappedPerson
+                                    conflictedPerson: currentPerson,
+                                    swappedPerson: swapCandidate,
+                                    swapDate: swapDateKey,
+                                    swapDateStr: new Date(swapDateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
                                 });
                                 
-                                // Update assignment
-                                updatedAssignments[dateKey][groupNum] = swappedPerson;
+                                // Perform the swap: conflicted person goes to swap date, swapped person goes to conflicted date
+                                updatedAssignments[dateKey][groupNum] = swapCandidate;
+                                updatedAssignments[swapDateKey][groupNum] = currentPerson;
+                            } else {
+                                // No swap found in current month - try cross-month swap
+                                // For semi-normal, check next month throughout the entire month (not just last 3 days)
+                                // Calculate current rotation position for semi-normal
+                                const currentRotationPosition = currentIndex;
+                                
+                                // Try to get person from next month
+                                const nextMonthResult = getPersonFromNextMonth(dateKey, 'semi', groupNum, month, year, rotationDays, groupPeople, currentRotationPosition);
+                                
+                                if (nextMonthResult && nextMonthResult.person) {
+                                    const nextMonthPerson = nextMonthResult.person;
+                                    const swapDayKey = nextMonthResult.swapDayKey;
+                                    
+                                    // Check if next month person has conflict on current day
+                                    let nextMonthPersonHasConflict = false;
+                                    const nextPersonBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] || 
+                                                             (beforeType === 'special-holiday' ? 
+                                                              (simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(nextMonthPerson) ? nextMonthPerson : null) : null);
+                                    const nextPersonAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] || 
+                                                            (afterType === 'special-holiday' ? 
+                                                             (simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(nextMonthPerson) ? nextMonthPerson : null) : null);
+                                    
+                                    if (nextPersonBefore === nextMonthPerson || nextPersonAfter === nextMonthPerson) {
+                                        nextMonthPersonHasConflict = true;
+                                    }
+                                    
+                                    // Also check if next month person is missing on current day
+                                    if (!nextMonthPersonHasConflict && isPersonMissingOnDate(nextMonthPerson, groupNum, date)) {
+                                        nextMonthPersonHasConflict = true;
+                                    }
+                                    
+                                    if (!nextMonthPersonHasConflict) {
+                                        // Valid cross-month swap found
+                                        swappedPeople.push({
+                                            date: dateKey,
+                                            dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                            groupNum: groupNum,
+                                            conflictedPerson: currentPerson,
+                                            swappedPerson: nextMonthPerson,
+                                            swapDate: swapDayKey,
+                                            swapDateStr: new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                        });
+                                        
+                                        // Assign next month person to current day
+                                        updatedAssignments[dateKey][groupNum] = nextMonthPerson;
+                                        
+                                        // Save cross-month swap: conflicted person must be assigned to swapDayKey in next month
+                                        if (!crossMonthSwaps[swapDayKey]) {
+                                            crossMonthSwaps[swapDayKey] = {};
+                                        }
+                                        crossMonthSwaps[swapDayKey][groupNum] = currentPerson;
+                                        console.log(`[CROSS-MONTH SWAP SEMI] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${swapDayKey} (Group ${groupNum})`);
+                                    }
+                                }
                             }
                         }
                     }
@@ -6807,11 +6917,13 @@
             } else {
                 message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Αλλάχθηκαν ' + swappedPeople.length + ' άτομα:</strong><br><br>';
                 message += '<table class="table table-sm table-bordered">';
-                message += '<thead><tr><th>Ημερομηνία</th><th>Ομάδα</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th></tr></thead><tbody>';
+                message += '<thead><tr><th>Ημερομηνία</th><th>Ομάδα</th><th>Σύγκρουση</th><th>Αλλαγή με</th><th>Ημερομηνία Αλλαγής</th></tr></thead><tbody>';
                 
                 swappedPeople.forEach(item => {
                     const groupName = getGroupName(item.groupNum);
-                    message += `<tr><td>${item.dateStr}</td><td>${groupName}</td><td><strong>${item.skippedPerson}</strong></td><td><strong>${item.swappedPerson}</strong></td></tr>`;
+                    const conflictedPerson = item.conflictedPerson || item.skippedPerson;
+                    const swapDateStr = item.swapDateStr || '-';
+                    message += `<tr><td>${item.dateStr}</td><td>${groupName}</td><td><strong>${conflictedPerson}</strong></td><td><strong>${item.swappedPerson}</strong></td><td>${swapDateStr}</td></tr>`;
                 });
                 
                 message += '</tbody></table></div>';
@@ -8089,14 +8201,30 @@
                             let rotationPosition = globalSemiRotationPosition[groupNum] % rotationDays;
                             let assignedPerson = groupPeople[rotationPosition];
                             
+                            // Check if this day is a cross-month swap assignment (person swapped from previous month)
+                            // Structure: crossMonthSwaps[dateKey][groupNum] = personName
+                            let isCrossMonthSwapDay = false;
+                            if (crossMonthSwaps[dateKey] && crossMonthSwaps[dateKey][groupNum]) {
+                                // This person was swapped from previous month and must be assigned to this day
+                                assignedPerson = crossMonthSwaps[dateKey][groupNum];
+                                isCrossMonthSwapDay = true;
+                                console.log(`[PREVIEW CROSS-MONTH SEMI] Assigning ${assignedPerson} to ${dateKey} (Group ${groupNum}, swapped from previous month)`);
+                                // Remove from tracking since we're assigning them now (will be saved when calculation completes)
+                                delete crossMonthSwaps[dateKey][groupNum];
+                                // If no more groups for this date, remove the date entry
+                                if (Object.keys(crossMonthSwaps[dateKey]).length === 0) {
+                                    delete crossMonthSwaps[dateKey];
+                                }
+                            }
+                            
                             // Check if there's a pending swap for this position
-                            if (pendingSwaps[monthKey][groupNum] && pendingSwaps[monthKey][groupNum].swapToPosition === rotationPosition) {
+                            if (!isCrossMonthSwapDay && pendingSwaps[monthKey][groupNum] && pendingSwaps[monthKey][groupNum].swapToPosition === rotationPosition) {
                                 // This is the position where the skipped person should be assigned (swapped person's original position)
                                 assignedPerson = pendingSwaps[monthKey][groupNum].skippedPerson;
                                 delete pendingSwaps[monthKey][groupNum];
                                 // Advance rotation normally from this position
                                 globalSemiRotationPosition[groupNum] = rotationPosition + 1;
-                            } else {
+                            } else if (!isCrossMonthSwapDay) {
                                 // PREVIEW MODE: Just show basic rotation WITHOUT consecutive day swap logic
                                 // Swap logic will run when Next is pressed
                                 
@@ -8112,10 +8240,18 @@
                                             break;
                                         }
                                     }
-                                    }
+                                }
                                     
                                 // Advance rotation position
                                 globalSemiRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                            } else {
+                                // For cross-month swap, advance from the assigned person's position
+                                const assignedIndex = groupPeople.indexOf(assignedPerson);
+                                if (assignedIndex !== -1) {
+                                    globalSemiRotationPosition[groupNum] = (assignedIndex + 1) % rotationDays;
+                                } else {
+                                    globalSemiRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                }
                             }
                             
                             // Store assignment for potential future swaps
@@ -9457,8 +9593,8 @@
                                         hasConflict = true;
                                     }
                                 } else if (dayTypeCategory === 'semi') {
-                                    // Check consecutive day with weekend, special, or normal
-                                    // Use enhanced hasConsecutiveDuty to check all combinations
+                                    // Semi-normal swap logic is handled in runSemiNormalSwapLogic() after pressing Next in Step 3
+                                    // No swap logic here - just check for consecutive duty conflicts
                                     if (hasConsecutiveDuty(dayKey, expectedPerson, groupNum)) {
                                         hasConflict = true;
                                     }
@@ -10032,19 +10168,10 @@
                         // If person was skipped due to conflict, find next available day for them
                         // Note: For weekends, if skipped due to special holiday in same month, don't reassign
                         // They will be assigned when their turn comes again in rotation
-                        if (skippedPerson && skippedPerson !== assignedPerson && dayTypeCategory !== 'weekend') {
-                            // Only find next available day for semi and normal (not weekend)
-                            if (dayTypeCategory === 'semi') {
-                            const nextAvailableDay = findNextAvailableDayForPerson(skippedPerson, groupNum, dayTypeCategory, dayKey, dayTypeLists);
-                            if (nextAvailableDay) {
-                                // Check if next available day already has assignment for this group
-                                const nextAssignment = getAssignmentForDate(nextAvailableDay);
-                                if (!nextAssignment || !nextAssignment.includes(`(Ομάδα ${groupNum})`)) {
-                                    // Assign skipped person to next available day
-                                    assignPersonToDay(nextAvailableDay, skippedPerson, groupNum);
-                                    }
-                                }
-                            } else if (dayTypeCategory === 'normal') {
+                        // Note: For semi-normal, swap logic is handled in runSemiNormalSwapLogic() after pressing Next in Step 3
+                        if (skippedPerson && skippedPerson !== assignedPerson && dayTypeCategory !== 'weekend' && dayTypeCategory !== 'semi') {
+                            // Only find next available day for normal (not weekend, not semi)
+                            if (dayTypeCategory === 'normal') {
                                 // For normal days: swap with person who has same day of week (Monday↔Wednesday, Tuesday↔Thursday)
                                 const currentDayOfWeek = dayDate.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                                 
