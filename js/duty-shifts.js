@@ -6302,7 +6302,9 @@
                     
                     const assignment = specialHolidayAssignments[dateKey];
                     if (assignment) {
-                        const parts = assignment.split(',').map(p => p.trim());
+                        // Ensure assignment is a string (it might be an object if data wasn't flattened correctly)
+                        const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
+                        const parts = assignmentStr.split(',').map(p => p.trim());
                         parts.forEach(part => {
                             const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
                             if (match) {
