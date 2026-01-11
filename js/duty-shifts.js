@@ -4847,14 +4847,14 @@
                                 if (!isNaN(swapPairId)) {
                                     // Generate colors for swap pairs (same as in runNormalSwapLogic)
                                     const swapColors = [
-                                        { border: '#17a2b8', bg: 'rgba(23, 162, 184, 0.1)' }, // Cyan
-                                        { border: '#28a745', bg: 'rgba(40, 167, 69, 0.1)' }, // Green
-                                        { border: '#ffc107', bg: 'rgba(255, 193, 7, 0.1)' }, // Yellow
-                                        { border: '#dc3545', bg: 'rgba(220, 53, 69, 0.1)' }, // Red
-                                        { border: '#6f42c1', bg: 'rgba(111, 66, 193, 0.1)' }, // Purple
-                                        { border: '#fd7e14', bg: 'rgba(253, 126, 20, 0.1)' }, // Orange
-                                        { border: '#20c997', bg: 'rgba(32, 201, 151, 0.1)' }, // Teal
-                                        { border: '#e83e8c', bg: 'rgba(232, 62, 140, 0.1)' }  // Pink
+                                        { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.15)' }, // Bright Red
+                                        { border: '#00E676', bg: 'rgba(0, 230, 118, 0.15)' }, // Bright Green
+                                        { border: '#FFD600', bg: 'rgba(255, 214, 0, 0.15)' }, // Bright Yellow
+                                        { border: '#00B0FF', bg: 'rgba(0, 176, 255, 0.15)' }, // Bright Blue
+                                        { border: '#D500F9', bg: 'rgba(213, 0, 249, 0.15)' }, // Bright Purple
+                                        { border: '#FF6D00', bg: 'rgba(255, 109, 0, 0.15)' }, // Bright Orange
+                                        { border: '#00E5FF', bg: 'rgba(0, 229, 255, 0.15)' }, // Bright Cyan
+                                        { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.15)' }  // Bright Pink
                                     ];
                                     const swapColor = swapColors[swapPairId % swapColors.length];
                                     swapPairStyle = `border: 2px solid ${swapColor.border}; background-color: ${swapColor.bg};`;
@@ -4902,14 +4902,14 @@
                                             const swapPairId = typeof reason.swapPairId === 'number' ? reason.swapPairId : parseInt(reason.swapPairId);
                                             if (!isNaN(swapPairId)) {
                                                 const swapColors = [
-                                                    { border: '#17a2b8', bg: 'rgba(23, 162, 184, 0.1)' }, // Cyan
-                                                    { border: '#28a745', bg: 'rgba(40, 167, 69, 0.1)' }, // Green
-                                                    { border: '#ffc107', bg: 'rgba(255, 193, 7, 0.1)' }, // Yellow
-                                                    { border: '#dc3545', bg: 'rgba(220, 53, 69, 0.1)' }, // Red
-                                                    { border: '#6f42c1', bg: 'rgba(111, 66, 193, 0.1)' }, // Purple
-                                                    { border: '#fd7e14', bg: 'rgba(253, 126, 20, 0.1)' }, // Orange
-                                                    { border: '#20c997', bg: 'rgba(32, 201, 151, 0.1)' }, // Teal
-                                                    { border: '#e83e8c', bg: 'rgba(232, 62, 140, 0.1)' }  // Pink
+                                                    { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.15)' }, // Bright Red
+                                                    { border: '#00E676', bg: 'rgba(0, 230, 118, 0.15)' }, // Bright Green
+                                                    { border: '#FFD600', bg: 'rgba(255, 214, 0, 0.15)' }, // Bright Yellow
+                                                    { border: '#00B0FF', bg: 'rgba(0, 176, 255, 0.15)' }, // Bright Blue
+                                                    { border: '#D500F9', bg: 'rgba(213, 0, 249, 0.15)' }, // Bright Purple
+                                                    { border: '#FF6D00', bg: 'rgba(255, 109, 0, 0.15)' }, // Bright Orange
+                                                    { border: '#00E5FF', bg: 'rgba(0, 229, 255, 0.15)' }, // Bright Cyan
+                                                    { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.15)' }  // Bright Pink
                                                 ];
                                                 const swapColor = swapColors[swapPairId % swapColors.length];
                                                 swapPairStyle = `border: 2px solid ${swapColor.border}; background-color: ${swapColor.bg};`;
@@ -6850,14 +6850,14 @@
                 }
                 let swapPairCounter = maxSwapPairId + 1; // Start from max + 1 to ensure uniqueness
                 const swapColors = [
-                    { border: '#17a2b8', bg: 'rgba(23, 162, 184, 0.1)' }, // Cyan
-                    { border: '#28a745', bg: 'rgba(40, 167, 69, 0.1)' }, // Green
-                    { border: '#ffc107', bg: 'rgba(255, 193, 7, 0.1)' }, // Yellow
-                    { border: '#dc3545', bg: 'rgba(220, 53, 69, 0.1)' }, // Red
-                    { border: '#6f42c1', bg: 'rgba(111, 66, 193, 0.1)' }, // Purple
-                    { border: '#fd7e14', bg: 'rgba(253, 126, 20, 0.1)' }, // Orange
-                    { border: '#20c997', bg: 'rgba(32, 201, 151, 0.1)' }, // Teal
-                    { border: '#e83e8c', bg: 'rgba(232, 62, 140, 0.1)' }  // Pink
+                    { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.15)' }, // Bright Red
+                    { border: '#00E676', bg: 'rgba(0, 230, 118, 0.15)' }, // Bright Green
+                    { border: '#FFD600', bg: 'rgba(255, 214, 0, 0.15)' }, // Bright Yellow
+                    { border: '#00B0FF', bg: 'rgba(0, 176, 255, 0.15)' }, // Bright Blue
+                    { border: '#D500F9', bg: 'rgba(213, 0, 249, 0.15)' }, // Bright Purple
+                    { border: '#FF6D00', bg: 'rgba(255, 109, 0, 0.15)' }, // Bright Orange
+                    { border: '#00E5FF', bg: 'rgba(0, 229, 255, 0.15)' }, // Bright Cyan
+                    { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.15)' }  // Bright Pink
                 ];
                 
                 // Load current semi-normal assignments from preview (tempSemiAssignments)
@@ -7517,14 +7517,14 @@
                 
                 // Generate colors for swap pairs (different colors for each pair)
                 const swapColors = [
-                    { border: '#17a2b8', bg: 'rgba(23, 162, 184, 0.1)' }, // Cyan
-                    { border: '#28a745', bg: 'rgba(40, 167, 69, 0.1)' }, // Green
-                    { border: '#ffc107', bg: 'rgba(255, 193, 7, 0.1)' }, // Yellow
-                    { border: '#dc3545', bg: 'rgba(220, 53, 69, 0.1)' }, // Red
-                    { border: '#6f42c1', bg: 'rgba(111, 66, 193, 0.1)' }, // Purple
-                    { border: '#fd7e14', bg: 'rgba(253, 126, 20, 0.1)' }, // Orange
-                    { border: '#20c997', bg: 'rgba(32, 201, 151, 0.1)' }, // Teal
-                    { border: '#e83e8c', bg: 'rgba(232, 62, 140, 0.1)' }  // Pink
+                    { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.15)' }, // Bright Red
+                    { border: '#00E676', bg: 'rgba(0, 230, 118, 0.15)' }, // Bright Green
+                    { border: '#FFD600', bg: 'rgba(255, 214, 0, 0.15)' }, // Bright Yellow
+                    { border: '#00B0FF', bg: 'rgba(0, 176, 255, 0.15)' }, // Bright Blue
+                    { border: '#D500F9', bg: 'rgba(213, 0, 249, 0.15)' }, // Bright Purple
+                    { border: '#FF6D00', bg: 'rgba(255, 109, 0, 0.15)' }, // Bright Orange
+                    { border: '#00E5FF', bg: 'rgba(0, 229, 255, 0.15)' }, // Bright Cyan
+                    { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.15)' }  // Bright Pink
                 ];
                 
                 // Load current normal assignments from tempNormalAssignments
@@ -10419,7 +10419,8 @@
         function showDayDetails(date) {
             try {
                 const key = formatDateKey(date);
-                const assignment = dutyAssignments[key];
+                // Use getAssignmentForDate to get the final assignment after swap logic
+                const assignment = getAssignmentForDate(key);
                 const dayType = getDayType(date);
                 
                 // Store selected date for manual assignment
@@ -10605,6 +10606,103 @@
                     </div>
                 </div>
             `;
+            
+            // Collect all swap details for this date
+            const swapDetails = [];
+            if (assignmentReasons[key]) {
+                for (const groupNumStr in assignmentReasons[key]) {
+                    const groupNum = parseInt(groupNumStr);
+                    if (isNaN(groupNum)) continue;
+                    
+                    for (const personName in assignmentReasons[key][groupNum]) {
+                        const reason = assignmentReasons[key][groupNum][personName];
+                        if (reason && reason.type === 'swap') {
+                            // Find the other person in the swap pair
+                            let swappedWithPerson = reason.swappedWith || 'Άγνωστο';
+                            let swapDate = null;
+                            
+                            // Search for the other person in the swap pair by swapPairId
+                            if (reason.swapPairId !== null && reason.swapPairId !== undefined) {
+                                for (const otherDateKey in assignmentReasons) {
+                                    for (const otherGroupNumStr in assignmentReasons[otherDateKey]) {
+                                        const otherGroupNum = parseInt(otherGroupNumStr);
+                                        if (isNaN(otherGroupNum)) continue;
+                                        
+                                        for (const otherPersonName in assignmentReasons[otherDateKey][otherGroupNum]) {
+                                            const otherReason = assignmentReasons[otherDateKey][otherGroupNum][otherPersonName];
+                                            if (otherReason && 
+                                                otherReason.type === 'swap' && 
+                                                otherReason.swapPairId === reason.swapPairId &&
+                                                (otherDateKey !== key || otherGroupNum !== groupNum || otherPersonName !== personName)) {
+                                                swappedWithPerson = otherPersonName;
+                                                swapDate = otherDateKey;
+                                                break;
+                                            }
+                                        }
+                                        if (swapDate) break;
+                                    }
+                                    if (swapDate) break;
+                                }
+                            }
+                            
+                            swapDetails.push({
+                                groupNum: groupNum,
+                                personName: personName,
+                                swappedWith: swappedWithPerson,
+                                swapDate: swapDate,
+                                reason: reason.reason,
+                                swapPairId: reason.swapPairId
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // Display swap details if any
+            if (swapDetails.length > 0) {
+                content += `
+                    <div class="mt-3 mb-3">
+                        <strong><i class="fas fa-exchange-alt me-2"></i>Λεπτομέρειες Αλλαγών:</strong>
+                        <div class="mt-2">
+                `;
+                
+                swapDetails.forEach((swap, index) => {
+                    const swapColors = [
+                        { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.15)' }, // Bright Red
+                        { border: '#00E676', bg: 'rgba(0, 230, 118, 0.15)' }, // Bright Green
+                        { border: '#FFD600', bg: 'rgba(255, 214, 0, 0.15)' }, // Bright Yellow
+                        { border: '#00B0FF', bg: 'rgba(0, 176, 255, 0.15)' }, // Bright Blue
+                        { border: '#D500F9', bg: 'rgba(213, 0, 249, 0.15)' }, // Bright Purple
+                        { border: '#FF6D00', bg: 'rgba(255, 109, 0, 0.15)' }, // Bright Orange
+                        { border: '#00E5FF', bg: 'rgba(0, 229, 255, 0.15)' }, // Bright Cyan
+                        { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.15)' }  // Bright Pink
+                    ];
+                    const swapPairId = typeof swap.swapPairId === 'number' ? swap.swapPairId : parseInt(swap.swapPairId);
+                    const swapColor = !isNaN(swapPairId) ? swapColors[swapPairId % swapColors.length] : swapColors[0];
+                    const swapDateStr = swap.swapDate ? new Date(swap.swapDate + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Άγνωστη';
+                    
+                    content += `
+                        <div class="p-2 mb-2 border rounded" style="border-color: ${swapColor.border} !important; background-color: ${swapColor.bg};">
+                            <div class="d-flex align-items-center mb-1">
+                                <i class="fas fa-exchange-alt me-2" style="color: ${swapColor.border};"></i>
+                                <strong>Ομάδα ${swap.groupNum}:</strong>
+                            </div>
+                            <div class="ms-4 small">
+                                <div><strong>${swap.personName}</strong> <i class="fas fa-arrow-right mx-1"></i> <strong>${swap.swappedWith}</strong></div>
+                                <div class="text-muted mt-1">
+                                    <i class="fas fa-calendar-alt me-1"></i>Ημερομηνία αλλαγής: ${swapDateStr}
+                                </div>
+                                ${swap.reason ? `<div class="text-muted mt-1"><i class="fas fa-info-circle me-1"></i>${swap.reason}</div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                content += `
+                        </div>
+                    </div>
+                `;
+            }
             
                 document.getElementById('dayDetailsContent').innerHTML = content;
                 
