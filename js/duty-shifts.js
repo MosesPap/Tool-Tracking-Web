@@ -9084,6 +9084,9 @@
             const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
             const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
             const globalWeekendRotationPosition = {}; // groupNum -> global position (continues across months)
+            // IMPORTANT: Track weekend rotation persons (who SHOULD be assigned according to rotation)
+            // This is separate from assigned persons (who may have been swapped/skipped)
+            const weekendRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
             const sortedWeekends = [...weekendHolidays].sort();
             
             sortedWeekends.forEach((dateKey, weekendIndex) => {
@@ -9213,6 +9216,9 @@
                 // Track assignments for swapping logic
                 const semiAssignments = {}; // dateKey -> { groupNum -> person name }
                 const globalSemiRotationPosition = {}; // groupNum -> global position (continues across months)
+                // IMPORTANT: Track semi-normal rotation persons (who SHOULD be assigned according to rotation)
+                // This is separate from assigned persons (who may have been swapped)
+                const semiRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
                 // Track pending swaps: when Person A is swapped, Person B should be assigned to Person A's next day
                 const pendingSwaps = {}; // monthKey -> { groupNum -> { skippedPerson, swapToPosition } }
                 
@@ -9606,6 +9612,9 @@
                 const swappedDaysPreview = {}; // dateKey -> { groupNum -> true }
                 // Track which people have already been swapped (to prevent swapping them again on subsequent days)
                 const swappedPeoplePreview = new Set(); // Set of person names who have already been swapped
+                // IMPORTANT: Track normal rotation persons (who SHOULD be assigned according to rotation)
+                // This is separate from assigned persons (who may have been swapped)
+                const normalRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
                 
                 sortedNormal.forEach((dateKey, normalIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
