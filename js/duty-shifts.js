@@ -4870,9 +4870,11 @@
                         }
                         
                         // Check if person has conflict on this date
+                        // IMPORTANT: If person was swapped in (has swap reason), don't show conflict warning
+                        // because the swap was done to resolve the conflict
                         let conflictIcon = '';
                         let conflictTitle = '';
-                        const hasConflict = hasConsecutiveDuty(key, name, parseInt(group || 0));
+                        const hasConflict = !isSwapped && hasConsecutiveDuty(key, name, parseInt(group || 0));
                         if (hasConflict) {
                             // Make conflict icon highly visible - larger, with background color and border
                             conflictIcon = '<i class="fas fa-exclamation-triangle" style="color: #dc3545; font-size: 1.2em; background-color: #fff3cd; padding: 3px 5px; border-radius: 4px; border: 2px solid #dc3545; display: inline-block; min-width: 20px; text-align: center;" title="Σύγκρουση"></i> ';
