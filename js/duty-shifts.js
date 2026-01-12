@@ -59,20 +59,48 @@
                 if (isNaN(date.getTime())) return null;
                 
                 const dayType = getDayType(date);
+                let assignment = null;
+                
                 if (dayType === 'special-holiday') {
-                    return specialHolidayAssignments[dateKey] || null;
+                    assignment = specialHolidayAssignments[dateKey] || null;
                 } else if (dayType === 'weekend-holiday') {
-                    return weekendAssignments[dateKey] || null;
+                    assignment = weekendAssignments[dateKey] || null;
                 } else if (dayType === 'semi-normal-day') {
-                    return semiNormalAssignments[dateKey] || null;
+                    assignment = semiNormalAssignments[dateKey] || null;
                 } else if (dayType === 'normal-day') {
-                    return normalDayAssignments[dateKey] || null;
+                    assignment = normalDayAssignments[dateKey] || null;
                 }
+                
+                // If assignment is an object (like { groupNum: personName }), convert to string format
+                if (assignment && typeof assignment === 'object' && !Array.isArray(assignment)) {
+                    const parts = [];
+                    for (const groupNum in assignment) {
+                        const personName = assignment[groupNum];
+                        if (personName) {
+                            parts.push(`${personName} (Ομάδα ${groupNum})`);
+                        }
+                    }
+                    return parts.length > 0 ? parts.join(', ') : null;
+                }
+                
+                return assignment;
             } catch (error) {
                 console.error(`Error getting assignment for ${dateKey}:`, error);
             }
             // Fallback to legacy dutyAssignments
-            return dutyAssignments[dateKey] || null;
+            const fallbackAssignment = dutyAssignments[dateKey] || null;
+            // Also handle object format in fallback
+            if (fallbackAssignment && typeof fallbackAssignment === 'object' && !Array.isArray(fallbackAssignment)) {
+                const parts = [];
+                for (const groupNum in fallbackAssignment) {
+                    const personName = fallbackAssignment[groupNum];
+                    if (personName) {
+                        parts.push(`${personName} (Ομάδα ${groupNum})`);
+                    }
+                }
+                return parts.length > 0 ? parts.join(', ') : null;
+            }
+            return fallbackAssignment;
         }
         
         // Set assignment for a specific date (saves to correct document based on day type)
@@ -11523,7 +11551,9 @@
                     const assignment = getAssignmentForDate(dayKey) || '';
                     let assignedPerson = null;
                     if (assignment) {
-                        const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
+                        // Ensure assignment is a string (getAssignmentForDate should return string, but double-check)
+                        const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
+                        const parts = assignmentStr.split(',').map(p => p.trim()).filter(p => p);
                         for (const part of parts) {
                             const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                             if (match && parseInt(match[2]) === groupNum) {
