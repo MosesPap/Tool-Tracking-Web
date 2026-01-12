@@ -8911,10 +8911,24 @@
                                     // Always start from first person for February 2026
                                     globalWeekendRotationPosition[groupNum] = 0;
                                     console.log(`[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} weekend - February 2026`);
+                                } else if (lastRotationPositions.weekend[groupNum]) {
+                                    // Continue from last person assigned in previous month
+                                    const lastPersonName = lastRotationPositions.weekend[groupNum];
+                                    const lastPersonIndex = groupPeople.indexOf(lastPersonName);
+                                    if (lastPersonIndex >= 0) {
+                                        // Found last person - start from next person
+                                        globalWeekendRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
+                                        console.log(`[WEEKEND ROTATION] Continuing from last person ${lastPersonName} (index ${lastPersonIndex}) for group ${groupNum}, starting at position ${globalWeekendRotationPosition[groupNum]}`);
+                                    } else {
+                                        // Last person not found in list - use rotation calculation
+                                        const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
+                                        globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                        console.log(`[WEEKEND ROTATION] Last person ${lastPersonName} not found in group ${groupNum} list, using rotation calculation: position ${globalWeekendRotationPosition[groupNum]}`);
+                                    }
                                 } else {
                                     // Initialize based on rotation count from start date
-                                const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
-                                globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                    const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
+                                    globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
                                 }
                             }
                             
@@ -9543,15 +9557,10 @@
                     calculationSteps.startDate.getFullYear() === 2026 && 
                     calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
                 
-                if (!isFebruary2026) {
-                    // Only load from Firestore if NOT February 2026
-                for (let g = 1; g <= 4; g++) {
-                    if (lastRotationPositions.normal[g] !== undefined) {
-                        globalNormalRotationPosition[g] = lastRotationPositions.normal[g];
-                        console.log(`[PREVIEW ROTATION] Initialized normal rotation position for group ${g} from Firestore: ${globalNormalRotationPosition[g]}`);
-                    }
-                    }
-                } else {
+                // REMOVED: Don't pre-initialize globalNormalRotationPosition here
+                // The correct initialization happens per-group inside the loop below (line 9594+)
+                // where we properly convert person names to position indices
+                if (isFebruary2026) {
                     console.log(`[PREVIEW ROTATION] February 2026 detected - will start all groups from position 0 (first person)`);
                 }
                 // Track pending swaps: when Person A is swapped, Person B should be assigned to Person A's next normal day
@@ -9626,6 +9635,31 @@
                             // If a person was swapped from previous month, assign them and skip the normal rotation person
                             let isCrossMonthSwapDay = false;
                             let assignedPerson = null;
+                            
+                            // Ensure globalNormalRotationPosition is initialized
+                            if (globalNormalRotationPosition[groupNum] === undefined) {
+                                console.error(`[ERROR] globalNormalRotationPosition[${groupNum}] is undefined! This should have been initialized above.`);
+                                // Fallback: initialize now
+                                const isFebruary2026 = calculationSteps.startDate && 
+                                    calculationSteps.startDate.getFullYear() === 2026 && 
+                                    calculationSteps.startDate.getMonth() === 1;
+                                if (isFebruary2026) {
+                                    globalNormalRotationPosition[groupNum] = 0;
+                                } else if (lastRotationPositions.normal[groupNum]) {
+                                    const lastPersonName = lastRotationPositions.normal[groupNum];
+                                    const lastPersonIndex = groupPeople.indexOf(lastPersonName);
+                                    if (lastPersonIndex >= 0) {
+                                        globalNormalRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
+                                    } else {
+                                        const daysSinceStart = getRotationPosition(date, 'normal', groupNum);
+                                        globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                    }
+                                } else {
+                                    const daysSinceStart = getRotationPosition(date, 'normal', groupNum);
+                                    globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                }
+                            }
+                            
                             let rotationPosition = globalNormalRotationPosition[groupNum] % rotationDays;
                             
                             if (crossMonthSwaps[dateKey] && crossMonthSwaps[dateKey][groupNum]) {
