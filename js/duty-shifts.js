@@ -9376,21 +9376,22 @@
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempSemiAssignments = semiAssignments;
                 calculationSteps.lastSemiRotationPositions = {};
-                // Find the last assigned person for each group (store person name, not position)
+                // IMPORTANT: Find the last ROTATION person (who should be assigned according to rotation)
+                // NOT the assigned person (who may have been swapped)
+                // Use the semiRotationPersons we tracked during processing
                 for (let g = 1; g <= 4; g++) {
-                    // Find the last semi-normal assignment for this group
                     const sortedSemiKeys = [...semiNormalDays].sort();
-                    let lastAssignedPerson = null;
+                    let lastRotationPerson = null;
                     for (let i = sortedSemiKeys.length - 1; i >= 0; i--) {
                         const dateKey = sortedSemiKeys[i];
-                        if (semiAssignments[dateKey] && semiAssignments[dateKey][g]) {
-                            lastAssignedPerson = semiAssignments[dateKey][g];
+                        if (semiRotationPersons[dateKey] && semiRotationPersons[dateKey][g]) {
+                            lastRotationPerson = semiRotationPersons[dateKey][g];
                             break;
                         }
                     }
-                    if (lastAssignedPerson) {
-                        calculationSteps.lastSemiRotationPositions[g] = lastAssignedPerson;
-                        console.log(`[SEMI ROTATION] Storing last person ${lastAssignedPerson} for group ${g}`);
+                    if (lastRotationPerson) {
+                        calculationSteps.lastSemiRotationPositions[g] = lastRotationPerson;
+                        console.log(`[SEMI ROTATION] Storing last rotation person ${lastRotationPerson} for group ${g} (not swapped person)`);
                     }
                 }
                 
@@ -9564,6 +9565,11 @@
             // Sort normal days by date (define at function scope so it's accessible for swap logic)
             const sortedNormal = [...normalDays].sort();
             
+            // IMPORTANT: Track normal rotation persons (who SHOULD be assigned according to rotation)
+            // This is separate from assigned persons (who may have been swapped)
+            // Declare at function level so it's accessible throughout the function
+            const normalRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
+            
             if (normalDays.length === 0) {
                 html += '<div class="alert alert-info">';
                 html += '<i class="fas fa-info-circle me-2"></i>';
@@ -9612,9 +9618,7 @@
                 const swappedDaysPreview = {}; // dateKey -> { groupNum -> true }
                 // Track which people have already been swapped (to prevent swapping them again on subsequent days)
                 const swappedPeoplePreview = new Set(); // Set of person names who have already been swapped
-                // IMPORTANT: Track normal rotation persons (who SHOULD be assigned according to rotation)
-                // This is separate from assigned persons (who may have been swapped)
-                const normalRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
+                // NOTE: normalRotationPersons is already declared at function level (above), don't redeclare it here
                 
                 sortedNormal.forEach((dateKey, normalIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
