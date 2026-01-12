@@ -557,11 +557,32 @@
                     const data = lastRotationPositionsDoc.data();
                     delete data.lastUpdated;
                     delete data.updatedBy;
-                    // Merge with existing structure
-                    if (data.normal) lastRotationPositions.normal = data.normal;
-                    if (data.semi) lastRotationPositions.semi = data.semi;
-                    if (data.weekend) lastRotationPositions.weekend = data.weekend;
-                    if (data.special) lastRotationPositions.special = data.special;
+                    
+                    // Helper function to convert array to object with 1-based keys
+                    const convertArrayToObject = (arr) => {
+                        if (Array.isArray(arr)) {
+                            const obj = {};
+                            arr.forEach((value, index) => {
+                                obj[index + 1] = value; // Convert 0-based array index to 1-based group number
+                            });
+                            return obj;
+                        }
+                        return arr; // Already an object, return as-is
+                    };
+                    
+                    // Merge with existing structure, converting arrays to objects if needed
+                    if (data.normal) {
+                        lastRotationPositions.normal = convertArrayToObject(data.normal);
+                    }
+                    if (data.semi) {
+                        lastRotationPositions.semi = convertArrayToObject(data.semi);
+                    }
+                    if (data.weekend) {
+                        lastRotationPositions.weekend = convertArrayToObject(data.weekend);
+                    }
+                    if (data.special) {
+                        lastRotationPositions.special = convertArrayToObject(data.special);
+                    }
                     console.log('Loaded lastRotationPositions from Firestore:', lastRotationPositions);
                     console.log('Loaded lastRotationPositions details:', {
                         special: lastRotationPositions.special,
@@ -832,10 +853,23 @@
             if (savedLastRotationPositions) {
                 try {
                     const parsed = JSON.parse(savedLastRotationPositions);
-                    if (parsed.normal) lastRotationPositions.normal = parsed.normal;
-                    if (parsed.semi) lastRotationPositions.semi = parsed.semi;
-                    if (parsed.weekend) lastRotationPositions.weekend = parsed.weekend;
-                    if (parsed.special) lastRotationPositions.special = parsed.special;
+                    
+                    // Helper function to convert array to object with 1-based keys
+                    const convertArrayToObject = (arr) => {
+                        if (Array.isArray(arr)) {
+                            const obj = {};
+                            arr.forEach((value, index) => {
+                                obj[index + 1] = value; // Convert 0-based array index to 1-based group number
+                            });
+                            return obj;
+                        }
+                        return arr; // Already an object, return as-is
+                    };
+                    
+                    if (parsed.normal) lastRotationPositions.normal = convertArrayToObject(parsed.normal);
+                    if (parsed.semi) lastRotationPositions.semi = convertArrayToObject(parsed.semi);
+                    if (parsed.weekend) lastRotationPositions.weekend = convertArrayToObject(parsed.weekend);
+                    if (parsed.special) lastRotationPositions.special = convertArrayToObject(parsed.special);
                     console.log('Loaded lastRotationPositions from localStorage:', lastRotationPositions);
                 } catch (e) {
                     console.error('Error parsing lastRotationPositions from localStorage:', e);
