@@ -8858,6 +8858,10 @@
                 // Track weekend assignments as we process them (for consecutive day checking)
                 const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
                 
+                // IMPORTANT: Track rotation persons (who SHOULD be assigned according to rotation)
+                // This is separate from assigned persons (who may have been swapped/skipped)
+                const weekendRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
+                
                 sortedWeekends.forEach((dateKey, weekendIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -8935,7 +8939,18 @@
                             // PREVIEW MODE: Just show basic rotation WITHOUT skip logic
                             // Skip logic will run when Next is pressed
                             let rotationPosition = globalWeekendRotationPosition[groupNum] % rotationDays;
-                            let assignedPerson = groupPeople[rotationPosition];
+                            
+                            // IMPORTANT: Track the rotation person (who SHOULD be assigned according to rotation)
+                            // This is the person BEFORE any skip/missing logic
+                            const rotationPerson = groupPeople[rotationPosition];
+                            
+                            // Store rotation person for this date/group (before any skip logic)
+                            if (!weekendRotationPersons[dateKey]) {
+                                weekendRotationPersons[dateKey] = {};
+                            }
+                            weekendRotationPersons[dateKey][groupNum] = rotationPerson;
+                            
+                            let assignedPerson = rotationPerson;
                             
                             // Check if assigned person is missing, if so find next in rotation
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
@@ -8993,21 +9008,22 @@
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempWeekendAssignments = simulatedWeekendAssignments;
                 calculationSteps.lastWeekendRotationPositions = {};
-                // Find the last assigned person for each group (store person name, not position)
+                // IMPORTANT: Find the last ROTATION person (who should be assigned according to rotation)
+                // NOT the assigned person (who may have been swapped/skipped)
+                // Use the weekendRotationPersons we tracked during processing
                 for (let g = 1; g <= 4; g++) {
-                    // Find the last weekend assignment for this group
                     const sortedWeekendKeys = [...weekendHolidays].sort();
-                    let lastAssignedPerson = null;
+                    let lastRotationPerson = null;
                     for (let i = sortedWeekendKeys.length - 1; i >= 0; i--) {
                         const dateKey = sortedWeekendKeys[i];
-                        if (simulatedWeekendAssignments[dateKey] && simulatedWeekendAssignments[dateKey][g]) {
-                            lastAssignedPerson = simulatedWeekendAssignments[dateKey][g];
+                        if (weekendRotationPersons[dateKey] && weekendRotationPersons[dateKey][g]) {
+                            lastRotationPerson = weekendRotationPersons[dateKey][g];
                             break;
                         }
                     }
-                    if (lastAssignedPerson) {
-                        calculationSteps.lastWeekendRotationPositions[g] = lastAssignedPerson;
-                        console.log(`[WEEKEND ROTATION] Storing last person ${lastAssignedPerson} for group ${g}`);
+                    if (lastRotationPerson) {
+                        calculationSteps.lastWeekendRotationPositions[g] = lastRotationPerson;
+                        console.log(`[WEEKEND ROTATION] Storing last rotation person ${lastRotationPerson} for group ${g} (not swapped/skipped person)`);
                     }
                 }
                 
@@ -9120,31 +9136,39 @@
                             }
                         }
                         
-                        // PREVIEW MODE: Just show basic rotation WITHOUT skip logic
-                        // Skip logic will run when Next is pressed in Step 2
-                        let rotationPosition = globalWeekendRotationPosition[groupNum] % rotationDays;
-                        let assignedPerson = groupPeople[rotationPosition];
-                        
-                        // Check if assigned person is missing, if so find next in rotation
-                        if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                            // Find next person in rotation who is not missing
-                                for (let offset = 1; offset < rotationDays; offset++) {
-                                    const nextIndex = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[nextIndex];
-                                if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
-                                        assignedPerson = candidate;
-                                    rotationPosition = nextIndex;
-                                        break;
+                            // PREVIEW MODE: Just show basic rotation WITHOUT skip logic
+                            // Skip logic will run when Next is pressed in Step 2
+                            let rotationPosition = globalWeekendRotationPosition[groupNum] % rotationDays;
+                            
+                            // IMPORTANT: Track the rotation person (who SHOULD be assigned according to rotation)
+                            // This is the person BEFORE any skip/missing logic
+                            const rotationPerson = groupPeople[rotationPosition];
+                            
+                            // Store rotation person for this date/group (before any skip logic)
+                            if (!weekendRotationPersons[dateKey]) {
+                                weekendRotationPersons[dateKey] = {};
+                            }
+                            weekendRotationPersons[dateKey][groupNum] = rotationPerson;
+                            
+                            let assignedPerson = rotationPerson;
+                            
+                            // Check if assigned person is missing, if so find next in rotation
+                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
+                                // Find next person in rotation who is not missing
+                                    for (let offset = 1; offset < rotationDays; offset++) {
+                                        const nextIndex = (rotationPosition + offset) % rotationDays;
+                                        const candidate = groupPeople[nextIndex];
+                                    if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
+                                            assignedPerson = candidate;
+                                        rotationPosition = nextIndex;
+                                            break;
+                                        }
                                     }
-                                }
                         }
                         
-                        // Advance rotation position
-                        if (assignedPerson) {
-                                globalWeekendRotationPosition[groupNum] = rotationPosition + 1;
-                        } else {
-                            globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                        }
+                        // Advance rotation position (always advance based on rotation person, not assigned person)
+                        // This ensures rotation continues correctly even if person was skipped
+                        globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                         
                         if (assignedPerson) {
                             if (!simulatedWeekendAssignments[dateKey]) {
@@ -9249,7 +9273,18 @@
                             }
                             
                             let rotationPosition = globalSemiRotationPosition[groupNum] % rotationDays;
-                            let assignedPerson = groupPeople[rotationPosition];
+                            
+                            // IMPORTANT: Track the rotation person (who SHOULD be assigned according to rotation)
+                            // This is the person BEFORE any swap/cross-month logic
+                            const rotationPerson = groupPeople[rotationPosition];
+                            
+                            // Store rotation person for this date/group (before any swap logic)
+                            if (!semiRotationPersons[dateKey]) {
+                                semiRotationPersons[dateKey] = {};
+                            }
+                            semiRotationPersons[dateKey][groupNum] = rotationPerson;
+                            
+                            let assignedPerson = rotationPerson;
                             
                             // Check if this day is a cross-month swap assignment (person swapped from previous month)
                             // Structure: crossMonthSwaps[dateKey][groupNum] = personName
@@ -9661,6 +9696,16 @@
                             }
                             
                             let rotationPosition = globalNormalRotationPosition[groupNum] % rotationDays;
+                            
+                            // IMPORTANT: Track the rotation person (who SHOULD be assigned according to rotation)
+                            // This is the person BEFORE any swap/cross-month/missing logic
+                            const rotationPerson = groupPeople[rotationPosition];
+                            
+                            // Store rotation person for this date/group (before any swap/cross-month logic)
+                            if (!normalRotationPersons[dateKey]) {
+                                normalRotationPersons[dateKey] = {};
+                            }
+                            normalRotationPersons[dateKey][groupNum] = rotationPerson;
                             
                             if (crossMonthSwaps[dateKey] && crossMonthSwaps[dateKey][groupNum]) {
                                 // This person was swapped from previous month and must be assigned to this day
@@ -10271,21 +10316,22 @@
             // Store normal assignments and rotation positions for saving when Next is pressed
             calculationSteps.tempNormalAssignments = normalAssignments;
             calculationSteps.lastNormalRotationPositions = {};
-            // Find the last assigned person for each group (store person name, not position)
+            // IMPORTANT: Find the last ROTATION person (who should be assigned according to rotation)
+            // NOT the assigned person (who may have been swapped)
+            // Use the normalRotationPersons we tracked during processing
             for (let g = 1; g <= 4; g++) {
-                // Find the last normal day assignment for this group
                 const sortedNormalKeys = [...normalDays].sort();
-                let lastAssignedPerson = null;
+                let lastRotationPerson = null;
                 for (let i = sortedNormalKeys.length - 1; i >= 0; i--) {
                     const dateKey = sortedNormalKeys[i];
-                    if (normalAssignments[dateKey] && normalAssignments[dateKey][g]) {
-                        lastAssignedPerson = normalAssignments[dateKey][g];
+                    if (normalRotationPersons[dateKey] && normalRotationPersons[dateKey][g]) {
+                        lastRotationPerson = normalRotationPersons[dateKey][g];
                         break;
                     }
                 }
-                if (lastAssignedPerson) {
-                    calculationSteps.lastNormalRotationPositions[g] = lastAssignedPerson;
-                    console.log(`[NORMAL ROTATION] Storing last person ${lastAssignedPerson} for group ${g}`);
+                if (lastRotationPerson) {
+                    calculationSteps.lastNormalRotationPositions[g] = lastRotationPerson;
+                    console.log(`[NORMAL ROTATION] Storing last rotation person ${lastRotationPerson} for group ${g} (not swapped person)`);
                 }
             }
             
