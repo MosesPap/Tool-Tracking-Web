@@ -7938,8 +7938,13 @@
                                                             crossMonthSwaps[nextMonthSwapDayKey] = {};
                                                         }
                                                         crossMonthSwaps[nextMonthSwapDayKey][groupNum] = currentPerson;
+                                                        // Also store the swap candidate in a temporary location for the swap execution
+                                                        if (!updatedAssignments[nextMonthSwapDayKey]) {
+                                                            updatedAssignments[nextMonthSwapDayKey] = {};
+                                                        }
+                                                        updatedAssignments[nextMonthSwapDayKey][groupNum] = swapCandidate; // Store candidate for swap execution
                                                         console.log(`[SWAP LOGIC] ✓ Step 3b SUCCESS (CROSS-MONTH): Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${nextMonthSwapDayKey})`);
-                                                        console.log(`[CROSS-MONTH SWAP NORMAL Step 3b] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${nextMonthSwapDayKey} (Group ${groupNum})`);
+                                                        console.log(`[CROSS-MONTH SWAP NORMAL Step 3b] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${nextMonthSwapDayKey} (Group ${groupNum}), swap candidate: ${swapCandidate}`);
                                                     } else {
                                                         console.log(`[SWAP LOGIC] ✗ Step 3b FAILED: Candidate ${swapCandidate} has conflict on next month swap day ${nextMonthSwapDayKey}`);
                                                     }
@@ -8000,8 +8005,13 @@
                                                                 crossMonthSwaps[nextMonthSwapDayKey] = {};
                                                             }
                                                             crossMonthSwaps[nextMonthSwapDayKey][groupNum] = currentPerson;
+                                                            // Also store the swap candidate in a temporary location for the swap execution
+                                                            if (!updatedAssignments[nextMonthSwapDayKey]) {
+                                                                updatedAssignments[nextMonthSwapDayKey] = {};
+                                                            }
+                                                            updatedAssignments[nextMonthSwapDayKey][groupNum] = swapCandidate; // Store candidate for swap execution
                                                             console.log(`[SWAP LOGIC] ✓ Step 4a SUCCESS (CROSS-MONTH): Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${nextMonthSwapDayKey})`);
-                                                            console.log(`[CROSS-MONTH SWAP NORMAL Step 4a] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${nextMonthSwapDayKey} (Group ${groupNum})`);
+                                                            console.log(`[CROSS-MONTH SWAP NORMAL Step 4a] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${nextMonthSwapDayKey} (Group ${groupNum}), swap candidate: ${swapCandidate}`);
                                                         } else {
                                                             console.log(`[SWAP LOGIC] ✗ Step 4a FAILED: Candidate ${swapCandidate} has conflict on next month swap day ${nextMonthSwapDayKey}`);
                                                         }
@@ -8071,8 +8081,13 @@
                                                                 crossMonthSwaps[nextMonthSwapDayKey] = {};
                                                             }
                                                             crossMonthSwaps[nextMonthSwapDayKey][groupNum] = currentPerson;
+                                                            // Also store the swap candidate in a temporary location for the swap execution
+                                                            if (!updatedAssignments[nextMonthSwapDayKey]) {
+                                                                updatedAssignments[nextMonthSwapDayKey] = {};
+                                                            }
+                                                            updatedAssignments[nextMonthSwapDayKey][groupNum] = swapCandidate; // Store candidate for swap execution
                                                             console.log(`[SWAP LOGIC] ✓ Step 4b SUCCESS (CROSS-MONTH): Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${nextMonthSwapDayKey})`);
-                                                            console.log(`[CROSS-MONTH SWAP NORMAL Step 4b] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${nextMonthSwapDayKey} (Group ${groupNum})`);
+                                                            console.log(`[CROSS-MONTH SWAP NORMAL Step 4b] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${nextMonthSwapDayKey} (Group ${groupNum}), swap candidate: ${swapCandidate}`);
                                                         } else {
                                                             console.log(`[SWAP LOGIC] ✗ Step 4b FAILED: Candidate ${swapCandidate} has conflict on next month swap day ${nextMonthSwapDayKey}`);
                                                         }
