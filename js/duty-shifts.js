@@ -5274,7 +5274,7 @@
             dayBefore.setDate(dayBefore.getDate() - 1);
             const dayBeforeKey = formatDateKey(dayBefore);
             
-            // Check if person has duty on day before (check simulated assignments if provided)
+            // Check if person has duty on day before (check simulated assignments if provided, then fallback to Firestore)
             let hasDutyBefore = false;
             if (simulatedAssignments) {
                 // Check simulated assignments first
@@ -5293,6 +5293,12 @@
                 } else {
                     beforeTypeCategory = 'normal';
                     hasDutyBefore = simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum] === person;
+                }
+                
+                // IMPORTANT: If not found in simulated assignments, fallback to Firestore assignments
+                // This handles dates from previous months that were already calculated and saved
+                if (!hasDutyBefore) {
+                    hasDutyBefore = hasDutyOnDay(dayBeforeKey, person, groupNum);
                 }
             } else {
                 // Check permanent assignments
@@ -5379,6 +5385,12 @@
                             }
                         }
                     }
+                }
+                
+                // IMPORTANT: If not found in simulated assignments, fallback to Firestore assignments
+                // This handles dates from previous months that were already calculated and saved
+                if (!hasDutyAfter) {
+                    hasDutyAfter = hasDutyOnDay(dayAfterKey, person, groupNum);
                 }
             } else {
                 // Check permanent assignments
@@ -7789,6 +7801,7 @@
                                     
                                     // IMPORTANT: Verify the current person actually has a real conflict (not a false positive)
                                     // Check if the conflict is between normal-normal days (which shouldn't conflict)
+                                    // IMPORTANT: Use actual assigned persons from preview/Firestore, not rotation calculation
                                     const dayBefore = new Date(date);
                                     dayBefore.setDate(dayBefore.getDate() - 1);
                                     const dayAfter = new Date(date);
@@ -7799,6 +7812,7 @@
                                     const afterType = getDayType(dayAfter);
                                     
                                     // Check if current person has duty on day before or after
+                                    // IMPORTANT: Check simulated assignments first, then fallback to Firestore for dates outside calculation range
                                     let hasDutyBefore = false;
                                     let hasDutyAfter = false;
                                     if (simulatedAssignments) {
@@ -7813,6 +7827,11 @@
                                             hasDutyBefore = simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum] === currentPerson;
                                         }
                                         
+                                        // Fallback to Firestore if not found in simulated assignments (for dates from previous months)
+                                        if (!hasDutyBefore) {
+                                            hasDutyBefore = hasDutyOnDay(dayBeforeKey, currentPerson, groupNum);
+                                        }
+                                        
                                         const afterMonthKey = `${dayAfter.getFullYear()}-${dayAfter.getMonth()}`;
                                         if (afterType === 'special-holiday') {
                                             hasDutyAfter = simulatedAssignments.special?.[afterMonthKey]?.[groupNum]?.has(currentPerson) || false;
@@ -7822,6 +7841,11 @@
                                             hasDutyAfter = simulatedAssignments.weekend?.[dayAfterKey]?.[groupNum] === currentPerson;
                                         } else if (afterType === 'normal-day') {
                                             hasDutyAfter = simulatedAssignments.normal?.[dayAfterKey]?.[groupNum] === currentPerson;
+                                        }
+                                        
+                                        // Fallback to Firestore if not found in simulated assignments (for dates from previous months)
+                                        if (!hasDutyAfter) {
+                                            hasDutyAfter = hasDutyOnDay(dayAfterKey, currentPerson, groupNum);
                                         }
                                     } else {
                                         hasDutyBefore = hasDutyOnDay(dayBeforeKey, currentPerson, groupNum);
@@ -7999,6 +8023,11 @@
                                             hasDutyAfter = simulatedAssignments.weekend?.[dayAfterKey]?.[groupNum] === currentPerson;
                                         } else if (afterType === 'normal-day') {
                                             hasDutyAfter = simulatedAssignments.normal?.[dayAfterKey]?.[groupNum] === currentPerson;
+                                        }
+                                        
+                                        // Fallback to Firestore if not found in simulated assignments (for dates from previous months)
+                                        if (!hasDutyAfter) {
+                                            hasDutyAfter = hasDutyOnDay(dayAfterKey, currentPerson, groupNum);
                                         }
                                     } else {
                                         hasDutyBefore = hasDutyOnDay(dayBeforeKey, currentPerson, groupNum);
@@ -10117,6 +10146,11 @@
                                         hasDutyBefore = simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum] === currentPerson;
                                     }
                                     
+                                    // Fallback to Firestore if not found in simulated assignments (for dates from previous months)
+                                    if (!hasDutyBefore) {
+                                        hasDutyBefore = hasDutyOnDay(dayBeforeKey, currentPerson, groupNum);
+                                    }
+                                    
                                     const afterMonthKey = `${dayAfter.getFullYear()}-${dayAfter.getMonth()}`;
                                     if (afterType === 'special-holiday') {
                                         hasDutyAfter = simulatedAssignments.special?.[afterMonthKey]?.[groupNum]?.has(currentPerson) || false;
@@ -10126,6 +10160,11 @@
                                         hasDutyAfter = simulatedAssignments.weekend?.[dayAfterKey]?.[groupNum] === currentPerson;
                                     } else if (afterType === 'normal-day') {
                                         hasDutyAfter = simulatedAssignments.normal?.[dayAfterKey]?.[groupNum] === currentPerson;
+                                    }
+                                    
+                                    // Fallback to Firestore if not found in simulated assignments (for dates from previous months)
+                                    if (!hasDutyAfter) {
+                                        hasDutyAfter = hasDutyOnDay(dayAfterKey, currentPerson, groupNum);
                                     }
                                 } else {
                                     hasDutyBefore = hasDutyOnDay(dayBeforeKey, currentPerson, groupNum);
