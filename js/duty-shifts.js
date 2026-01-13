@@ -5274,7 +5274,7 @@
             dayBefore.setDate(dayBefore.getDate() - 1);
             const dayBeforeKey = formatDateKey(dayBefore);
             
-            // Check if person has duty on day before (check simulated assignments if provided, then fallback to Firestore)
+            // Check if person has duty on day before (check simulated assignments if provided)
             let hasDutyBefore = false;
             if (simulatedAssignments) {
                 // Check simulated assignments first
@@ -5293,12 +5293,6 @@
                 } else {
                     beforeTypeCategory = 'normal';
                     hasDutyBefore = simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum] === person;
-                }
-                
-                // IMPORTANT: If not found in simulated assignments, fallback to Firestore assignments
-                // This handles dates from previous months that were already calculated and saved
-                if (!hasDutyBefore) {
-                    hasDutyBefore = hasDutyOnDay(dayBeforeKey, person, groupNum);
                 }
             } else {
                 // Check permanent assignments
@@ -5385,12 +5379,6 @@
                             }
                         }
                     }
-                }
-                
-                // IMPORTANT: If not found in simulated assignments, fallback to Firestore assignments
-                // This handles dates from previous months that were already calculated and saved
-                if (!hasDutyAfter) {
-                    hasDutyAfter = hasDutyOnDay(dayAfterKey, person, groupNum);
                 }
             } else {
                 // Check permanent assignments
@@ -7801,7 +7789,6 @@
                                     
                                     // IMPORTANT: Verify the current person actually has a real conflict (not a false positive)
                                     // Check if the conflict is between normal-normal days (which shouldn't conflict)
-                                    // IMPORTANT: Use actual assigned persons from preview/Firestore, not rotation calculation
                                     const dayBefore = new Date(date);
                                     dayBefore.setDate(dayBefore.getDate() - 1);
                                     const dayAfter = new Date(date);
@@ -7812,7 +7799,6 @@
                                     const afterType = getDayType(dayAfter);
                                     
                                     // Check if current person has duty on day before or after
-                                    // IMPORTANT: Check simulated assignments first, then fallback to Firestore for dates outside calculation range
                                     let hasDutyBefore = false;
                                     let hasDutyAfter = false;
                                     if (simulatedAssignments) {
@@ -7827,11 +7813,6 @@
                                             hasDutyBefore = simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum] === currentPerson;
                                         }
                                         
-                                        // Fallback to Firestore if not found in simulated assignments (for dates from previous months)
-                                        if (!hasDutyBefore) {
-                                            hasDutyBefore = hasDutyOnDay(dayBeforeKey, currentPerson, groupNum);
-                                        }
-                                        
                                         const afterMonthKey = `${dayAfter.getFullYear()}-${dayAfter.getMonth()}`;
                                         if (afterType === 'special-holiday') {
                                             hasDutyAfter = simulatedAssignments.special?.[afterMonthKey]?.[groupNum]?.has(currentPerson) || false;
@@ -7841,11 +7822,6 @@
                                             hasDutyAfter = simulatedAssignments.weekend?.[dayAfterKey]?.[groupNum] === currentPerson;
                                         } else if (afterType === 'normal-day') {
                                             hasDutyAfter = simulatedAssignments.normal?.[dayAfterKey]?.[groupNum] === currentPerson;
-                                        }
-                                        
-                                        // Fallback to Firestore if not found in simulated assignments (for dates from previous months)
-                                        if (!hasDutyAfter) {
-                                            hasDutyAfter = hasDutyOnDay(dayAfterKey, currentPerson, groupNum);
                                         }
                                     } else {
                                         hasDutyBefore = hasDutyOnDay(dayBeforeKey, currentPerson, groupNum);
@@ -8023,11 +7999,6 @@
                                             hasDutyAfter = simulatedAssignments.weekend?.[dayAfterKey]?.[groupNum] === currentPerson;
                                         } else if (afterType === 'normal-day') {
                                             hasDutyAfter = simulatedAssignments.normal?.[dayAfterKey]?.[groupNum] === currentPerson;
-                                        }
-                                        
-                                        // Fallback to Firestore if not found in simulated assignments (for dates from previous months)
-                                        if (!hasDutyAfter) {
-                                            hasDutyAfter = hasDutyOnDay(dayAfterKey, currentPerson, groupNum);
                                         }
                                     } else {
                                         hasDutyBefore = hasDutyOnDay(dayBeforeKey, currentPerson, groupNum);
@@ -9609,87 +9580,132 @@
                 }
             });
             
-            // Second, simulate Step 2 (weekends)
+            // Second, load Step 2 (weekends) from saved Firestore data
+            // IMPORTANT: Use actual weekend assignments saved in Firestore, not recalculated ones
+            // This ensures the preview swap logic sees the same assignments as the actual Step 2
             const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
-            const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
-            const globalWeekendRotationPosition = {}; // groupNum -> global position (continues across months)
             const sortedWeekends = [...weekendHolidays].sort();
-            // Initialize simulatedSemiAssignments and normalAssignments for consecutive check (will be populated later)
-            const simulatedSemiAssignments = {}; // dateKey -> { groupNum -> person name }
-            const normalAssignments = {}; // dateKey -> { groupNum -> person name }
             
-            sortedWeekends.forEach((dateKey, weekendIndex) => {
-                const date = new Date(dateKey + 'T00:00:00');
-                const month = date.getMonth();
-                const year = date.getFullYear();
-                const monthKey = `${year}-${month}`;
-                
-                if (!skippedInMonth[monthKey]) {
-                    skippedInMonth[monthKey] = {};
-                }
-                
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupData = groups[groupNum] || { weekend: [] };
-                    const groupPeople = groupData.weekend || [];
-                    
-                    if (groupPeople.length > 0) {
-                        if (!skippedInMonth[monthKey][groupNum]) {
-                            skippedInMonth[monthKey][groupNum] = new Set();
-                        }
-                        const rotationDays = groupPeople.length;
-                        if (globalWeekendRotationPosition[groupNum] === undefined) {
-                            // If start date is February 2026, always start from first person (position 0)
-                            const isFebruary2026 = calculationSteps.startDate && 
-                                calculationSteps.startDate.getFullYear() === 2026 && 
-                                calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
-                            
-                            if (isFebruary2026) {
-                                // Always start from first person for February 2026
-                                globalWeekendRotationPosition[groupNum] = 0;
-                                console.log(`[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} weekend - February 2026`);
-                            } else {
-                                // Initialize based on rotation count from start date
-                            const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
-                            globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
-                            }
-                        }
-                        
-                        let rotationPosition = globalWeekendRotationPosition[groupNum] % rotationDays;
-                        // PREVIEW MODE: Just show basic rotation WITHOUT skip logic
-                        // Skip logic will run when Next is pressed in Step 2
-                        let assignedPerson = groupPeople[rotationPosition];
-                        
-                        // Check if assigned person is missing, if so find next in rotation
-                        if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                            // Find next person in rotation who is not missing
-                                for (let offset = 1; offset < rotationDays; offset++) {
-                                    const nextIndex = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[nextIndex];
-                                if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
-                                        assignedPerson = candidate;
-                                    rotationPosition = nextIndex;
-                                        break;
-                                    }
+            // First, try to load from saved weekendAssignments (from Firestore)
+            sortedWeekends.forEach((dateKey) => {
+                const assignment = weekendAssignments[dateKey];
+                if (assignment) {
+                    // Handle both string format ("Person (Ομάδα 1), Person (Ομάδα 2)") and object format ({ groupNum: personName })
+                    if (typeof assignment === 'string') {
+                        const parts = assignment.split(',').map(p => p.trim());
+                        parts.forEach(part => {
+                            const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                            if (match) {
+                                const personName = match[1].trim();
+                                const groupNum = parseInt(match[2]);
+                                if (!simulatedWeekendAssignments[dateKey]) {
+                                    simulatedWeekendAssignments[dateKey] = {};
                                 }
-                        }
-                        
-                        // Advance rotation position
-                        if (assignedPerson) {
-                                globalWeekendRotationPosition[groupNum] = rotationPosition + 1;
-                        } else {
-                            globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                        }
-                        
-                        // Store assignment for saving
-                        if (assignedPerson) {
-                            if (!simulatedWeekendAssignments[dateKey]) {
-                                simulatedWeekendAssignments[dateKey] = {};
+                                simulatedWeekendAssignments[dateKey][groupNum] = personName;
                             }
-                            simulatedWeekendAssignments[dateKey][groupNum] = assignedPerson;
+                        });
+                    } else if (typeof assignment === 'object' && !Array.isArray(assignment)) {
+                        // Object format: { groupNum: personName }
+                        for (const groupNum in assignment) {
+                            const personName = assignment[groupNum];
+                            if (personName) {
+                                if (!simulatedWeekendAssignments[dateKey]) {
+                                    simulatedWeekendAssignments[dateKey] = {};
+                                }
+                                simulatedWeekendAssignments[dateKey][parseInt(groupNum)] = personName;
+                            }
                         }
                     }
                 }
             });
+            
+            // Fallback: If no saved assignments found, recalculate (for first-time calculation)
+            // This should rarely happen, but provides a fallback
+            const hasSavedAssignments = Object.keys(simulatedWeekendAssignments).length > 0;
+            if (!hasSavedAssignments) {
+                console.log('[PREVIEW] No saved weekend assignments found, recalculating from rotation');
+                const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
+                const globalWeekendRotationPosition = {}; // groupNum -> global position (continues across months)
+                
+                sortedWeekends.forEach((dateKey, weekendIndex) => {
+                    const date = new Date(dateKey + 'T00:00:00');
+                    const month = date.getMonth();
+                    const year = date.getFullYear();
+                    const monthKey = `${year}-${month}`;
+                    
+                    if (!skippedInMonth[monthKey]) {
+                        skippedInMonth[monthKey] = {};
+                    }
+                    
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        const groupData = groups[groupNum] || { weekend: [] };
+                        const groupPeople = groupData.weekend || [];
+                        
+                        if (groupPeople.length > 0) {
+                            if (!skippedInMonth[monthKey][groupNum]) {
+                                skippedInMonth[monthKey][groupNum] = new Set();
+                            }
+                            const rotationDays = groupPeople.length;
+                            if (globalWeekendRotationPosition[groupNum] === undefined) {
+                                // If start date is February 2026, always start from first person (position 0)
+                                const isFebruary2026 = calculationSteps.startDate && 
+                                    calculationSteps.startDate.getFullYear() === 2026 && 
+                                    calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                                
+                                if (isFebruary2026) {
+                                    // Always start from first person for February 2026
+                                    globalWeekendRotationPosition[groupNum] = 0;
+                                    console.log(`[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} weekend - February 2026`);
+                                } else {
+                                    // Initialize based on rotation count from start date
+                                    const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
+                                    globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                }
+                            }
+                            
+                            let rotationPosition = globalWeekendRotationPosition[groupNum] % rotationDays;
+                            // PREVIEW MODE: Just show basic rotation WITHOUT skip logic
+                            // Skip logic will run when Next is pressed in Step 2
+                            let assignedPerson = groupPeople[rotationPosition];
+                            
+                            // Check if assigned person is missing, if so find next in rotation
+                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
+                                // Find next person in rotation who is not missing
+                                for (let offset = 1; offset < rotationDays; offset++) {
+                                    const nextIndex = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[nextIndex];
+                                    if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
+                                        assignedPerson = candidate;
+                                        rotationPosition = nextIndex;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // Advance rotation position
+                            if (assignedPerson) {
+                                globalWeekendRotationPosition[groupNum] = rotationPosition + 1;
+                            } else {
+                                globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                            }
+                            
+                            // Store assignment for saving
+                            if (assignedPerson) {
+                                if (!simulatedWeekendAssignments[dateKey]) {
+                                    simulatedWeekendAssignments[dateKey] = {};
+                                }
+                                simulatedWeekendAssignments[dateKey][groupNum] = assignedPerson;
+                            }
+                        }
+                    }
+                });
+            } else {
+                console.log('[PREVIEW] Loaded weekend assignments from saved Firestore data:', Object.keys(simulatedWeekendAssignments).length, 'dates');
+            }
+            
+            // Initialize simulatedSemiAssignments and normalAssignments for consecutive check (will be populated later)
+            const simulatedSemiAssignments = {}; // dateKey -> { groupNum -> person name }
+            const normalAssignments = {}; // dateKey -> { groupNum -> person name }
             
             // Third, load Step 3 (semi-normal days) from saved data
             // Load semi-normal assignments from saved data (after swap logic from Step 3)
@@ -10146,11 +10162,6 @@
                                         hasDutyBefore = simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum] === currentPerson;
                                     }
                                     
-                                    // Fallback to Firestore if not found in simulated assignments (for dates from previous months)
-                                    if (!hasDutyBefore) {
-                                        hasDutyBefore = hasDutyOnDay(dayBeforeKey, currentPerson, groupNum);
-                                    }
-                                    
                                     const afterMonthKey = `${dayAfter.getFullYear()}-${dayAfter.getMonth()}`;
                                     if (afterType === 'special-holiday') {
                                         hasDutyAfter = simulatedAssignments.special?.[afterMonthKey]?.[groupNum]?.has(currentPerson) || false;
@@ -10160,11 +10171,6 @@
                                         hasDutyAfter = simulatedAssignments.weekend?.[dayAfterKey]?.[groupNum] === currentPerson;
                                     } else if (afterType === 'normal-day') {
                                         hasDutyAfter = simulatedAssignments.normal?.[dayAfterKey]?.[groupNum] === currentPerson;
-                                    }
-                                    
-                                    // Fallback to Firestore if not found in simulated assignments (for dates from previous months)
-                                    if (!hasDutyAfter) {
-                                        hasDutyAfter = hasDutyOnDay(dayAfterKey, currentPerson, groupNum);
                                     }
                                 } else {
                                     hasDutyBefore = hasDutyOnDay(dayBeforeKey, currentPerson, groupNum);
