@@ -5325,7 +5325,7 @@
             const assigned = formatGreekDayDate(newAssignmentDateKey);
             const prefix = (subjectName && conflictedPersonName && subjectName === conflictedPersonName)
                 ? `Αλλάχθηκε με ${changedWithName} επειδή είχε σύγκρουση την ${conflict.dayName} ${conflict.dateStr}`
-                : `Αλλάχθηκε με ${changedWithName} επειδή ο ${conflictedPersonName} είχε σύγκρουση την ${conflict.dayName} ${conflict.dateStr}`;
+                : `Έγινε η αλλαγή γιατι ο ${conflictedPersonName} είχε σύγκρουση την ${conflict.dayName} ${conflict.dateStr}`;
             return `${prefix}, και ανατέθηκε την ${assigned.dayName} ${assigned.dateStr}.`;
         }
 
@@ -5333,6 +5333,67 @@
             const d = formatGreekDayDate(dateKey);
             const monthPart = monthKey ? ` (${monthKey})` : '';
             return `Αντικαταστάθηκε ο ${skippedPersonName} επειδή είχε κώλυμα${monthPart} την ${d.dayName} ${d.dateStr}. Ανατέθηκε ο ${replacementPersonName}.`;
+        }
+
+        // Return the adjacent day (before/after) that causes the consecutive-duty conflict.
+        // Prefers the "after" day when both sides conflict (matches user expectation like Thu conflict with Fri -> show Fri).
+        // Returns null if no adjacent conflict is detected.
+        function getConsecutiveConflictNeighborDayKey(dayKey, person, groupNum, simulatedAssignments = null) {
+            const date = new Date(dayKey + 'T00:00:00');
+            if (isNaN(date.getTime())) return null;
+
+            const currentDayType = getDayType(date);
+            let currentTypeCategory = 'normal';
+            if (currentDayType === 'special-holiday') currentTypeCategory = 'special';
+            else if (currentDayType === 'semi-normal-day') currentTypeCategory = 'semi';
+            else if (currentDayType === 'weekend-holiday') currentTypeCategory = 'weekend';
+
+            const hasConflict = (type1, type2) => {
+                if (type1 === 'normal' && (type2 === 'semi' || type2 === 'weekend' || type2 === 'special')) return true;
+                if ((type1 === 'semi' || type1 === 'weekend' || type1 === 'special') && type2 === 'normal') return true;
+                if (type1 === 'semi' && (type2 === 'weekend' || type2 === 'special')) return true;
+                if ((type1 === 'weekend' || type1 === 'special') && type2 === 'semi') return true;
+                return false;
+            };
+
+            const checkNeighbor = (neighborDate) => {
+                const neighborKey = formatDateKey(neighborDate);
+                const neighborType = getDayType(neighborDate);
+                let neighborTypeCategory = 'normal';
+                if (neighborType === 'special-holiday') neighborTypeCategory = 'special';
+                else if (neighborType === 'semi-normal-day') neighborTypeCategory = 'semi';
+                else if (neighborType === 'weekend-holiday') neighborTypeCategory = 'weekend';
+
+                if (!hasConflict(currentTypeCategory, neighborTypeCategory)) return false;
+
+                // Determine if person has duty on neighbor day (simulated preferred)
+                if (simulatedAssignments) {
+                    const neighborMonthKey = `${neighborDate.getFullYear()}-${neighborDate.getMonth()}`;
+                    if (neighborTypeCategory === 'special') {
+                        return simulatedAssignments.special?.[neighborMonthKey]?.[groupNum]?.has(person) || false;
+                    }
+                    if (neighborTypeCategory === 'weekend') {
+                        return simulatedAssignments.weekend?.[neighborKey]?.[groupNum] === person;
+                    }
+                    if (neighborTypeCategory === 'semi') {
+                        return simulatedAssignments.semi?.[neighborKey]?.[groupNum] === person;
+                    }
+                    // normal
+                    return simulatedAssignments.normal?.[neighborKey]?.[groupNum] === person;
+                }
+
+                return hasDutyOnDay(neighborKey, person, groupNum);
+            };
+
+            const dayAfter = new Date(date);
+            dayAfter.setDate(dayAfter.getDate() + 1);
+            if (checkNeighbor(dayAfter)) return formatDateKey(dayAfter);
+
+            const dayBefore = new Date(date);
+            dayBefore.setDate(dayBefore.getDate() - 1);
+            if (checkNeighbor(dayBefore)) return formatDateKey(dayBefore);
+
+            return null;
         }
         
         // Helper function to get assignment reason
@@ -7417,7 +7478,13 @@
                                 swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
                                 
                                 // Store assignment reasons for both swapped people with swap pair ID
-                                // Improved Greek reasons (day + date + where the conflicted person was assigned)
+                                // Use the ACTUAL conflict neighbor day (e.g. Fri) instead of the swap-execution day (e.g. Thu).
+                                const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, {
+                                    special: simulatedSpecialAssignments,
+                                    weekend: simulatedWeekendAssignments,
+                                    semi: updatedAssignments,
+                                    normal: null
+                                }) || dateKey;
                                 storeAssignmentReason(
                                     dateKey,
                                     groupNum,
@@ -7426,7 +7493,7 @@
                                     buildSwapReasonGreek({
                                         changedWithName: currentPerson,
                                         conflictedPersonName: currentPerson,
-                                        conflictDateKey: dateKey,
+                                        conflictDateKey: conflictNeighborKey,
                                         newAssignmentDateKey: swapDateKey,
                                         subjectName: swapCandidate
                                     }),
@@ -7441,7 +7508,7 @@
                                     buildSwapReasonGreek({
                                         changedWithName: swapCandidate,
                                         conflictedPersonName: currentPerson,
-                                        conflictDateKey: dateKey,
+                                        conflictDateKey: conflictNeighborKey,
                                         newAssignmentDateKey: swapDateKey,
                                         subjectName: currentPerson
                                     }),
@@ -7512,7 +7579,9 @@
                                         console.log(`[CROSS-MONTH SWAP SEMI] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${swapDayKey} (Group ${groupNum})`);
                                         
                                         // Store assignment reasons for BOTH people in cross-month swap with swap pair ID
-                                        // Improved Greek reasons (cross-month)
+                                        // Improved Greek reasons (cross-month):
+                                        // Use the ACTUAL conflict neighbor day (e.g. Fri) instead of the swap-execution day.
+                                        const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, simulatedAssignments) || dateKey;
                                         // Mark the person from next month who was swapped in (now assigned to current date)
                                         storeAssignmentReason(
                                             dateKey,
@@ -7522,7 +7591,7 @@
                                             buildSwapReasonGreek({
                                                 changedWithName: currentPerson,
                                                 conflictedPersonName: currentPerson,
-                                                conflictDateKey: dateKey,
+                                                conflictDateKey: conflictNeighborKey,
                                                 newAssignmentDateKey: swapDayKey,
                                                 subjectName: nextMonthPerson
                                             }),
@@ -7538,7 +7607,7 @@
                                             buildSwapReasonGreek({
                                                 changedWithName: nextMonthPerson,
                                                 conflictedPersonName: currentPerson,
-                                                conflictDateKey: dateKey,
+                                                conflictDateKey: conflictNeighborKey,
                                                 newAssignmentDateKey: swapDayKey,
                                                 subjectName: currentPerson
                                             }),
@@ -8739,7 +8808,9 @@
                                 updatedAssignments[swapDayKey][groupNum] = currentPerson;
                                 
                                 // Store assignment reasons for BOTH people involved in the swap with swap pair ID
-                                // Improved Greek reasons (day + date + where the conflicted person was assigned)
+                                // Improved Greek reasons:
+                                // Use the ACTUAL conflict neighbor day (e.g. Fri) instead of the swap-execution day (e.g. Thu).
+                                const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, simulatedAssignments) || dateKey;
                                 storeAssignmentReason(
                                     dateKey,
                                     groupNum,
@@ -8748,7 +8819,7 @@
                                     buildSwapReasonGreek({
                                         changedWithName: currentPerson,
                                         conflictedPersonName: currentPerson,
-                                        conflictDateKey: dateKey,
+                                        conflictDateKey: conflictNeighborKey,
                                         newAssignmentDateKey: swapDayKey,
                                         subjectName: swapCandidate
                                     }),
@@ -8763,7 +8834,7 @@
                                     buildSwapReasonGreek({
                                         changedWithName: swapCandidate,
                                         conflictedPersonName: currentPerson,
-                                        conflictDateKey: dateKey,
+                                        conflictDateKey: conflictNeighborKey,
                                         newAssignmentDateKey: swapDayKey,
                                         subjectName: currentPerson
                                     }),
@@ -10908,7 +10979,9 @@
                             normalAssignments[swapDayKey][groupNum] = currentPerson;
                             
                             // Store assignment reasons for BOTH people involved in the swap with swap pair ID
-                            // Improved Greek reasons (day + date + where the conflicted person was assigned)
+                                // Improved Greek reasons:
+                                // Use the ACTUAL conflict neighbor day (e.g. Fri) instead of the swap-execution day (e.g. Thu).
+                                const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, simulatedAssignments) || dateKey;
                             storeAssignmentReason(
                                 dateKey,
                                 groupNum,
@@ -10917,7 +10990,7 @@
                                 buildSwapReasonGreek({
                                     changedWithName: currentPerson,
                                     conflictedPersonName: currentPerson,
-                                    conflictDateKey: dateKey,
+                                        conflictDateKey: conflictNeighborKey,
                                     newAssignmentDateKey: swapDayKey,
                                     subjectName: swapCandidate
                                 }),
@@ -10932,7 +11005,7 @@
                                 buildSwapReasonGreek({
                                     changedWithName: swapCandidate,
                                     conflictedPersonName: currentPerson,
-                                    conflictDateKey: dateKey,
+                                        conflictDateKey: conflictNeighborKey,
                                     newAssignmentDateKey: swapDayKey,
                                     subjectName: currentPerson
                                 }),
