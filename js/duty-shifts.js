@@ -10411,8 +10411,8 @@
                                     if (lastPersonName && lastPersonIndex >= 0) {
                                         globalNormalRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
                                 } else {
-                                        const daysSinceStart = getRotationPosition(date, 'normal', groupNum);
-                                        globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                    const daysSinceStart = getRotationPosition(date, 'normal', groupNum);
+                                    globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
                                     }
                                 }
                             }
@@ -12267,6 +12267,30 @@
             }
             return null;
         }
+
+        // Helper: did this person have a SPECIAL HOLIDAY duty in the same month for this group?
+        // Used for explaining weekend "skips".
+        function hasSpecialHolidayDutyInMonth(person, groupNum, year, month) {
+            try {
+                const monthStart = new Date(year, month, 1);
+                const monthEnd = new Date(year, month + 1, 0);
+                const personGroupStr = `${person} (Ομάδα ${groupNum})`;
+                const d = new Date(monthStart);
+                while (d <= monthEnd) {
+                    if (getDayType(d) === 'special-holiday') {
+                        const key = formatDateKey(d);
+                        const a = getAssignmentForDate(key);
+                        if (a && String(a).includes(personGroupStr)) {
+                            return key;
+                        }
+                    }
+                    d.setDate(d.getDate() + 1);
+                }
+            } catch (e) {
+                // ignore
+            }
+            return null;
+        }
         
         // Analyze rotation violations
         function analyzeRotationViolations() {
@@ -12537,67 +12561,38 @@
                             }
                         }
                         
-                        // Check if there's a swap and get the swap date
+                        // Pull swap/skip reason from assignmentReasons (same text shown in day-details popup)
                         const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
-                        let swapDateInfo = '';
-                        if (assignmentReason && assignmentReason.type === 'swap' && assignmentReason.swappedWith) {
-                            // Find the swap date by checking which date has the swapped person (swappedWith)
-                            // Check current month first
-                            const allDatesInMonth = [];
-                            for (let d = 1; d <= daysInMonth; d++) {
-                                allDatesInMonth.push(formatDateKey(new Date(year, month, d)));
+                        const swapOrSkipReasonText = assignmentReason?.reason || '';
+                        const swapOrSkipType = assignmentReason?.type || '';
+
+                        // Determine why the EXPECTED person was skipped (missing vs special holiday in month, etc.)
+                        let skippedReason = '';
+                        if (isMissing) {
+                            const mp = getPersonMissingPeriod(expectedPerson, groupNum, date);
+                            if (mp) {
+                                const startStr = mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                const endStr = mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                skippedReason = `Κώλυμα/Απουσία (${startStr}–${endStr})`;
+                            } else {
+                                skippedReason = 'Κώλυμα/Απουσία';
                             }
-                            
-                            let swapDateFound = false;
-                            // Look for the date where swappedWith person is assigned
-                            for (const checkDateKey of allDatesInMonth) {
-                                const checkAssignment = getAssignmentForDate(checkDateKey) || '';
-                                if (checkAssignment.includes(`${assignmentReason.swappedWith} (Ομάδα ${groupNum})`)) {
-                                    const swapDate = new Date(checkDateKey + 'T00:00:00');
-                                    const swapDateStr = swapDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                    swapDateInfo = `, Ημερομηνία αλλαγής: ${swapDateStr}`;
-                                    swapDateFound = true;
-                                    break;
-                                }
+                        } else if (dayTypeCategory === 'weekend') {
+                            const specialKey = hasSpecialHolidayDutyInMonth(expectedPerson, groupNum, year, month);
+                            if (specialKey) {
+                                const dd = new Date(specialKey + 'T00:00:00');
+                                skippedReason = `Ειδική αργία στον ίδιο μήνα (${getGreekDayName(dd)} ${dd.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })})`;
+                            } else {
+                                skippedReason = 'Παράλειψη (πιθανή ειδική αργία/περιορισμός μήνα)';
                             }
-                            
-                            // If not found in current month, check previous and next month
-                            if (!swapDateFound) {
-                                const prevMonth = new Date(year, month - 1, 1);
-                                const nextMonth = new Date(year, month + 1, 1);
-                                const lastDayPrev = new Date(year, month, 0);
-                                const lastDayNext = new Date(year, month + 2, 0);
-                                
-                                // Check previous month
-                                for (let d = 1; d <= lastDayPrev.getDate(); d++) {
-                                    const checkDate = new Date(year, month - 1, d);
-                                    const checkDateKey = formatDateKey(checkDate);
-                                    const checkAssignment = getAssignmentForDate(checkDateKey) || '';
-                                    if (checkAssignment.includes(`${assignmentReason.swappedWith} (Ομάδα ${groupNum})`)) {
-                                        const swapDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                        const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                        swapDateInfo = `, Ημερομηνία επηρεασμένη: ${currentDateStr}, Ημερομηνία αλλαγής: ${swapDateStr}`;
-                                        swapDateFound = true;
-                                        break;
-                                    }
-                                }
-                                
-                                // Check next month if still not found
-                                if (!swapDateFound) {
-                                    for (let d = 1; d <= lastDayNext.getDate(); d++) {
-                                        const checkDate = new Date(year, month + 1, d);
-                                        const checkDateKey = formatDateKey(checkDate);
-                                        const checkAssignment = getAssignmentForDate(checkDateKey) || '';
-                                        if (checkAssignment.includes(`${assignmentReason.swappedWith} (Ομάδα ${groupNum})`)) {
-                                            const swapDateStr = checkDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                            swapDateInfo = `, Ημερομηνία αλλαγής: ${swapDateStr}`;
-                                            swapDateFound = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
+                        } else if (swapOrSkipType === 'skip') {
+                            skippedReason = 'Παράλειψη';
+                        } else if (swapOrSkipType === 'swap') {
+                            skippedReason = 'Αλλαγή (swap)';
                         }
+
+                        // Conflicts: show the computed conflict details (what it conflicted with)
+                        const conflictSummary = (conflictDetails && conflictDetails.length > 0) ? conflictDetails.join(' | ') : '';
                         
                         violations.push({
                             date: dayKey,
@@ -12606,7 +12601,9 @@
                             groupName: getGroupName(groupNum),
                             assignedPerson: assignedPerson,
                             expectedPerson: expectedPerson,
-                            reason: violationReason + swapDateInfo,
+                            conflicts: conflictSummary,
+                            swapReason: swapOrSkipReasonText || violationReason,
+                            skippedReason: skippedReason,
                             dayType: getDayTypeLabel(dayType)
                         });
                     }
@@ -12640,7 +12637,9 @@
                         <td><span class="badge bg-primary">${violation.groupName}</span></td>
                         <td><strong>${violation.assignedPerson}</strong></td>
                         <td><strong class="text-danger">${violation.expectedPerson}</strong></td>
-                        <td><small>${violation.reason}</small></td>
+                        <td><small>${violation.conflicts || '-'}</small></td>
+                        <td><small>${violation.swapReason || '-'}</small></td>
+                        <td><small>${violation.skippedReason || '-'}</small></td>
                     `;
                     tableBody.appendChild(row);
                 });
