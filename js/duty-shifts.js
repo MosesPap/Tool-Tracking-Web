@@ -1047,6 +1047,67 @@
             return sanitized;
         }
 
+        // Merge month-organized assignment blocks into an existing Firestore doc without deleting older months.
+        // This prevents the "only last calculated month exists" issue when recalculating month-by-month.
+        async function mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, docId, monthOrganizedData) {
+            if (!db || !user || !docId || !monthOrganizedData) return;
+            try {
+                const docRef = db.collection('dutyShifts').doc(docId);
+                const existingDoc = await docRef.get();
+                let existing = {};
+                if (existingDoc.exists) {
+                    existing = existingDoc.data() || {};
+                    delete existing.lastUpdated;
+                    delete existing.updatedBy;
+                    delete existing._migratedFrom;
+                    delete existing._migrationDate;
+                }
+
+                // Normalize existing doc into month-organized structure.
+                // This prevents mixed formats (flat date keys + month blocks) which can cause missing/duplicate display
+                // and can break flattening when flat values are objects.
+                const monthKeyRegex = /^[A-Za-z]+\s+\d{4}$/; // e.g. "April 2026"
+                const dateKeyRegex = /^\d{4}-\d{2}-\d{2}$/; // e.g. "2026-04-08"
+
+                const normalizedExisting = {};
+                for (const key in existing) {
+                    const val = existing[key];
+                    if (monthKeyRegex.test(key) && val && typeof val === 'object' && !Array.isArray(val)) {
+                        normalizedExisting[key] = { ...val };
+                        continue;
+                    }
+                    if (dateKeyRegex.test(key)) {
+                        const monthName = getMonthNameFromDateKey(key);
+                        if (monthName) {
+                            if (!normalizedExisting[monthName]) normalizedExisting[monthName] = {};
+                            normalizedExisting[monthName][key] = val;
+                        }
+                        continue;
+                    }
+                    // Ignore unknown keys (prevents accidental flattening issues)
+                }
+
+                const merged = { ...normalizedExisting };
+                for (const monthKey in monthOrganizedData) {
+                    const monthVal = monthOrganizedData[monthKey];
+                    if (!monthKey || !monthVal || typeof monthVal !== 'object') continue;
+                    merged[monthKey] = {
+                        ...(merged[monthKey] || {}),
+                        ...(monthVal || {})
+                    };
+                }
+
+                const sanitized = sanitizeForFirestore(merged);
+                await docRef.set({
+                    ...sanitized,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
+            } catch (error) {
+                console.error(`Error merging/saving ${docId}:`, error);
+            }
+        }
+
         // Save data to Firebase Firestore
         async function saveData() {
             try {
@@ -1109,11 +1170,7 @@
                     if (assignmentCount > 0) {
                         const organizedNormal = organizeAssignmentsByMonth(normalDayAssignments);
                         const sanitizedNormal = sanitizeForFirestore(organizedNormal);
-                    await db.collection('dutyShifts').doc('normalDayAssignments').set({
-                            ...sanitizedNormal,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'normalDayAssignments', organizedNormal);
                         console.log('Saved normalDayAssignments organized by month:', Object.keys(organizedNormal).length, 'months', assignmentCount, 'assignments');
                     } else {
                         console.log('Skipping save of normalDayAssignments - no assignments to save');
@@ -1129,11 +1186,7 @@
                     if (assignmentCount > 0) {
                         const organizedSemi = organizeAssignmentsByMonth(semiNormalAssignments);
                         const sanitizedSemi = sanitizeForFirestore(organizedSemi);
-                    await db.collection('dutyShifts').doc('semiNormalAssignments').set({
-                            ...sanitizedSemi,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'semiNormalAssignments', organizedSemi);
                         console.log('Saved semiNormalAssignments organized by month:', Object.keys(organizedSemi).length, 'months', assignmentCount, 'assignments');
                     } else {
                         console.log('Skipping save of semiNormalAssignments - no assignments to save');
@@ -1149,11 +1202,7 @@
                     if (assignmentCount > 0) {
                         const organizedWeekend = organizeAssignmentsByMonth(weekendAssignments);
                         const sanitizedWeekend = sanitizeForFirestore(organizedWeekend);
-                    await db.collection('dutyShifts').doc('weekendAssignments').set({
-                            ...sanitizedWeekend,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'weekendAssignments', organizedWeekend);
                         console.log('Saved weekendAssignments organized by month:', Object.keys(organizedWeekend).length, 'months', assignmentCount, 'assignments');
                     } else {
                         console.log('Skipping save of weekendAssignments - no assignments to save');
@@ -1169,11 +1218,7 @@
                     if (assignmentCount > 0) {
                         const organizedSpecial = organizeAssignmentsByMonth(specialHolidayAssignments);
                         const sanitizedSpecial = sanitizeForFirestore(organizedSpecial);
-                    await db.collection('dutyShifts').doc('specialHolidayAssignments').set({
-                            ...sanitizedSpecial,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'specialHolidayAssignments', organizedSpecial);
                         console.log('Saved specialHolidayAssignments organized by month:', Object.keys(organizedSpecial).length, 'months', assignmentCount, 'assignments');
                     } else {
                         console.log('Skipping save of specialHolidayAssignments - no assignments to save');
@@ -1384,37 +1429,30 @@
                 // Save to separate documents
                 console.log('Saving split assignments...');
                 
+                // Save in month-organized format and merge to avoid deleting existing months
+                await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'normalDayAssignments', organizeAssignmentsByMonth(normalDayAssignments));
                 await db.collection('dutyShifts').doc('normalDayAssignments').set({
-                    ...normalDayAssignments,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid,
                     _migratedFrom: 'assignments',
                     _migrationDate: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                }, { merge: true });
                 
+                await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'semiNormalAssignments', organizeAssignmentsByMonth(semiNormalAssignments));
                 await db.collection('dutyShifts').doc('semiNormalAssignments').set({
-                    ...semiNormalAssignments,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid,
                     _migratedFrom: 'assignments',
                     _migrationDate: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                }, { merge: true });
                 
+                await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'weekendAssignments', organizeAssignmentsByMonth(weekendAssignments));
                 await db.collection('dutyShifts').doc('weekendAssignments').set({
-                    ...weekendAssignments,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid,
                     _migratedFrom: 'assignments',
                     _migrationDate: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                }, { merge: true });
                 
+                await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'specialHolidayAssignments', organizeAssignmentsByMonth(specialHolidayAssignments));
                 await db.collection('dutyShifts').doc('specialHolidayAssignments').set({
-                    ...specialHolidayAssignments,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid,
                     _migratedFrom: 'assignments',
                     _migrationDate: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                }, { merge: true });
                 
                 console.log('Migration completed!');
                 console.log(`Processed: ${processedCount} dates`);
@@ -6563,11 +6601,7 @@
                     const organizedSpecial = organizeAssignmentsByMonth(tempSpecialAssignments);
                     const sanitizedSpecial = sanitizeForFirestore(organizedSpecial);
                     
-                    await db.collection('dutyShifts').doc('specialHolidayAssignments').set({
-                        ...sanitizedSpecial,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'specialHolidayAssignments', organizedSpecial);
                     console.log('Saved Step 1 special holiday assignments to Firestore:', Object.keys(tempSpecialAssignments).length, 'dates');
                     
                     // Also update local memory
@@ -6949,11 +6983,7 @@
                     const organizedWeekend = organizeAssignmentsByMonth(formattedAssignments);
                     const sanitizedWeekend = sanitizeForFirestore(organizedWeekend);
                     
-                    await db.collection('dutyShifts').doc('weekendAssignments').set({
-                        ...sanitizedWeekend,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'weekendAssignments', organizedWeekend);
                     console.log('Saved Step 2 final weekend assignments (after skip logic) to weekendAssignments document');
                     
                     // Update local memory
@@ -7200,8 +7230,40 @@
                     updatedAssignments[dateKey] = { ...groups };
                 }
                 
+                // Helper: check if a person would have a semi-normal consecutive conflict on a given semi-normal day
+                // Conflict rules for semi-normal swaps: semi conflicts with weekend/special on day before/after.
+                const hasSemiConsecutiveConflictForPerson = (semiDateKey, person, groupNum) => {
+                    const semiDate = new Date(semiDateKey + 'T00:00:00');
+                    if (isNaN(semiDate.getTime())) return false;
+                    const dayType = getDayType(semiDate);
+                    if (dayType !== 'semi-normal-day') return false;
+
+                    const checkNeighbor = (neighborDate) => {
+                        const neighborType = getDayType(neighborDate);
+                        const neighborKey = formatDateKey(neighborDate);
+                        if (neighborType === 'weekend-holiday') {
+                            return simulatedWeekendAssignments[neighborKey]?.[groupNum] === person;
+                        }
+                        if (neighborType === 'special-holiday') {
+                            const neighborMonthKey = `${neighborDate.getFullYear()}-${neighborDate.getMonth()}`;
+                            return simulatedSpecialAssignments[neighborMonthKey]?.[groupNum]?.has(person) || false;
+                        }
+                        return false;
+                    };
+
+                    const dayBefore = new Date(semiDate);
+                    dayBefore.setDate(dayBefore.getDate() - 1);
+                    const dayAfter = new Date(semiDate);
+                    dayAfter.setDate(dayAfter.getDate() + 1);
+
+                    return checkNeighbor(dayBefore) || checkNeighbor(dayAfter);
+                };
+
+                // Prevent re-swapping the same semi-normal days repeatedly in one run
+                const swappedSemiSet = new Set(); // `${dateKey}:${groupNum}`
+
                 // Run swap logic (check for consecutive conflicts with weekend or special holiday)
-                sortedSemi.forEach((dateKey) => {
+                sortedSemi.forEach((dateKey, semiIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const month = date.getMonth();
                     const year = date.getFullYear();
@@ -7215,6 +7277,11 @@
                         
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (!currentPerson) continue;
+
+                        // Skip if this date/group was already swapped in this run
+                        if (swappedSemiSet.has(`${dateKey}:${groupNum}`)) {
+                            continue;
+                        }
                         
                         // Check for consecutive conflicts with weekend or special holiday
                         const dayBefore = new Date(date);
@@ -7251,94 +7318,36 @@
                         }
                         
                         if (hasConsecutiveConflict) {
-                            // Find a person to swap with (not just replace)
-                            // Need to find where the swapped person is assigned and swap both
-                            const rotationDays = groupPeople.length;
-                            const currentIndex = groupPeople.indexOf(currentPerson);
+                            // NEW RULE: swap with the next semi-normal day(s) in chronological order.
+                            // Try the immediate next semi-normal day first; if swap would cause a conflict for either person,
+                            // continue to the next semi-normal day, etc.
                             let swapCandidate = null;
                             let swapDateKey = null;
-                            
-                            // First, find a candidate who doesn't have conflict on current day
-                            for (let offset = 1; offset < rotationDays; offset++) {
-                                const nextIndex = (currentIndex + offset) % rotationDays;
-                                const candidate = groupPeople[nextIndex];
-                                
-                                if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) {
-                                    continue;
-                                }
-                                
-                                // Check if candidate has consecutive conflict on current day
-                                let candidateHasConflict = false;
-                                const candidateBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] || 
-                                                       (beforeType === 'special-holiday' ? 
-                                                        (simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(candidate) ? candidate : null) : null);
-                                const candidateAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] || 
-                                                      (afterType === 'special-holiday' ? 
-                                                       (simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(candidate) ? candidate : null) : null);
-                                
-                                if (candidateBefore === candidate || candidateAfter === candidate) {
-                                    candidateHasConflict = true;
-                                }
-                                
-                                if (!candidateHasConflict) {
-                                    // Found a candidate - now find where they are assigned
-                                    for (const checkDateKey in updatedAssignments) {
-                                        if (updatedAssignments[checkDateKey]?.[groupNum] === candidate) {
-                                            const checkDate = new Date(checkDateKey + 'T00:00:00');
-                                            const checkDayType = getDayType(checkDate);
-                                            
-                                            // Must be a semi-normal day
-                                            if (checkDayType === 'semi-normal-day') {
-                                                // Check if conflicted person can be assigned to candidate's day
-                                                const checkDayBefore = new Date(checkDate);
-                                                checkDayBefore.setDate(checkDayBefore.getDate() - 1);
-                                                const checkDayAfter = new Date(checkDate);
-                                                checkDayAfter.setDate(checkDayAfter.getDate() + 1);
-                                                
-                                                const checkDayBeforeKey = formatDateKey(checkDayBefore);
-                                                const checkDayAfterKey = formatDateKey(checkDayAfter);
-                                                
-                                                const checkBeforeType = getDayType(checkDayBefore);
-                                                const checkAfterType = getDayType(checkDayAfter);
-                                                
-                                                let conflictedPersonCanSwap = true;
-                                                
-                                                // Check if conflicted person has conflict on candidate's day
-                                                if (checkBeforeType === 'weekend-holiday' || checkBeforeType === 'special-holiday') {
-                                                    const personBefore = simulatedWeekendAssignments[checkDayBeforeKey]?.[groupNum] || 
-                                                                       (checkBeforeType === 'special-holiday' ? 
-                                                                        (simulatedSpecialAssignments[`${checkDayBefore.getFullYear()}-${checkDayBefore.getMonth()}`]?.[groupNum]?.has(currentPerson) ? currentPerson : null) : null);
-                                                    if (personBefore === currentPerson) {
-                                                        conflictedPersonCanSwap = false;
-                                                    }
-                                                }
-                                                
-                                                if (conflictedPersonCanSwap && (checkAfterType === 'weekend-holiday' || checkAfterType === 'special-holiday')) {
-                                                    const personAfter = simulatedWeekendAssignments[checkDayAfterKey]?.[groupNum] || 
-                                                                       (checkAfterType === 'special-holiday' ? 
-                                                                        (simulatedSpecialAssignments[`${checkDayAfter.getFullYear()}-${checkDayAfter.getMonth()}`]?.[groupNum]?.has(currentPerson) ? currentPerson : null) : null);
-                                                    if (personAfter === currentPerson) {
-                                                        conflictedPersonCanSwap = false;
-                                                    }
-                                                }
-                                                
-                                                // Also check if conflicted person is missing on candidate's day
-                                                if (conflictedPersonCanSwap && isPersonMissingOnDate(currentPerson, groupNum, checkDate)) {
-                                                    conflictedPersonCanSwap = false;
-                                                }
-                                                
-                                                if (conflictedPersonCanSwap) {
-                                                    swapCandidate = candidate;
-                                                    swapDateKey = checkDateKey;
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    
-                                    if (swapCandidate && swapDateKey) {
-                                        break; // Found valid swap
-                                    }
+
+                            for (let j = semiIndex + 1; j < sortedSemi.length; j++) {
+                                const candidateDateKey = sortedSemi[j];
+                                const candidateDate = new Date(candidateDateKey + 'T00:00:00');
+                                if (isNaN(candidateDate.getTime())) continue;
+
+                                // Candidate is the person currently assigned on the next semi-normal day
+                                const candidatePerson = updatedAssignments[candidateDateKey]?.[groupNum];
+                                if (!candidatePerson) continue;
+
+                                // Avoid re-swapping a day already swapped in this run
+                                if (swappedSemiSet.has(`${candidateDateKey}:${groupNum}`)) continue;
+
+                                // Both must be available on their new dates
+                                if (isPersonMissingOnDate(candidatePerson, groupNum, date)) continue;
+                                if (isPersonMissingOnDate(currentPerson, groupNum, candidateDate)) continue;
+
+                                // Validate: after swap, neither person has a semi consecutive conflict on their new semi day
+                                const candidateWouldConflict = hasSemiConsecutiveConflictForPerson(dateKey, candidatePerson, groupNum);
+                                const currentWouldConflict = hasSemiConsecutiveConflictForPerson(candidateDateKey, currentPerson, groupNum);
+
+                                if (!candidateWouldConflict && !currentWouldConflict) {
+                                    swapCandidate = candidatePerson;
+                                    swapDateKey = candidateDateKey;
+                                    break;
                                 }
                             }
                             
@@ -7360,6 +7369,10 @@
                                 // Perform the swap: conflicted person goes to swap date, swapped person goes to conflicted date
                                 updatedAssignments[dateKey][groupNum] = swapCandidate;
                                 updatedAssignments[swapDateKey][groupNum] = currentPerson;
+
+                                // Mark both days as swapped in this run to prevent re-swapping loops
+                                swappedSemiSet.add(`${dateKey}:${groupNum}`);
+                                swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
                                 
                                 // Store assignment reasons for both swapped people with swap pair ID
                                 const swapDateStr = new Date(swapDateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -7374,6 +7387,8 @@
                                 // No swap found in current month - try cross-month swap
                                 // For semi-normal, check next month throughout the entire month (not just last 3 days)
                                 // Calculate current rotation position for semi-normal
+                                const rotationDays = groupPeople.length;
+                                const currentIndex = groupPeople.indexOf(currentPerson);
                                 const currentRotationPosition = currentIndex;
                                 
                                 // Try to get person from next month
@@ -7558,11 +7573,7 @@
                     const organizedSemi = organizeAssignmentsByMonth(formattedAssignments);
                     const sanitizedSemi = sanitizeForFirestore(organizedSemi);
                     
-                    await db.collection('dutyShifts').doc('semiNormalAssignments').set({
-                        ...sanitizedSemi,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'semiNormalAssignments', organizedSemi);
                     console.log('Saved Step 3 final semi-normal assignments (after swap logic) to semiNormalAssignments document');
                     
                     // Update local memory
@@ -8789,11 +8800,7 @@
                     const organizedNormal = organizeAssignmentsByMonth(formattedAssignments);
                     const sanitizedNormal = sanitizeForFirestore(organizedNormal);
                     
-                    await db.collection('dutyShifts').doc('normalDayAssignments').set({
-                        ...sanitizedNormal,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'normalDayAssignments', organizedNormal);
                     console.log('Saved Step 4 final normal assignments (after swap logic) to normalDayAssignments document');
                     
                     // Update local memory
