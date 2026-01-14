@@ -7581,7 +7581,12 @@
                                         // Store assignment reasons for BOTH people in cross-month swap with swap pair ID
                                         // Improved Greek reasons (cross-month):
                                         // Use the ACTUAL conflict neighbor day (e.g. Fri) instead of the swap-execution day.
-                                        const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, simulatedAssignments) || dateKey;
+                                        const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, {
+                                            special: simulatedSpecialAssignments,
+                                            weekend: simulatedWeekendAssignments,
+                                            semi: updatedAssignments,
+                                            normal: null
+                                        }) || dateKey;
                                         // Mark the person from next month who was swapped in (now assigned to current date)
                                         storeAssignmentReason(
                                             dateKey,
