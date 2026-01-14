@@ -12567,6 +12567,7 @@
                         const swapOrSkipType = assignmentReason?.type || '';
 
                         // Determine why the EXPECTED person was skipped (missing vs special holiday in month, etc.)
+                        const isMissing = isPersonMissingOnDate(expectedPerson, groupNum, date);
                         let skippedReason = '';
                         if (isMissing) {
                             const mp = getPersonMissingPeriod(expectedPerson, groupNum, date);
