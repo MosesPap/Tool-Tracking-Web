@@ -5307,6 +5307,33 @@
                 swapPairId: swapPairId // For color coding swap pairs
             };
         }
+
+        function formatGreekDayDate(dateKey) {
+            const d = new Date(dateKey + 'T00:00:00');
+            if (isNaN(d.getTime())) return { dayName: '', dateStr: dateKey };
+            return {
+                dayName: getGreekDayName(d),
+                dateStr: d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+            };
+        }
+
+        // Build swap reason in Greek.
+        // If subjectName === conflictedPersonName, we omit repeating the name: "επειδή είχε σύγκρουση..."
+        // otherwise we use: "επειδή ο <conflicted> είχε σύγκρουση..."
+        function buildSwapReasonGreek({ changedWithName, conflictedPersonName, conflictDateKey, newAssignmentDateKey, subjectName = null }) {
+            const conflict = formatGreekDayDate(conflictDateKey);
+            const assigned = formatGreekDayDate(newAssignmentDateKey);
+            const prefix = (subjectName && conflictedPersonName && subjectName === conflictedPersonName)
+                ? `Αλλάχθηκε με ${changedWithName} επειδή είχε σύγκρουση την ${conflict.dayName} ${conflict.dateStr}`
+                : `Αλλάχθηκε με ${changedWithName} επειδή ο ${conflictedPersonName} είχε σύγκρουση την ${conflict.dayName} ${conflict.dateStr}`;
+            return `${prefix}, και ανατέθηκε την ${assigned.dayName} ${assigned.dateStr}.`;
+        }
+
+        function buildSkipReasonGreek({ skippedPersonName, replacementPersonName, dateKey, monthKey = null }) {
+            const d = formatGreekDayDate(dateKey);
+            const monthPart = monthKey ? ` (${monthKey})` : '';
+            return `Αντικαταστάθηκε ο ${skippedPersonName} επειδή είχε κώλυμα${monthPart} την ${d.dayName} ${d.dateStr}. Ανατέθηκε ο ${replacementPersonName}.`;
+        }
         
         // Helper function to get assignment reason
         function getAssignmentReason(dateKey, groupNum, personName) {
@@ -6870,6 +6897,21 @@
                                 
                                 // Update assignment
                                 updatedAssignments[dateKey][groupNum] = replacementPerson;
+
+                                // Store skip reason on the ASSIGNED person so it shows in calendar/modal
+                                // (calendar checks reasons by currently displayed person name)
+                                const monthReason = hasSpecialHoliday
+                                    ? 'ειδική αργία στον ίδιο μήνα'
+                                    : 'ήταν ήδη παραλειφθεί αυτόν τον μήνα';
+                                storeAssignmentReason(
+                                    dateKey,
+                                    groupNum,
+                                    replacementPerson,
+                                    'skip',
+                                    `Αντικαταστάθηκε ο ${currentPerson} επειδή είχε ${monthReason} την ${getGreekDayName(date)} ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ο ${replacementPerson}.`,
+                                    currentPerson,
+                                    null
+                                );
                             }
                         }
                     }
@@ -7375,10 +7417,37 @@
                                 swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
                                 
                                 // Store assignment reasons for both swapped people with swap pair ID
-                                const swapDateStr = new Date(swapDateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                storeAssignmentReason(dateKey, groupNum, swapCandidate, 'swap', `Αλλαγή με ${currentPerson} (${currentDateStr})`, currentPerson, swapPairId);
-                                storeAssignmentReason(swapDateKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${swapCandidate} (${swapDateStr})`, swapCandidate, swapPairId);
+                                // Improved Greek reasons (day + date + where the conflicted person was assigned)
+                                storeAssignmentReason(
+                                    dateKey,
+                                    groupNum,
+                                    swapCandidate,
+                                    'swap',
+                                    buildSwapReasonGreek({
+                                        changedWithName: currentPerson,
+                                        conflictedPersonName: currentPerson,
+                                        conflictDateKey: dateKey,
+                                        newAssignmentDateKey: swapDateKey,
+                                        subjectName: swapCandidate
+                                    }),
+                                    currentPerson,
+                                    swapPairId
+                                );
+                                storeAssignmentReason(
+                                    swapDateKey,
+                                    groupNum,
+                                    currentPerson,
+                                    'swap',
+                                    buildSwapReasonGreek({
+                                        changedWithName: swapCandidate,
+                                        conflictedPersonName: currentPerson,
+                                        conflictDateKey: dateKey,
+                                        newAssignmentDateKey: swapDateKey,
+                                        subjectName: currentPerson
+                                    }),
+                                    swapCandidate,
+                                    swapPairId
+                                );
                                 
                                 // IMPORTANT: Stop processing this conflict - swap found, don't try cross-month swap
                                 // Break out of the loop to prevent unnecessary swaps
@@ -7443,13 +7512,39 @@
                                         console.log(`[CROSS-MONTH SWAP SEMI] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${swapDayKey} (Group ${groupNum})`);
                                         
                                         // Store assignment reasons for BOTH people in cross-month swap with swap pair ID
-                                        const swapDateStr = new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                        const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                        // Improved Greek reasons (cross-month)
                                         // Mark the person from next month who was swapped in (now assigned to current date)
-                                        storeAssignmentReason(dateKey, groupNum, nextMonthPerson, 'swap', `Αλλαγή με ${currentPerson} (${currentDateStr} → ${swapDateStr})`, currentPerson, swapPairId);
+                                        storeAssignmentReason(
+                                            dateKey,
+                                            groupNum,
+                                            nextMonthPerson,
+                                            'swap',
+                                            buildSwapReasonGreek({
+                                                changedWithName: currentPerson,
+                                                conflictedPersonName: currentPerson,
+                                                conflictDateKey: dateKey,
+                                                newAssignmentDateKey: swapDayKey,
+                                                subjectName: nextMonthPerson
+                                            }),
+                                            currentPerson,
+                                            swapPairId
+                                        );
                                         // Also mark the conflicted person who will be assigned to next month (cross-month swap)
-                                        // Note: This will be marked when the next month is calculated, but we can pre-mark it here
-                                        storeAssignmentReason(swapDayKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${nextMonthPerson} (${currentDateStr} → ${swapDateStr})`, nextMonthPerson, swapPairId);
+                                        storeAssignmentReason(
+                                            swapDayKey,
+                                            groupNum,
+                                            currentPerson,
+                                            'swap',
+                                            buildSwapReasonGreek({
+                                                changedWithName: nextMonthPerson,
+                                                conflictedPersonName: currentPerson,
+                                                conflictDateKey: dateKey,
+                                                newAssignmentDateKey: swapDayKey,
+                                                subjectName: currentPerson
+                                            }),
+                                            nextMonthPerson,
+                                            swapPairId
+                                        );
                                         
                                         // IMPORTANT: Stop processing this conflict - swap found
                                         break;
@@ -8644,10 +8739,37 @@
                                 updatedAssignments[swapDayKey][groupNum] = currentPerson;
                                 
                                 // Store assignment reasons for BOTH people involved in the swap with swap pair ID
-                                const swapDateStr = new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                storeAssignmentReason(dateKey, groupNum, swapCandidate, 'swap', `Αλλαγή με ${currentPerson} (${currentDateStr})`, currentPerson, swapPairId);
-                                storeAssignmentReason(swapDayKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${swapCandidate} (${swapDateStr})`, swapCandidate, swapPairId);
+                                // Improved Greek reasons (day + date + where the conflicted person was assigned)
+                                storeAssignmentReason(
+                                    dateKey,
+                                    groupNum,
+                                    swapCandidate,
+                                    'swap',
+                                    buildSwapReasonGreek({
+                                        changedWithName: currentPerson,
+                                        conflictedPersonName: currentPerson,
+                                        conflictDateKey: dateKey,
+                                        newAssignmentDateKey: swapDayKey,
+                                        subjectName: swapCandidate
+                                    }),
+                                    currentPerson,
+                                    swapPairId
+                                );
+                                storeAssignmentReason(
+                                    swapDayKey,
+                                    groupNum,
+                                    currentPerson,
+                                    'swap',
+                                    buildSwapReasonGreek({
+                                        changedWithName: swapCandidate,
+                                        conflictedPersonName: currentPerson,
+                                        conflictDateKey: dateKey,
+                                        newAssignmentDateKey: swapDayKey,
+                                        subjectName: currentPerson
+                                    }),
+                                    swapCandidate,
+                                    swapPairId
+                                );
                                 
                                 // Mark both people as swapped to prevent re-swapping
                                 swappedPeopleSet.add(`${dateKey}:${groupNum}:${currentPerson}`);
@@ -10786,10 +10908,37 @@
                             normalAssignments[swapDayKey][groupNum] = currentPerson;
                             
                             // Store assignment reasons for BOTH people involved in the swap with swap pair ID
-                            const swapDateStr = new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                            const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                            storeAssignmentReason(dateKey, groupNum, swapCandidate, 'swap', `Αλλαγή με ${currentPerson} (${currentDateStr})`, currentPerson, swapPairId);
-                            storeAssignmentReason(swapDayKey, groupNum, currentPerson, 'swap', `Αλλαγή με ${swapCandidate} (${swapDateStr})`, swapCandidate, swapPairId);
+                            // Improved Greek reasons (day + date + where the conflicted person was assigned)
+                            storeAssignmentReason(
+                                dateKey,
+                                groupNum,
+                                swapCandidate,
+                                'swap',
+                                buildSwapReasonGreek({
+                                    changedWithName: currentPerson,
+                                    conflictedPersonName: currentPerson,
+                                    conflictDateKey: dateKey,
+                                    newAssignmentDateKey: swapDayKey,
+                                    subjectName: swapCandidate
+                                }),
+                                currentPerson,
+                                swapPairId
+                            );
+                            storeAssignmentReason(
+                                swapDayKey,
+                                groupNum,
+                                currentPerson,
+                                'swap',
+                                buildSwapReasonGreek({
+                                    changedWithName: swapCandidate,
+                                    conflictedPersonName: currentPerson,
+                                    conflictDateKey: dateKey,
+                                    newAssignmentDateKey: swapDayKey,
+                                    subjectName: currentPerson
+                                }),
+                                swapCandidate,
+                                swapPairId
+                            );
                             
                             // Mark both people as swapped to prevent re-swapping
                             swappedPeopleSet.add(`${dateKey}:${groupNum}:${currentPerson}`);
