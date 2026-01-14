@@ -7613,7 +7613,7 @@
                 const lastNormalRotationPositionsByMonth = calculationSteps.lastNormalRotationPositionsByMonth || {};
                 
                 console.log('[STEP 4] tempNormalAssignments keys:', Object.keys(tempNormalAssignments).length);
-                console.log('[STEP 4] lastNormalRotationPositions:', lastNormalRotationPositions);
+                console.log('[STEP 4] lastNormalRotationPositionsByMonth:', lastNormalRotationPositionsByMonth);
                 
                 // First, save normal assignments to assignments document (pre-logic)
                 if (Object.keys(tempNormalAssignments).length > 0) {
