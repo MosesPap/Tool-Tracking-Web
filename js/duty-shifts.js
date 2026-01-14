@@ -6415,10 +6415,6 @@
                                 }
                                 tempSpecialAssignments[dateKey][groupNum] = assignedPerson;
                                 
-                                // Track last rotation person for this group (store person name, not position)
-                                // This allows rotation to continue from where it left off in previous month
-                                lastSpecialRotationPositions[groupNum] = assignedPerson;
-                                
                                 // Advance rotation position for next date
                                 globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                             } else {
