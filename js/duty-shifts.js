@@ -12419,7 +12419,7 @@
                             // Check conflicts based on day type (matching calculation logic)
                             if (dayTypeCategory === 'weekend') {
                                 // For weekends: check if person has special holiday in the same month
-                                if (hasSpecialHolidayDutyInMonth(expectedPerson, groupNum, month, year)) {
+                                if (hasSpecialHolidayDutyInMonth(expectedPerson, groupNum, year, month)) {
                                     hasLegitimateConflict = true;
                                     // Find which special holiday in this month
                                     const firstDay = new Date(year, month, 1);
@@ -12567,7 +12567,6 @@
                         const swapOrSkipType = assignmentReason?.type || '';
 
                         // Determine why the EXPECTED person was skipped (missing vs special holiday in month, etc.)
-                        const isMissing = isPersonMissingOnDate(expectedPerson, groupNum, date);
                         let skippedReason = '';
                         if (isMissing) {
                             const mp = getPersonMissingPeriod(expectedPerson, groupNum, date);
