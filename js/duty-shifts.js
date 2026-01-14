@@ -12268,9 +12268,9 @@
             return null;
         }
 
-        // Helper: did this person have a SPECIAL HOLIDAY duty in the same month for this group?
-        // Used for explaining weekend "skips".
-        function hasSpecialHolidayDutyInMonth(person, groupNum, year, month) {
+        // Helper: return the SPECIAL HOLIDAY dateKey (YYYY-MM-DD) in the same month for this group, if any.
+        // Used for explaining weekend "skips" in the rotation-violations popup.
+        function getSpecialHolidayDutyDateInMonth(person, groupNum, year, month) {
             try {
                 const monthStart = new Date(year, month, 1);
                 const monthEnd = new Date(year, month + 1, 0);
@@ -12386,6 +12386,8 @@
                     
                     // Compare assigned vs expected
                     if (expectedPerson && assignedPerson !== expectedPerson) {
+                        // Always define isMissing for this mismatch (used later in multiple branches)
+                        const isMissing = isPersonMissingOnDate(expectedPerson, groupNum, date);
                         // Check if expected person is in the list
                         const expectedIndex = groupPeople.indexOf(expectedPerson);
                         const assignedIndex = groupPeople.indexOf(assignedPerson);
@@ -12397,8 +12399,6 @@
                             continue;
                         } else {
                             // Check why expected person was skipped - use the SAME logic as the calculation
-                            const isMissing = isPersonMissingOnDate(expectedPerson, groupNum, date);
-                            
                             // Get detailed information about conflicts based on day type
                             let conflictDetails = [];
                             let hasLegitimateConflict = false;
@@ -12419,7 +12419,7 @@
                             // Check conflicts based on day type (matching calculation logic)
                             if (dayTypeCategory === 'weekend') {
                                 // For weekends: check if person has special holiday in the same month
-                                if (hasSpecialHolidayDutyInMonth(expectedPerson, groupNum, year, month)) {
+                                if (hasSpecialHolidayDutyInMonth(expectedPerson, groupNum, month, year)) {
                                     hasLegitimateConflict = true;
                                     // Find which special holiday in this month
                                     const firstDay = new Date(year, month, 1);
@@ -12578,7 +12578,7 @@
                                 skippedReason = 'Κώλυμα/Απουσία';
                             }
                         } else if (dayTypeCategory === 'weekend') {
-                            const specialKey = hasSpecialHolidayDutyInMonth(expectedPerson, groupNum, year, month);
+                            const specialKey = getSpecialHolidayDutyDateInMonth(expectedPerson, groupNum, year, month);
                             if (specialKey) {
                                 const dd = new Date(specialKey + 'T00:00:00');
                                 skippedReason = `Ειδική αργία στον ίδιο μήνα (${getGreekDayName(dd)} ${dd.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })})`;
