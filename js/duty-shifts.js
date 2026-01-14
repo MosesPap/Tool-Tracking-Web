@@ -11612,7 +11612,7 @@
                 const disabledTitle = isCritical ? 'title="Αυτή η ανάθεση είναι κρίσιμη και δεν μπορεί να αλλάξει"' : '';
                 
                 // Add reason display below the person name
-                const reasonDisplay = reason ? `<div class="mt-1 small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${reason.reason}</div>` : '';
+                const reasonDisplay = reason ? `<div class="mt-2 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${reason.reason}</div>` : '';
                 
                 // Get all people from this group for dropdown
                 const groupData = groups[person.group] || {};
@@ -11631,7 +11631,7 @@
                 ).join('');
                 
                 content += `
-                    <div class="mb-2 p-2 border rounded ${criticalClass}" ${disabledTitle}>
+                    <div class="mb-2 p-2 border rounded duty-person-card ${criticalClass}" ${disabledTitle}>
                         <label class="form-label small text-muted">Ομάδα ${person.group}: ${groupName}${criticalLabel}${reasonBadge}</label>
                         <select class="form-select duty-person-select" 
                                 data-index="${index}" 
@@ -11727,7 +11727,7 @@
                     const swapDateStr = swap.swapDate ? new Date(swap.swapDate + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Άγνωστη';
                     
                     content += `
-                        <div class="p-2 mb-2 border rounded" style="border-color: ${swapColor.border} !important; background-color: ${swapColor.bg};">
+                        <div class="p-2 mb-2 border rounded swap-detail-card" style="border-color: ${swapColor.border} !important; background-color: ${swapColor.bg};">
                             <div class="d-flex align-items-center mb-1">
                                 <i class="fas fa-exchange-alt me-2" style="color: ${swapColor.border};"></i>
                                 <strong>Ομάδα ${swap.groupNum}:</strong>
