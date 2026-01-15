@@ -20,7 +20,7 @@
         let dutyAssignments = {};
         
         // Track skip/swap reasons for each assignment
-        // Structure: assignmentReasons[dateKey][groupNum][personName] = { type: 'skip'|'swap', reason: '...', swappedWith: '...' }
+        // Structure: assignmentReasons[dateKey][groupNum][personName] = { type: 'skip'|'swap', reason: '...', swappedWith: '...', swapPairId, meta? }
         let assignmentReasons = {};
         // Track critical assignments from last duties - these must NEVER be deleted
         // Format: { "2025-12-25": ["Person Name (Ομάδα 1)", ...], ... }
@@ -5293,7 +5293,7 @@
         }
         
         // Helper function to store assignment reason
-        function storeAssignmentReason(dateKey, groupNum, personName, type, reason, swappedWith = null, swapPairId = null) {
+        function storeAssignmentReason(dateKey, groupNum, personName, type, reason, swappedWith = null, swapPairId = null, meta = null) {
             if (!assignmentReasons[dateKey]) {
                 assignmentReasons[dateKey] = {};
             }
@@ -5304,7 +5304,8 @@
                 type: type, // 'skip' or 'swap'
                 reason: reason,
                 swappedWith: swappedWith,
-                swapPairId: swapPairId // For color coding swap pairs
+                swapPairId: swapPairId, // For color coding swap pairs
+                ...(meta ? { meta } : {})
             };
         }
 
@@ -8816,6 +8817,13 @@
                                 // Improved Greek reasons:
                                 // Use the ACTUAL conflict neighbor day (e.g. Fri) instead of the swap-execution day (e.g. Thu).
                                 const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, simulatedAssignments) || dateKey;
+                                const isCrossMonthSwap = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
+                                const swapMeta = isCrossMonthSwap ? {
+                                    isCrossMonth: true,
+                                    originDayKey: dateKey,
+                                    swapDayKey: swapDayKey,
+                                    conflictDateKey: conflictNeighborKey
+                                } : null;
                                 storeAssignmentReason(
                                     dateKey,
                                     groupNum,
@@ -8829,7 +8837,8 @@
                                         subjectName: swapCandidate
                                     }),
                                     currentPerson,
-                                    swapPairId
+                                    swapPairId,
+                                    swapMeta
                                 );
                                 storeAssignmentReason(
                                     swapDayKey,
@@ -8844,7 +8853,8 @@
                                         subjectName: currentPerson
                                     }),
                                     swapCandidate,
-                                    swapPairId
+                                    swapPairId,
+                                    swapMeta
                                 );
                                 
                                 // Mark both people as swapped to prevent re-swapping
@@ -10987,6 +10997,13 @@
                                 // Improved Greek reasons:
                                 // Use the ACTUAL conflict neighbor day (e.g. Fri) instead of the swap-execution day (e.g. Thu).
                                 const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, simulatedAssignments) || dateKey;
+                            const isCrossMonthSwap = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
+                            const swapMeta = isCrossMonthSwap ? {
+                                isCrossMonth: true,
+                                originDayKey: dateKey,
+                                swapDayKey: swapDayKey,
+                                conflictDateKey: conflictNeighborKey
+                            } : null;
                             storeAssignmentReason(
                                 dateKey,
                                 groupNum,
@@ -11000,7 +11017,8 @@
                                     subjectName: swapCandidate
                                 }),
                                 currentPerson,
-                                swapPairId
+                                swapPairId,
+                                swapMeta
                             );
                             storeAssignmentReason(
                                 swapDayKey,
@@ -11015,7 +11033,8 @@
                                     subjectName: currentPerson
                                 }),
                                 swapCandidate,
-                                swapPairId
+                                swapPairId,
+                                swapMeta
                             );
                             
                             // Mark both people as swapped to prevent re-swapping
@@ -12368,7 +12387,8 @@
                     
                     // Calculate rotation position based on days since February 2026
                     const rotationPosition = getRotationPosition(date, dayTypeCategory, groupNum) % rotationDays;
-                    let expectedPerson = groupPeople[rotationPosition];
+                    const baseExpectedPerson = groupPeople[rotationPosition];
+                    let expectedPerson = baseExpectedPerson;
                     
                     // If expected person is missing, find next in rotation
                     if (expectedPerson && isPersonMissingOnDate(expectedPerson, groupNum, date)) {
@@ -12382,6 +12402,29 @@
                     }
                     }
                     
+                    // If we had to skip the base expected person due to missing, show it explicitly (even if assignments follow the adjusted rotation)
+                    if (baseExpectedPerson && baseExpectedPerson !== expectedPerson && isPersonMissingOnDate(baseExpectedPerson, groupNum, date)) {
+                        const mp = getPersonMissingPeriod(baseExpectedPerson, groupNum, date);
+                        const startStr = mp ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                        const endStr = mp ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                        const missingReason = mp ? `Κώλυμα/Απουσία (${startStr}–${endStr})` : 'Κώλυμα/Απουσία';
+                        const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
+                        const swapOrSkipReasonText = assignmentReason?.reason || '';
+
+                        violations.push({
+                            date: dayKey,
+                            dateFormatted: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                            group: groupNum,
+                            groupName: getGroupName(groupNum),
+                            assignedPerson: assignedPerson,
+                            expectedPerson: baseExpectedPerson,
+                            conflicts: '',
+                            swapReason: swapOrSkipReasonText || `Παράλειψη λόγω ${missingReason}`,
+                            skippedReason: missingReason,
+                            dayType: getDayTypeLabel(dayType)
+                        });
+                    }
+
                     let violationReason = '';
                     
                     // Compare assigned vs expected
@@ -12613,6 +12656,69 @@
                 }
             }
             
+            // Also show cross-month swaps that were created by (or related to) the viewed month.
+            // These swaps are stored on the swap day key (often in the next month), so without this they won't appear.
+            try {
+                const viewMonthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`; // YYYY-MM
+                const seenCrossMonth = new Set(); // dateKey|group|person
+
+                for (const dateKey in assignmentReasons) {
+                    const dateReasons = assignmentReasons[dateKey];
+                    if (!dateReasons) continue;
+
+                    for (const groupNumStr in dateReasons) {
+                        const groupReasons = dateReasons[groupNumStr];
+                        if (!groupReasons) continue;
+                        const groupNum = parseInt(groupNumStr);
+                        if (!groupNum) continue;
+
+                        for (const personName in groupReasons) {
+                            const r = groupReasons[personName];
+                            const meta = r?.meta;
+                            if (!meta?.isCrossMonth) continue;
+
+                            const originDayKey = meta.originDayKey;
+                            const swapDayKey = meta.swapDayKey || dateKey;
+                            const conflictDateKey = meta.conflictDateKey || originDayKey || dateKey;
+
+                            const relatesToViewedMonth =
+                                (originDayKey && originDayKey.startsWith(viewMonthPrefix + '-')) ||
+                                dateKey.startsWith(viewMonthPrefix + '-');
+
+                            if (!relatesToViewedMonth) continue;
+
+                            // Only add rows for the swap day that lies OUTSIDE the viewed month (that's the missing part)
+                            if (dateKey.startsWith(viewMonthPrefix + '-')) continue;
+
+                            const uniqueKey = `${dateKey}|${groupNum}|${personName}`;
+                            if (seenCrossMonth.has(uniqueKey)) continue;
+                            seenCrossMonth.add(uniqueKey);
+
+                            const d = new Date(dateKey + 'T00:00:00');
+                            const originStr = originDayKey ? new Date(originDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
+                            const conflictStr = conflictDateKey ? new Date(conflictDateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
+
+                            violations.push({
+                                date: dateKey,
+                                dateFormatted: isNaN(d.getTime())
+                                    ? dateKey
+                                    : d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                group: groupNum,
+                                groupName: getGroupName(groupNum),
+                                assignedPerson: personName,
+                                expectedPerson: '(Δια-μήνα swap)',
+                                conflicts: `Από προηγούμενο μήνα: ${originStr} | Σύγκρουση: ${conflictStr}`,
+                                swapReason: r?.reason || '',
+                                skippedReason: '',
+                                dayType: getDayTypeLabel(getDayType(d))
+                            });
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('Error collecting cross-month swap entries for violations popup:', e);
+            }
+
             // Display violations in modal
             displayRotationViolations(violations);
         }
