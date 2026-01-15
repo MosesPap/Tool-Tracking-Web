@@ -12718,7 +12718,7 @@
                                 group: groupNum,
                                 groupName: getGroupName(groupNum),
                                 assignedPerson: personName,
-                                expectedPerson: '(Δια-μήνα swap)',
+                                expectedPerson: r?.swappedWith || '(Swap)',
                                 conflicts: `Από προηγούμενο μήνα: ${originStr} | Σύγκρουση: ${conflictStr}`,
                                 swapReason: r?.reason || '',
                                 skippedReason: '',
