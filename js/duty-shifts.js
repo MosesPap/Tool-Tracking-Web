@@ -12388,6 +12388,9 @@
                     if (expectedPerson && assignedPerson !== expectedPerson) {
                         // Always define isMissing for this mismatch (used later in multiple branches)
                         const isMissing = isPersonMissingOnDate(expectedPerson, groupNum, date);
+                        // Always define conflictDetails in this mismatch scope (used later for table output)
+                        let conflictDetails = [];
+                        let hasLegitimateConflict = false;
                         // Check if expected person is in the list
                         const expectedIndex = groupPeople.indexOf(expectedPerson);
                         const assignedIndex = groupPeople.indexOf(assignedPerson);
@@ -12400,8 +12403,8 @@
                         } else {
                             // Check why expected person was skipped - use the SAME logic as the calculation
                             // Get detailed information about conflicts based on day type
-                            let conflictDetails = [];
-                            let hasLegitimateConflict = false;
+                            conflictDetails = [];
+                            hasLegitimateConflict = false;
                             
                             // Check if person is missing
                             if (isMissing) {
