@@ -12429,6 +12429,12 @@
                     
                     // Compare assigned vs expected
                     if (expectedPerson && assignedPerson !== expectedPerson) {
+                        // Pull swap/skip reason from assignmentReasons (same text shown in day-details popup)
+                        // We need this early because it may indicate a legitimate "skip" even when we can't re-derive the rule.
+                        const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
+                        const swapOrSkipReasonText = assignmentReason?.reason || '';
+                        const swapOrSkipType = assignmentReason?.type || '';
+
                         // Always define isMissing for this mismatch (used later in multiple branches)
                         const isMissing = isPersonMissingOnDate(expectedPerson, groupNum, date);
                         // Always define conflictDetails in this mismatch scope (used later for table output)
@@ -12480,6 +12486,12 @@
                                         }
                                         checkDate.setDate(checkDate.getDate() + 1);
                                     }
+                                }
+                                // If we still couldn't re-derive, but the saved reason indicates a special-holiday-in-month skip,
+                                // treat it as legitimate so the popup can show it.
+                                if (!hasLegitimateConflict && swapOrSkipType === 'skip' && swapOrSkipReasonText.includes('ειδική αργία')) {
+                                    hasLegitimateConflict = true;
+                                    conflictDetails.push('Παράλειψη λόγω ειδικής αργίας στον ίδιο μήνα (από λόγους ανάθεσης)');
                                 }
                             } else if (dayTypeCategory === 'semi') {
                                 // For semi-normal: check if expected person has consecutive weekend or special holiday
@@ -12606,11 +12618,6 @@
                                 continue; // Skip adding this to violations
                             }
                         }
-                        
-                        // Pull swap/skip reason from assignmentReasons (same text shown in day-details popup)
-                        const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
-                        const swapOrSkipReasonText = assignmentReason?.reason || '';
-                        const swapOrSkipType = assignmentReason?.type || '';
 
                         // Determine why the EXPECTED person was skipped (missing vs special holiday in month, etc.)
                         let skippedReason = '';
@@ -12629,7 +12636,10 @@
                                 const dd = new Date(specialKey + 'T00:00:00');
                                 skippedReason = `Ειδική αργία στον ίδιο μήνα (${getGreekDayName(dd)} ${dd.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })})`;
                             } else {
-                                skippedReason = 'Παράλειψη (πιθανή ειδική αργία/περιορισμός μήνα)';
+                                // Fallback: if the stored reason indicates special-holiday skip, show it explicitly
+                                skippedReason = swapOrSkipReasonText.includes('ειδική αργία')
+                                    ? 'Ειδική αργία στον ίδιο μήνα'
+                                    : 'Παράλειψη (πιθανή ειδική αργία/περιορισμός μήνα)';
                             }
                         } else if (swapOrSkipType === 'skip') {
                             skippedReason = 'Παράλειψη';
