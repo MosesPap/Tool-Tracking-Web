@@ -12666,16 +12666,19 @@
                 }
             }
             
-            // Also show cross-month swaps related to the viewed month.
-            // These swaps are stored on the swap day key (often in the next month). We want them visible in BOTH months:
-            // - when viewing the origin month (show the next-month swap date row)
-            // - when viewing the swap month (show the swap date row too)
+            // Also show cross-month swaps that fall INSIDE the viewed month.
+            // Cross-month swaps are stored on the swap day key (often in the next month).
+            // We intentionally keep the popup scoped to the current month, so:
+            // - viewing Feb will NOT show March dates
+            // - viewing March WILL show the March swap date row
             try {
                 const viewMonthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`; // YYYY-MM
                 const seenCrossMonth = new Set(); // dateKey|group|person
                 const existingRowKeys = new Set(violations.map(v => `${v.date}|${v.group}|${v.assignedPerson}`));
 
                 for (const dateKey in assignmentReasons) {
+                    // Only show rows for dates in the viewed month
+                    if (!dateKey.startsWith(viewMonthPrefix + '-')) continue;
                     const dateReasons = assignmentReasons[dateKey];
                     if (!dateReasons) continue;
 
@@ -12693,12 +12696,7 @@
                             const originDayKey = meta.originDayKey;
                             const swapDayKey = meta.swapDayKey || dateKey;
                             const conflictDateKey = meta.conflictDateKey || originDayKey || dateKey;
-
-                            const relatesToViewedMonth =
-                                (originDayKey && originDayKey.startsWith(viewMonthPrefix + '-')) ||
-                                dateKey.startsWith(viewMonthPrefix + '-');
-
-                            if (!relatesToViewedMonth) continue;
+                            // (dateKey is already within view month due to the filter above)
 
                             const uniqueKey = `${dateKey}|${groupNum}|${personName}`;
                             if (seenCrossMonth.has(uniqueKey)) continue;
