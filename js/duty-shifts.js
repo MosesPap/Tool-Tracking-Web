@@ -12666,11 +12666,14 @@
                 }
             }
             
-            // Also show cross-month swaps that were created by (or related to) the viewed month.
-            // These swaps are stored on the swap day key (often in the next month), so without this they won't appear.
+            // Also show cross-month swaps related to the viewed month.
+            // These swaps are stored on the swap day key (often in the next month). We want them visible in BOTH months:
+            // - when viewing the origin month (show the next-month swap date row)
+            // - when viewing the swap month (show the swap date row too)
             try {
                 const viewMonthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`; // YYYY-MM
                 const seenCrossMonth = new Set(); // dateKey|group|person
+                const existingRowKeys = new Set(violations.map(v => `${v.date}|${v.group}|${v.assignedPerson}`));
 
                 for (const dateKey in assignmentReasons) {
                     const dateReasons = assignmentReasons[dateKey];
@@ -12697,12 +12700,11 @@
 
                             if (!relatesToViewedMonth) continue;
 
-                            // Only add rows for the swap day that lies OUTSIDE the viewed month (that's the missing part)
-                            if (dateKey.startsWith(viewMonthPrefix + '-')) continue;
-
                             const uniqueKey = `${dateKey}|${groupNum}|${personName}`;
                             if (seenCrossMonth.has(uniqueKey)) continue;
                             seenCrossMonth.add(uniqueKey);
+                            if (existingRowKeys.has(uniqueKey)) continue; // already present via normal mismatch logic
+                            existingRowKeys.add(uniqueKey);
 
                             const d = new Date(dateKey + 'T00:00:00');
                             const originStr = originDayKey ? new Date(originDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
