@@ -5325,7 +5325,7 @@
             const conflict = formatGreekDayDate(conflictDateKey);
             const assigned = formatGreekDayDate(newAssignmentDateKey);
             const prefix = (subjectName && conflictedPersonName && subjectName === conflictedPersonName)
-                ? `Αλλάχθηκε με ${changedWithName} επειδή είχε σύγκρουση την ${conflict.dayName} ${conflict.dateStr}`
+                ? `Αλλάχθηκε με ${changedWithName} επειδή είχε ο ${conflictedPersonName} σύγκρουση την ${conflict.dayName} ${conflict.dateStr}`
                 : `Έγινε η αλλαγή γιατι ο ${conflictedPersonName} είχε σύγκρουση την ${conflict.dayName} ${conflict.dateStr}`;
             return `${prefix}, και ανατέθηκε την ${assigned.dayName} ${assigned.dateStr}.`;
         }
