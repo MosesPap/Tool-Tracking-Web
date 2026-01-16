@@ -6423,6 +6423,8 @@
                 const tempSpecialAssignments = {}; // dateKey -> { groupNum -> personName }
                 // Track rotation persons (who SHOULD be assigned according to rotation, before missing/skip)
                 const specialRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
+                // For missing replacement: keep a simulated set of special assignments so hasConsecutiveDuty can validate neighbors.
+                const simulatedSpecialAssignmentsForConflict = {}; // monthKey -> { groupNum -> Set(person) }
                 
                 // Initialize global rotation positions for special holidays (once per group, before processing dates)
                 const globalSpecialRotationPosition = {}; // groupNum -> global position (continues across months)
@@ -6471,6 +6473,10 @@
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     const dayName = getGreekDayName(date);
+                    const monthKeyForConflict = `${date.getFullYear()}-${date.getMonth()}`;
+                    if (!simulatedSpecialAssignmentsForConflict[monthKeyForConflict]) {
+                        simulatedSpecialAssignmentsForConflict[monthKeyForConflict] = {};
+                    }
                     
                     // Get holiday name
                     let holidayName = '';
@@ -6523,15 +6529,18 @@
                             
                             // Check if assigned person is missing, if so find next in rotation
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                                // Find next person in rotation who is not missing
-                                for (let offset = 1; offset < rotationDays; offset++) {
-                                    const nextIndex = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[nextIndex];
-                                    if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
-                                        assignedPerson = candidate;
-                                        rotationPosition = nextIndex;
-                                        break;
-                                    }
+                                const simulatedAssignments = { special: simulatedSpecialAssignmentsForConflict };
+                                const res = findNextEligiblePersonAfterMissing({
+                                    dateKey,
+                                    date,
+                                    groupNum,
+                                    groupPeople,
+                                    startRotationPosition: rotationPosition,
+                                    simulatedAssignments
+                                });
+                                if (res) {
+                                    assignedPerson = res.person;
+                                    rotationPosition = res.index;
                                 }
                             }
                             
@@ -6541,6 +6550,12 @@
                                     tempSpecialAssignments[dateKey] = {};
                                 }
                                 tempSpecialAssignments[dateKey][groupNum] = assignedPerson;
+
+                                // Track in simulated set for neighbor-conflict checking
+                                if (!simulatedSpecialAssignmentsForConflict[monthKeyForConflict][groupNum]) {
+                                    simulatedSpecialAssignmentsForConflict[monthKeyForConflict][groupNum] = new Set();
+                                }
+                                simulatedSpecialAssignmentsForConflict[monthKeyForConflict][groupNum].add(assignedPerson);
                                 
                                 // Advance rotation position for next date
                                 globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
@@ -9183,13 +9198,16 @@
                                 
                                 // Check if assigned person is missing, if so find next in rotation
                                 if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, dateIterator)) {
-                                    for (let offset = 1; offset < rotationDays; offset++) {
-                                        const nextIndex = (rotationPosition + offset) % rotationDays;
-                                        const candidate = groupPeople[nextIndex];
-                                        if (candidate && !isPersonMissingOnDate(candidate, groupNum, dateIterator)) {
-                                            assignedPerson = candidate;
-                                            break;
-                                        }
+                                    const res = findNextEligiblePersonAfterMissing({
+                                        dateKey,
+                                        date: dateIterator,
+                                        groupNum,
+                                        groupPeople,
+                                        startRotationPosition: rotationPosition,
+                                        simulatedAssignments: null // conversion path: keep missing-only (no full simulated sets here)
+                                    });
+                                    if (res) {
+                                        assignedPerson = res.person;
                                     }
                                 }
                                 
@@ -9601,15 +9619,21 @@
                             
                             // Check if assigned person is missing, if so find next in rotation
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                                // Find next person in rotation who is not missing
-                                for (let offset = 1; offset < rotationDays; offset++) {
-                                    const nextIndex = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[nextIndex];
-                                    if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
-                                        assignedPerson = candidate;
-                                        rotationPosition = nextIndex;
-                                        break;
-                                    }
+                                const simulatedAssignments = {
+                                    special: simulatedSpecialAssignments,
+                                    weekend: simulatedWeekendAssignments
+                                };
+                                const res = findNextEligiblePersonAfterMissing({
+                                    dateKey,
+                                    date,
+                                    groupNum,
+                                    groupPeople,
+                                    startRotationPosition: rotationPosition,
+                                    simulatedAssignments
+                                });
+                                if (res) {
+                                    assignedPerson = res.person;
+                                    rotationPosition = res.index;
                                 }
                             }
                             
@@ -9820,16 +9844,22 @@
                             
                             // Check if assigned person is missing, if so find next in rotation
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                                // Find next person in rotation who is not missing
-                                for (let offset = 1; offset < rotationDays; offset++) {
-                                    const nextIndex = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[nextIndex];
-                                    if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
-                                        assignedPerson = candidate;
-                                        rotationPosition = nextIndex;
-                                        break;
-                                    }
-                            }
+                                const simulatedAssignments = {
+                                    special: simulatedSpecialAssignments,
+                                    weekend: simulatedWeekendAssignments
+                                };
+                                const res = findNextEligiblePersonAfterMissing({
+                                    dateKey,
+                                    date,
+                                    groupNum,
+                                    groupPeople,
+                                    startRotationPosition: rotationPosition,
+                                    simulatedAssignments
+                                });
+                                if (res) {
+                                    assignedPerson = res.person;
+                                    rotationPosition = res.index;
+                                }
                         }
                         
                         // Advance rotation position (always advance based on rotation person, not assigned person)
@@ -9982,15 +10012,22 @@
                                 
                                 // Check if assigned person is missing, if so find next in rotation
                                 if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                                    // Find next person in rotation who is not missing
-                                    for (let offset = 1; offset < rotationDays; offset++) {
-                                        const nextIndex = (rotationPosition + offset) % rotationDays;
-                                        const candidate = groupPeople[nextIndex];
-                                        if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
-                                            assignedPerson = candidate;
-                                            rotationPosition = nextIndex;
-                                            break;
-                                        }
+                                    const simulatedAssignments = {
+                                        special: simulatedSpecialAssignments,
+                                        weekend: simulatedWeekendAssignments,
+                                        semi: semiAssignments
+                                    };
+                                    const res = findNextEligiblePersonAfterMissing({
+                                        dateKey,
+                                        date,
+                                        groupNum,
+                                        groupPeople,
+                                        startRotationPosition: rotationPosition,
+                                        simulatedAssignments
+                                    });
+                                    if (res) {
+                                        assignedPerson = res.person;
+                                        rotationPosition = res.index;
                                     }
                                     }
                                     
@@ -10224,15 +10261,23 @@
                         
                             // Check if assigned person is missing, if so find next in rotation
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                                // Find next person in rotation who is not missing
-                                for (let offset = 1; offset < rotationDays; offset++) {
-                                    const nextIndex = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[nextIndex];
-                                    if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
-                                        assignedPerson = candidate;
-                                        rotationPosition = nextIndex;
-                                        break;
-                                    }
+                                // In preview fallback, use improved missing replacement that also validates conflicts
+                                // against already-known assignments (special + weekend).
+                                const simulatedAssignments = {
+                                    special: simulatedSpecialAssignments,
+                                    weekend: simulatedWeekendAssignments
+                                };
+                                const res = findNextEligiblePersonAfterMissing({
+                                    dateKey,
+                                    date,
+                                    groupNum,
+                                    groupPeople,
+                                    startRotationPosition: rotationPosition,
+                                    simulatedAssignments
+                                });
+                                if (res) {
+                                    assignedPerson = res.person;
+                                    rotationPosition = res.index;
                                 }
                             }
                             
@@ -10523,15 +10568,25 @@
                                 // Swap logic will run when Next is pressed
                                 // Check if assigned person is missing, if so find next in rotation
                                 if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
-                                    // Find next person in rotation who is not missing
-                                    for (let offset = 1; offset < rotationDays; offset++) {
-                                        const nextIndex = (rotationPosition + offset) % rotationDays;
-                                        const candidate = groupPeople[nextIndex];
-                                        if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
-                                            assignedPerson = candidate;
-                                            rotationPosition = nextIndex;
-                                            break;
-                                        }
+                                    const simulatedAssignments = {
+                                        special: simulatedSpecialAssignments,
+                                        weekend: simulatedWeekendAssignments,
+                                        semi: simulatedSemiAssignments,
+                                        normal: normalAssignments,
+                                        normalRotationPositions: globalNormalRotationPosition
+                                    };
+                                    const res = findNextEligiblePersonAfterMissing({
+                                        dateKey,
+                                        date,
+                                        groupNum,
+                                        groupPeople,
+                                        startRotationPosition: rotationPosition,
+                                        simulatedAssignments,
+                                        alreadyAssignedSet: assignedPeoplePreview?.[monthKey]?.[groupNum] || null
+                                    });
+                                    if (res) {
+                                        assignedPerson = res.person;
+                                        rotationPosition = res.index;
                                     }
                                 }
                                     
@@ -12009,6 +12064,33 @@
                 const end = new Date(period.end + 'T00:00:00');
                 return checkDate >= start && checkDate <= end;
             });
+        }
+
+        // When the rotation-selected person is missing, pick the next person in rotation
+        // BUT also validate consecutive-duty conflicts (before/after) and cross-month (via hasConsecutiveDuty).
+        // - startRotationPosition: the index of the rotation-selected person
+        // - alreadyAssignedSet: optional Set to prevent duplicates (used in preview normal logic)
+        function findNextEligiblePersonAfterMissing({
+            dateKey,
+            date,
+            groupNum,
+            groupPeople,
+            startRotationPosition,
+            simulatedAssignments = null,
+            alreadyAssignedSet = null
+        }) {
+            if (!Array.isArray(groupPeople) || groupPeople.length === 0) return null;
+            const rotationDays = groupPeople.length;
+            for (let offset = 1; offset < rotationDays; offset++) {
+                const idx = (startRotationPosition + offset) % rotationDays;
+                const candidate = groupPeople[idx];
+                if (!candidate) continue;
+                if (alreadyAssignedSet && alreadyAssignedSet.has(candidate)) continue;
+                if (isPersonMissingOnDate(candidate, groupNum, date)) continue;
+                if (simulatedAssignments && hasConsecutiveDuty(dateKey, candidate, groupNum, simulatedAssignments)) continue;
+                return { person: candidate, index: idx };
+            }
+            return null;
         }
 
         // Open missing period modal
