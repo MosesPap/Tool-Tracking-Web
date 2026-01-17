@@ -6769,13 +6769,138 @@
             stepContent.innerHTML = html;
         }
 
+        // Step 1 results modal: show baseline vs computed changes (missing replacements) for special holidays
+        function showSpecialHolidayResultsAndProceed() {
+            try {
+                const dayTypeLists = calculationSteps.dayTypeLists || { special: [] };
+                const specialHolidays = (dayTypeLists.special || []).slice().sort();
+                const baselineByDate = calculationSteps.tempSpecialBaselineAssignments || {};
+                const computedByDate = calculationSteps.tempSpecialAssignments || {};
+
+                // Build rows where baseline != computed
+                const changes = [];
+                for (const dateKey of specialHolidays) {
+                    const date = new Date(dateKey + 'T00:00:00');
+                    if (isNaN(date.getTime())) continue;
+
+                    // Holiday name (same logic as Step 1 table)
+                    let holidayName = '';
+                    const year = date.getFullYear();
+                    const month = date.getMonth() + 1;
+                    const day = date.getDate();
+                    for (const holidayDef of recurringSpecialHolidays) {
+                        if (holidayDef.type === 'fixed' && holidayDef.month === month && holidayDef.day === day) {
+                            holidayName = holidayDef.name;
+                            break;
+                        } else if (holidayDef.type === 'easter-relative') {
+                            const orthodoxHolidays = calculateOrthodoxHolidays(year);
+                            const easterDate = orthodoxHolidays.easterSunday;
+                            const holidayDate = new Date(easterDate);
+                            holidayDate.setDate(holidayDate.getDate() + (holidayDef.offset || 0));
+                            if (formatDateKey(holidayDate) === dateKey) {
+                                holidayName = holidayDef.name;
+                                break;
+                            }
+                        }
+                    }
+
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        const base = baselineByDate?.[dateKey]?.[groupNum] || null;
+                        const comp = computedByDate?.[dateKey]?.[groupNum] || null;
+                        if (!base || !comp) continue;
+                        if (base === comp) continue;
+
+                        let reason = '';
+                        if (isPersonMissingOnDate(base, groupNum, date)) {
+                            const mp = getPersonMissingPeriod(base, groupNum, date);
+                            const startStr = mp ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                            const endStr = mp ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                            reason = mp ? `Κώλυμα/Απουσία (${startStr}–${endStr})` : 'Κώλυμα/Απουσία';
+                        } else {
+                            reason = 'Αλλαγή (κανόνας/σύγκρουση)';
+                        }
+
+                        changes.push({
+                            dateKey,
+                            dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                            dayName: getGreekDayName(date),
+                            holidayName: holidayName || 'Ειδική Αργία',
+                            groupNum,
+                            groupName: getGroupName(groupNum),
+                            baseline: base,
+                            computed: comp,
+                            reason
+                        });
+                    }
+                }
+
+                let message = '';
+                if (changes.length === 0) {
+                    message = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>Καμία αλλαγή!</strong><br>Δεν βρέθηκαν αντικαταστάσεις λόγω κωλύματος στις ειδικές αργίες.</div>';
+                } else {
+                    message = `<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Βρέθηκαν ${changes.length} αντικαταστάσεις στις ειδικές αργίες:</strong></div>`;
+                    message += '<div class="table-responsive"><table class="table table-sm table-bordered">';
+                    message += '<thead><tr><th>Ημερομηνία</th><th>Αργία</th><th>Ομάδα</th><th>Baseline</th><th>Computed</th><th>Λόγος</th></tr></thead><tbody>';
+                    for (const c of changes) {
+                        message += `<tr>
+                            <td>${c.dayName} ${c.dateStr}</td>
+                            <td>${c.holidayName}</td>
+                            <td>${c.groupName}</td>
+                            <td><strong>${c.baseline}</strong></td>
+                            <td><strong>${c.computed}</strong></td>
+                            <td>${c.reason}</td>
+                        </tr>`;
+                    }
+                    message += '</tbody></table></div>';
+                }
+
+                const modalHtml = `
+                    <div class="modal fade" id="specialHolidayResultsModal" tabindex="-1">
+                        <div class="modal-dialog modal-xl">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title"><i class="fas fa-star me-2"></i>Αποτελέσματα Ειδικών Αργιών</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    ${message}
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" id="specialHolidayCancelButton" data-bs-dismiss="modal">Ακύρωση</button>
+                                    <button type="button" class="btn btn-primary" id="specialHolidayOkButton" data-bs-dismiss="modal">OK</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                const existingModal = document.getElementById('specialHolidayResultsModal');
+                if (existingModal) existingModal.remove();
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+                const modal = new bootstrap.Modal(document.getElementById('specialHolidayResultsModal'));
+                modal.show();
+
+                const okButton = document.getElementById('specialHolidayOkButton');
+                if (okButton) {
+                    okButton.addEventListener('click', async function() {
+                        await saveStep1_SpecialHolidays();
+                        calculationSteps.currentStep = 2;
+                        renderCurrentStep();
+                    });
+                }
+            } catch (error) {
+                console.error('Error showing special holiday results:', error);
+                alert('Σφάλμα κατά την εμφάνιση αποτελεσμάτων ειδικών αργιών: ' + error.message);
+            }
+        }
+
         // Navigation functions
         async function goToNextStep() {
             // If moving from Step 1 (Special Holidays), save assignments to Firestore
             if (calculationSteps.currentStep === 1) {
-                await saveStep1_SpecialHolidays();
-                calculationSteps.currentStep++;
-                renderCurrentStep();
+                // Show results window first; save + proceed only after OK
+                showSpecialHolidayResultsAndProceed();
                 return;
             }
             
