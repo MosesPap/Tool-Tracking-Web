@@ -4875,11 +4875,31 @@
                             const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                             const nameOnly = part.replace(/\s*\(Ομάδα\s*\d+\)\s*/g, '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
                             let underline = false;
+                            let isSwap = false;
+                            let swapStyle = '';
                             if (m) {
                                 const personName = m[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
                                 const g = parseInt(m[2], 10);
                                 if (personName && g >= 1 && g <= 4) {
                                     const r = getAssignmentReason(key, g, personName);
+                                    if (r && r.type === 'swap') {
+                                        isSwap = true;
+                                        // Colorize swap borders by swapPairId (matches earlier swap palette concept)
+                                        const swapColors = [
+                                            { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.12)' },
+                                            { border: '#00E676', bg: 'rgba(0, 230, 118, 0.12)' },
+                                            { border: '#FFD600', bg: 'rgba(255, 214, 0, 0.12)' },
+                                            { border: '#00B0FF', bg: 'rgba(0, 176, 255, 0.12)' },
+                                            { border: '#D500F9', bg: 'rgba(213, 0, 249, 0.12)' },
+                                            { border: '#FF6D00', bg: 'rgba(255, 109, 0, 0.12)' },
+                                            { border: '#00E5FF', bg: 'rgba(0, 229, 255, 0.12)' },
+                                            { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.12)' }
+                                        ];
+                                        const pidRaw = r.swapPairId;
+                                        const pid = typeof pidRaw === 'number' ? pidRaw : parseInt(pidRaw, 10);
+                                        const c = swapColors[(isNaN(pid) ? 0 : pid) % swapColors.length];
+                                        swapStyle = `border: 2px solid ${c.border}; background-color: ${c.bg};`;
+                                    }
                                     if (r && r.type === 'skip') {
                                         const txt = (r.reason || '').toString().toLowerCase();
                                         if (txt.includes('κώλυμα') || txt.includes('απουσία') || txt.includes('ειδική αργία')) {
@@ -4901,7 +4921,8 @@
                                     }
                                 }
                             }
-                            displayAssignmentHtml += `<div class="duty-person${underline ? ' duty-person-replacement' : ''}">${nameOnly}</div>`;
+                            const cls = isSwap ? 'duty-person-swapped' : 'duty-person';
+                            displayAssignmentHtml += `<div class="${cls}${underline ? ' duty-person-replacement' : ''}" ${swapStyle ? `style="${swapStyle}"` : ''}>${nameOnly}</div>`;
                         }
                         // Optional: show a small marker if there are reasons on this date (without heavy per-person checks)
                         if (shouldShowHeavyIndicators && assignmentReasons[key]) {
