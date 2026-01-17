@@ -70,6 +70,20 @@
             return out;
         }
 
+        function buildBaselineComputedCellHtml(baselinePerson, computedPerson, computedDaysCountInfo = '', computedLastDutyInfo = '') {
+            const base = baselinePerson || '-';
+            const comp = computedPerson || '-';
+            const changed = base !== '-' && comp !== '-' && base !== comp;
+            const baseLabel = `<div class="small text-muted">Baseline</div>`;
+            const compLabel = `<div class="small text-primary">Computed${changed ? ' (changed)' : ''}</div>`;
+            return `
+                <div><strong>${base}</strong></div>
+                ${baseLabel}
+                <div class="mt-1">${comp}${computedDaysCountInfo || ''}${computedLastDutyInfo || ''}</div>
+                ${compLabel}
+            `;
+        }
+
         function getPreviousMonthKeyFromDate(date) {
             const d = new Date(date.getFullYear(), date.getMonth(), 1);
             d.setMonth(d.getMonth() - 1);
@@ -6684,7 +6698,7 @@
                                 }
                             }
                             
-                            html += `<td>${assignedPerson || '-'}${daysCountInfo}${lastDutyInfo}</td>`;
+                            html += `<td>${buildBaselineComputedCellHtml(rotationPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
                     
@@ -9803,7 +9817,7 @@
                                 }
                             }
                             
-                            html += `<td>${assignedPerson || '-'}${daysCountInfo}${lastDutyInfo}</td>`;
+                            html += `<td>${buildBaselineComputedCellHtml(rotationPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
                     
@@ -10199,7 +10213,7 @@
                                 }
                             }
                             
-                            html += `<td>${assignedPerson || '-'}${daysCountInfo}${lastDutyInfo}</td>`;
+                            html += `<td>${buildBaselineComputedCellHtml(rotationPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
                     
@@ -10785,7 +10799,7 @@
                                 }
                             }
                             
-                            html += `<td>${assignedPerson || '-'}${daysCountInfo}${lastDutyInfo}</td>`;
+                            html += `<td>${buildBaselineComputedCellHtml(rotationPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
                     
@@ -11282,7 +11296,8 @@
                                 }
                             }
                             
-                                rowHtml += `<td>${assignedPerson || '-'}${daysCountInfo}${lastDutyInfo}</td>`;
+                                const baselinePerson = normalRotationPersons?.[dateKey]?.[groupNum] || null;
+                                rowHtml += `<td>${buildBaselineComputedCellHtml(baselinePerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
                     
