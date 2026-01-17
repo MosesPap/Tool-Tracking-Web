@@ -3353,59 +3353,113 @@
             return null;
         }
 
-        // Find same-date matches: A(fromGroup) and B(toGroup) assigned on the same date.
-        // If no match exists in the current month, searches previous months (baseline docs first).
-        // Returns: { special: [...], weekend: [...], semi: [...], normal: [...] }
+        // Transfer auto-positioning reference date selection (per duty type):
+        // 1) Find the LAST date in the reference month where Person A appears in the *baseline rotation* (for that duty type).
+        // 2) If none, search previous months (month-by-month backwards) for the most recent baseline date.
+        // 3) If still none, search criticalAssignments history.
+        //
+        // Then, on that same dateKey, find Person B for the destination group (baseline -> final -> critical) and use rankings to place A.
         function findTransferMatchesBackwards(personA, fromGroup, toGroup, startYear, startMonth, maxMonthsBack = 24) {
             const matches = { special: [], weekend: [], semi: [], normal: [] };
-            const haveAny = (type) => (matches[type] && matches[type].length > 0);
+            const types = ['special', 'weekend', 'semi', 'normal'];
 
-            for (let back = 0; back < maxMonthsBack; back++) {
-                const monthStart = new Date(startYear, startMonth - back, 1);
-                const year = monthStart.getFullYear();
-                const month = monthStart.getMonth();
-                const firstDay = new Date(year, month, 1);
-                const lastDay = new Date(year, month + 1, 0);
-                const monthKey = `${year}-${month}`;
-                const monthLabel = new Date(year, month, 1).toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
+            const monthLabelFor = (y, m) => new Date(y, m, 1).toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
 
-                for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
-                    const dayKey = formatDateKey(d);
-                    const cat = getDayTypeCategoryFromDayType(getDayType(d));
-                    // If we already found a match for this type in a more recent month, skip.
-                    if (haveAny(cat)) continue;
-
-                    const baseline = getRotationBaselineAssignmentForDate(dayKey);
-                    const finalAssignment = getAssignmentForDate(dayKey);
-                    const criticalAssignment = getCriticalAssignmentForDate(dayKey);
-                    const assignment = baseline || finalAssignment || criticalAssignment;
-                    if (!assignment) continue;
-
-                    const a = parseAssignedPersonForGroupFromAssignment(assignment, fromGroup);
-                    if (!a || a !== personA) continue;
-
-                    const b = parseAssignedPersonForGroupFromAssignment(assignment, toGroup);
-                    if (!b) continue;
-
-                    let source = 'final';
-                    if (baseline) source = 'baseline';
-                    else if (!finalAssignment && criticalAssignment) source = 'critical';
-
-                    matches[cat].push({
-                        dateKey: dayKey,
-                        dateStr: d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-                        dayName: getGreekDayName(d),
-                        personB: b,
-                        monthKey,
-                        monthLabel,
-                        source
-                    });
+            const findPersonBOnDate = (dayKey) => {
+                const baseline = getRotationBaselineAssignmentForDate(dayKey);
+                if (baseline) {
+                    const b = parseAssignedPersonForGroupFromAssignment(baseline, toGroup);
+                    if (b) return { personB: b, sourceB: 'baseline' };
                 }
-
-                // Stop early if we have at least one match for every list type
-                if (haveAny('special') && haveAny('weekend') && haveAny('semi') && haveAny('normal')) {
-                    break;
+                const finalAssignment = getAssignmentForDate(dayKey);
+                if (finalAssignment) {
+                    const b = parseAssignedPersonForGroupFromAssignment(finalAssignment, toGroup);
+                    if (b) return { personB: b, sourceB: 'final' };
                 }
+                const criticalAssignment = getCriticalAssignmentForDate(dayKey);
+                if (criticalAssignment) {
+                    const b = parseAssignedPersonForGroupFromAssignment(criticalAssignment, toGroup);
+                    if (b) return { personB: b, sourceB: 'critical' };
+                }
+                return { personB: null, sourceB: null };
+            };
+
+            const findLastBaselineDateForA = (type) => {
+                for (let back = 0; back < maxMonthsBack; back++) {
+                    const monthStart = new Date(startYear, startMonth - back, 1);
+                    const y = monthStart.getFullYear();
+                    const m = monthStart.getMonth();
+                    const firstDay = new Date(y, m, 1);
+                    const lastDay = new Date(y, m + 1, 0);
+
+                    for (let d = new Date(lastDay); d >= firstDay; d.setDate(d.getDate() - 1)) {
+                        const cat = getDayTypeCategoryFromDayType(getDayType(d));
+                        if (cat !== type) continue;
+                        const dayKey = formatDateKey(d);
+                        const baseline = getRotationBaselineAssignmentForDate(dayKey);
+                        if (!baseline) continue;
+                        const a = parseAssignedPersonForGroupFromAssignment(baseline, fromGroup);
+                        if (a && a === personA) {
+                            return {
+                                dateKey: dayKey,
+                                dateObj: new Date(d),
+                                monthKey: `${y}-${m}`,
+                                monthLabel: monthLabelFor(y, m),
+                                sourceA: 'baseline'
+                            };
+                        }
+                    }
+                }
+                return null;
+            };
+
+            const findLastCriticalDateForA = (type) => {
+                for (let back = 0; back < maxMonthsBack; back++) {
+                    const monthStart = new Date(startYear, startMonth - back, 1);
+                    const y = monthStart.getFullYear();
+                    const m = monthStart.getMonth();
+                    const firstDay = new Date(y, m, 1);
+                    const lastDay = new Date(y, m + 1, 0);
+
+                    for (let d = new Date(lastDay); d >= firstDay; d.setDate(d.getDate() - 1)) {
+                        const cat = getDayTypeCategoryFromDayType(getDayType(d));
+                        if (cat !== type) continue;
+                        const dayKey = formatDateKey(d);
+                        const critical = getCriticalAssignmentForDate(dayKey);
+                        if (!critical) continue;
+                        const a = parseAssignedPersonForGroupFromAssignment(critical, fromGroup);
+                        if (a && a === personA) {
+                            return {
+                                dateKey: dayKey,
+                                dateObj: new Date(d),
+                                monthKey: `${y}-${m}`,
+                                monthLabel: monthLabelFor(y, m),
+                                sourceA: 'critical'
+                            };
+                        }
+                    }
+                }
+                return null;
+            };
+
+            for (const type of types) {
+                let ref = findLastBaselineDateForA(type);
+                if (!ref) ref = findLastCriticalDateForA(type);
+                if (!ref) continue;
+
+                const { personB, sourceB } = findPersonBOnDate(ref.dateKey);
+                if (!personB) continue;
+
+                matches[type].push({
+                    dateKey: ref.dateKey,
+                    dateStr: ref.dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                    dayName: getGreekDayName(ref.dateObj),
+                    personB,
+                    monthKey: ref.monthKey,
+                    monthLabel: ref.monthLabel,
+                    sourceA: ref.sourceA,
+                    sourceB
+                });
             }
 
             return matches;
@@ -3481,8 +3535,8 @@
                 const totalMatches = matchesByType?.[type]?.length || 0;
 
                 const matchText = chosen
-                    ? `${chosen.dayName} ${chosen.dateStr} — ${chosen.personB} (${chosen.monthLabel || chosen.monthKey || ''}, ${chosen.source || ''})`
-                    : 'Δεν βρέθηκε κοινή υπηρεσία στον μήνα';
+                    ? `${chosen.dayName} ${chosen.dateStr} — ${chosen.personB} (${chosen.monthLabel || chosen.monthKey || ''}, A:${chosen.sourceA || ''}, B:${chosen.sourceB || ''})`
+                    : 'Δεν βρέθηκε κοινή υπηρεσία';
 
                 let intended = 'Δεν έχει επιλεγεί';
                 if (pos) {
