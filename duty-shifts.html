@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.157 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.158 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -749,7 +749,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.157</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.158</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -894,17 +894,14 @@
                     <button class="btn btn-sm btn-outline-secondary" onclick="nextMonth()">
                         <i class="fas fa-chevron-right"></i>
                     </button>
-                    <button class="btn btn-sm btn-success ms-2" onclick="openAssignDutyModalForDate()">
-                        <i class="fas fa-user-plus me-1"></i>Χειροκίνητη Ανάθεση
-                    </button>
                     <button class="btn btn-sm btn-primary ms-2" onclick="openCalculateDutiesModal()">
                         <i class="fas fa-calculator me-1"></i>Υπολογισμός Υπηρεσιών
                     </button>
                     <button class="btn btn-sm btn-success ms-2" onclick="showExcelPreview()">
                         <i class="fas fa-file-excel me-1"></i>Δημιουργία Excel
                     </button>
-                    <button class="btn btn-sm btn-warning ms-2" onclick="migrateAssignmentsByDayType()">
-                        <i class="fas fa-exchange-alt me-1"></i>Μεταφορά Ανά Τύπο Ημέρας
+                    <button class="btn btn-sm btn-danger ms-2" onclick="clearDutyShiftsFirestoreDocs()">
+                        <i class="fas fa-broom me-1"></i>Καθαρισμός Firebase (Υπηρεσίες)
                     </button>
                     <button class="btn btn-sm btn-warning ms-2" onclick="analyzeRotationViolations()">
                         <i class="fas fa-exclamation-triangle me-1"></i>Έλεγχος Αναθέσεων Υπηρεσιών
@@ -1315,44 +1312,6 @@
                         <i class="fas fa-save me-1"></i>Αποθήκευση Αλλαγών
                     </button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Assign Duty Modal -->
-    <div class="modal fade" id="assignDutyModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Ανάθεση Υπηρεσίας</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="assignDutyDate" class="form-label">Ημερομηνία</label>
-                        <input type="date" class="form-control" id="assignDutyDate" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="assignDutyGroup" class="form-label">Ομάδα</label>
-                        <select class="form-control" id="assignDutyGroup" required>
-                            <option value="">Επιλέξτε Ομάδα</option>
-                            <option value="1">ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</option>
-                            <option value="2">ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</option>
-                            <option value="3">ΤΕΧΝΙΚΟΣ Ε/Π AW139</option>
-                            <option value="4">ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="assignDutyPerson" class="form-label">Άτομο</label>
-                        <select class="form-control" id="assignDutyPerson" required>
-                            <option value="">Επιλέξτε Άτομο</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
-                    <button type="button" class="btn btn-primary" onclick="saveManualDuty()">Αποθήκευση</button>
                 </div>
             </div>
         </div>

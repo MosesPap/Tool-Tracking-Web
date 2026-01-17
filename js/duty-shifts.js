@@ -219,7 +219,7 @@
         let intendedAssignments = {};
         let currentDate = new Date();
         let currentGroup = null;
-        let selectedDateForDuty = null;
+        // Manual assignment feature removed; keep dayDetails selection state elsewhere if needed.
         
         // Step-by-step calculation state
         let calculationSteps = {
@@ -1183,134 +1183,6 @@
             }
         }
 
-        // Migration function: Split assignments by day type
-        async function migrateAssignmentsByDayType() {
-            try {
-                if (!window.db) {
-                    alert('Firebase not ready');
-                    return;
-                }
-                
-                const db = window.db || firebase.firestore();
-                const user = window.auth?.currentUser;
-                
-                if (!user) {
-                    alert('User not authenticated');
-                    return;
-                }
-                
-                // Confirm migration
-                if (!confirm('Αυτή η λειτουργία θα διαχωρίσει τις υπηρεσίες σε 4 ξεχωριστά έγγραφα ανά τύπο ημέρας.\n\nΣυνέχεια;')) {
-                    return;
-                }
-                
-                console.log('Starting migration: Splitting assignments by day type...');
-                
-                // Load current assignments
-                const assignmentsDoc = await db.collection('dutyShifts').doc('assignments').get();
-                if (!assignmentsDoc.exists) {
-                    alert('Δεν βρέθηκε έγγραφο assignments');
-                    return;
-                }
-                
-                const data = assignmentsDoc.data();
-                // Remove metadata fields
-                const assignments = { ...data };
-                delete assignments.lastUpdated;
-                delete assignments.updatedBy;
-                
-                // Initialize separate assignment objects
-                const normalDayAssignments = {};
-                const semiNormalAssignments = {};
-                const weekendAssignments = {};
-                const specialHolidayAssignments = {};
-                
-                let processedCount = 0;
-                let errorCount = 0;
-                
-                // Process each date
-                for (const dateKey in assignments) {
-                    if (dateKey === 'lastUpdated' || dateKey === 'updatedBy') continue;
-                    
-                    try {
-                        // Parse date key (format: YYYY-MM-DD)
-                        const date = new Date(dateKey + 'T00:00:00');
-                        if (isNaN(date.getTime())) {
-                            console.warn(`Invalid date key: ${dateKey}`);
-                            errorCount++;
-                            continue;
-                        }
-                        
-                        // Determine day type
-                        const dayType = getDayType(date);
-                        const assignmentValue = assignments[dateKey];
-                        
-                        // Split based on day type
-                        if (dayType === 'special-holiday') {
-                            specialHolidayAssignments[dateKey] = assignmentValue;
-                        } else if (dayType === 'weekend-holiday') {
-                            weekendAssignments[dateKey] = assignmentValue;
-                        } else if (dayType === 'semi-normal-day') {
-                            semiNormalAssignments[dateKey] = assignmentValue;
-                        } else if (dayType === 'normal-day') {
-                            normalDayAssignments[dateKey] = assignmentValue;
-                        } else {
-                            console.warn(`Unknown day type for ${dateKey}: ${dayType}`);
-                            errorCount++;
-                            continue;
-                        }
-                        
-                        processedCount++;
-                    } catch (error) {
-                        console.error(`Error processing ${dateKey}:`, error);
-                        errorCount++;
-                    }
-                }
-                
-                // Save to separate documents
-                console.log('Saving split assignments...');
-                
-                // Save in month-organized format and merge to avoid deleting existing months
-                await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'normalDayAssignments', organizeAssignmentsByMonth(normalDayAssignments));
-                await db.collection('dutyShifts').doc('normalDayAssignments').set({
-                    _migratedFrom: 'assignments',
-                    _migrationDate: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
-                
-                await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'semiNormalAssignments', organizeAssignmentsByMonth(semiNormalAssignments));
-                await db.collection('dutyShifts').doc('semiNormalAssignments').set({
-                    _migratedFrom: 'assignments',
-                    _migrationDate: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
-                
-                await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'weekendAssignments', organizeAssignmentsByMonth(weekendAssignments));
-                await db.collection('dutyShifts').doc('weekendAssignments').set({
-                    _migratedFrom: 'assignments',
-                    _migrationDate: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
-                
-                await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'specialHolidayAssignments', organizeAssignmentsByMonth(specialHolidayAssignments));
-                await db.collection('dutyShifts').doc('specialHolidayAssignments').set({
-                    _migratedFrom: 'assignments',
-                    _migrationDate: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
-                
-                console.log('Migration completed!');
-                console.log(`Processed: ${processedCount} dates`);
-                console.log(`Errors: ${errorCount}`);
-                console.log(`Normal days: ${Object.keys(normalDayAssignments).length}`);
-                console.log(`Semi-normal days: ${Object.keys(semiNormalAssignments).length}`);
-                console.log(`Weekend/Holiday days: ${Object.keys(weekendAssignments).length}`);
-                console.log(`Special holidays: ${Object.keys(specialHolidayAssignments).length}`);
-                
-                alert(`Μεταφορά ολοκληρώθηκε!\n\nΕπεξεργάστηκε: ${processedCount} ημερομηνίες\nΣφάλματα: ${errorCount}\n\nΚαθημερινές: ${Object.keys(normalDayAssignments).length}\nΗμιαργίες: ${Object.keys(semiNormalAssignments).length}\nΣαββατοκύριακα/Αργίες: ${Object.keys(weekendAssignments).length}\nΕιδικές Αργίες: ${Object.keys(specialHolidayAssignments).length}`);
-                
-            } catch (error) {
-                console.error('Error during migration:', error);
-                alert('Σφάλμα κατά τη μεταφορά: ' + error.message);
-            }
-        }
-
         // Fallback: Save data to localStorage
         function saveDataToLocalStorage() {
             localStorage.setItem('dutyShiftsGroups', JSON.stringify(groups));
@@ -1328,6 +1200,98 @@
             localStorage.setItem('dutyShiftsCrossMonthSwaps', JSON.stringify(crossMonthSwaps));
             localStorage.setItem('dutyShiftsLastRotationPositions', JSON.stringify(lastRotationPositions));
             localStorage.setItem('dutyShiftsRankings', JSON.stringify(rankings));
+        }
+
+        // Clear selected dutyShifts documents in Firestore (wipe fields, keep only metadata)
+        // This is a destructive action and intended for admin maintenance.
+        async function clearDutyShiftsFirestoreDocs() {
+            try {
+                if (!window.db) {
+                    alert('Firebase not ready');
+                    return;
+                }
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                if (!user) {
+                    alert('User not authenticated');
+                    return;
+                }
+
+                const confirmText =
+                    'ΠΡΟΣΟΧΗ: Αυτό θα καθαρίσει (wipe) τα παρακάτω Firestore έγγραφα:\n' +
+                    '- assignmentReasons\n- assignments\n- crossMonthSwaps\n- lastRotationPositions\n' +
+                    '- normalDayAssignments\n- semiNormalAssignments\n- specialHolidayAssignments\n' +
+                    '- tempAssignments\n- weekendAssignments\n\n' +
+                    'Αυτό ΔΕΝ επηρεάζει τις ομάδες/λίστες (groups), αργίες, ή ιεραρχίες.\n\nΣυνέχεια;';
+
+                if (!confirm(confirmText)) return;
+
+                const loadingAlert = document.createElement('div');
+                loadingAlert.className = 'alert alert-warning position-fixed top-50 start-50 translate-middle';
+                loadingAlert.style.zIndex = '9999';
+                loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Καθαρισμός Firestore εγγράφων...';
+                document.body.appendChild(loadingAlert);
+
+                const dutyShifts = db.collection('dutyShifts');
+                const batch = db.batch();
+                const ts = firebase.firestore.FieldValue.serverTimestamp();
+
+                const docIds = [
+                    'assignmentReasons',
+                    'assignments',
+                    'crossMonthSwaps',
+                    'normalDayAssignments',
+                    'semiNormalAssignments',
+                    'specialHolidayAssignments',
+                    'tempAssignments',
+                    'weekendAssignments'
+                ];
+
+                for (const id of docIds) {
+                    batch.set(dutyShifts.doc(id), { lastUpdated: ts, updatedBy: user.uid }, { merge: false });
+                }
+
+                // Keep explicit empty structure so code that reads it stays stable
+                batch.set(
+                    dutyShifts.doc('lastRotationPositions'),
+                    { normal: {}, semi: {}, weekend: {}, special: {}, lastUpdated: ts, updatedBy: user.uid },
+                    { merge: false }
+                );
+
+                await batch.commit();
+
+                // Reset in-memory state (so UI updates immediately without refresh)
+                assignmentReasons = {};
+                dutyAssignments = {};
+                crossMonthSwaps = {};
+                lastRotationPositions = { normal: {}, semi: {}, weekend: {}, special: {} };
+                normalDayAssignments = {};
+                semiNormalAssignments = {};
+                weekendAssignments = {};
+                specialHolidayAssignments = {};
+                calculationSteps.tempAssignments = null;
+
+                // Clear localStorage backups for these docs to prevent fallback re-populating them
+                [
+                    'dutyShiftsAssignmentReasons',
+                    'dutyShiftsAssignments',
+                    'dutyShiftsCrossMonthSwaps',
+                    'dutyShiftsLastRotationPositions',
+                    'dutyShiftsNormalDayAssignments',
+                    'dutyShiftsSemiNormalAssignments',
+                    'dutyShiftsWeekendAssignments',
+                    'dutyShiftsSpecialHolidayAssignments'
+                ].forEach(k => localStorage.removeItem(k));
+
+                renderCalendar();
+                updateStatistics();
+
+                if (loadingAlert && loadingAlert.parentNode) loadingAlert.parentNode.removeChild(loadingAlert);
+                alert('Ο καθαρισμός ολοκληρώθηκε.');
+            } catch (error) {
+                console.error('Error clearing dutyShifts docs:', error);
+                alert('Σφάλμα κατά τον καθαρισμό: ' + error.message);
+            }
         }
 
         // Get group name by number
@@ -11348,8 +11312,6 @@
                 const assignment = getAssignmentForDate(key);
                 const dayType = getDayType(date);
                 
-                // Store selected date for manual assignment
-                selectedDateForDuty = date;
                 currentEditingDayKey = key;
                 currentEditingDayDate = date;
                 
@@ -11716,145 +11678,7 @@
             alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
         }
 
-        // Open assign duty modal from day details
-        function openAssignDutyModal() {
-            // Close day details modal
-            const dayDetailsModal = bootstrap.Modal.getInstance(document.getElementById('dayDetailsModal'));
-            if (dayDetailsModal) {
-                dayDetailsModal.hide();
-            }
-            
-            openAssignDutyModalForDate(selectedDateForDuty);
-        }
-
-        // Open assign duty modal for a specific date (or current date if not specified)
-        function openAssignDutyModalForDate(date = null) {
-            // Clear previous event listeners
-            const groupSelect = document.getElementById('assignDutyGroup');
-            const newGroupSelect = groupSelect.cloneNode(true);
-            groupSelect.parentNode.replaceChild(newGroupSelect, groupSelect);
-            
-            // Set date in assign modal
-            const dateInput = document.getElementById('assignDutyDate');
-            if (date) {
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                dateInput.value = `${year}-${month}-${day}`;
-                selectedDateForDuty = date;
-            } else {
-                // Use today's date
-                const today = new Date();
-                const year = today.getFullYear();
-                const month = String(today.getMonth() + 1).padStart(2, '0');
-                const day = String(today.getDate()).padStart(2, '0');
-                dateInput.value = `${year}-${month}-${day}`;
-                selectedDateForDuty = today;
-            }
-            
-            // Reset form
-            document.getElementById('assignDutyGroup').value = '';
-            document.getElementById('assignDutyPerson').innerHTML = '<option value="">Επιλέξτε Άτομο</option>';
-            
-            // Update person dropdown when group changes
-            document.getElementById('assignDutyGroup').addEventListener('change', function() {
-                updatePersonDropdown();
-            });
-            
-            // Open modal
-            const modal = new bootstrap.Modal(document.getElementById('assignDutyModal'));
-            modal.show();
-        }
-
-        // Update person dropdown based on selected group
-        function updatePersonDropdown() {
-            const groupSelect = document.getElementById('assignDutyGroup');
-            const personSelect = document.getElementById('assignDutyPerson');
-            const selectedGroup = parseInt(groupSelect.value);
-            
-            personSelect.innerHTML = '<option value="">Επιλέξτε Άτομο</option>';
-            
-            if (selectedGroup && groups[selectedGroup]) {
-                const groupData = groups[selectedGroup];
-                const specialList = groupData.special || [];
-                const weekendList = groupData.weekend || [];
-                const semiList = groupData.semi || [];
-                const normalList = groupData.normal || [];
-                // Combine all lists, removing duplicates
-                const allPeople = [...new Set([...specialList, ...weekendList, ...semiList, ...normalList])];
-                
-                if (allPeople.length > 0) {
-                    allPeople.forEach(person => {
-                        const option = document.createElement('option');
-                        option.value = person;
-                        option.textContent = person;
-                        personSelect.appendChild(option);
-                    });
-                }
-            }
-        }
-
-        // Save manual duty assignment
-        function saveManualDuty() {
-            const date = document.getElementById('assignDutyDate').value;
-            const groupNum = parseInt(document.getElementById('assignDutyGroup').value);
-            const person = document.getElementById('assignDutyPerson').value.trim();
-            
-            if (!date) {
-                alert('Παρακαλώ επιλέξτε ημερομηνία');
-                return;
-            }
-            
-            if (!groupNum || !person) {
-                alert('Παρακαλώ επιλέξτε ομάδα και άτομο');
-                return;
-            }
-            
-            const dateKey = formatDateKey(new Date(date + 'T00:00:00'));
-            
-            // Check if assignment already exists
-            if (dutyAssignments[dateKey]) {
-                // Update existing assignment
-                const existing = dutyAssignments[dateKey];
-                // Ensure existing is a string
-                const existingStr = typeof existing === 'string' ? existing : String(existing || '');
-                // Remove old assignment for this group if exists
-                const updated = existingStr.split(', ').filter(a => !a.includes(`Ομάδα ${groupNum}`));
-                updated.push(`${person} (Ομάδα ${groupNum})`);
-                dutyAssignments[dateKey] = updated.join(', ');
-            } else {
-                // Create new assignment
-                dutyAssignments[dateKey] = `${person} (Ομάδα ${groupNum})`;
-            }
-            
-            saveData();
-            renderCalendar();
-            
-            const modal = bootstrap.Modal.getInstance(document.getElementById('assignDutyModal'));
-            modal.hide();
-            
-            alert('Η ανάθεση υπηρεσίας αποθηκεύτηκε επιτυχώς!');
-        }
-
-        // Remove duty assignment
-        function removeDutyAssignment() {
-            if (!selectedDateForDuty) return;
-            
-            if (!confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε την ανάθεση υπηρεσίας για αυτή την ημέρα;')) {
-                return;
-            }
-            
-            const key = formatDateKey(selectedDateForDuty);
-            delete dutyAssignments[key];
-            
-            saveData();
-            renderCalendar();
-            
-            const modal = bootstrap.Modal.getInstance(document.getElementById('dayDetailsModal'));
-            modal.hide();
-            
-            alert('Η ανάθεση υπηρεσίας αφαιρέθηκε επιτυχώς!');
-        }
+        // Manual assignment feature removed (UI + handlers).
 
         // Check if person is missing on a specific date
         function isPersonMissingOnDate(person, groupNum, date) {
