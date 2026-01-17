@@ -16,6 +16,11 @@
         let semiNormalAssignments = {};
         let weekendAssignments = {};
         let specialHolidayAssignments = {};
+        // Rotation baseline (pure rotation order before missing/skip/swap) - saved for history/positioning logic
+        let rotationBaselineSpecialAssignments = {};
+        let rotationBaselineWeekendAssignments = {};
+        let rotationBaselineSemiAssignments = {};
+        let rotationBaselineNormalAssignments = {};
         // Legacy: Keep dutyAssignments for backward compatibility during migration
         let dutyAssignments = {};
         
@@ -46,6 +51,23 @@
 
         function getMonthKeyFromDate(date) {
             return `${date.getFullYear()}-${date.getMonth()}`;
+        }
+
+        // Convert dateKey -> {groupNum -> personName} into dateKey -> "Person (Ομάδα 1), Person (Ομάδα 2)..."
+        function formatGroupAssignmentsToStringMap(assignmentsByDate) {
+            const out = {};
+            if (!assignmentsByDate || typeof assignmentsByDate !== 'object') return out;
+            for (const dateKey of Object.keys(assignmentsByDate)) {
+                const gmap = assignmentsByDate[dateKey];
+                if (!gmap || typeof gmap !== 'object') continue;
+                const parts = [];
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const person = gmap[groupNum];
+                    if (person) parts.push(`${person} (Ομάδα ${groupNum})`);
+                }
+                if (parts.length) out[dateKey] = parts.join(', ');
+            }
+            return out;
         }
 
         function getPreviousMonthKeyFromDate(date) {
@@ -2603,7 +2625,7 @@
                 alert('Δεν υπάρχουν άλλες ομάδες για μεταφορά');
                 return;
             }
-
+            
             pendingTransferTargetGroup = { fromGroup, index, listType, personName, reopenActionsOnCancel: !!reopenActionsOnCancel };
 
             document.getElementById('transferSelectPersonName').textContent = personName || '';
@@ -3033,7 +3055,7 @@
             
             // Track this edit so Save can force-commit it if the user clicks Save while editing
             activeRankingEdit = { personName, finishEdit, input };
-
+            
             input.addEventListener('blur', finishEdit);
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
@@ -6583,6 +6605,8 @@
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempSpecialAssignments = tempSpecialAssignments;
+                // Store pure rotation baseline (before missing replacement) for saving to Firestore
+                calculationSteps.tempSpecialBaselineAssignments = specialRotationPersons;
 
                 // Store last rotation person for each group (overall, for end-of-range continuation)
                 calculationSteps.lastSpecialRotationPositions = {};
@@ -6691,6 +6715,7 @@
                 }
                 
                 const tempSpecialAssignments = calculationSteps.tempSpecialAssignments || {};
+                const tempSpecialBaselineAssignments = calculationSteps.tempSpecialBaselineAssignments || {};
                 const lastSpecialRotationPositionsByMonth = calculationSteps.lastSpecialRotationPositionsByMonth || {};
                 
                 // Save special holiday assignments to Firestore
@@ -6704,6 +6729,14 @@
                     
                     // Also update local memory
                     Object.assign(specialHolidayAssignments, tempSpecialAssignments);
+                }
+
+                // Save special-holiday rotation baseline (pure rotation order) to Firestore
+                if (Object.keys(tempSpecialBaselineAssignments).length > 0) {
+                    const formattedBaseline = formatGroupAssignmentsToStringMap(tempSpecialBaselineAssignments);
+                    const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineSpecialAssignments', organizedBaseline);
+                    Object.assign(rotationBaselineSpecialAssignments, formattedBaseline);
                 }
                 
                 // Save last rotation positions for special holidays (per month)
@@ -6748,7 +6781,16 @@
                 }
                 
                 const tempWeekendAssignments = calculationSteps.tempWeekendAssignments || {};
+                const tempWeekendBaselineAssignments = calculationSteps.tempWeekendBaselineAssignments || {};
                 const lastWeekendRotationPositionsByMonth = calculationSteps.lastWeekendRotationPositionsByMonth || {};
+                
+                // Save weekend rotation baseline (pure rotation order) to Firestore
+                if (Object.keys(tempWeekendBaselineAssignments).length > 0) {
+                    const formattedBaseline = formatGroupAssignmentsToStringMap(tempWeekendBaselineAssignments);
+                    const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineWeekendAssignments', organizedBaseline);
+                    Object.assign(rotationBaselineWeekendAssignments, formattedBaseline);
+                }
                 
                 // First, save weekend assignments to assignments document (pre-skip)
                 if (Object.keys(tempWeekendAssignments).length > 0) {
@@ -7124,7 +7166,16 @@
                 }
                 
                 const tempSemiAssignments = calculationSteps.tempSemiAssignments || {};
+                const tempSemiBaselineAssignments = calculationSteps.tempSemiBaselineAssignments || {};
                 const lastSemiRotationPositionsByMonth = calculationSteps.lastSemiRotationPositionsByMonth || {};
+                
+                // Save semi-normal rotation baseline (pure rotation order) to Firestore
+                if (Object.keys(tempSemiBaselineAssignments).length > 0) {
+                    const formattedBaseline = formatGroupAssignmentsToStringMap(tempSemiBaselineAssignments);
+                    const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineSemiAssignments', organizedBaseline);
+                    Object.assign(rotationBaselineSemiAssignments, formattedBaseline);
+                }
                 
                 // First, save semi-normal assignments to assignments document (pre-logic)
                 if (Object.keys(tempSemiAssignments).length > 0) {
@@ -7796,10 +7847,19 @@
                 }
                 
                 const tempNormalAssignments = calculationSteps.tempNormalAssignments || {};
+                const tempNormalBaselineAssignments = calculationSteps.tempNormalBaselineAssignments || {};
                 const lastNormalRotationPositionsByMonth = calculationSteps.lastNormalRotationPositionsByMonth || {};
                 
                 console.log('[STEP 4] tempNormalAssignments keys:', Object.keys(tempNormalAssignments).length);
                 console.log('[STEP 4] lastNormalRotationPositionsByMonth:', lastNormalRotationPositionsByMonth);
+                
+                // Save normal rotation baseline (pure rotation order) to Firestore
+                if (Object.keys(tempNormalBaselineAssignments).length > 0) {
+                    const formattedBaseline = formatGroupAssignmentsToStringMap(tempNormalBaselineAssignments);
+                    const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineNormalAssignments', organizedBaseline);
+                    Object.assign(rotationBaselineNormalAssignments, formattedBaseline);
+                }
                 
                 // First, save normal assignments to assignments document (pre-logic)
                 if (Object.keys(tempNormalAssignments).length > 0) {
@@ -9664,6 +9724,7 @@
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempWeekendAssignments = simulatedWeekendAssignments;
+                calculationSteps.tempWeekendBaselineAssignments = weekendRotationPersons;
                 calculationSteps.lastWeekendRotationPositions = {};
                 // IMPORTANT: Find the last ROTATION person (who should be assigned according to rotation)
                 // NOT the assigned person (who may have been swapped/skipped)
@@ -10059,6 +10120,7 @@
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempSemiAssignments = semiAssignments;
+                calculationSteps.tempSemiBaselineAssignments = semiRotationPersons;
                 calculationSteps.lastSemiRotationPositions = {};
                 // IMPORTANT: Find the last ROTATION person (who should be assigned according to rotation)
                 // NOT the assigned person (who may have been swapped)
@@ -11171,6 +11233,7 @@
             
             // Store normal assignments and rotation positions for saving when Next is pressed
             calculationSteps.tempNormalAssignments = normalAssignments;
+            calculationSteps.tempNormalBaselineAssignments = normalRotationPersons;
             calculationSteps.lastNormalRotationPositions = {};
             // IMPORTANT: Find the last ROTATION person (who should be assigned according to rotation)
             // NOT the assigned person (who may have been swapped)
