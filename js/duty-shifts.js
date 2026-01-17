@@ -1958,6 +1958,9 @@
         let currentPersonActionsName = null;
         let currentPersonActionsIndex = null;
         let currentPersonActionsListType = null;
+        
+        // Pending "transfer to group" selection (from actions modal)
+        let pendingTransferTargetGroup = null;
 
         // Add person
         function addPerson(groupNumber) {
@@ -2584,22 +2587,68 @@
         function openTransferFromActions() {
             const modal = bootstrap.Modal.getInstance(document.getElementById('personActionsModal'));
             modal.hide();
-            // Show selection for target group
-            const availableGroups = [1, 2, 3, 4].filter(g => g !== currentPersonActionsGroup);
+            openTransferTargetGroupModal(
+                currentPersonActionsGroup,
+                currentPersonActionsIndex,
+                currentPersonActionsListType,
+                currentPersonActionsName,
+                true
+            );
+        }
+
+        // Open modal to select destination group (better UX than prompt())
+        function openTransferTargetGroupModal(fromGroup, index, listType, personName, reopenActionsOnCancel = false) {
+            const availableGroups = [1, 2, 3, 4].filter(g => g !== fromGroup);
             if (availableGroups.length === 0) {
                 alert('Δεν υπάρχουν άλλες ομάδες για μεταφορά');
                 return;
             }
-            
-            const groupOptions = availableGroups.map(g => `${g}: ${getGroupName(g)}`).join(', ');
-            const targetGroupStr = prompt(`Επιλέξτε την ομάδα προορισμού (${groupOptions}):`);
-            const targetGroup = parseInt(targetGroupStr);
-            
-            if (targetGroup && availableGroups.includes(targetGroup)) {
-                transferPerson(currentPersonActionsGroup, currentPersonActionsIndex, targetGroup, currentPersonActionsListType);
-            } else if (targetGroupStr !== null) {
-                alert('Μη έγκυρη επιλογή ομάδας');
+
+            pendingTransferTargetGroup = { fromGroup, index, listType, personName, reopenActionsOnCancel: !!reopenActionsOnCancel };
+
+            document.getElementById('transferSelectPersonName').textContent = personName || '';
+            document.getElementById('transferSelectFromGroup').textContent = getGroupName(fromGroup);
+
+            const select = document.getElementById('transferTargetGroupSelect');
+            select.innerHTML = availableGroups
+                .map(g => `<option value="${g}">Ομάδα ${g}: ${getGroupName(g)}</option>`)
+                .join('');
+
+            const modal = new bootstrap.Modal(document.getElementById('transferTargetGroupModal'));
+            modal.show();
+        }
+
+        function cancelTransferTargetGroup() {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('transferTargetGroupModal'));
+            if (modal) modal.hide();
+
+            const reopen = pendingTransferTargetGroup?.reopenActionsOnCancel;
+            pendingTransferTargetGroup = null;
+
+            if (reopen) {
+                const actionsModal = new bootstrap.Modal(document.getElementById('personActionsModal'));
+                actionsModal.show();
             }
+        }
+
+        function confirmTransferTargetGroup() {
+            if (!pendingTransferTargetGroup) return;
+
+            const select = document.getElementById('transferTargetGroupSelect');
+            const toGroup = parseInt(select.value, 10);
+            const { fromGroup, index, listType } = pendingTransferTargetGroup;
+
+            const modal = bootstrap.Modal.getInstance(document.getElementById('transferTargetGroupModal'));
+            if (modal) modal.hide();
+
+            pendingTransferTargetGroup = null;
+
+            if (!toGroup || toGroup === fromGroup || ![1, 2, 3, 4].includes(toGroup)) {
+                alert('Μη έγκυρη επιλογή ομάδας');
+                return;
+            }
+
+            transferPerson(fromGroup, index, toGroup, listType);
         }
         
         // Delete person from actions modal
@@ -12281,7 +12330,7 @@
                         const assignedIndex = groupPeople.indexOf(assignedPerson);
                         
                         if (assignedIndex === -1) {
-                            violationReason = 'Το άτομο που ανέθεται δεν είναι στη λίστα περιστροφής';
+                            violationReason = 'Το άτομο που ανατήθεται δεν είναι στη λίστα περιστροφής';
                         } else if (expectedIndex === -1) {
                             // Expected person not in list (shouldn't happen)
                             continue;
