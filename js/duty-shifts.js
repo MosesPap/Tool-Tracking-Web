@@ -4751,6 +4751,60 @@
             // Precompute special holiday map to avoid repeated .find() calls
             const specialHolidayNameByDate = new Map((specialHolidays || []).map(h => [h.date, h.name]));
             const shouldShowHeavyIndicators = false; // performance: avoid conflict/reason checks in calendar view
+
+            // Precompute: for current month, who has special-holiday duty (by group).
+            // Used to underline weekend replacements when expected person is skipped due to special holiday in same month.
+            const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}-`;
+            const specialDutyInMonthByGroup = { 1: new Set(), 2: new Set(), 3: new Set(), 4: new Set() };
+            for (const dateKey in specialHolidayAssignments || {}) {
+                if (!dateKey || !dateKey.startsWith(monthPrefix)) continue;
+                const a = specialHolidayAssignments[dateKey];
+                if (!a) continue;
+                const str = typeof a === 'string' ? a : String(a);
+                const parts = str.split(',').map(p => p.trim()).filter(Boolean);
+                for (const part of parts) {
+                    const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                    if (m) {
+                        const name = m[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
+                        const g = parseInt(m[2], 10);
+                        if (g >= 1 && g <= 4 && name) specialDutyInMonthByGroup[g].add(name);
+                    }
+                }
+            }
+
+            // Precompute: rotation-expected person per dateKey/group for this month, per day-type category.
+            const monthExpectedByDateGroup = {}; // dateKey -> { groupNum: expectedPerson }
+            const dayKeysByCategory = { special: [], weekend: [], semi: [], normal: [] };
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dt = new Date(year, month, d);
+                const dk = formatDateKey(dt);
+                const isSpecial = specialHolidayNameByDate.has(dk);
+                const dtType = isSpecial ? 'special-holiday' : getDayType(dt);
+                let cat = 'normal';
+                if (dtType === 'special-holiday') cat = 'special';
+                else if (dtType === 'weekend-holiday') cat = 'weekend';
+                else if (dtType === 'semi-normal-day') cat = 'semi';
+                dayKeysByCategory[cat].push(dk);
+            }
+            const monthSeedDate = new Date(year, month, 1);
+            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                const gdata = groups[groupNum] || {};
+                for (const cat of ['special', 'weekend', 'semi', 'normal']) {
+                    const people = gdata[cat] || [];
+                    if (!Array.isArray(people) || people.length === 0) continue;
+                    const seed = getLastRotationPersonForDate(cat, monthSeedDate, groupNum);
+                    let idx = 0;
+                    if (seed) {
+                        const seedIdx = people.indexOf(seed);
+                        if (seedIdx >= 0) idx = (seedIdx + 1) % people.length;
+                    }
+                    for (const dk of dayKeysByCategory[cat]) {
+                        if (!monthExpectedByDateGroup[dk]) monthExpectedByDateGroup[dk] = {};
+                        monthExpectedByDateGroup[dk][groupNum] = people[idx];
+                        idx = (idx + 1) % people.length;
+                    }
+                }
+            }
             
             // Day headers - Monday first
             const dayHeaders = ['Δευ', 'Τρι', 'Τετ', 'Πεμ', 'Παρ', 'Σαβ', 'Κυρ'];
@@ -4818,8 +4872,36 @@
                     if (parts.length > 0) {
                         displayAssignmentHtml = '<div class="duty-person-container">';
                         for (const part of parts) {
+                            const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                             const nameOnly = part.replace(/\s*\(Ομάδα\s*\d+\)\s*/g, '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
-                            displayAssignmentHtml += `<div class="duty-person">${nameOnly}</div>`;
+                            let underline = false;
+                            if (m) {
+                                const personName = m[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
+                                const g = parseInt(m[2], 10);
+                                if (personName && g >= 1 && g <= 4) {
+                                    const r = getAssignmentReason(key, g, personName);
+                                    if (r && r.type === 'skip') {
+                                        const txt = (r.reason || '').toString().toLowerCase();
+                                        if (txt.includes('κώλυμα') || txt.includes('απουσία') || txt.includes('ειδική αργία')) {
+                                            underline = true;
+                                        }
+                                    } else {
+                                        const expected = monthExpectedByDateGroup[key]?.[g];
+                                        if (expected && expected !== personName) {
+                                            // Underline if expected person was missing on this date
+                                            if (isPersonMissingOnDate(expected, g, date)) {
+                                                underline = true;
+                                            } else if (dayType === 'weekend-holiday') {
+                                                // Underline if expected person was skipped from weekend due to special holiday in same month
+                                                if (specialDutyInMonthByGroup[g].has(expected)) {
+                                                    underline = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            displayAssignmentHtml += `<div class="duty-person${underline ? ' duty-person-replacement' : ''}">${nameOnly}</div>`;
                         }
                         // Optional: show a small marker if there are reasons on this date (without heavy per-person checks)
                         if (shouldShowHeavyIndicators && assignmentReasons[key]) {
