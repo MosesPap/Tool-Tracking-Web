@@ -3333,6 +3333,16 @@
             }
         }
 
+        // criticalAssignments is stored as: { "YYYY-MM-DD": ["Name (Ομάδα 1)", "Name (Ομάδα 2)", ...], ... }
+        // Use it as a last-resort source for same-day matching during group transfer auto-positioning.
+        function getCriticalAssignmentForDate(dateKey) {
+            const v = criticalAssignments?.[dateKey];
+            if (!v) return null;
+            if (typeof v === 'string') return v;
+            if (Array.isArray(v)) return v.filter(Boolean).join(', ');
+            return null;
+        }
+
         function parseAssignedPersonForGroupFromAssignment(assignmentStr, groupNum) {
             if (!assignmentStr) return null;
             const parts = String(assignmentStr).split(',').map(p => p.trim()).filter(Boolean);
@@ -3366,7 +3376,9 @@
                     if (haveAny(cat)) continue;
 
                     const baseline = getRotationBaselineAssignmentForDate(dayKey);
-                    const assignment = baseline || getAssignmentForDate(dayKey);
+                    const finalAssignment = getAssignmentForDate(dayKey);
+                    const criticalAssignment = getCriticalAssignmentForDate(dayKey);
+                    const assignment = baseline || finalAssignment || criticalAssignment;
                     if (!assignment) continue;
 
                     const a = parseAssignedPersonForGroupFromAssignment(assignment, fromGroup);
@@ -3375,6 +3387,10 @@
                     const b = parseAssignedPersonForGroupFromAssignment(assignment, toGroup);
                     if (!b) continue;
 
+                    let source = 'final';
+                    if (baseline) source = 'baseline';
+                    else if (!finalAssignment && criticalAssignment) source = 'critical';
+
                     matches[cat].push({
                         dateKey: dayKey,
                         dateStr: d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
@@ -3382,7 +3398,7 @@
                         personB: b,
                         monthKey,
                         monthLabel,
-                        source: baseline ? 'baseline' : 'final'
+                        source
                     });
                 }
 
