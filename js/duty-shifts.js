@@ -378,6 +378,10 @@
                     semiNormalDoc,
                     weekendDoc,
                     specialHolidayDoc,
+                    rotationBaselineSpecialDoc,
+                    rotationBaselineWeekendDoc,
+                    rotationBaselineSemiDoc,
+                    rotationBaselineNormalDoc,
                     assignmentsDoc,
                     criticalAssignmentsDoc,
                     crossMonthSwapsDoc,
@@ -393,6 +397,10 @@
                     dutyShifts.doc('semiNormalAssignments').get(),
                     dutyShifts.doc('weekendAssignments').get(),
                     dutyShifts.doc('specialHolidayAssignments').get(),
+                    dutyShifts.doc('rotationBaselineSpecialAssignments').get(),
+                    dutyShifts.doc('rotationBaselineWeekendAssignments').get(),
+                    dutyShifts.doc('rotationBaselineSemiAssignments').get(),
+                    dutyShifts.doc('rotationBaselineNormalAssignments').get(),
                     dutyShifts.doc('assignments').get(), // legacy
                     dutyShifts.doc('criticalAssignments').get(),
                     dutyShifts.doc('crossMonthSwaps').get(),
@@ -500,6 +508,48 @@
                     delete data._migratedFrom;
                     delete data._migrationDate;
                     specialHolidayAssignments = isMonthOrganizedDoc(data) ? flattenAssignmentsByMonth(data) : (data || {});
+                }
+
+                // Load rotation baseline docs (pure rotation order, month-organized)
+                if (rotationBaselineSpecialDoc.exists) {
+                    const data = rotationBaselineSpecialDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    delete data._migratedFrom;
+                    delete data._migrationDate;
+                    rotationBaselineSpecialAssignments = isMonthOrganizedDoc(data) ? flattenAssignmentsByMonth(data) : (data || {});
+                } else {
+                    rotationBaselineSpecialAssignments = {};
+                }
+                if (rotationBaselineWeekendDoc.exists) {
+                    const data = rotationBaselineWeekendDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    delete data._migratedFrom;
+                    delete data._migrationDate;
+                    rotationBaselineWeekendAssignments = isMonthOrganizedDoc(data) ? flattenAssignmentsByMonth(data) : (data || {});
+                } else {
+                    rotationBaselineWeekendAssignments = {};
+                }
+                if (rotationBaselineSemiDoc.exists) {
+                    const data = rotationBaselineSemiDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    delete data._migratedFrom;
+                    delete data._migrationDate;
+                    rotationBaselineSemiAssignments = isMonthOrganizedDoc(data) ? flattenAssignmentsByMonth(data) : (data || {});
+                } else {
+                    rotationBaselineSemiAssignments = {};
+                }
+                if (rotationBaselineNormalDoc.exists) {
+                    const data = rotationBaselineNormalDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    delete data._migratedFrom;
+                    delete data._migrationDate;
+                    rotationBaselineNormalAssignments = isMonthOrganizedDoc(data) ? flattenAssignmentsByMonth(data) : (data || {});
+                } else {
+                    rotationBaselineNormalAssignments = {};
                 }
                 
                 // Also load legacy assignments document for backward compatibility
@@ -3235,7 +3285,7 @@
             // - Compare hierarchy (rankings): if A is higher rank -> place AFTER B, else place ABOVE B
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth(); // 0-11
-            const matchesByType = findTransferMonthMatches(transferData.person, transferData.fromGroup, transferData.toGroup, year, month);
+            const matchesByType = findTransferMatchesBackwards(transferData.person, transferData.fromGroup, transferData.toGroup, year, month, 36);
             applyAutoTransferPositionsFromMatches(matchesByType);
 
             // Render preview + positioning UI (manual override still available)
@@ -3253,6 +3303,22 @@
             return 'normal';
         }
 
+        // Prefer rotation baseline assignments (pure rotation) when available.
+        // Falls back to final assignments for that date.
+        function getRotationBaselineAssignmentForDate(dateKey) {
+            try {
+                const d = new Date(dateKey + 'T00:00:00');
+                if (isNaN(d.getTime())) return null;
+                const cat = getDayTypeCategoryFromDayType(getDayType(d));
+                if (cat === 'special') return rotationBaselineSpecialAssignments?.[dateKey] || null;
+                if (cat === 'weekend') return rotationBaselineWeekendAssignments?.[dateKey] || null;
+                if (cat === 'semi') return rotationBaselineSemiAssignments?.[dateKey] || null;
+                return rotationBaselineNormalAssignments?.[dateKey] || null;
+            } catch (_) {
+                return null;
+            }
+        }
+
         function parseAssignedPersonForGroupFromAssignment(assignmentStr, groupNum) {
             if (!assignmentStr) return null;
             const parts = String(assignmentStr).split(',').map(p => p.trim()).filter(Boolean);
@@ -3263,34 +3329,55 @@
             return null;
         }
 
-        // Find same-date matches WITHIN a month: A(fromGroup) and B(toGroup) assigned on the same date.
-        // Returns: { special: [{dateKey, dateStr, dayName, personB}], weekend: [...], semi: [...], normal: [...] }
-        function findTransferMonthMatches(personA, fromGroup, toGroup, year, month) {
+        // Find same-date matches: A(fromGroup) and B(toGroup) assigned on the same date.
+        // If no match exists in the current month, searches previous months (baseline docs first).
+        // Returns: { special: [...], weekend: [...], semi: [...], normal: [...] }
+        function findTransferMatchesBackwards(personA, fromGroup, toGroup, startYear, startMonth, maxMonthsBack = 24) {
             const matches = { special: [], weekend: [], semi: [], normal: [] };
-            const firstDay = new Date(year, month, 1);
-            const lastDay = new Date(year, month + 1, 0);
+            const haveAny = (type) => (matches[type] && matches[type].length > 0);
 
-            for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
-                const dayKey = formatDateKey(d);
-                const dayType = getDayType(d);
-                const cat = getDayTypeCategoryFromDayType(dayType);
+            for (let back = 0; back < maxMonthsBack; back++) {
+                const monthStart = new Date(startYear, startMonth - back, 1);
+                const year = monthStart.getFullYear();
+                const month = monthStart.getMonth();
+                const firstDay = new Date(year, month, 1);
+                const lastDay = new Date(year, month + 1, 0);
+                const monthKey = `${year}-${month}`;
+                const monthLabel = new Date(year, month, 1).toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
 
-                const assignment = getAssignmentForDate(dayKey);
-                if (!assignment) continue;
+                for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
+                    const dayKey = formatDateKey(d);
+                    const cat = getDayTypeCategoryFromDayType(getDayType(d));
+                    // If we already found a match for this type in a more recent month, skip.
+                    if (haveAny(cat)) continue;
 
-                const a = parseAssignedPersonForGroupFromAssignment(assignment, fromGroup);
-                if (!a || a !== personA) continue;
+                    const baseline = getRotationBaselineAssignmentForDate(dayKey);
+                    const assignment = baseline || getAssignmentForDate(dayKey);
+                    if (!assignment) continue;
 
-                const b = parseAssignedPersonForGroupFromAssignment(assignment, toGroup);
-                if (!b) continue;
+                    const a = parseAssignedPersonForGroupFromAssignment(assignment, fromGroup);
+                    if (!a || a !== personA) continue;
 
-                matches[cat].push({
-                    dateKey: dayKey,
-                    dateStr: d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-                    dayName: getGreekDayName(d),
-                    personB: b
-                });
+                    const b = parseAssignedPersonForGroupFromAssignment(assignment, toGroup);
+                    if (!b) continue;
+
+                    matches[cat].push({
+                        dateKey: dayKey,
+                        dateStr: d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                        dayName: getGreekDayName(d),
+                        personB: b,
+                        monthKey,
+                        monthLabel,
+                        source: baseline ? 'baseline' : 'final'
+                    });
+                }
+
+                // Stop early if we have at least one match for every list type
+                if (haveAny('special') && haveAny('weekend') && haveAny('semi') && haveAny('normal')) {
+                    break;
+                }
             }
+
             return matches;
         }
 
@@ -3311,8 +3398,8 @@
             const ranksByType = {};
 
             ['special', 'weekend', 'semi', 'normal'].forEach(type => {
-                // Choose the LAST match in the month (closest to end of month)
-                const matches = matchesByType?.[type] || [];
+                // Choose the most recent match by dateKey
+                const matches = (matchesByType?.[type] || []).slice().sort((a, b) => (a.dateKey || '').localeCompare(b.dateKey || ''));
                 const chosen = matches.length ? matches[matches.length - 1] : null;
                 chosenByType[type] = chosen;
 
@@ -3361,9 +3448,10 @@
                 const chosen = transferData.auto?.chosenByType?.[type] || null;
                 const pos = transferData.positions?.[type] || null;
                 const r = transferData.auto?.ranksByType?.[type] || {};
+                const totalMatches = matchesByType?.[type]?.length || 0;
 
                 const matchText = chosen
-                    ? `${chosen.dayName} ${chosen.dateStr} — ${chosen.personB}`
+                    ? `${chosen.dayName} ${chosen.dateStr} — ${chosen.personB} (${chosen.monthLabel || chosen.monthKey || ''}, ${chosen.source || ''})`
                     : 'Δεν βρέθηκε κοινή υπηρεσία στον μήνα';
 
                 let intended = 'Δεν έχει επιλεγεί';
@@ -3378,7 +3466,7 @@
 
                 return `<tr>
                     <td><strong>${label}</strong></td>
-                    <td>${matchText}</td>
+                    <td>${matchText}<div class="small text-muted">Matches: ${totalMatches}</div></td>
                     <td>${rankText}</td>
                     <td><strong>${intended}</strong></td>
                 </tr>`;
@@ -3387,8 +3475,8 @@
             el.innerHTML = `
                 <div class="alert alert-light border">
                     <div class="mb-2">
-                        <strong>Αυτόματη πρόταση τοποθέτησης (μήνας: ${monthStr})</strong>
-                        <div class="text-muted small">Βάσει ίδιας ημερομηνίας υπηρεσίας και ιεραρχίας (rankings). Μπορείτε να την αλλάξετε χειροκίνητα παρακάτω.</div>
+                        <strong>Αυτόματη πρόταση τοποθέτησης (αφετηρία μήνας: ${monthStr})</strong>
+                        <div class="text-muted small">Αν δεν υπάρχει κοινή υπηρεσία στον μήνα, γίνεται αναζήτηση σε προηγούμενους μήνες (baseline docs πρώτα). Μπορείτε να αλλάξετε χειροκίνητα παρακάτω.</div>
                     </div>
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered mb-0">
@@ -3497,7 +3585,7 @@
             // Re-render to show updated selection
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth();
-            const matchesByType = findTransferMonthMatches(transferData.person, transferData.fromGroup, transferData.toGroup, year, month);
+            const matchesByType = findTransferMatchesBackwards(transferData.person, transferData.fromGroup, transferData.toGroup, year, month, 36);
             // Update preview to reflect the intended positions after manual override
             renderTransferAutoPreview(matchesByType);
             renderTransferPositionLists(matchesByType);
