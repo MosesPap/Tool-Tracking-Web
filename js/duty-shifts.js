@@ -2768,6 +2768,8 @@
         let draggedRankingItem = null;
         let rankingScrollInterval = null;
         let currentMouseY = 0;
+        // Track an in-progress manual ranking edit so we can safely commit it before saving
+        let activeRankingEdit = null;
 
         function handleRankingDragStart(e) {
             draggedRankingItem = this;
@@ -2973,19 +2975,48 @@
                 // - Person at 9 becomes 8
                 // - Moved person becomes 9
                 updateRankingsAfterMove();
+
+                // Clear active edit tracking
+                if (activeRankingEdit && activeRankingEdit.personName === personName) {
+                    activeRankingEdit = null;
+                }
             };
             
+            // Track this edit so Save can force-commit it if the user clicks Save while editing
+            activeRankingEdit = { personName, finishEdit, input };
+
             input.addEventListener('blur', finishEdit);
-            input.addEventListener('keypress', (e) => {
+            input.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     finishEdit();
+                    // Prevent the Enter key from triggering other actions
+                    return;
+                }
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    // Cancel: restore original number and exit edit mode
+                    rankingNumberEl.textContent = String(currentRanking);
+                    if (activeRankingEdit && activeRankingEdit.personName === personName) {
+                        activeRankingEdit = null;
+                    }
                 }
             });
         }
 
         // Save rankings to Firestore
         function saveRankings() {
+            // If the user is currently editing a ranking number, commit it first
+            if (activeRankingEdit && typeof activeRankingEdit.finishEdit === 'function') {
+                try {
+                    activeRankingEdit.finishEdit();
+                } catch (e) {
+                    // If commit fails (validation), don't proceed with save
+                    console.error('Failed to commit active ranking edit before saving:', e);
+                    return;
+                }
+            }
+
             const container = document.getElementById('rankingsListBody');
             const items = Array.from(container.querySelectorAll('.ranking-item'));
             
