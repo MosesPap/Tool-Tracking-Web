@@ -4242,6 +4242,78 @@
                 
                 // Check if ExcelJS is available, otherwise fall back to SheetJS
                 const useExcelJS = typeof ExcelJS !== 'undefined';
+
+                // Keep Greek characters in filenames; only remove illegal/control chars.
+                const sanitizeFilenameComponent = (value) => {
+                    return (value ?? '')
+                        .toString()
+                        .normalize('NFC')
+                        // Remove ASCII control chars (includes \n \r \t)
+                        .replace(/[\x00-\x1F\x7F]/g, '')
+                        // Remove Windows forbidden filename chars
+                        .replace(/[\\/:*?"<>|]/g, '_')
+                        // Replace any other weird chars (keep unicode letters/numbers, space, underscore, dash, dot)
+                        .replace(/[^\p{L}\p{N} _.\-]/gu, '_')
+                        .trim()
+                        .replace(/\s+/g, '_')
+                        .replace(/_+/g, '_')
+                        .replace(/^_+|_+$/g, '');
+                };
+
+                const buildExcelFilename = (groupName, monthName, year) => {
+                    const prefix = 'ΥΠΗΡΕΣΙΑ';
+                    const safeGroup = sanitizeFilenameComponent(groupName);
+                    const safeMonth = sanitizeFilenameComponent(monthName);
+                    return `${prefix}_${safeGroup}_${safeMonth}_${year}.xlsx`;
+                };
+
+                const getGreekMonthAbbrev = (date) => {
+                    const abbr = ['ΙΑΝ', 'ΦΕΒ', 'ΜΑΡ', 'ΑΠΡ', 'ΜΑΙ', 'ΙΟΥΝ', 'ΙΟΥΛ', 'ΑΥΓ', 'ΣΕΠ', 'ΟΚΤ', 'ΝΟΕ', 'ΔΕΚ'];
+                    return abbr[date.getMonth()];
+                };
+
+                const monthFolderName = `${getGreekMonthAbbrev(currentDate)} ${String(year).slice(-2)}`;
+
+                const excelMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+                const downloadBytes = (fileName, bytes) => {
+                    const blob = new Blob([bytes], { type: excelMime });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = fileName;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                };
+
+                // If supported (Chrome/Edge), ask user for a base folder and create a month subfolder (e.g. "ΙΑΝ 26")
+                // Otherwise we fall back to normal browser downloads (cannot auto-create folders there).
+                let monthDirHandle = null;
+                if (typeof window.showDirectoryPicker === 'function') {
+                    try {
+                        const baseDir = await window.showDirectoryPicker({ mode: 'readwrite' });
+                        monthDirHandle = await baseDir.getDirectoryHandle(monthFolderName, { create: true });
+                    } catch (e) {
+                        // user cancelled or not allowed; fallback to normal downloads
+                        monthDirHandle = null;
+                    }
+                }
+
+                const saveBytesToMonthFolder = async (fileName, bytes) => {
+                    if (!monthDirHandle) return false;
+                    try {
+                        const fileHandle = await monthDirHandle.getFileHandle(fileName, { create: true });
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(new Blob([bytes], { type: excelMime }));
+                        await writable.close();
+                        return true;
+                    } catch (e) {
+                        console.warn('Failed saving to folder, falling back to download:', e);
+                        return false;
+                    }
+                };
                 
                 // Generate Excel file for each group
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -4402,20 +4474,15 @@
                             row.height = 22;
                         }
                         
-                        // Generate file name
-                        const fileName = `YPHRESIA_${groupName.replace(/[^a-zA-Z0-9]/g, '_')}_${monthName.replace(/[^a-zA-Z0-9]/g, '_')}_${year}.xlsx`;
+                        // Generate file name (keep Greek)
+                        const fileName = buildExcelFilename(groupName, monthName, year);
                         
                         // Write file
                         const buffer = await workbook.xlsx.writeBuffer();
-                        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                        const url = URL.createObjectURL(blob);
-                        const link = document.createElement('a');
-                        link.href = url;
-                        link.download = fileName;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        URL.revokeObjectURL(url);
+                        const saved = await saveBytesToMonthFolder(fileName, buffer);
+                        if (!saved) {
+                            downloadBytes(fileName, buffer);
+                        }
                     } else {
                         // Fallback to SheetJS (limited styling)
                         const wb = XLSX.utils.book_new();
@@ -4500,8 +4567,12 @@
                         }
                         
                         XLSX.utils.book_append_sheet(wb, ws, 'Υπηρεσίες');
-                        const fileName = `YPHRESIA_${groupName.replace(/[^a-zA-Z0-9]/g, '_')}_${monthName.replace(/[^a-zA-Z0-9]/g, '_')}_${year}.xlsx`;
-                        XLSX.writeFile(wb, fileName);
+                        const fileName = buildExcelFilename(groupName, monthName, year);
+                        const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                        const saved = await saveBytesToMonthFolder(fileName, out);
+                        if (!saved) {
+                            downloadBytes(fileName, out);
+                        }
                     }
                 }
                 
@@ -4518,7 +4589,9 @@
                     }
                 }
                 
-                alert('Τα Excel αρχεία δημιουργήθηκαν επιτυχώς!');
+                alert(monthDirHandle
+                    ? `Τα Excel αρχεία αποθηκεύτηκαν στον φάκελο "${monthFolderName}".`
+                    : 'Τα Excel αρχεία δημιουργήθηκαν επιτυχώς!');
             } catch (error) {
                 console.error('Error generating Excel files:', error);
                 alert('Σφάλμα κατά τη δημιουργία των Excel αρχείων: ' + error.message);
