@@ -6781,7 +6781,7 @@
                                     groupNum,
                                     replacementPerson,
                                     'skip',
-                                    `Αντικαταστάθηκε ο ${currentPerson} επειδή είχε ${monthReason} την ${getGreekDayName(date)} ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ο ${replacementPerson}.`,
+                                    `Αντικατατέστησε ο ${currentPerson} επειδή είχε ${monthReason} την ${getGreekDayName(date)} ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ο ${replacementPerson}.`,
                                     currentPerson,
                                     null
                                 );
