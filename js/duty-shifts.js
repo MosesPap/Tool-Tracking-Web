@@ -5129,7 +5129,7 @@
         function buildSkipReasonGreek({ skippedPersonName, replacementPersonName, dateKey, monthKey = null }) {
             const d = formatGreekDayDate(dateKey);
             const monthPart = monthKey ? ` (${monthKey})` : '';
-            return `Αντικαταστάθηκε ο ${skippedPersonName} επειδή είχε κώλυμα${monthPart} την ${d.dayName} ${d.dateStr}. Ανατέθηκε ο ${replacementPersonName}.`;
+            return `Αντικατέστησε τον ${skippedPersonName} επειδή είχε κώλυμα${monthPart} την ${d.dayName} ${d.dateStr}. Ανατέθηκε ο ${replacementPersonName}.`;
         }
 
         // Return the adjacent day (before/after) that causes the consecutive-duty conflict.
@@ -12383,6 +12383,18 @@
                                             conflictDetails.push(`Ημερομηνία επηρεασμένη: ${currentDateStr}, Το ανέθετο άτομο έχει συνεχόμενη Ημιαργία: ${afterDateStr}`);
                                         }
                                     }
+                                }
+
+                                // IMPORTANT: Monday↔Wednesday / Tuesday↔Thursday swaps may not be re-derivable by the
+                                // simplified conflict checks above. If the saved assignmentReasons indicates a swap,
+                                // treat it as legitimate so the popup shows the reason.
+                                if (!hasLegitimateConflict && swapOrSkipType === 'swap' && swapOrSkipReasonText) {
+                                    hasLegitimateConflict = true;
+                                    const dow = date.getDay(); // 1=Mon,2=Tue,3=Wed,4=Thu
+                                    let swapRule = 'Καθημερινών';
+                                    if (dow === 1 || dow === 3) swapRule = 'Δευτέρα↔Τετάρτη';
+                                    else if (dow === 2 || dow === 4) swapRule = 'Τρίτη↔Πέμπτη';
+                                    conflictDetails.push(`Αλλαγή βάσει κανόνα ${swapRule} (από λόγους ανάθεσης)`);
                                 }
                             }
                             
