@@ -531,42 +531,9 @@
                     delete data.lastUpdated;
                     delete data.updatedBy;
                     criticalAssignments = data || {};
-                    
-                    console.log('Loaded criticalAssignments from Firestore:', Object.keys(criticalAssignments).length, 'dates');
-                    console.log('Sample criticalAssignments:', Object.entries(criticalAssignments).slice(0, 3));
-                    
-                    // Restore critical assignments to dutyAssignments if they're missing
-                    Object.keys(criticalAssignments).forEach(dateKey => {
-                        const criticalPeople = criticalAssignments[dateKey];
-                        // Handle both array format and string format (for backward compatibility)
-                        let peopleArray = [];
-                        if (Array.isArray(criticalPeople)) {
-                            peopleArray = criticalPeople;
-                        } else if (typeof criticalPeople === 'string') {
-                            peopleArray = [criticalPeople];
-                        }
-                        
-                        if (peopleArray.length > 0) {
-                            // Ensure critical assignments are in day-type-specific documents
-                            const existingAssignment = getAssignmentForDate(dateKey);
-                            if (!existingAssignment) {
-                                setAssignmentForDate(dateKey, peopleArray.join(', '));
-                                console.log(`Restored critical assignment for ${dateKey}: ${peopleArray.join(', ')}`);
-                            } else {
-                                // Merge critical assignments with existing ones
-                                const existing = existingAssignment.split(', ');
-                                peopleArray.forEach(person => {
-                                    if (!existing.includes(person)) {
-                                        existing.push(person);
-                                    }
-                                });
-                                setAssignmentForDate(dateKey, existing.join(', '));
-                                console.log(`Merged critical assignment for ${dateKey}: ${existing.join(', ')}`);
-                            }
-                        }
-                    });
                 } else {
-                    console.log('No criticalAssignments document found in Firestore');
+                    // Keep empty - criticalAssignments are optional history only
+                    criticalAssignments = {};
                 }
                 
                 // Load cross-month swaps from Firestore
@@ -696,9 +663,8 @@
                 // Reset rankingsModified flag after loading (rankings haven't been modified yet)
                 rankingsModified = false;
                 
-                // After loading all data, rebuild criticalAssignments from lastDuties if they're missing
-                // This ensures manually entered dates are always protected
-                rebuildCriticalAssignmentsFromLastDuties();
+                // IMPORTANT: Do not auto-rebuild/restore critical assignments into the schedule.
+                // criticalAssignments are kept as history only and must not affect the current calendar.
                 
                 console.log('Data loaded from Firebase');
             } catch (error) {
@@ -714,7 +680,6 @@
         // Saving should only happen when actual changes are made by the user.
         function rebuildCriticalAssignmentsFromLastDuties() {
             let rebuiltCount = 0;
-            let updatedCount = 0;
             
             for (let groupNum = 1; groupNum <= 4; groupNum++) {
                 const groupData = groups[groupNum];
@@ -759,16 +724,6 @@
                                         criticalAssignments[dateKey].push(personGroupStr);
                                         rebuiltCount++;
                                     }
-                                    
-                                    // Also ensure it's in day-type-specific assignments (only if not already there)
-                                    const existingAssignment = getAssignmentForDate(dateKey);
-                                    if (!existingAssignment) {
-                                        setAssignmentForDate(dateKey, personGroupStr);
-                                        updatedCount++;
-                                    } else if (!existingAssignment.includes(personGroupStr)) {
-                                        setAssignmentForDate(dateKey, existingAssignment + `, ${personGroupStr}`);
-                                        updatedCount++;
-                                    }
                                 }
                             } catch (error) {
                                 console.error(`Error rebuilding critical assignment for ${dateStr}:`, error);
@@ -779,8 +734,8 @@
             }
             
             // Only log if there were actual changes
-            if (rebuiltCount > 0 || updatedCount > 0) {
-                console.log(`Rebuilt ${rebuiltCount} critical assignments and updated ${updatedCount} duty assignments from lastDuties (in-memory only, not saved)`);
+            if (rebuiltCount > 0) {
+                console.log(`Rebuilt ${rebuiltCount} critical history entries from lastDuties (in-memory only, not saved)`);
             }
         }
 
@@ -881,26 +836,6 @@
             const savedCriticalAssignments = localStorage.getItem('dutyShiftsCriticalAssignments');
             if (savedCriticalAssignments) {
                 criticalAssignments = JSON.parse(savedCriticalAssignments);
-                
-                // Restore critical assignments to day-type-specific documents if they're missing
-                Object.keys(criticalAssignments).forEach(dateKey => {
-                    const criticalPeople = criticalAssignments[dateKey];
-                    if (Array.isArray(criticalPeople) && criticalPeople.length > 0) {
-                        const existingAssignment = getAssignmentForDate(dateKey);
-                        if (!existingAssignment) {
-                            setAssignmentForDate(dateKey, criticalPeople.join(', '));
-                        } else {
-                            // Merge critical assignments with existing ones
-                            const existing = existingAssignment.split(', ');
-                            criticalPeople.forEach(person => {
-                                if (!existing.includes(person)) {
-                                    existing.push(person);
-                                }
-                            });
-                            setAssignmentForDate(dateKey, existing.join(', '));
-                        }
-                    }
-                });
             }
             
             // Load assignment reasons (swap/skip indicators)
@@ -978,8 +913,8 @@
             // Reset rankingsModified flag after loading from localStorage
             rankingsModified = false;
             
-            // After loading from localStorage, rebuild criticalAssignments from lastDuties
-            rebuildCriticalAssignmentsFromLastDuties();
+            // IMPORTANT: Do not auto-rebuild/restore critical assignments into the schedule.
+            // criticalAssignments are kept as history only and must not affect the current calendar.
         }
 
         // Helper function to sanitize data for Firestore (remove undefined, functions, etc.)
@@ -1210,9 +1145,6 @@
                 // Save critical assignments separately
                 try {
                 console.log('Saving criticalAssignments to Firestore:', Object.keys(criticalAssignments).length, 'dates');
-                if (Object.keys(criticalAssignments).length > 0) {
-                    console.log('Sample criticalAssignments being saved:', Object.entries(criticalAssignments).slice(0, 3));
-                }
                     const sanitizedCritical = sanitizeForFirestore(criticalAssignments);
                 await db.collection('dutyShifts').doc('criticalAssignments').set({
                         ...sanitizedCritical,
@@ -4794,34 +4726,7 @@
                 return;
             }
             
-            // CRITICAL: Restore critical assignments to day-type-specific documents before rendering
-            // This ensures manually entered last duty dates are always visible
-            Object.keys(criticalAssignments).forEach(dateKey => {
-                const criticalPeople = criticalAssignments[dateKey];
-                if (Array.isArray(criticalPeople) && criticalPeople.length > 0) {
-                    const criticalStr = criticalPeople.join(', ');
-                    const existingAssignment = getAssignmentForDate(dateKey);
-                    if (!existingAssignment) {
-                        // No assignment exists, add the critical one
-                        setAssignmentForDate(dateKey, criticalStr);
-                        console.log(`Restored critical assignment for ${dateKey}: ${criticalStr}`);
-                    } else {
-                        // Assignment exists, merge critical people if not already present
-                        const existing = existingAssignment.split(', ');
-                        let needsUpdate = false;
-                        criticalPeople.forEach(person => {
-                            if (!existing.includes(person)) {
-                                existing.push(person);
-                                needsUpdate = true;
-                            }
-                        });
-                        if (needsUpdate) {
-                            setAssignmentForDate(dateKey, existing.join(', '));
-                            console.log(`Merged critical assignment for ${dateKey}: ${existing.join(', ')}`);
-                        }
-                    }
-                }
-            });
+            // NOTE: criticalAssignments are treated as history only and must not be injected into the calendar.
             
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth();
@@ -9093,25 +8998,17 @@
             const preserveExisting = calculationSteps.preserveExisting;
             
             // Clear assignments only for the selected date range if not preserving
-            // BUT NEVER delete critical assignments (from last duties)
             if (!preserveExisting) {
                 const dateIterator = new Date(startDate);
                 while (dateIterator <= endDate) {
                     const key = formatDateKey(dateIterator);
-                    // Check if this is a critical assignment - if so, preserve it
-                    if (criticalAssignments[key] && criticalAssignments[key].length > 0) {
-                        // This is a critical assignment - restore it if it was cleared
-                        const criticalPeople = criticalAssignments[key];
-                        dutyAssignments[key] = criticalPeople.join(', ');
-                    } else {
-                        // Not critical, safe to delete
-                        delete dutyAssignments[key];
-                            // Also delete from day-type-specific assignments
-                            delete normalDayAssignments[key];
-                            delete semiNormalAssignments[key];
-                            delete weekendAssignments[key];
-                            delete specialHolidayAssignments[key];
-                    }
+                    // Delete assignments for the selected date range
+                    delete dutyAssignments[key];
+                    // Also delete from day-type-specific assignments
+                    delete normalDayAssignments[key];
+                    delete semiNormalAssignments[key];
+                    delete weekendAssignments[key];
+                    delete specialHolidayAssignments[key];
                     dateIterator.setDate(dateIterator.getDate() + 1);
                 }
             }
