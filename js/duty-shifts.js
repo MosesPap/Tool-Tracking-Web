@@ -247,22 +247,28 @@
         let isLoadingData = false;
         const DATA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache duration
         
-        // Initialize
-        document.addEventListener('DOMContentLoaded', async function() {
-            // Wait for Firebase to be ready
-            if (window.auth && window.db) {
-                // Check authentication
+        // Initialize (guard against duplicate initialization which can cause slow loads after refresh)
+        let dutyShiftsInitStarted = false;
+        let dutyShiftsAuthUnsubscribe = null;
+        function startDutyShiftsAppInit() {
+            if (dutyShiftsInitStarted) return;
+            dutyShiftsInitStarted = true;
+            
+            const tryAttach = () => {
+                // Wait for Firebase to be ready (do NOT re-dispatch DOMContentLoaded)
+                if (!(window.auth && window.db)) {
+                    setTimeout(tryAttach, 250);
+                    return;
+                }
+                
+                // Attach auth listener once
                 let authListenerUnsubscribed = false;
-                const unsubscribe = window.auth.onAuthStateChanged(async function(user) {
-                    // Prevent duplicate processing if listener fires multiple times
+                dutyShiftsAuthUnsubscribe = window.auth.onAuthStateChanged(async function(user) {
                     if (authListenerUnsubscribed) return;
                     
                     if (user && user.emailVerified) {
-                        // Check if data was recently loaded to prevent duplicate reads
                         const now = Date.now();
                         if (dataLastLoaded && (now - dataLastLoaded) < DATA_CACHE_DURATION && !isLoadingData) {
-                            console.log('[DUTY-SHIFTS] Data recently loaded, skipping reload');
-                            // Still render with existing data
                             renderGroups();
                             renderHolidays();
                             renderRecurringHolidays();
@@ -276,47 +282,49 @@
                         dataLastLoaded = Date.now();
                         isLoadingData = false;
                         
-                        renderGroups();
-                        renderHolidays();
-                        renderRecurringHolidays();
-                        renderCalendar();
-                        updateStatistics();
+                        // Render UI in next frame to reduce long main-thread blocking
+                        requestAnimationFrame(() => {
+                            renderGroups();
+                            renderHolidays();
+                            renderRecurringHolidays();
+                            renderCalendar();
+                            updateStatistics();
+                        });
                     } else {
                         // Not authenticated, use localStorage
                         loadDataFromLocalStorage();
-                        renderGroups();
-                        renderHolidays();
-                        renderRecurringHolidays();
-                        renderCalendar();
-                        updateStatistics();
+                        requestAnimationFrame(() => {
+                            renderGroups();
+                            renderHolidays();
+                            renderRecurringHolidays();
+                            renderCalendar();
+                            updateStatistics();
+                        });
                     }
                 });
                 
                 // Clean up listener when page is hidden/unloaded to prevent background reads
                 document.addEventListener('visibilitychange', function() {
                     if (document.hidden) {
-                        // Page is hidden, unsubscribe to prevent background reads
-                        if (unsubscribe && typeof unsubscribe === 'function') {
-                            unsubscribe();
+                        if (dutyShiftsAuthUnsubscribe && typeof dutyShiftsAuthUnsubscribe === 'function') {
+                            dutyShiftsAuthUnsubscribe();
                             authListenerUnsubscribed = true;
                         }
                     }
                 });
                 
                 window.addEventListener('beforeunload', function() {
-                    // Page is unloading, unsubscribe to prevent reads
-                    if (unsubscribe && typeof unsubscribe === 'function') {
-                        unsubscribe();
+                    if (dutyShiftsAuthUnsubscribe && typeof dutyShiftsAuthUnsubscribe === 'function') {
+                        dutyShiftsAuthUnsubscribe();
                         authListenerUnsubscribed = true;
                     }
                 });
-            } else {
-                // Firebase not loaded yet, wait a bit and try again
-                setTimeout(() => {
-                    document.dispatchEvent(new Event('DOMContentLoaded'));
-                }, 500);
-            }
-        });
+            };
+            
+            tryAttach();
+        }
+        
+        document.addEventListener('DOMContentLoaded', startDutyShiftsAppInit);
 
         // Load data from Firebase Firestore
         async function loadData() {
@@ -1409,9 +1417,39 @@
         // Render groups - shows 4 separate order lists per group
         // preserveOpenLists: if true, preserves currently open lists
         // forceOpenLists: array of list IDs that should be opened after render
+        const groupListRenderRegistry = new Map(); // containerId -> { groupNum, type, list }
+        function ensureGroupListPopulated(containerId) {
+            try {
+                const el = document.getElementById(containerId);
+                if (!el) return;
+                if (el.dataset && el.dataset.populated === 'true') return;
+                const meta = groupListRenderRegistry.get(containerId);
+                if (!meta) return;
+                
+                const list = meta.list || [];
+                el.innerHTML = '';
+                if (!Array.isArray(list) || list.length === 0) {
+                    el.innerHTML = '<p class="text-muted text-center small">Δεν υπάρχουν άτομα</p>';
+                    el.dataset.populated = 'true';
+                    return;
+                }
+                
+                const frag = document.createDocumentFragment();
+                list.forEach((person, index) => {
+                    const personDiv = createPersonItem(meta.groupNum, person, index, meta.type, list);
+                    frag.appendChild(personDiv);
+                });
+                el.appendChild(frag);
+                el.dataset.populated = 'true';
+            } catch (e) {
+                console.error('Error populating group list:', containerId, e);
+            }
+        }
+
         function renderGroups(preserveOpenLists = true, forceOpenLists = []) {
             // Track open lists before rendering if preserveOpenLists is true
             const openLists = preserveOpenLists ? getOpenLists() : [];
+            groupListRenderRegistry.clear();
             
             // Add any forced open lists to the list
             if (forceOpenLists && forceOpenLists.length > 0) {
@@ -1526,13 +1564,12 @@
                     
                     lists.forEach(({ type, list, containerId }) => {
                         const listContainer = document.getElementById(containerId);
-                        if (list.length === 0) {
-                            listContainer.innerHTML = '<p class="text-muted text-center small">Δεν υπάρχουν άτομα</p>';
-                        } else {
-                            list.forEach((person, index) => {
-                                const personDiv = createPersonItem(i, person, index, type, list);
-                                listContainer.appendChild(personDiv);
-                            });
+                        // Lazy rendering for performance: populate only when expanded.
+                        groupListRenderRegistry.set(containerId, { groupNum: i, type, list });
+                        listContainer.dataset.populated = 'false';
+                        // If list is already open (restoreOpenLists will show it), pre-populate now.
+                        if (openLists.includes(containerId)) {
+                            ensureGroupListPopulated(containerId);
                         }
                     });
                 }
@@ -4709,6 +4746,11 @@
             
             const grid = calendarGrid;
             grid.innerHTML = '';
+            const frag = document.createDocumentFragment();
+            
+            // Precompute special holiday map to avoid repeated .find() calls
+            const specialHolidayNameByDate = new Map((specialHolidays || []).map(h => [h.date, h.name]));
+            const shouldShowHeavyIndicators = false; // performance: avoid conflict/reason checks in calendar view
             
             // Day headers - Monday first
             const dayHeaders = ['Δευ', 'Τρι', 'Τετ', 'Πεμ', 'Παρ', 'Σαβ', 'Κυρ'];
@@ -4716,13 +4758,13 @@
                 const headerDiv = document.createElement('div');
                 headerDiv.className = 'calendar-day-header';
                 headerDiv.textContent = header;
-                grid.appendChild(headerDiv);
+                frag.appendChild(headerDiv);
             });
             
             // Empty cells for days before month starts
             for (let i = 0; i < startingDayOfWeek; i++) {
                 const emptyDiv = document.createElement('div');
-                grid.appendChild(emptyDiv);
+                frag.appendChild(emptyDiv);
             }
             
             // Days of the month
@@ -4731,7 +4773,6 @@
             
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(year, month, day);
-                const dayType = getDayType(date);
                 const isToday = date.getTime() === today.getTime();
                 const key = formatDateKey(date);
                 // Get assignment from the correct day-type-specific document
@@ -4747,7 +4788,8 @@
                 
                 // CRITICAL: Special holidays must always have purple color, even if they're also weekends/holidays
                 // Remove conflicting day type classes and ensure special-holiday class is applied
-                const isSpecial = isSpecialHoliday(date);
+                const isSpecial = specialHolidayNameByDate.has(key);
+                const dayType = isSpecial ? 'special-holiday' : getDayType(date);
                 if (isSpecial) {
                     // For special holidays, only use special-holiday class (purple color)
                     dayDiv.className = `calendar-day special-holiday ${isToday ? 'today' : ''}`;
@@ -4766,227 +4808,25 @@
                 }
                 
                 // Get holiday name (special holiday first, then Orthodox/Cyprus holiday)
-                const holidayName = getOrthodoxHolidayName(date);
+                const holidayName = specialHolidayNameByDate.get(key) || getOrthodoxHolidayNameAuto(date);
                 
                 // Parse assignment and display each person on a separate line (no commas)
                 let displayAssignmentHtml = '';
                 if (assignment) {
-                    // Ensure assignment is a string (it might be an object if data wasn't flattened correctly)
                     const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
-                    // Split by comma first, then extract person-group info from each part
                     const parts = assignmentStr.split(',').map(p => p.trim()).filter(p => p);
-                    const personGroups = [];
-                    
-                    parts.forEach(part => {
-                        // Try to match "Name (Ομάδα X)" pattern
-                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
-                        if (match) {
-                            // Remove any leading/trailing commas from the name
-                            const name = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
-                            personGroups.push({
-                                name: name,
-                                group: match[2].trim(),
-                                fullString: part
-                            });
-                        } else {
-                            // If no group pattern, check if it's just a name
-                            // Try to extract group info if it exists elsewhere in the string
-                            const groupMatch = part.match(/\(Ομάδα\s*(\d+)\)/);
-                            if (groupMatch) {
-                                let name = part.replace(/\s*\(Ομάδα\s*\d+\)\s*/, '').trim();
-                                name = name.replace(/^,+\s*/, '').replace(/\s*,+$/, ''); // Remove leading/trailing commas
-                                personGroups.push({
-                                    name: name,
-                                    group: groupMatch[1],
-                                    fullString: part
-                                });
-                            } else {
-                                // Just a name without group info - remove commas
-                                let name = part.replace(/^,+\s*/, '').replace(/\s*,+$/, '');
-                                personGroups.push({
-                                    name: name,
-                                    group: null,
-                                    fullString: part
-                                });
-                            }
+                    if (parts.length > 0) {
+                        displayAssignmentHtml = '<div class="duty-person-container">';
+                        for (const part of parts) {
+                            const nameOnly = part.replace(/\s*\(Ομάδα\s*\d+\)\s*/g, '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
+                            displayAssignmentHtml += `<div class="duty-person">${nameOnly}</div>`;
                         }
-                    });
-                    
-                    // Check if this date has critical assignments
-                    const criticalPeople = criticalAssignments[key] || [];
-                    
-                    // Create a container div for all persons - each on separate line
-                    displayAssignmentHtml = '<div class="duty-person-container">';
-                    personGroups.forEach(({ name, group, fullString }) => {
-                        // Check if this person-group combination is in critical assignments
-                        const isCritical = criticalPeople.some(cp => {
-                            if (group) {
-                                return cp === fullString || (cp.includes(name) && cp.includes(`(Ομάδα ${group})`));
-                            } else {
-                                return cp.includes(name);
-                            }
-                        });
-                        
-                        // Check for skip/swap reason
-                        const reason = getAssignmentReason(key, parseInt(group || 0), name);
-                        let indicatorIcon = '';
-                        let indicatorTitle = '';
-                        let isSwapped = false;
-                        if (reason) {
-                            if (reason.type === 'skip') {
-                                indicatorIcon = '<i class="fas fa-arrow-right text-warning" title="Παραλείφθηκε"></i> ';
-                                indicatorTitle = reason.reason;
-                            } else if (reason.type === 'swap') {
-                                indicatorIcon = '<i class="fas fa-exchange-alt text-info" title="Αλλαγή" style="font-size: 0.9em;"></i> ';
-                                indicatorTitle = reason.reason;
-                                isSwapped = true;
-                            }
+                        // Optional: show a small marker if there are reasons on this date (without heavy per-person checks)
+                        if (shouldShowHeavyIndicators && assignmentReasons[key]) {
+                            displayAssignmentHtml += `<div class="duty-person-swapped" title="Υπάρχουν λόγοι αλλαγής/παράλειψης">*</div>`;
                         }
-                        
-                        // Check if person has conflict on this date
-                        // IMPORTANT: If person was swapped in (has swap reason), don't show conflict warning
-                        // because the swap was done to resolve the conflict
-                        let conflictIcon = '';
-                        let conflictTitle = '';
-                        const hasConflict = !isSwapped && hasConsecutiveDuty(key, name, parseInt(group || 0));
-                        if (hasConflict) {
-                            // Make conflict icon highly visible - larger, with background color and border
-                            conflictIcon = '<i class="fas fa-exclamation-triangle" style="color: #dc3545; font-size: 1.2em; background-color: #fff3cd; padding: 3px 5px; border-radius: 4px; border: 2px solid #dc3545; display: inline-block; min-width: 20px; text-align: center;" title="Σύγκρουση"></i> ';
-                            const date = new Date(key + 'T00:00:00');
-                            const dayBefore = new Date(date);
-                            dayBefore.setDate(dayBefore.getDate() - 1);
-                            const dayAfter = new Date(date);
-                            dayAfter.setDate(dayAfter.getDate() + 1);
-                            const dayBeforeKey = formatDateKey(dayBefore);
-                            const dayAfterKey = formatDateKey(dayAfter);
-                            
-                            let conflictDetails = [];
-                            if (hasDutyOnDay(dayBeforeKey, name, parseInt(group || 0))) {
-                                const beforeDateStr = dayBefore.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                conflictDetails.push(`Συνεχόμενη ημέρα: ${beforeDateStr}`);
-                            }
-                            if (hasDutyOnDay(dayAfterKey, name, parseInt(group || 0))) {
-                                const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                conflictDetails.push(`Συνεχόμενη ημέρα: ${afterDateStr}`);
-                            }
-                            if (conflictDetails.length > 0) {
-                                const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                conflictTitle = `Σύγκρουση - Ημερομηνία επηρεασμένη: ${currentDateStr}, ${conflictDetails.join(', ')}`;
-                            } else {
-                                conflictTitle = 'Σύγκρουση';
-                            }
-                        }
-                        
-                        // Apply styling: critical assignments get red, swapped assignments get round border with color coding
-                        let styleClass = 'duty-person';
-                        let swapPairStyle = '';
-                        if (isCritical) {
-                            styleClass = 'duty-person-critical';
-                        } else if (isSwapped) {
-                            styleClass = 'duty-person-swapped';
-                            // Get swap pair ID and apply color
-                            if (reason && reason.swapPairId !== null && reason.swapPairId !== undefined) {
-                                // Ensure swapPairId is a number (Firestore might return it as string)
-                                const swapPairId = typeof reason.swapPairId === 'number' ? reason.swapPairId : parseInt(reason.swapPairId);
-                                if (!isNaN(swapPairId)) {
-                                    // Generate colors for swap pairs (same as in runNormalSwapLogic)
-                                    const swapColors = [
-                                        { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.15)' }, // Bright Red
-                                        { border: '#00E676', bg: 'rgba(0, 230, 118, 0.15)' }, // Bright Green
-                                        { border: '#FFD600', bg: 'rgba(255, 214, 0, 0.15)' }, // Bright Yellow
-                                        { border: '#00B0FF', bg: 'rgba(0, 176, 255, 0.15)' }, // Bright Blue
-                                        { border: '#D500F9', bg: 'rgba(213, 0, 249, 0.15)' }, // Bright Purple
-                                        { border: '#FF6D00', bg: 'rgba(255, 109, 0, 0.15)' }, // Bright Orange
-                                        { border: '#00E5FF', bg: 'rgba(0, 229, 255, 0.15)' }, // Bright Cyan
-                                        { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.15)' }  // Bright Pink
-                                    ];
-                                    const swapColor = swapColors[swapPairId % swapColors.length];
-                                    swapPairStyle = `border: 2px solid ${swapColor.border}; background-color: ${swapColor.bg};`;
-                                }
-                            }
-                        }
-                        
-                        // Display name with indicator icon and conflict icon
-                        const combinedTitle = indicatorTitle || conflictTitle || '';
-                        // For swapped people, the icon and name are already in the round border, so don't add extra flex styling
-                        if (isSwapped) {
-                            displayAssignmentHtml += `<div class="${styleClass}" style="${swapPairStyle}" title="${combinedTitle}">${indicatorIcon}${name}</div>`;
-                        } else {
-                        displayAssignmentHtml += `<div class="${styleClass}" style="display: flex; align-items: center; gap: 4px;" title="${combinedTitle}">${indicatorIcon}${name}${conflictIcon}</div>`;
-                        }
-                    });
-                    
-                    // Also check for people who were swapped out (have swap reason but not in current assignment)
-                    // This ensures both people involved in a swap are marked
-                    if (assignmentReasons[key]) {
-                        for (const groupNumStr in assignmentReasons[key]) {
-                            const groupNumForReason = parseInt(groupNumStr);
-                            if (isNaN(groupNumForReason)) continue;
-                            
-                            for (const personName in assignmentReasons[key][groupNumForReason]) {
-                                const reason = assignmentReasons[key][groupNumForReason][personName];
-                                
-                                // Only show swap reasons for people not already displayed
-                                if (reason && reason.type === 'swap') {
-                                    // Check if this person is already in the displayed assignment
-                                    const alreadyDisplayed = personGroups.some(({ name, group }) => 
-                                        name === personName && parseInt(group || 0) === groupNumForReason
-                                    );
-                                    
-                                    if (!alreadyDisplayed) {
-                                        // IMPORTANT: Only show swap reason if this swap actually applies to this date
-                                        // A swap reason exists, but we need to verify:
-                                        // 1. The person they swapped with is actually assigned here (regular swap - this person was swapped out), OR
-                                        // 2. This person is in crossMonthSwaps for this date (cross-month swap - they were swapped here from previous month)
-                                        
-                                        const swappedWithPerson = reason.swappedWith;
-                                        const swappedWithIsHere = swappedWithPerson && personGroups.some(({ name, group }) => 
-                                            name === swappedWithPerson && parseInt(group || 0) === groupNumForReason
-                                        );
-                                        
-                                        // Check if this person was supposed to be here (cross-month swap from previous month)
-                                        const wasSupposedToBeHere = crossMonthSwaps[key]?.[groupNumForReason] === personName;
-                                        
-                                        // Only show swap indicator if:
-                                        // - The person they swapped with is actually assigned here (proves the swap happened), OR
-                                        // - This person was supposed to be here according to crossMonthSwaps (cross-month swap)
-                                        if (swappedWithIsHere || wasSupposedToBeHere) {
-                                            // This person was swapped out but is not in current assignment - show them with swap indicator
-                                            const indicatorIcon = '<i class="fas fa-exchange-alt text-info" title="Αλλαγή" style="font-size: 0.9em;"></i> ';
-                                            const styleClass = 'duty-person-swapped';
-                                            const title = reason.reason || 'Αλλαγή';
-                                            
-                                            // Apply color based on swap pair ID
-                                            let swapPairStyle = '';
-                                            if (reason.swapPairId !== null && reason.swapPairId !== undefined) {
-                                                // Ensure swapPairId is a number (Firestore might return it as string)
-                                                const swapPairId = typeof reason.swapPairId === 'number' ? reason.swapPairId : parseInt(reason.swapPairId);
-                                                if (!isNaN(swapPairId)) {
-                                                    const swapColors = [
-                                                        { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.15)' }, // Bright Red
-                                                        { border: '#00E676', bg: 'rgba(0, 230, 118, 0.15)' }, // Bright Green
-                                                        { border: '#FFD600', bg: 'rgba(255, 214, 0, 0.15)' }, // Bright Yellow
-                                                        { border: '#00B0FF', bg: 'rgba(0, 176, 255, 0.15)' }, // Bright Blue
-                                                        { border: '#D500F9', bg: 'rgba(213, 0, 249, 0.15)' }, // Bright Purple
-                                                        { border: '#FF6D00', bg: 'rgba(255, 109, 0, 0.15)' }, // Bright Orange
-                                                        { border: '#00E5FF', bg: 'rgba(0, 229, 255, 0.15)' }, // Bright Cyan
-                                                        { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.15)' }  // Bright Pink
-                                                    ];
-                                                    const swapColor = swapColors[swapPairId % swapColors.length];
-                                                    swapPairStyle = `border: 2px solid ${swapColor.border}; background-color: ${swapColor.bg};`;
-                                                }
-                                            }
-                                            
-                                            displayAssignmentHtml += `<div class="${styleClass}" style="${swapPairStyle}" title="${title}">${indicatorIcon}${personName}</div>`;
-                                        }
-                                        // If neither condition is true, don't show the swap indicator (the swap reason exists but doesn't apply to this date yet)
-                                    }
-                                }
-                            }
-                        }
+                        displayAssignmentHtml += '</div>';
                     }
-                    
-                    displayAssignmentHtml += '</div>';
                 }
                 
                 dayDiv.innerHTML = `
@@ -5009,8 +4849,10 @@
                     }
                 });
                 
-                grid.appendChild(dayDiv);
+                frag.appendChild(dayDiv);
             }
+            
+            grid.appendChild(frag);
         }
 
         // Get day type label
@@ -11926,6 +11768,11 @@
             if (listElement && chevronElement) {
                 // Check current state BEFORE toggling
                 const isCurrentlyShown = listElement.classList.contains('show');
+                
+                // Lazy populate list when opening (improves initial load performance a lot)
+                if (!isCurrentlyShown) {
+                    ensureGroupListPopulated(listId);
+                }
                 
                 // Toggle Bootstrap collapse
                 const bsCollapse = new bootstrap.Collapse(listElement, {
