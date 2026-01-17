@@ -3172,7 +3172,8 @@
             toGroup: null,
             lastDuties: null,
             missingPeriods: null,
-            positions: {} // { listType: { referencePerson: string, position: 'above'|'below'|'end' } }
+            positions: {}, // { listType: { referencePerson: string, position: 'above'|'below'|'end' } }
+            auto: null // { year, month, matchesByType, chosenByType, ranksByType }
         };
 
         // Transfer person to another group - opens positioning modal
@@ -3189,6 +3190,7 @@
             transferData.lastDuties = groups[fromGroup].lastDuties?.[person] || null;
             transferData.missingPeriods = groups[fromGroup].missingPeriods?.[person] || null;
             transferData.positions = {};
+            transferData.auto = null;
             
             // Close dropdown
             document.querySelectorAll('.transfer-dropdown-content').forEach(dropdown => {
@@ -3205,76 +3207,186 @@
             document.getElementById('transferFromGroup').textContent = getGroupName(transferData.fromGroup);
             document.getElementById('transferToGroup').textContent = getGroupName(transferData.toGroup);
             
-            // Find people from target group who had duty on same days
-            const sameDayPeople = findPeopleWithSameDutyDays(transferData.person, transferData.fromGroup, transferData.toGroup);
-            
-            // Render positioning options for each list type
-            renderTransferPositionLists(sameDayPeople);
+            // Auto-suggest positions based on the CURRENT month and rankings:
+            // - Find dates in the current month where person A (fromGroup) had duty
+            // - For each such date, find the person B (toGroup) who had duty on the SAME date
+            // - Compare hierarchy (rankings): if A is higher rank -> place AFTER B, else place ABOVE B
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth(); // 0-11
+            const matchesByType = findTransferMonthMatches(transferData.person, transferData.fromGroup, transferData.toGroup, year, month);
+            applyAutoTransferPositionsFromMatches(matchesByType);
+
+            // Render preview + positioning UI (manual override still available)
+            renderTransferAutoPreview(matchesByType);
+            renderTransferPositionLists(matchesByType);
             
             const modal = new bootstrap.Modal(document.getElementById('transferPositionModal'));
             modal.show();
         }
 
-        // Find people from target group who had duty on same days as the person being transferred
-        function findPeopleWithSameDutyDays(person, fromGroup, toGroup) {
-            const sameDayPeople = {
-                special: [],
-                weekend: [],
-                semi: [],
-                normal: []
-            };
-            
-            // Get all days where person had duty
-            const personDutyDays = [];
-            for (const [dayKey, assignment] of Object.entries(dutyAssignments)) {
-                // Ensure assignment is a string
-                const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment || '');
-                if (assignmentStr.includes(`${person} (Ομάδα ${fromGroup})`)) {
-                    personDutyDays.push(dayKey);
-                }
+        function getDayTypeCategoryFromDayType(dayType) {
+            if (dayType === 'special-holiday') return 'special';
+            if (dayType === 'weekend-holiday') return 'weekend';
+            if (dayType === 'semi-normal-day') return 'semi';
+            return 'normal';
+        }
+
+        function parseAssignedPersonForGroupFromAssignment(assignmentStr, groupNum) {
+            if (!assignmentStr) return null;
+            const parts = String(assignmentStr).split(',').map(p => p.trim()).filter(Boolean);
+            for (const part of parts) {
+                const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                if (m && parseInt(m[2], 10) === groupNum) return m[1].trim();
             }
-            
-            if (personDutyDays.length === 0) {
-                return sameDayPeople; // No duty days found
+            return null;
+        }
+
+        // Find same-date matches WITHIN a month: A(fromGroup) and B(toGroup) assigned on the same date.
+        // Returns: { special: [{dateKey, dateStr, dayName, personB}], weekend: [...], semi: [...], normal: [...] }
+        function findTransferMonthMatches(personA, fromGroup, toGroup, year, month) {
+            const matches = { special: [], weekend: [], semi: [], normal: [] };
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+
+            for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
+                const dayKey = formatDateKey(d);
+                const dayType = getDayType(d);
+                const cat = getDayTypeCategoryFromDayType(dayType);
+
+                const assignment = getAssignmentForDate(dayKey);
+                if (!assignment) continue;
+
+                const a = parseAssignedPersonForGroupFromAssignment(assignment, fromGroup);
+                if (!a || a !== personA) continue;
+
+                const b = parseAssignedPersonForGroupFromAssignment(assignment, toGroup);
+                if (!b) continue;
+
+                matches[cat].push({
+                    dateKey: dayKey,
+                    dateStr: d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                    dayName: getGreekDayName(d),
+                    personB: b
+                });
             }
-            
-            // For each day type, find people from target group who had duty on same days
-            const targetGroupData = groups[toGroup] || { special: [], weekend: [], semi: [], normal: [] };
-            
-            personDutyDays.forEach(dayKey => {
-                const dayDate = new Date(dayKey + 'T00:00:00');
-                const dayType = getDayType(dayDate);
-                let dayTypeCategory = 'normal';
-                
-                if (dayType === 'special-holiday') {
-                    dayTypeCategory = 'special';
-                } else if (dayType === 'semi-normal-day') {
-                    dayTypeCategory = 'semi';
-                } else if (dayType === 'weekend-holiday') {
-                    dayTypeCategory = 'weekend';
+            return matches;
+        }
+
+        function getRankValue(personName) {
+            const v = rankings?.[personName];
+            const n = parseInt(v, 10);
+            return Number.isFinite(n) && n > 0 ? n : 9999;
+        }
+
+        // Apply auto positions to transferData.positions (only if not already explicitly set).
+        function applyAutoTransferPositionsFromMatches(matchesByType) {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const personA = transferData.person;
+            const rankA = getRankValue(personA);
+
+            const chosenByType = {};
+            const ranksByType = {};
+
+            ['special', 'weekend', 'semi', 'normal'].forEach(type => {
+                // Choose the LAST match in the month (closest to end of month)
+                const matches = matchesByType?.[type] || [];
+                const chosen = matches.length ? matches[matches.length - 1] : null;
+                chosenByType[type] = chosen;
+
+                if (!chosen) {
+                    ranksByType[type] = { rankA, rankB: null };
+                    // Default if we have no evidence: end
+                    if (!transferData.positions[type]) {
+                        transferData.positions[type] = { referencePerson: null, position: 'end' };
+                    }
+                    return;
                 }
-                
-                // Check if anyone from target group had duty on this day
-                const assignment = dutyAssignments[dayKey];
-                if (assignment) {
-                    // Ensure assignment is a string
-                    const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
-                    const targetGroupPeople = targetGroupData[dayTypeCategory] || [];
-                    targetGroupPeople.forEach(targetPerson => {
-                        if (assignmentStr.includes(`${targetPerson} (Ομάδα ${toGroup})`)) {
-                            if (!sameDayPeople[dayTypeCategory].includes(targetPerson)) {
-                                sameDayPeople[dayTypeCategory].push(targetPerson);
-                            }
-                        }
-                    });
+
+                const personB = chosen.personB;
+                const rankB = getRankValue(personB);
+                ranksByType[type] = { rankA, rankB };
+
+                // User rule:
+                // - If A is higher ranking -> place AFTER B
+                // - If A is lower ranking -> place ABOVE B
+                // Ranking convention: smaller number = higher rank
+                const position = rankA < rankB ? 'below' : 'above';
+
+                // Only auto-set if not already set
+                if (!transferData.positions[type]) {
+                    transferData.positions[type] = { referencePerson: personB, position };
                 }
             });
-            
-            return sameDayPeople;
+
+            transferData.auto = { year, month, matchesByType, chosenByType, ranksByType };
+        }
+
+        function renderTransferAutoPreview(matchesByType) {
+            const el = document.getElementById('transferAutoPreview');
+            if (!el) return;
+
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const monthStr = new Date(year, month, 1).toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
+
+            const rows = [
+                { type: 'special', label: 'Ειδικές Αργίες' },
+                { type: 'weekend', label: 'Σαββατοκύριακα/Αργίες' },
+                { type: 'semi', label: 'Ημιαργίες' },
+                { type: 'normal', label: 'Καθημερινές' }
+            ].map(({ type, label }) => {
+                const chosen = transferData.auto?.chosenByType?.[type] || null;
+                const pos = transferData.positions?.[type] || null;
+                const r = transferData.auto?.ranksByType?.[type] || {};
+
+                const matchText = chosen
+                    ? `${chosen.dayName} ${chosen.dateStr} — ${chosen.personB}`
+                    : 'Δεν βρέθηκε κοινή υπηρεσία στον μήνα';
+
+                let intended = 'Δεν έχει επιλεγεί';
+                if (pos) {
+                    if (pos.position === 'end') intended = 'Στο τέλος';
+                    else if (pos.referencePerson) intended = `${pos.position === 'above' ? 'Πάνω από' : 'Κάτω από'} ${pos.referencePerson}`;
+                }
+
+                const rankText = chosen
+                    ? `A:${r.rankA ?? ''} / B:${r.rankB ?? ''}`
+                    : `A:${r.rankA ?? ''}`;
+
+                return `<tr>
+                    <td><strong>${label}</strong></td>
+                    <td>${matchText}</td>
+                    <td>${rankText}</td>
+                    <td><strong>${intended}</strong></td>
+                </tr>`;
+            }).join('');
+
+            el.innerHTML = `
+                <div class="alert alert-light border">
+                    <div class="mb-2">
+                        <strong>Αυτόματη πρόταση τοποθέτησης (μήνας: ${monthStr})</strong>
+                        <div class="text-muted small">Βάσει ίδιας ημερομηνίας υπηρεσίας και ιεραρχίας (rankings). Μπορείτε να την αλλάξετε χειροκίνητα παρακάτω.</div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Λίστα</th>
+                                    <th>Κοινή υπηρεσία (Α &amp; Ομάδα προορισμού)</th>
+                                    <th>Ιεραρχία</th>
+                                    <th>Προτεινόμενη θέση</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
         }
 
         // Render positioning lists for transfer
-        function renderTransferPositionLists(sameDayPeople) {
+        function renderTransferPositionLists(matchesByType) {
             const container = document.getElementById('transferPositionLists');
             const listTypes = [
                 { type: 'special', label: 'Ειδικές Αργίες', icon: 'fa-star' },
@@ -3287,7 +3399,9 @@
             
             container.innerHTML = listTypes.map(({ type, label, icon }) => {
                 const list = targetGroupData[type] || [];
-                const sameDayPeopleList = sameDayPeople[type] || [];
+                const matchList = matchesByType?.[type] || [];
+                // Show unique Bs for quick manual anchors
+                const sameDayPeopleList = Array.from(new Set(matchList.map(m => m.personB))).filter(Boolean);
                 
                 let optionsHtml = '';
                 
@@ -3359,8 +3473,12 @@
             };
             
             // Re-render to show updated selection
-            const sameDayPeople = findPeopleWithSameDutyDays(transferData.person, transferData.fromGroup, transferData.toGroup);
-            renderTransferPositionLists(sameDayPeople);
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const matchesByType = findTransferMonthMatches(transferData.person, transferData.fromGroup, transferData.toGroup, year, month);
+            // Update preview to reflect the intended positions after manual override
+            renderTransferAutoPreview(matchesByType);
+            renderTransferPositionLists(matchesByType);
         }
 
         // Complete the transfer with selected positions
@@ -12422,7 +12540,7 @@
                                             const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             const beforeDateStr = dayBefore.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             const beforeTypeName = beforeType === 'special-holiday' ? 'Ειδική Αργία' : 'Σαββατοκύριακο/Αργία';
-                                            conflictDetails.push(`Ημερομηνία επηρεασμένη: ${currentDateStr}, Το ανέθετο άτομο έχει συνεχόμενη ${beforeTypeName}: ${beforeDateStr}`);
+                                            conflictDetails.push(`Ημερομηνία επηρεασμένη: ${currentDateStr}, Το άτομο που δεν ανατέθηκε έχει συνεχόμενη ${beforeTypeName}: ${beforeDateStr}`);
                                         }
                                     }
                                     if (afterType === 'weekend-holiday' || afterType === 'special-holiday') {
@@ -12431,7 +12549,7 @@
                                             const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             const afterTypeName = afterType === 'special-holiday' ? 'Ειδική Αργία' : 'Σαββατοκύριακο/Αργία';
-                                            conflictDetails.push(`Ημερομηνία επηρεασμένη: ${currentDateStr}, Το ανέθετο άτομο έχει συνεχόμενη ${afterTypeName}: ${afterDateStr}`);
+                                            conflictDetails.push(`Ημερομηνία επηρεασμένη: ${currentDateStr}, Το άτομο που δεν ανατέθηκε έχει συνεχόμενη ${afterTypeName}: ${afterDateStr}`);
                                         }
                                     }
                                 }
@@ -12460,7 +12578,7 @@
                                             hasLegitimateConflict = true;
                                             const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                            conflictDetails.push(`Ημερομηνία επηρεασμένη: ${currentDateStr}, Το ανέθετο άτομο έχει συνεχόμενη Ημιαργία: ${afterDateStr}`);
+                                            conflictDetails.push(`Ημερομηνία επηρεασμένη: ${currentDateStr}, έχει συνεχόμενη Ημιαργία: ${afterDateStr}`);
                                         }
                                     }
                                 }
