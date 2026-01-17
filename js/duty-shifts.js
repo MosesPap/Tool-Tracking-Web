@@ -77,15 +77,15 @@
 
             // If there is no change, show the name only once (no duplicate baseline/computed).
             if (!changed) {
-                return `<div><strong>${base}</strong>${computedDaysCountInfo || ''}${computedLastDutyInfo || ''}</div>`;
+                return `<div><strong>${base}</strong></div>`;
             }
 
             // If changed (swap/skip/missing replacement), show Baseline -> Computed clearly.
             return `
-                <div class="small text-muted">Baseline</div>
+                <div class="small text-muted">Βασική Σειρά</div>
                 <div><strong>${base}</strong></div>
-                <div class="small text-primary mt-1">Computed</div>
-                <div><strong>${comp}</strong>${computedDaysCountInfo || ''}${computedLastDutyInfo || ''}</div>
+                <div class="small text-primary mt-1">Αντικατάσταση</div>
+                <div><strong>${comp}</strong></div>
             `;
         }
 
