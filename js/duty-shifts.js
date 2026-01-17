@@ -74,13 +74,18 @@
             const base = baselinePerson || '-';
             const comp = computedPerson || '-';
             const changed = base !== '-' && comp !== '-' && base !== comp;
-            const baseLabel = `<div class="small text-muted">Baseline</div>`;
-            const compLabel = `<div class="small text-primary">Computed${changed ? ' (changed)' : ''}</div>`;
+
+            // If there is no change, show the name only once (no duplicate baseline/computed).
+            if (!changed) {
+                return `<div><strong>${base}</strong>${computedDaysCountInfo || ''}${computedLastDutyInfo || ''}</div>`;
+            }
+
+            // If changed (swap/skip/missing replacement), show Baseline -> Computed clearly.
             return `
+                <div class="small text-muted">Baseline</div>
                 <div><strong>${base}</strong></div>
-                ${baseLabel}
-                <div class="mt-1">${comp}${computedDaysCountInfo || ''}${computedLastDutyInfo || ''}</div>
-                ${compLabel}
+                <div class="small text-primary mt-1">Computed</div>
+                <div><strong>${comp}</strong>${computedDaysCountInfo || ''}${computedLastDutyInfo || ''}</div>
             `;
         }
 
@@ -6762,9 +6767,9 @@
                                 
                                 // Show days counted in parentheses
                                 if (daysSince !== null && daysSince !== Infinity) {
-                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} ημέρες)</span>`;
+                                    daysCountInfo = ` <span class="text-info">${daysSince}/${rotationDays} ημέρες</span>`;
                                 } else if (daysSince === Infinity) {
-                                    daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
+                                    daysCountInfo = ' <span class="text-success">πρώτη φορά</span>';
                                 }
                             }
                             
@@ -10006,9 +10011,9 @@
                                 
                                 // Show days counted in parentheses
                                 if (daysSince !== null && daysSince !== Infinity) {
-                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} ημέρες)</span>`;
+                                    daysCountInfo = ` <span class="text-info">${daysSince}/${rotationDays} ημέρες</span>`;
                                 } else if (daysSince === Infinity) {
-                                    daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
+                                    daysCountInfo = ' <span class="text-success">πρώτη φορά</span>';
                                 }
                             }
                             
@@ -10402,9 +10407,9 @@
                                 lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
                                 
                                 if (daysSince !== null && daysSince !== Infinity) {
-                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} ημέρες)</span>`;
+                                    daysCountInfo = ` <span class="text-info">${daysSince}/${rotationDays} ημέρες</span>`;
                                 } else if (daysSince === Infinity) {
-                                    daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
+                                    daysCountInfo = ' <span class="text-success">πρώτη φορά</span>';
                                 }
                             }
                             
@@ -10988,9 +10993,9 @@
                                 lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
                                 
                                 if (daysSince !== null && daysSince !== Infinity) {
-                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} ημέρες)</span>`;
+                                    daysCountInfo = ` <span class="text-info">${daysSince}/${rotationDays} ημέρες</span>`;
                                 } else if (daysSince === Infinity) {
-                                    daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
+                                    daysCountInfo = ' <span class="text-success">πρώτη φορά</span>';
                                 }
                             }
                             
@@ -11485,9 +11490,9 @@
                                 lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
                                 
                                 if (daysSince !== null && daysSince !== Infinity) {
-                                    daysCountInfo = ` <span class="text-info">(${daysSince}/${rotationDays} ημέρες)</span>`;
+                                    daysCountInfo = ` <span class="text-info">${daysSince}/${rotationDays} ημέρες</span>`;
                                 } else if (daysSince === Infinity) {
-                                    daysCountInfo = ' <span class="text-success">(πρώτη φορά)</span>';
+                                    daysCountInfo = ' <span class="text-success">πρώτη φορά</span>';
                                 }
                             }
                             
