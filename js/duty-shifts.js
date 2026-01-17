@@ -11528,14 +11528,14 @@
                             const startStr = mp ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
                             const endStr = mp ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
                             const missingReason = mp ? `Κώλυμα/Απουσία (${startStr}–${endStr})` : 'Κώλυμα/Απουσία';
-                            derivedReasonText = `Αντικαταστάθηκε ο/η ${expected} λόγω ${missingReason}.`;
+                            derivedReasonText = `Αντικατέστησε τον/την ${expected} λόγω ${missingReason}.`;
                         } else if (dayTypeCategory === 'weekend' && hasSpecialHolidayDutyInMonth(expected, person.group, month, year)) {
                             const specialKey = getSpecialHolidayDutyDateInMonth(expected, person.group, year, month);
                             if (specialKey) {
                                 const dd = new Date(specialKey + 'T00:00:00');
-                                derivedReasonText = `Αντικαταστάθηκε ο/η ${expected} λόγω ειδικής αργίας στον ίδιο μήνα (${getGreekDayName(dd)} ${dd.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}).`;
+                                derivedReasonText = `Αντικατέστησε τον/την ${expected} λόγω ειδικής αργίας στον ίδιο μήνα (${getGreekDayName(dd)} ${dd.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}).`;
                             } else {
-                                derivedReasonText = `Αντικαταστάθηκε ο/η ${expected} λόγω ειδικής αργίας στον ίδιο μήνα.`;
+                                derivedReasonText = `Αντικατέστησε τον/την ${expected} λόγω ειδικής αργίας στον ίδιο μήνα.`;
                             }
                         }
                     }
