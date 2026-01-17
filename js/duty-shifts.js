@@ -5121,15 +5121,15 @@
             const conflict = formatGreekDayDate(conflictDateKey);
             const assigned = formatGreekDayDate(newAssignmentDateKey);
             const prefix = (subjectName && conflictedPersonName && subjectName === conflictedPersonName)
-                ? `Αλλάχθηκε με ${changedWithName} επειδή ο ${conflictedPersonName} είχε σύγκρουση την ${conflict.dayName} ${conflict.dateStr}`
-                : `Έγινε η αλλαγή γιατι ο ${conflictedPersonName} είχε σύγκρουση την ${conflict.dayName} ${conflict.dateStr}`;
+                ? `Αλλάχθηκε με ${changedWithName} επειδή ο/η ${conflictedPersonName} είχε σύγκρουση την ${conflict.dayName} ${conflict.dateStr}`
+                : `Έγινε η αλλαγή γιατι ο/η ${conflictedPersonName} είχε σύγκρουση την ${conflict.dayName} ${conflict.dateStr}`;
             return `${prefix}, και ανατέθηκε την ${assigned.dayName} ${assigned.dateStr}.`;
         }
 
         function buildSkipReasonGreek({ skippedPersonName, replacementPersonName, dateKey, monthKey = null }) {
             const d = formatGreekDayDate(dateKey);
             const monthPart = monthKey ? ` (${monthKey})` : '';
-            return `Αντικατέστησε τον ${skippedPersonName} επειδή είχε κώλυμα${monthPart} την ${d.dayName} ${d.dateStr}. Ανατέθηκε ο ${replacementPersonName}.`;
+            return `Αντικατέστησε τον/την ${skippedPersonName} επειδή είχε κώλυμα${monthPart} την ${d.dayName} ${d.dateStr}. Ανατέθηκε ο/η ${replacementPersonName}.`;
         }
 
         // Return the adjacent day (before/after) that causes the consecutive-duty conflict.
@@ -6781,7 +6781,7 @@
                                     groupNum,
                                     replacementPerson,
                                     'skip',
-                                    `Αντικατατέστησε ο ${currentPerson} επειδή είχε ${monthReason} την ${getGreekDayName(date)} ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ο ${replacementPerson}.`,
+                                    `Αντικατέστησε τον/την ${currentPerson} επειδή είχε ${monthReason} την ${getGreekDayName(date)} ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ο/η ${replacementPerson}.`,
                                     currentPerson,
                                     null
                                 );
@@ -11528,14 +11528,14 @@
                             const startStr = mp ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
                             const endStr = mp ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
                             const missingReason = mp ? `Κώλυμα/Απουσία (${startStr}–${endStr})` : 'Κώλυμα/Απουσία';
-                            derivedReasonText = `Αντικαταστάθηκε ο ${expected} λόγω ${missingReason}.`;
+                            derivedReasonText = `Αντικαταστάθηκε ο/η ${expected} λόγω ${missingReason}.`;
                         } else if (dayTypeCategory === 'weekend' && hasSpecialHolidayDutyInMonth(expected, person.group, month, year)) {
                             const specialKey = getSpecialHolidayDutyDateInMonth(expected, person.group, year, month);
                             if (specialKey) {
                                 const dd = new Date(specialKey + 'T00:00:00');
-                                derivedReasonText = `Αντικαταστάθηκε ο ${expected} λόγω ειδικής αργίας στον ίδιο μήνα (${getGreekDayName(dd)} ${dd.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}).`;
+                                derivedReasonText = `Αντικαταστάθηκε ο/η ${expected} λόγω ειδικής αργίας στον ίδιο μήνα (${getGreekDayName(dd)} ${dd.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}).`;
                             } else {
-                                derivedReasonText = `Αντικαταστάθηκε ο ${expected} λόγω ειδικής αργίας στον ίδιο μήνα.`;
+                                derivedReasonText = `Αντικαταστάθηκε ο/η ${expected} λόγω ειδικής αργίας στον ίδιο μήνα.`;
                             }
                         }
                     }
