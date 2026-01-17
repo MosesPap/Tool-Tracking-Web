@@ -284,21 +284,21 @@
                         
                         // Render UI in next frame to reduce long main-thread blocking
                         requestAnimationFrame(() => {
-                            renderGroups();
-                            renderHolidays();
-                            renderRecurringHolidays();
-                            renderCalendar();
-                            updateStatistics();
+                        renderGroups();
+                        renderHolidays();
+                        renderRecurringHolidays();
+                        renderCalendar();
+                        updateStatistics();
                         });
                     } else {
                         // Not authenticated, use localStorage
                         loadDataFromLocalStorage();
                         requestAnimationFrame(() => {
-                            renderGroups();
-                            renderHolidays();
-                            renderRecurringHolidays();
-                            renderCalendar();
-                            updateStatistics();
+                        renderGroups();
+                        renderHolidays();
+                        renderRecurringHolidays();
+                        renderCalendar();
+                        updateStatistics();
                         });
                     }
                 });
@@ -525,7 +525,7 @@
                     delete data.lastUpdated;
                     delete data.updatedBy;
                     criticalAssignments = data || {};
-                } else {
+                            } else {
                     criticalAssignments = {};
                 }
                 
@@ -536,7 +536,7 @@
                     delete data.updatedBy;
                     crossMonthSwaps = data || {};
                 } else {
-                    crossMonthSwaps = {};
+                            crossMonthSwaps = {};
                 }
                 
                 // Load assignment reasons
@@ -1224,7 +1224,7 @@
                     alert('User not authenticated');
                     return;
                 }
-
+                
                 const confirmText =
                     'ΠΡΟΣΟΧΗ: Αυτό θα καθαρίσει (wipe) τα παρακάτω Firestore έγγραφα:\n' +
                     '- assignmentReasons\n- assignments\n- crossMonthSwaps\n- lastRotationPositions\n' +
@@ -4905,7 +4905,7 @@
                                         if (txt.includes('κώλυμα') || txt.includes('απουσία') || txt.includes('ειδική αργία')) {
                                             underline = true;
                                         }
-                                    } else {
+                            } else {
                                         const expected = monthExpectedByDateGroup[key]?.[g];
                                         if (expected && expected !== personName) {
                                             // Underline if expected person was missing on this date
@@ -4928,7 +4928,7 @@
                         if (shouldShowHeavyIndicators && assignmentReasons[key]) {
                             displayAssignmentHtml += `<div class="duty-person-swapped" title="Υπάρχουν λόγοι αλλαγής/παράλειψης">*</div>`;
                         }
-                        displayAssignmentHtml += '</div>';
+                    displayAssignmentHtml += '</div>';
                     }
                 }
                 
@@ -8914,12 +8914,12 @@
                 while (dateIterator <= endDate) {
                     const key = formatDateKey(dateIterator);
                     // Delete assignments for the selected date range
-                    delete dutyAssignments[key];
-                    // Also delete from day-type-specific assignments
-                    delete normalDayAssignments[key];
-                    delete semiNormalAssignments[key];
-                    delete weekendAssignments[key];
-                    delete specialHolidayAssignments[key];
+                        delete dutyAssignments[key];
+                            // Also delete from day-type-specific assignments
+                            delete normalDayAssignments[key];
+                            delete semiNormalAssignments[key];
+                            delete weekendAssignments[key];
+                            delete specialHolidayAssignments[key];
                     dateIterator.setDate(dateIterator.getDate() + 1);
                 }
             }
@@ -11329,9 +11329,55 @@
                 // Use getAssignmentForDate to get the final assignment after swap logic
                 const assignment = getAssignmentForDate(key);
                 const dayType = getDayType(date);
+                const year = date.getFullYear();
+                const month = date.getMonth();
+                
+                // Day type category for expected-person derivation
+                let dayTypeCategory = 'normal';
+                if (isSpecialHoliday(date) || dayType === 'special-holiday') dayTypeCategory = 'special';
+                else if (dayType === 'weekend-holiday') dayTypeCategory = 'weekend';
+                else if (dayType === 'semi-normal-day') dayTypeCategory = 'semi';
                 
                 currentEditingDayKey = key;
                 currentEditingDayDate = date;
+
+                // Derive who SHOULD be assigned for this date/group, using month-scoped seeding from lastRotationPositions.
+                const getExpectedPersonForDay = (groupNum) => {
+                    try {
+                        const groupData = groups[groupNum] || {};
+                        const groupPeople = groupData[dayTypeCategory] || [];
+                        if (!Array.isArray(groupPeople) || groupPeople.length === 0) return null;
+                        
+                        // Build list of this category's days in current month, sorted
+                        const firstDay = new Date(year, month, 1);
+                        const lastDay = new Date(year, month + 1, 0);
+                        const keys = [];
+                        const d = new Date(firstDay);
+                        while (d <= lastDay) {
+                            const dk = formatDateKey(d);
+                            let cat = 'normal';
+                            const dt = getDayType(d);
+                            if (isSpecialHoliday(d) || dt === 'special-holiday') cat = 'special';
+                            else if (dt === 'weekend-holiday') cat = 'weekend';
+                            else if (dt === 'semi-normal-day') cat = 'semi';
+                            if (cat === dayTypeCategory) keys.push(dk);
+                            d.setDate(d.getDate() + 1);
+                        }
+                        keys.sort();
+                        const idxInMonth = keys.indexOf(key);
+                        if (idxInMonth < 0) return null;
+                        
+                        const seed = getLastRotationPersonForDate(dayTypeCategory, new Date(year, month, 1), groupNum);
+                        let seedIdx = 0;
+                        if (seed) {
+                            const si = groupPeople.indexOf(seed);
+                            if (si >= 0) seedIdx = (si + 1) % groupPeople.length;
+                        }
+                        return groupPeople[(seedIdx + idxInMonth) % groupPeople.length] || null;
+                    } catch (e) {
+                        return null;
+                    }
+                };
                 
                 const modalElement = document.getElementById('dayDetailsModal');
                 if (!modalElement) {
@@ -11471,8 +11517,32 @@
                 const disabledAttr = isCritical ? 'disabled' : '';
                 const disabledTitle = isCritical ? 'title="Αυτή η ανάθεση είναι κρίσιμη και δεν μπορεί να αλλάξει"' : '';
                 
-                // Add reason display below the person name
-                const reasonDisplay = reason ? `<div class="mt-2 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${reason.reason}</div>` : '';
+                // Add reason display below the person name.
+                // If assignmentReasons is missing (common for missing-period replacements), derive the same reason logic as violations popup.
+                let derivedReasonText = '';
+                if (!reason && person.name && person.group) {
+                    const expected = getExpectedPersonForDay(person.group);
+                    if (expected && expected !== person.name) {
+                        if (isPersonMissingOnDate(expected, person.group, date)) {
+                            const mp = getPersonMissingPeriod(expected, person.group, date);
+                            const startStr = mp ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                            const endStr = mp ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                            const missingReason = mp ? `Κώλυμα/Απουσία (${startStr}–${endStr})` : 'Κώλυμα/Απουσία';
+                            derivedReasonText = `Αντικαταστάθηκε ο ${expected} λόγω ${missingReason}.`;
+                        } else if (dayTypeCategory === 'weekend' && hasSpecialHolidayDutyInMonth(expected, person.group, month, year)) {
+                            const specialKey = getSpecialHolidayDutyDateInMonth(expected, person.group, year, month);
+                            if (specialKey) {
+                                const dd = new Date(specialKey + 'T00:00:00');
+                                derivedReasonText = `Αντικαταστάθηκε ο ${expected} λόγω ειδικής αργίας στον ίδιο μήνα (${getGreekDayName(dd)} ${dd.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}).`;
+                            } else {
+                                derivedReasonText = `Αντικαταστάθηκε ο ${expected} λόγω ειδικής αργίας στον ίδιο μήνα.`;
+                            }
+                        }
+                    }
+                }
+                const reasonDisplay = (reason || derivedReasonText)
+                    ? `<div class="mt-2 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${reason ? reason.reason : derivedReasonText}</div>`
+                    : '';
                 
                 // Get all people from this group for dropdown
                 const groupData = groups[person.group] || {};
@@ -12159,7 +12229,7 @@
                             dayType: getDayTypeLabel(dayType)
                         });
                     }
-
+                    
                     let violationReason = '';
                     
                     // Compare assigned vs expected
@@ -12353,7 +12423,7 @@
                                 continue; // Skip adding this to violations
                             }
                         }
-
+                        
                         // Determine why the EXPECTED person was skipped (missing vs special holiday in month, etc.)
                         let skippedReason = '';
                         if (isMissing) {
@@ -12463,7 +12533,7 @@
             } catch (e) {
                 console.warn('Error collecting cross-month swap entries for violations popup:', e);
             }
-
+            
             // Display violations in modal
             displayRotationViolations(violations);
         }
