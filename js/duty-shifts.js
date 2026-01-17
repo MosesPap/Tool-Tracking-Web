@@ -374,26 +374,6 @@
                     
                     // NOTE: Do NOT call saveData() here - it would overwrite assignments that haven't been loaded yet
                     // Priorities will be saved when they're actually modified by the user
-                    
-                    // Debug: Log lastDuties and priorities to verify they're loaded
-                    console.log('Loaded groups from Firestore');
-                    for (let g = 1; g <= 4; g++) {
-                        if (groups[g] && groups[g].lastDuties) {
-                            const lastDutiesCount = Object.keys(groups[g].lastDuties).length;
-                            if (lastDutiesCount > 0) {
-                                console.log(`Group ${g} has ${lastDutiesCount} people with lastDuties:`, Object.keys(groups[g].lastDuties));
-                                // Log sample lastDuties
-                                const samplePerson = Object.keys(groups[g].lastDuties)[0];
-                                console.log(`Sample lastDuties for ${samplePerson}:`, groups[g].lastDuties[samplePerson]);
-                            }
-                        }
-                        if (groups[g] && groups[g].priorities) {
-                            const prioritiesCount = Object.keys(groups[g].priorities).length;
-                            if (prioritiesCount > 0) {
-                                console.log(`Group ${g} has ${prioritiesCount} people with priorities:`, Object.keys(groups[g].priorities));
-                            }
-                        }
-                    }
                 }
                 
                 // Load holidays
