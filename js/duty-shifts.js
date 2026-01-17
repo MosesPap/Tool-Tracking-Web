@@ -337,14 +337,45 @@
                     return;
                 }
                 
+                // Fetch all Firestore documents in parallel to reduce load time.
+                const dutyShifts = db.collection('dutyShifts');
+                const [
+                    groupsDoc,
+                    holidaysDoc,
+                    specialHolidaysDoc,
+                    recurringDoc,
+                    normalDayDoc,
+                    semiNormalDoc,
+                    weekendDoc,
+                    specialHolidayDoc,
+                    assignmentsDoc,
+                    criticalAssignmentsDoc,
+                    crossMonthSwapsDoc,
+                    assignmentReasonsDoc,
+                    lastRotationPositionsDoc,
+                    rankingsDoc
+                ] = await Promise.all([
+                    dutyShifts.doc('groups').get(),
+                    dutyShifts.doc('holidays').get(),
+                    dutyShifts.doc('specialHolidays').get(),
+                    dutyShifts.doc('recurringSpecialHolidays').get(),
+                    dutyShifts.doc('normalDayAssignments').get(),
+                    dutyShifts.doc('semiNormalAssignments').get(),
+                    dutyShifts.doc('weekendAssignments').get(),
+                    dutyShifts.doc('specialHolidayAssignments').get(),
+                    dutyShifts.doc('assignments').get(), // legacy
+                    dutyShifts.doc('criticalAssignments').get(),
+                    dutyShifts.doc('crossMonthSwaps').get(),
+                    dutyShifts.doc('assignmentReasons').get(),
+                    dutyShifts.doc('lastRotationPositions').get(),
+                    dutyShifts.doc('rankings').get()
+                ]);
+                
                 // Load groups
-                const groupsDoc = await db.collection('dutyShifts').doc('groups').get();
                 if (groupsDoc.exists) {
                     const data = groupsDoc.data();
-                    // Remove metadata fields
                     delete data.lastUpdated;
                     delete data.updatedBy;
-                    // Migrate old format to new format if needed
                     groups = migrateGroupsFormat(data) || { 1: { regular: [], special: [] }, 2: { regular: [], special: [] }, 3: { regular: [], special: [] }, 4: { regular: [], special: [] } };
                     
                     // CRITICAL: Always ensure priorities object exists and is properly initialized
@@ -364,140 +395,97 @@
                                 if (!groups[i].priorities[person]) {
                                     groups[i].priorities[person] = {};
                                 }
-                                // Only set default if priority doesn't exist (preserve existing priorities)
                                 if (groups[i].priorities[person][listType] === undefined) {
                                     groups[i].priorities[person][listType] = 999; // Default priority
                                 }
                             });
                         });
                     }
-                    
-                    // NOTE: Do NOT call saveData() here - it would overwrite assignments that haven't been loaded yet
-                    // Priorities will be saved when they're actually modified by the user
                 }
                 
                 // Load holidays
-                const holidaysDoc = await db.collection('dutyShifts').doc('holidays').get();
                 if (holidaysDoc.exists) {
                     const data = holidaysDoc.data();
                     holidays = data.list || [];
                 }
                 
                 // Load special holidays
-                const specialHolidaysDoc = await db.collection('dutyShifts').doc('specialHolidays').get();
                 if (specialHolidaysDoc.exists) {
                     const data = specialHolidaysDoc.data();
                     specialHolidays = data.list || [];
                 }
                 
-                // Load recurring holidays configuration
-                await loadRecurringHolidaysConfig();
+                // Load recurring holidays config (Firestore first, then localStorage fallback)
+                if (recurringDoc.exists) {
+                    const data = recurringDoc.data();
+                    recurringSpecialHolidays = data.list || recurringSpecialHolidays;
+                }
+                const savedRecurring = localStorage.getItem('dutyShiftsRecurringHolidays');
+                if (savedRecurring) {
+                    try {
+                        recurringSpecialHolidays = JSON.parse(savedRecurring);
+                    } catch (e) {
+                        // ignore parse errors
+                    }
+                }
                 
                 // Initialize default special holidays if they don't exist
                 initializeDefaultSpecialHolidays();
                 
+                // Helper: check month-organized format (e.g., "February 2026" keys)
+                const isMonthOrganizedDoc = (data) => Object.keys(data || {}).some(k => /^[A-Za-z]+\s+\d{4}$/.test(k) && typeof data[k] === 'object');
+                
                 // Load assignments from separate documents by day type
-                // Support both old format (flat date keys) and new format (month-organized)
-                const normalDayDoc = await db.collection('dutyShifts').doc('normalDayAssignments').get();
                 if (normalDayDoc.exists) {
                     const data = normalDayDoc.data();
                     delete data.lastUpdated;
                     delete data.updatedBy;
                     delete data._migratedFrom;
                     delete data._migrationDate;
-                    // Check if data is month-organized (new format) or flat (old format)
-                    const isMonthOrganized = Object.keys(data).some(key => {
-                        // Check if key looks like "Month Year" (e.g., "February 2026")
-                        return /^[A-Za-z]+\s+\d{4}$/.test(key) && typeof data[key] === 'object';
-                    });
-                    if (isMonthOrganized) {
-                        normalDayAssignments = flattenAssignmentsByMonth(data);
-                        console.log('Loaded normalDayAssignments from month-organized format');
-                    } else {
-                        normalDayAssignments = data || {};
-                        console.log('Loaded normalDayAssignments from flat format (legacy)');
-                    }
+                    normalDayAssignments = isMonthOrganizedDoc(data) ? flattenAssignmentsByMonth(data) : (data || {});
                 }
                 
-                const semiNormalDoc = await db.collection('dutyShifts').doc('semiNormalAssignments').get();
                 if (semiNormalDoc.exists) {
                     const data = semiNormalDoc.data();
                     delete data.lastUpdated;
                     delete data.updatedBy;
                     delete data._migratedFrom;
                     delete data._migrationDate;
-                    const isMonthOrganized = Object.keys(data).some(key => {
-                        return /^[A-Za-z]+\s+\d{4}$/.test(key) && typeof data[key] === 'object';
-                    });
-                    if (isMonthOrganized) {
-                        semiNormalAssignments = flattenAssignmentsByMonth(data);
-                        console.log('Loaded semiNormalAssignments from month-organized format');
-                    } else {
-                        semiNormalAssignments = data || {};
-                        console.log('Loaded semiNormalAssignments from flat format (legacy)');
-                    }
+                    semiNormalAssignments = isMonthOrganizedDoc(data) ? flattenAssignmentsByMonth(data) : (data || {});
                 }
                 
-                const weekendDoc = await db.collection('dutyShifts').doc('weekendAssignments').get();
                 if (weekendDoc.exists) {
                     const data = weekendDoc.data();
                     delete data.lastUpdated;
                     delete data.updatedBy;
                     delete data._migratedFrom;
                     delete data._migrationDate;
-                    const isMonthOrganized = Object.keys(data).some(key => {
-                        return /^[A-Za-z]+\s+\d{4}$/.test(key) && typeof data[key] === 'object';
-                    });
-                    if (isMonthOrganized) {
-                        weekendAssignments = flattenAssignmentsByMonth(data);
-                        console.log('Loaded weekendAssignments from month-organized format');
-                    } else {
-                        weekendAssignments = data || {};
-                        console.log('Loaded weekendAssignments from flat format (legacy)');
-                    }
+                    weekendAssignments = isMonthOrganizedDoc(data) ? flattenAssignmentsByMonth(data) : (data || {});
                 }
                 
-                const specialHolidayDoc = await db.collection('dutyShifts').doc('specialHolidayAssignments').get();
                 if (specialHolidayDoc.exists) {
                     const data = specialHolidayDoc.data();
                     delete data.lastUpdated;
                     delete data.updatedBy;
                     delete data._migratedFrom;
                     delete data._migrationDate;
-                    const isMonthOrganized = Object.keys(data).some(key => {
-                        return /^[A-Za-z]+\s+\d{4}$/.test(key) && typeof data[key] === 'object';
-                    });
-                    if (isMonthOrganized) {
-                        specialHolidayAssignments = flattenAssignmentsByMonth(data);
-                        console.log('Loaded specialHolidayAssignments from month-organized format');
-                    } else {
-                        specialHolidayAssignments = data || {};
-                        console.log('Loaded specialHolidayAssignments from flat format (legacy)');
-                    }
+                    specialHolidayAssignments = isMonthOrganizedDoc(data) ? flattenAssignmentsByMonth(data) : (data || {});
                 }
                 
                 // Also load legacy assignments document for backward compatibility
-                const assignmentsDoc = await db.collection('dutyShifts').doc('assignments').get();
                 if (assignmentsDoc.exists) {
                     const data = assignmentsDoc.data();
                     delete data.lastUpdated;
                     delete data.updatedBy;
                     
-                    // Check if data is organized by month and flatten if needed
-                    const isMonthOrganized = data && typeof data === 'object' && Object.keys(data).some(key => {
+                    const isMonthOrganizedLegacy = data && typeof data === 'object' && Object.keys(data).some(key => {
                         const val = data[key];
-                        return typeof val === 'object' && val !== null && !Array.isArray(val) && 
-                               !(key === 'lastUpdated' || key === 'updatedBy' || key === '_migratedFrom' || key === '_migrationDate') &&
-                               Object.keys(val).some(k => /^\d{4}-\d{2}-\d{2}$/.test(k));
+                        return typeof val === 'object' && val !== null && !Array.isArray(val) &&
+                            !(key === 'lastUpdated' || key === 'updatedBy' || key === '_migratedFrom' || key === '_migrationDate') &&
+                            Object.keys(val).some(k => /^\d{4}-\d{2}-\d{2}$/.test(k));
                     });
                     
-                    if (isMonthOrganized) {
-                        dutyAssignments = flattenAssignmentsByMonth(data);
-                        console.log('Loaded dutyAssignments from month-organized format');
-                    } else {
-                    dutyAssignments = data || {};
-                        console.log('Loaded dutyAssignments from flat format (legacy)');
-                    }
+                    dutyAssignments = isMonthOrganizedLegacy ? flattenAssignmentsByMonth(data) : (data || {});
                     
                     // Merge legacy assignments into day-type-specific documents if they don't exist
                     for (const dateKey in dutyAssignments) {
@@ -523,140 +511,81 @@
                     }
                 }
                 
-                // Load critical assignments
-                const criticalAssignmentsDoc = await db.collection('dutyShifts').doc('criticalAssignments').get();
+                // Load critical assignments (history only)
                 if (criticalAssignmentsDoc.exists) {
                     const data = criticalAssignmentsDoc.data();
-                    // Remove metadata fields
                     delete data.lastUpdated;
                     delete data.updatedBy;
                     criticalAssignments = data || {};
                 } else {
-                    // Keep empty - criticalAssignments are optional history only
                     criticalAssignments = {};
                 }
                 
                 // Load cross-month swaps from Firestore
-                const crossMonthSwapsDoc = await db.collection('dutyShifts').doc('crossMonthSwaps').get();
                 if (crossMonthSwapsDoc.exists) {
                     const data = crossMonthSwapsDoc.data();
                     delete data.lastUpdated;
                     delete data.updatedBy;
                     crossMonthSwaps = data || {};
-                    console.log('Loaded crossMonthSwaps from Firestore:', Object.keys(crossMonthSwaps).length, 'dates');
                 } else {
-                    // Try loading from localStorage as fallback
-                    const localCrossMonth = localStorage.getItem('dutyShiftsCrossMonthSwaps');
-                    if (localCrossMonth) {
-                        try {
-                            crossMonthSwaps = JSON.parse(localCrossMonth);
-                            console.log('Loaded crossMonthSwaps from localStorage');
-                        } catch (e) {
-                            console.error('Error parsing crossMonthSwaps from localStorage:', e);
-                            crossMonthSwaps = {};
-                        }
-                    } else {
-                        crossMonthSwaps = {};
-                    }
+                    crossMonthSwaps = {};
                 }
                 
-                // Load assignment reasons (swap/skip indicators)
-                const assignmentReasonsDoc = await db.collection('dutyShifts').doc('assignmentReasons').get();
+                // Load assignment reasons
                 if (assignmentReasonsDoc.exists) {
                     const data = assignmentReasonsDoc.data();
-                    // Remove metadata fields
                     delete data.lastUpdated;
                     delete data.updatedBy;
                     assignmentReasons = data || {};
-                    console.log('Loaded assignmentReasons from Firestore:', Object.keys(assignmentReasons).length, 'dates');
-                    console.log('Sample assignmentReasons:', Object.entries(assignmentReasons).slice(0, 3));
                 } else {
-                    console.log('No assignmentReasons document found in Firestore, starting with empty reasons');
                     assignmentReasons = {};
                 }
                 
-                // Load last rotation positions from Firestore
-                const lastRotationPositionsDoc = await db.collection('dutyShifts').doc('lastRotationPositions').get();
+                // Load last rotation positions
                 if (lastRotationPositionsDoc.exists) {
                     const data = lastRotationPositionsDoc.data();
                     delete data.lastUpdated;
                     delete data.updatedBy;
                     
-                    // Helper function to convert array to object with 1-based keys
                     const convertArrayToObject = (arr) => {
                         if (Array.isArray(arr)) {
                             const obj = {};
                             arr.forEach((value, index) => {
-                                obj[index + 1] = value; // Convert 0-based array index to 1-based group number
+                                obj[index + 1] = value;
                             });
                             return obj;
                         }
-                        return arr; // Already an object, return as-is
+                        return arr;
                     };
                     
-                    // Normalize both legacy (flat) and new (month-scoped) formats
                     const normalizeRotationType = (val) => {
                         if (!val || typeof val !== 'object') return {};
-                        if (Array.isArray(val)) {
-                            // Legacy array format -> {1:...,2:...}
-                            return convertArrayToObject(val);
-                        }
+                        if (Array.isArray(val)) return convertArrayToObject(val);
                         const keys = Object.keys(val);
                         const hasMonthKeys = keys.some(k => isMonthKey(k));
                         if (hasMonthKeys) {
                             const out = {};
-                            for (const mk of keys) {
-                                out[mk] = convertArrayToObject(val[mk]);
-                            }
+                            for (const mk of keys) out[mk] = convertArrayToObject(val[mk]);
                             return out;
                         }
-                        // Legacy flat object -> {1:...,2:...}
                         return convertArrayToObject(val);
                     };
-
-                    // Merge with existing structure, converting arrays to objects if needed
-                    if (data.normal) {
-                        lastRotationPositions.normal = normalizeRotationType(data.normal);
-                    }
-                    if (data.semi) {
-                        lastRotationPositions.semi = normalizeRotationType(data.semi);
-                    }
-                    if (data.weekend) {
-                        lastRotationPositions.weekend = normalizeRotationType(data.weekend);
-                    }
-                    if (data.special) {
-                        lastRotationPositions.special = normalizeRotationType(data.special);
-                    }
-                    console.log('Loaded lastRotationPositions from Firestore:', lastRotationPositions);
-                    console.log('Loaded lastRotationPositions details:', {
-                        special: lastRotationPositions.special,
-                        weekend: lastRotationPositions.weekend,
-                        semi: lastRotationPositions.semi,
-                        normal: lastRotationPositions.normal
-                    });
+                    
+                    if (data.normal) lastRotationPositions.normal = normalizeRotationType(data.normal);
+                    if (data.semi) lastRotationPositions.semi = normalizeRotationType(data.semi);
+                    if (data.weekend) lastRotationPositions.weekend = normalizeRotationType(data.weekend);
+                    if (data.special) lastRotationPositions.special = normalizeRotationType(data.special);
                 } else {
-                    // Initialize empty if not found
-                    lastRotationPositions = {
-                        normal: {},
-                        semi: {},
-                        weekend: {},
-                        special: {}
-                    };
+                    lastRotationPositions = { normal: {}, semi: {}, weekend: {}, special: {} };
                 }
                 
-                // Load rankings from Firestore
-                const rankingsDoc = await db.collection('dutyShifts').doc('rankings').get();
+                // Load rankings
                 if (rankingsDoc.exists) {
                     const data = rankingsDoc.data();
-                    // Remove metadata fields
                     delete data.lastUpdated;
                     delete data.updatedBy;
-                    // Store rankings from Firestore: { "Person Name": rankNumber }
                     rankings = data || {};
-                    console.log('Loaded rankings from Firestore:', Object.keys(rankings).length, 'people');
-                    console.log('Sample rankings:', Object.entries(rankings).slice(0, 5));
                 } else {
-                    console.log('No rankings document found in Firestore, starting with empty rankings');
                     rankings = {};
                 }
                 
