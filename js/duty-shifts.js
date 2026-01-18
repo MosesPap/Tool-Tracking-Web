@@ -140,11 +140,10 @@
                     return '<div class="text-muted small">-</div>';
                 }
                 let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">';
-                html += '<thead class="table-light"><tr><th>Ημερομηνία</th><th>Ημέρα</th><th>Ομάδα</th><th>Βασική Σειρά</th><th>Αντικατάσταση</th><th>Αιτία</th></tr></thead><tbody>';
+                html += '<thead class="table-light"><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Βασική Σειρά</th><th>Αντικατάσταση</th><th>Αιτία</th></tr></thead><tbody>';
                 for (const r of rows) {
                     html += `<tr>
                         <td>${r.dateStr}</td>
-                        <td>${r.dayName}</td>
                         <td>${r.groupName}</td>
                         <td><strong>${r.baseline || '-'}</strong></td>
                         <td><strong>${r.computed || '-'}</strong></td>
