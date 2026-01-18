@@ -7400,32 +7400,86 @@
         
         // Show popup with weekend skip results
         function showWeekendSkipResults(skippedPeople, updatedAssignments) {
+            const findSwapOtherDateKey = (swapPairIdRaw, groupNum, currentDateKey) => {
+                if (swapPairIdRaw === null || swapPairIdRaw === undefined) return null;
+                const swapPairId = typeof swapPairIdRaw === 'number' ? swapPairIdRaw : parseInt(swapPairIdRaw);
+                if (isNaN(swapPairId)) return null;
+                for (const dk in assignmentReasons) {
+                    if (dk === currentDateKey) continue;
+                    const gmap = assignmentReasons?.[dk]?.[groupNum];
+                    if (!gmap) continue;
+                    for (const pn in gmap) {
+                        const r = gmap[pn];
+                        const rid = r?.swapPairId;
+                        const nid = typeof rid === 'number' ? rid : parseInt(rid);
+                        if (!isNaN(nid) && nid === swapPairId) return dk;
+                    }
+                }
+                return null;
+            };
+
             let message = '';
             
-            if (skippedPeople.length === 0) {
-                message = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>Κανένας δεν παραλείφθηκε!</strong><br>Όλοι οι άνθρωποι που είχαν ειδική αργία τον ίδιο μήνα παραλείφθηκαν σωστά.</div>';
-            } else {
-                message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Παραλείφθηκαν ' + skippedPeople.length + ' άτομα:</strong></div>';
-                message += '<div class="table-responsive"><table class="table table-sm table-bordered">';
-                message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
-                
-                skippedPeople.forEach(item => {
-                    const dateObj = new Date(item.date + 'T00:00:00');
-                    const dayName = !isNaN(dateObj.getTime()) ? getGreekDayName(dateObj) : '';
-                    const service = getGroupName(item.groupNum);
-                    const reasonObj = assignmentReasons?.[item.date]?.[item.groupNum]?.[item.replacementPerson] || null;
-                    const reasonText = (reasonObj && reasonObj.reason) ? String(reasonObj.reason) : '';
+            const baselineByDate = calculationSteps.tempWeekendBaselineAssignments || {};
+            const computedByDate = updatedAssignments || {};
+
+            const rows = [];
+            const dateKeys = Object.keys(computedByDate).sort();
+            for (const dateKey of dateKeys) {
+                const dateObj = new Date(dateKey + 'T00:00:00');
+                if (isNaN(dateObj.getTime())) continue;
+                const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const dayName = getGreekDayName(dateObj);
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const base = baselineByDate?.[dateKey]?.[groupNum] || null;
+                    const comp = computedByDate?.[dateKey]?.[groupNum] || null;
+                    if (!base || !comp) continue;
+                    if (base === comp) continue;
+
+                    const reasonObj = assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null;
+                    const reasonText = reasonObj?.reason ? String(reasonObj.reason) : '';
                     const briefReason =
                         reasonText.includes('ειδική αργία') ? 'Ειδική αργία στον ίδιο μήνα' :
                         reasonText.includes('παραλειφθεί') ? 'Ήταν ήδη παραλειφθεί αυτόν τον μήνα' :
-                        (reasonText ? reasonText.split('.').filter(Boolean)[0] : '');
+                        (isPersonMissingOnDate(base, groupNum, dateObj) ? 'Κώλυμα/Απουσία' : (reasonText ? reasonText.split('.').filter(Boolean)[0] : 'Αλλαγή'));
+
+                    // Weekend skip has no swap-date; keep '-' (but support future swapPairId logic if it appears)
+                    const swapOtherKey = reasonObj?.type === 'swap'
+                        ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
+                        : null;
+                    const swapDateStr = swapOtherKey
+                        ? new Date(swapOtherKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                        : '-';
+
+                    rows.push({
+                        dateKey,
+                        dayName,
+                        dateStr,
+                        groupNum,
+                        service: getGroupName(groupNum),
+                        skipped: base,
+                        replacement: comp,
+                        swapDateStr,
+                        briefReason
+                    });
+                }
+            }
+
+            if (rows.length === 0) {
+                message = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>Κανένας δεν παραλείφθηκε!</strong><br>Όλοι οι άνθρωποι που είχαν ειδική αργία τον ίδιο μήνα παραλείφθηκαν σωστά.</div>';
+            } else {
+                message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Αλλαγές: ' + rows.length + ' εγγραφές</strong></div>';
+                message += '<div class="table-responsive"><table class="table table-sm table-bordered">';
+                message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
+                
+                rows.forEach(r => {
                     message += `<tr>
-                        <td>${dayName} ${item.dateStr}</td>
-                        <td>${service}</td>
-                        <td><strong>${item.skippedPerson}</strong></td>
-                        <td><strong>${item.replacementPerson}</strong></td>
-                        <td>-</td>
-                        <td>${briefReason}</td>
+                        <td>${r.dayName} ${r.dateStr}</td>
+                        <td>${r.service}</td>
+                        <td><strong>${r.skipped}</strong></td>
+                        <td><strong>${r.replacement}</strong></td>
+                        <td>${r.swapDateStr}</td>
+                        <td>${r.briefReason}</td>
                     </tr>`;
                 });
                 
@@ -8046,34 +8100,84 @@
         
         // Show popup with semi-normal swap results
         function showSemiNormalSwapResults(swappedPeople, updatedAssignments) {
+            const findSwapOtherDateKey = (swapPairIdRaw, groupNum, currentDateKey) => {
+                if (swapPairIdRaw === null || swapPairIdRaw === undefined) return null;
+                const swapPairId = typeof swapPairIdRaw === 'number' ? swapPairIdRaw : parseInt(swapPairIdRaw);
+                if (isNaN(swapPairId)) return null;
+                for (const dk in assignmentReasons) {
+                    if (dk === currentDateKey) continue;
+                    const gmap = assignmentReasons?.[dk]?.[groupNum];
+                    if (!gmap) continue;
+                    for (const pn in gmap) {
+                        const r = gmap[pn];
+                        const rid = r?.swapPairId;
+                        const nid = typeof rid === 'number' ? rid : parseInt(rid);
+                        if (!isNaN(nid) && nid === swapPairId) return dk;
+                    }
+                }
+                return null;
+            };
+
             let message = '';
-            
-            if (swappedPeople.length === 0) {
-                message = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>Κανένας δεν αλλάχθηκε!</strong><br>Δεν βρέθηκαν συνεχόμενες ημέρες που να απαιτούν αλλαγή.</div>';
+
+            const baselineByDate = calculationSteps.tempSemiBaselineAssignments || {};
+            const computedByDate = updatedAssignments || {};
+            const rows = [];
+            const dateKeys = Object.keys(computedByDate).sort();
+            for (const dateKey of dateKeys) {
+                const dateObj = new Date(dateKey + 'T00:00:00');
+                if (isNaN(dateObj.getTime())) continue;
+                const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const dayName = getGreekDayName(dateObj);
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const base = baselineByDate?.[dateKey]?.[groupNum] || null;
+                    const comp = computedByDate?.[dateKey]?.[groupNum] || null;
+                    if (!base || !comp) continue;
+                    if (base === comp) continue;
+
+                    const reasonObj = assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null;
+                    const reasonText = reasonObj?.reason ? String(reasonObj.reason) : '';
+                    const briefReason = reasonText
+                        ? reasonText.split('.').filter(Boolean)[0]
+                        : (isPersonMissingOnDate(base, groupNum, dateObj) ? 'Κώλυμα/Απουσία' : 'Αλλαγή');
+
+                    const otherKey = reasonObj?.type === 'swap'
+                        ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
+                        : null;
+                    const swapDateStr = otherKey
+                        ? new Date(otherKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                        : '-';
+
+                    rows.push({
+                        dateKey,
+                        dayName,
+                        dateStr,
+                        groupNum,
+                        service: getGroupName(groupNum),
+                        skipped: base,
+                        replacement: comp,
+                        swapDateStr,
+                        briefReason
+                    });
+                }
+            }
+
+            if (rows.length === 0) {
+                message = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>Καμία αλλαγή!</strong><br>Δεν βρέθηκαν αλλαγές στις ημιαργίες.</div>';
             } else {
-                message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Αλλάχθηκαν ' + swappedPeople.length + ' άτομα:</strong></div>';
+                message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Αλλαγές: ' + rows.length + ' εγγραφές</strong></div>';
                 message += '<div class="table-responsive"><table class="table table-sm table-bordered">';
                 message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
-                
-                swappedPeople.forEach(item => {
-                    const conflictedPerson = item.conflictedPerson || item.skippedPerson;
-                    const swapDateStr = item.swapDateStr || '-';
-                    const service = getGroupName(item.groupNum);
-                    const dateObj = new Date((item.date || '') + 'T00:00:00');
-                    const dayName = !isNaN(dateObj.getTime()) ? getGreekDayName(dateObj) : '';
-                    const reasonObj = assignmentReasons?.[item.date]?.[item.groupNum]?.[item.swappedPerson] || null;
-                    const reasonText = (reasonObj && reasonObj.reason) ? String(reasonObj.reason) : '';
-                    const briefReason = reasonText ? reasonText.split('.').filter(Boolean)[0] : 'Σύγκρουση (συνεχόμενη υπηρεσία)';
+                rows.forEach(r => {
                     message += `<tr>
-                        <td>${dayName} ${item.dateStr}</td>
-                        <td>${service}</td>
-                        <td><strong>${conflictedPerson}</strong></td>
-                        <td><strong>${item.swappedPerson}</strong></td>
-                        <td>${swapDateStr}</td>
-                        <td>${briefReason}</td>
+                        <td>${r.dayName} ${r.dateStr}</td>
+                        <td>${r.service}</td>
+                        <td><strong>${r.skipped}</strong></td>
+                        <td><strong>${r.replacement}</strong></td>
+                        <td>${r.swapDateStr}</td>
+                        <td>${r.briefReason}</td>
                     </tr>`;
                 });
-                
                 message += '</tbody></table></div>';
             }
             
@@ -9294,34 +9398,85 @@
         
         // Show popup with normal swap results
         function showNormalSwapResults(swappedPeople, updatedAssignments) {
+            const findSwapOtherDateKey = (swapPairIdRaw, groupNum, currentDateKey) => {
+                if (swapPairIdRaw === null || swapPairIdRaw === undefined) return null;
+                const swapPairId = typeof swapPairIdRaw === 'number' ? swapPairIdRaw : parseInt(swapPairIdRaw);
+                if (isNaN(swapPairId)) return null;
+                for (const dk in assignmentReasons) {
+                    if (dk === currentDateKey) continue;
+                    const gmap = assignmentReasons?.[dk]?.[groupNum];
+                    if (!gmap) continue;
+                    for (const pn in gmap) {
+                        const r = gmap[pn];
+                        const rid = r?.swapPairId;
+                        const nid = typeof rid === 'number' ? rid : parseInt(rid);
+                        if (!isNaN(nid) && nid === swapPairId) return dk;
+                    }
+                }
+                return null;
+            };
+
             console.log('[STEP 4] showNormalSwapResults() called with', swappedPeople.length, 'swapped people');
             let message = '';
             
-            if (swappedPeople.length === 0) {
-                message = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>Κανένας δεν αλλάχθηκε!</strong><br>Δεν βρέθηκαν συνεχόμενες ημέρες που να απαιτούν αλλαγή.</div>';
+            const baselineByDate = calculationSteps.tempNormalBaselineAssignments || {};
+            const computedByDate = updatedAssignments || {};
+            const rows = [];
+            const dateKeys = Object.keys(computedByDate).sort();
+            for (const dateKey of dateKeys) {
+                const dateObj = new Date(dateKey + 'T00:00:00');
+                if (isNaN(dateObj.getTime())) continue;
+                const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const dayName = getGreekDayName(dateObj);
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const base = baselineByDate?.[dateKey]?.[groupNum] || null;
+                    const comp = computedByDate?.[dateKey]?.[groupNum] || null;
+                    if (!base || !comp) continue;
+                    if (base === comp) continue;
+
+                    const reasonObj = assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null;
+                    const reasonText = reasonObj?.reason ? String(reasonObj.reason) : '';
+                    const briefReason = reasonText
+                        ? reasonText.split('.').filter(Boolean)[0]
+                        : (isPersonMissingOnDate(base, groupNum, dateObj) ? 'Κώλυμα/Απουσία' : 'Αλλαγή');
+
+                    const otherKey = reasonObj?.type === 'swap'
+                        ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
+                        : null;
+                    const swapDateStr = otherKey
+                        ? new Date(otherKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                        : '-';
+
+                    rows.push({
+                        dateKey,
+                        dayName,
+                        dateStr,
+                        groupNum,
+                        service: getGroupName(groupNum),
+                        skipped: base,
+                        replacement: comp,
+                        swapDateStr,
+                        briefReason
+                    });
+                }
+            }
+
+            if (rows.length === 0) {
+                message = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>Καμία αλλαγή!</strong><br>Δεν βρέθηκαν αλλαγές στις καθημερινές.</div>';
             } else {
-                message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Αλλάχθηκαν ' + swappedPeople.length + ' άτομα:</strong></div>';
+                message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Αλλαγές: ' + rows.length + ' εγγραφές</strong></div>';
                 message += '<div class="table-responsive"><table class="table table-sm table-bordered">';
                 message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
-                
-                swappedPeople.forEach(item => {
-                    const service = getGroupName(item.groupNum);
-                    const swapDateStr = item.swapDateStr || item.dateStr;
-                    const dateObj = new Date((item.date || '') + 'T00:00:00');
-                    const dayName = !isNaN(dateObj.getTime()) ? getGreekDayName(dateObj) : '';
-                    const reasonObj = assignmentReasons?.[item.date]?.[item.groupNum]?.[item.swappedPerson] || null;
-                    const reasonText = (reasonObj && reasonObj.reason) ? String(reasonObj.reason) : '';
-                    const briefReason = reasonText ? reasonText.split('.').filter(Boolean)[0] : 'Σύγκρουση (συνεχόμενη υπηρεσία)';
+                rows.forEach(r => {
                     message += `<tr>
-                        <td>${dayName} ${item.dateStr}</td>
-                        <td>${service}</td>
-                        <td><strong>${item.skippedPerson}</strong></td>
-                        <td><strong>${item.swappedPerson}</strong></td>
-                        <td>${swapDateStr}</td>
-                        <td>${briefReason}</td>
+                        <td>${r.dayName} ${r.dateStr}</td>
+                        <td>${r.service}</td>
+                        <td><strong>${r.skipped}</strong></td>
+                        <td><strong>${r.replacement}</strong></td>
+                        <td>${r.swapDateStr}</td>
+                        <td>${r.briefReason}</td>
                     </tr>`;
                 });
-                
                 message += '</tbody></table></div>';
             }
             
