@@ -11039,8 +11039,6 @@
             }
             
             html += '</div>';
-            // Placeholder for always-visible summary of swaps/skips/missing/conflicts for this calculation range
-            html += '<div id="previewChangesSummary"></div>';
             
             // NOW APPLY SWAP LOGIC IN PREVIEW (Monday-Wednesday and Tuesday-Thursday rules)
             // This ensures preview shows exactly what will be saved
@@ -11536,130 +11534,7 @@
                 }
             }
 
-            // Build and show a summary of everything that will happen (swaps / skips / missing replacements / remaining conflicts)
-            try {
-                const summaryHost = document.getElementById('previewChangesSummary');
-                if (summaryHost) {
-                    const items = [];
-
-                    // 1) Swaps/Skips already recorded via assignmentReasons (filter to current range or linked cross-month meta)
-                    for (const dateKey in assignmentReasons) {
-                        const dateObj = new Date(dateKey + 'T00:00:00');
-                        const inRange = isDateKeyInRange(dateKey, startDate, endDate);
-                        for (const groupNumStr in (assignmentReasons[dateKey] || {})) {
-                            const groupNum = parseInt(groupNumStr);
-                            for (const personName in (assignmentReasons[dateKey][groupNumStr] || {})) {
-                                const r = assignmentReasons[dateKey][groupNumStr][personName];
-                                if (!r || (!r.type && !r.reason)) continue;
-
-                                const meta = r.meta || null;
-                                const isLinkedCrossMonth = meta?.isCrossMonth && (
-                                    isDateKeyInRange(meta.originDayKey, startDate, endDate) ||
-                                    isDateKeyInRange(meta.swapDayKey, startDate, endDate)
-                                );
-                                if (!inRange && !isLinkedCrossMonth) continue;
-
-                                const dayName = !isNaN(dateObj.getTime()) ? getGreekDayName(dateObj) : '';
-                                const dateStr = !isNaN(dateObj.getTime())
-                                    ? dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                                    : dateKey;
-                                const groupName = getGroupName(groupNum);
-
-                                // baseline for normal-days summary: rotation person if available
-                                const baseline = normalRotationPersons?.[dateKey]?.[groupNum] || null;
-                                const computed = personName;
-
-                                items.push({
-                                    kind: r.type === 'swap' ? 'swap' : 'skip',
-                                    dateKey,
-                                    dateStr,
-                                    dayName,
-                                    groupNum,
-                                    groupName,
-                                    baseline,
-                                    computed,
-                                    reason: r.reason || ''
-                                });
-                            }
-                        }
-                    }
-
-                    // 2) Missing replacements on normal days (not always stored in assignmentReasons)
-                    for (const dateKey of (sortedNormal || [])) {
-                        if (!isDateKeyInRange(dateKey, startDate, endDate)) continue;
-                        const dateObj = new Date(dateKey + 'T00:00:00');
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            const baseline = normalRotationPersons?.[dateKey]?.[groupNum] || null;
-                            const computed = normalAssignments?.[dateKey]?.[groupNum] || null;
-                            if (!baseline || !computed) continue;
-                            if (baseline === computed) continue;
-                            if (!isPersonMissingOnDate(baseline, groupNum, dateObj)) continue;
-
-                            items.push({
-                                kind: 'missing',
-                                dateKey,
-                                dateStr: dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-                                dayName: getGreekDayName(dateObj),
-                                groupNum,
-                                groupName: getGroupName(groupNum),
-                                baseline,
-                                computed,
-                                reason: buildSkipReasonGreek({ skippedPersonName: baseline, replacementPersonName: computed, dateKey })
-                            });
-                        }
-                    }
-
-                    // 3) Remaining consecutive-duty conflicts after all preview logic has been applied
-                    const simulatedAssignmentsFinal = {
-                        special: simulatedSpecialAssignments,
-                        weekend: simulatedWeekendAssignments,
-                        semi: simulatedSemiAssignments,
-                        normal: normalAssignments,
-                        normalRotationPositions: globalNormalRotationPosition
-                    };
-                    for (const dateKey of (sortedNormal || [])) {
-                        if (!isDateKeyInRange(dateKey, startDate, endDate)) continue;
-                        const dateObj = new Date(dateKey + 'T00:00:00');
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            const person = normalAssignments?.[dateKey]?.[groupNum];
-                            if (!person) continue;
-                            if (!hasConsecutiveDuty(dateKey, person, groupNum, simulatedAssignmentsFinal)) continue;
-
-                            const baseline = normalRotationPersons?.[dateKey]?.[groupNum] || null;
-                            const neighbor = getConsecutiveConflictNeighborDayKey(dateKey, person, groupNum, simulatedAssignmentsFinal);
-                            const neighborStr = neighbor
-                                ? new Date(neighbor + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                                : '';
-
-                            items.push({
-                                kind: 'conflict',
-                                dateKey,
-                                dateStr: dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-                                dayName: getGreekDayName(dateObj),
-                                groupNum,
-                                groupName: getGroupName(groupNum),
-                                baseline,
-                                computed: person,
-                                reason: neighbor ? `Παραμένει σύγκρουση με την ${neighborStr}.` : 'Παραμένει σύγκρουση (γειτονική ημέρα μη διαθέσιμη).'
-                            });
-                        }
-                    }
-
-                    // Sort for stable display (date, then group)
-                    items.sort((a, b) => {
-                        if (a.dateKey !== b.dateKey) return a.dateKey.localeCompare(b.dateKey);
-                        return (a.groupNum || 0) - (b.groupNum || 0);
-                    });
-
-                    summaryHost.innerHTML = buildPreviewCalculationSummaryHtml({
-                        title: 'Τι θα γίνει σε αυτόν τον υπολογισμό (Swaps / Skips / Missing / Συγκρούσεις)',
-                        items
-                    });
-                }
-            } catch (e) {
-                // Never break the preview due to summary rendering
-                console.warn('Preview summary build failed:', e);
-            }
+            // (Intentionally no always-visible summary section in step modal)
             
             // Store preview assignments and save them temporarily to Firestore
             // Convert Sets to arrays for serialization
