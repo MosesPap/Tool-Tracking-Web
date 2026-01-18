@@ -7002,7 +7002,7 @@
 
                 const modalHtml = `
                     <div class="modal fade" id="specialHolidayResultsModal" tabindex="-1">
-                        <div class="modal-dialog modal-xl">
+                    <div class="modal-dialog modal-xl modal-superwide">
                             <div class="modal-content">
                                 <div class="modal-header">
                                     <h5 class="modal-title"><i class="fas fa-star me-2"></i>Αποτελέσματα Ειδικών Αργιών</h5>
@@ -7434,7 +7434,7 @@
             // Create and show modal
             const modalHtml = `
                 <div class="modal fade" id="weekendSkipResultsModal" tabindex="-1">
-                    <div class="modal-dialog modal-lg">
+                    <div class="modal-dialog modal-xl modal-superwide">
                         <div class="modal-content">
                             <div class="modal-header">
                                 <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Αποτελέσματα Παραλείψεων Σαββατοκύριακων</h5>
@@ -8079,7 +8079,7 @@
             // Create and show modal
             const modalHtml = `
                 <div class="modal fade" id="semiNormalSwapResultsModal" tabindex="-1">
-                    <div class="modal-dialog modal-lg">
+                    <div class="modal-dialog modal-xl modal-superwide">
                         <div class="modal-content">
                             <div class="modal-header">
                                 <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Αποτελέσματα Αλλαγών Ημιαργιών</h5>
@@ -9327,7 +9327,7 @@
             // Create and show modal
             const modalHtml = `
                 <div class="modal fade" id="normalSwapResultsModal" tabindex="-1">
-                    <div class="modal-dialog modal-lg">
+                    <div class="modal-dialog modal-xl modal-superwide">
                         <div class="modal-content">
                             <div class="modal-header">
                                 <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Αποτελέσματα Αλλαγών Καθημερινών</h5>
