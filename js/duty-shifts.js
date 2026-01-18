@@ -1294,9 +1294,10 @@
                 
                 const confirmText =
                     'ΠΡΟΣΟΧΗ: Αυτό θα καθαρίσει (wipe) τα παρακάτω Firestore έγγραφα:\n' +
-                    '- assignmentReasons\n- assignments\n- crossMonthSwaps\n- lastRotationPositions\n' +
+                    '- assignmentReasons\n- crossMonthSwaps\n- lastRotationPositions\n' +
                     '- normalDayAssignments\n- semiNormalAssignments\n- specialHolidayAssignments\n' +
                     '- tempAssignments\n- weekendAssignments\n\n' +
+                    '- rotationBaselineSpecialAssignments\n- rotationBaselineWeekendAssignments\n- rotationBaselineSemiAssignments\n- rotationBaselineNormalAssignments\n\n' +
                     'Αυτό ΔΕΝ επηρεάζει τις ομάδες/λίστες (groups), αργίες, ή ιεραρχίες.\n\nΣυνέχεια;';
 
                 if (!confirm(confirmText)) return;
@@ -1313,13 +1314,16 @@
 
                 const docIds = [
                     'assignmentReasons',
-                    'assignments',
                     'crossMonthSwaps',
                     'normalDayAssignments',
                     'semiNormalAssignments',
                     'specialHolidayAssignments',
                     'tempAssignments',
-                    'weekendAssignments'
+                    'weekendAssignments',
+                    'rotationBaselineSpecialAssignments',
+                    'rotationBaselineWeekendAssignments',
+                    'rotationBaselineSemiAssignments',
+                    'rotationBaselineNormalAssignments'
                 ];
 
                 for (const id of docIds) {
@@ -1344,6 +1348,11 @@
                 semiNormalAssignments = {};
                 weekendAssignments = {};
                 specialHolidayAssignments = {};
+                rotationBaselineSpecialAssignments = {};
+                rotationBaselineWeekendAssignments = {};
+                rotationBaselineSemiAssignments = {};
+                rotationBaselineNormalAssignments = {};
+                rotationBaselineLastByType = { normal: {}, semi: {}, weekend: {}, special: {} };
                 calculationSteps.tempAssignments = null;
 
                 // Clear localStorage backups for these docs to prevent fallback re-populating them
