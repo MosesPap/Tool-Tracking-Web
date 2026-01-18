@@ -120,6 +120,107 @@
             `;
         }
 
+        function isDateKeyInRange(dateKey, startDate, endDate) {
+            if (!dateKey || typeof dateKey !== 'string') return false;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return false;
+            const d = new Date(dateKey + 'T00:00:00');
+            if (isNaN(d.getTime())) return false;
+            return d >= startDate && d <= endDate;
+        }
+
+        function buildPreviewCalculationSummaryHtml({ title, items }) {
+            const safeTitle = title || 'Σύνοψη Αλλαγών';
+            const swaps = items.filter(i => i.kind === 'swap');
+            const skips = items.filter(i => i.kind === 'skip');
+            const missing = items.filter(i => i.kind === 'missing');
+            const conflicts = items.filter(i => i.kind === 'conflict');
+
+            const buildTable = (rows) => {
+                if (!rows.length) {
+                    return '<div class="text-muted small">-</div>';
+                }
+                let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">';
+                html += '<thead class="table-light"><tr><th>Ημερομηνία</th><th>Ημέρα</th><th>Ομάδα</th><th>Βασική Σειρά</th><th>Αντικατάσταση</th><th>Αιτία</th></tr></thead><tbody>';
+                for (const r of rows) {
+                    html += `<tr>
+                        <td>${r.dateStr}</td>
+                        <td>${r.dayName}</td>
+                        <td>${r.groupName}</td>
+                        <td><strong>${r.baseline || '-'}</strong></td>
+                        <td><strong>${r.computed || '-'}</strong></td>
+                        <td>${r.reason || ''}</td>
+                    </tr>`;
+                }
+                html += '</tbody></table></div>';
+                return html;
+            };
+
+            return `
+                <div class="mt-4">
+                    <h6 class="mb-2"><i class="fas fa-list-check me-2"></i>${safeTitle}</h6>
+                    <div class="alert alert-light border mb-3">
+                        <div class="d-flex flex-wrap gap-2">
+                            <span class="badge bg-primary">Swaps: ${swaps.length}</span>
+                            <span class="badge bg-warning text-dark">Skips (ειδική αργία): ${skips.length}</span>
+                            <span class="badge bg-info text-dark">Missing αντικαταστάσεις: ${missing.length}</span>
+                            <span class="badge bg-danger">Υπόλοιπες συγκρούσεις: ${conflicts.length}</span>
+                        </div>
+                    </div>
+
+                    <div class="accordion" id="previewSummaryAccordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="prevSumHead1">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#prevSumBody1">
+                                    Swaps
+                                </button>
+                            </h2>
+                            <div id="prevSumBody1" class="accordion-collapse collapse show" data-bs-parent="#previewSummaryAccordion">
+                                <div class="accordion-body">
+                                    ${buildTable(swaps)}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="prevSumHead2">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#prevSumBody2">
+                                    Skips (ειδική αργία)
+                                </button>
+                            </h2>
+                            <div id="prevSumBody2" class="accordion-collapse collapse" data-bs-parent="#previewSummaryAccordion">
+                                <div class="accordion-body">
+                                    ${buildTable(skips)}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="prevSumHead3">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#prevSumBody3">
+                                    Missing αντικαταστάσεις
+                                </button>
+                            </h2>
+                            <div id="prevSumBody3" class="accordion-collapse collapse" data-bs-parent="#previewSummaryAccordion">
+                                <div class="accordion-body">
+                                    ${buildTable(missing)}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="prevSumHead4">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#prevSumBody4">
+                                    Υπόλοιπες συγκρούσεις (μετά τις αλλαγές)
+                                </button>
+                            </h2>
+                            <div id="prevSumBody4" class="accordion-collapse collapse" data-bs-parent="#previewSummaryAccordion">
+                                <div class="accordion-body">
+                                    ${buildTable(conflicts)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         function getPreviousMonthKeyFromDate(date) {
             const d = new Date(date.getFullYear(), date.getMonth(), 1);
             d.setMonth(d.getMonth() - 1);
@@ -10899,6 +11000,8 @@
             }
             
             html += '</div>';
+            // Placeholder for always-visible summary of swaps/skips/missing/conflicts for this calculation range
+            html += '<div id="previewChangesSummary"></div>';
             
             // NOW APPLY SWAP LOGIC IN PREVIEW (Monday-Wednesday and Tuesday-Thursday rules)
             // This ensures preview shows exactly what will be saved
@@ -11392,6 +11495,131 @@
                         tableBody.innerHTML += rowHtml;
                 });
                 }
+            }
+
+            // Build and show a summary of everything that will happen (swaps / skips / missing replacements / remaining conflicts)
+            try {
+                const summaryHost = document.getElementById('previewChangesSummary');
+                if (summaryHost) {
+                    const items = [];
+
+                    // 1) Swaps/Skips already recorded via assignmentReasons (filter to current range or linked cross-month meta)
+                    for (const dateKey in assignmentReasons) {
+                        const dateObj = new Date(dateKey + 'T00:00:00');
+                        const inRange = isDateKeyInRange(dateKey, startDate, endDate);
+                        for (const groupNumStr in (assignmentReasons[dateKey] || {})) {
+                            const groupNum = parseInt(groupNumStr);
+                            for (const personName in (assignmentReasons[dateKey][groupNumStr] || {})) {
+                                const r = assignmentReasons[dateKey][groupNumStr][personName];
+                                if (!r || (!r.type && !r.reason)) continue;
+
+                                const meta = r.meta || null;
+                                const isLinkedCrossMonth = meta?.isCrossMonth && (
+                                    isDateKeyInRange(meta.originDayKey, startDate, endDate) ||
+                                    isDateKeyInRange(meta.swapDayKey, startDate, endDate)
+                                );
+                                if (!inRange && !isLinkedCrossMonth) continue;
+
+                                const dayName = !isNaN(dateObj.getTime()) ? getGreekDayName(dateObj) : '';
+                                const dateStr = !isNaN(dateObj.getTime())
+                                    ? dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                    : dateKey;
+                                const groupName = getGroupName(groupNum);
+
+                                // baseline for normal-days summary: rotation person if available
+                                const baseline = normalRotationPersons?.[dateKey]?.[groupNum] || null;
+                                const computed = personName;
+
+                                items.push({
+                                    kind: r.type === 'swap' ? 'swap' : 'skip',
+                                    dateKey,
+                                    dateStr,
+                                    dayName,
+                                    groupNum,
+                                    groupName,
+                                    baseline,
+                                    computed,
+                                    reason: r.reason || ''
+                                });
+                            }
+                        }
+                    }
+
+                    // 2) Missing replacements on normal days (not always stored in assignmentReasons)
+                    for (const dateKey of (sortedNormal || [])) {
+                        if (!isDateKeyInRange(dateKey, startDate, endDate)) continue;
+                        const dateObj = new Date(dateKey + 'T00:00:00');
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            const baseline = normalRotationPersons?.[dateKey]?.[groupNum] || null;
+                            const computed = normalAssignments?.[dateKey]?.[groupNum] || null;
+                            if (!baseline || !computed) continue;
+                            if (baseline === computed) continue;
+                            if (!isPersonMissingOnDate(baseline, groupNum, dateObj)) continue;
+
+                            items.push({
+                                kind: 'missing',
+                                dateKey,
+                                dateStr: dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                dayName: getGreekDayName(dateObj),
+                                groupNum,
+                                groupName: getGroupName(groupNum),
+                                baseline,
+                                computed,
+                                reason: buildSkipReasonGreek({ skippedPersonName: baseline, replacementPersonName: computed, dateKey })
+                            });
+                        }
+                    }
+
+                    // 3) Remaining consecutive-duty conflicts after all preview logic has been applied
+                    const simulatedAssignmentsFinal = {
+                        special: simulatedSpecialAssignments,
+                        weekend: simulatedWeekendAssignments,
+                        semi: simulatedSemiAssignments,
+                        normal: normalAssignments,
+                        normalRotationPositions: globalNormalRotationPosition
+                    };
+                    for (const dateKey of (sortedNormal || [])) {
+                        if (!isDateKeyInRange(dateKey, startDate, endDate)) continue;
+                        const dateObj = new Date(dateKey + 'T00:00:00');
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            const person = normalAssignments?.[dateKey]?.[groupNum];
+                            if (!person) continue;
+                            if (!hasConsecutiveDuty(dateKey, person, groupNum, simulatedAssignmentsFinal)) continue;
+
+                            const baseline = normalRotationPersons?.[dateKey]?.[groupNum] || null;
+                            const neighbor = getConsecutiveConflictNeighborDayKey(dateKey, person, groupNum, simulatedAssignmentsFinal);
+                            const neighborStr = neighbor
+                                ? new Date(neighbor + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                : '';
+
+                            items.push({
+                                kind: 'conflict',
+                                dateKey,
+                                dateStr: dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                dayName: getGreekDayName(dateObj),
+                                groupNum,
+                                groupName: getGroupName(groupNum),
+                                baseline,
+                                computed: person,
+                                reason: neighbor ? `Παραμένει σύγκρουση με την ${neighborStr}.` : 'Παραμένει σύγκρουση (γειτονική ημέρα μη διαθέσιμη).'
+                            });
+                        }
+                    }
+
+                    // Sort for stable display (date, then group)
+                    items.sort((a, b) => {
+                        if (a.dateKey !== b.dateKey) return a.dateKey.localeCompare(b.dateKey);
+                        return (a.groupNum || 0) - (b.groupNum || 0);
+                    });
+
+                    summaryHost.innerHTML = buildPreviewCalculationSummaryHtml({
+                        title: 'Τι θα γίνει σε αυτόν τον υπολογισμό (Swaps / Skips / Missing / Συγκρούσεις)',
+                        items
+                    });
+                }
+            } catch (e) {
+                // Never break the preview due to summary rendering
+                console.warn('Preview summary build failed:', e);
             }
             
             // Store preview assignments and save them temporarily to Firestore
