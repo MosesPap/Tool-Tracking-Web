@@ -10270,7 +10270,7 @@
                 html += '<thead class="table-warning">';
                 html += '<tr>';
                 html += '<th>Ημερομηνία</th>';
-                // Date column should show only the date (no weekday); remove separate day column.
+                html += '<th>Όνομα Ημιαργίας</th>';
                 html += `<th>${getGroupName(1)}</th>`;
                 html += `<th>${getGroupName(2)}</th>`;
                 html += `<th>${getGroupName(3)}</th>`;
@@ -10305,7 +10305,7 @@
                     
                     html += '<tr>';
                     html += `<td><strong>${dateStr}</strong></td>`;
-                    // Removed day name column
+                    html += `<td>${dayName}</td>`;
                     
                     // Calculate who will be assigned for each group
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -10731,7 +10731,7 @@
                 html += '<thead class="table-primary">';
                 html += '<tr>';
                 html += '<th>Ημερομηνία</th>';
-                // Date column should show only the date (no weekday); remove separate day column.
+                html += '<th>Όνομα Ημέρας</th>';
                 html += `<th>${getGroupName(1)}</th>`;
                 html += `<th>${getGroupName(2)}</th>`;
                 html += `<th>${getGroupName(3)}</th>`;
@@ -10783,7 +10783,7 @@
                     
                     html += '<tr>';
                     html += `<td><strong>${dateStr}</strong></td>`;
-                    // Removed day name column
+                    html += `<td>${dayName}</td>`;
                     
                     // Calculate who will be assigned for each group
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -11498,7 +11498,7 @@
                         
                         let rowHtml = '<tr>';
                         rowHtml += `<td><strong>${dateStr}</strong></td>`;
-                        // Removed day name column
+                        rowHtml += `<td>${dayName}</td>`;
                         
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
                             const groupData = groups[groupNum] || { normal: [] };
