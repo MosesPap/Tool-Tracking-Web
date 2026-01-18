@@ -6986,7 +6986,7 @@
                     message += '<div class="table-responsive"><table class="table table-sm table-bordered">';
                     message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
                     for (const c of changes) {
-                        const service = `Ειδική Αργία - ${c.holidayName} (Ομάδα ${c.groupNum})`;
+                        const service = getGroupName(c.groupNum);
                         message += `<tr>
                             <td>${c.dayName} ${c.dateStr}</td>
                             <td>${service}</td>
@@ -7410,7 +7410,7 @@
                 skippedPeople.forEach(item => {
                     const dateObj = new Date(item.date + 'T00:00:00');
                     const dayName = !isNaN(dateObj.getTime()) ? getGreekDayName(dateObj) : '';
-                    const service = `ΣΚ/Αργία (Ομάδα ${item.groupNum})`;
+                    const service = getGroupName(item.groupNum);
                     const reasonObj = assignmentReasons?.[item.date]?.[item.groupNum]?.[item.replacementPerson] || null;
                     const reasonText = (reasonObj && reasonObj.reason) ? String(reasonObj.reason) : '';
                     const briefReason =
@@ -8056,7 +8056,7 @@
                 swappedPeople.forEach(item => {
                     const conflictedPerson = item.conflictedPerson || item.skippedPerson;
                     const swapDateStr = item.swapDateStr || '-';
-                    const service = `Ημιαργία (Ομάδα ${item.groupNum})`;
+                    const service = getGroupName(item.groupNum);
                     const dateObj = new Date((item.date || '') + 'T00:00:00');
                     const dayName = !isNaN(dateObj.getTime()) ? getGreekDayName(dateObj) : '';
                     const reasonObj = assignmentReasons?.[item.date]?.[item.groupNum]?.[item.swappedPerson] || null;
@@ -9303,7 +9303,7 @@
                 message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
                 
                 swappedPeople.forEach(item => {
-                    const service = `Καθημερινή (Ομάδα ${item.groupNum})`;
+                    const service = getGroupName(item.groupNum);
                     const swapDateStr = item.swapDateStr || item.dateStr;
                     const dateObj = new Date((item.date || '') + 'T00:00:00');
                     const dayName = !isNaN(dateObj.getTime()) ? getGreekDayName(dateObj) : '';
