@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.185 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.186 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -33,6 +33,28 @@
         /* Sticky table headers + proper scrolling inside modal tables */
         .modal .table-responsive {
             max-height: 60vh;
+            overflow: auto;
+        }
+
+        /* Make specific heavy-table modals use table-only scrolling (no modal-body scrollbar) */
+        #stepByStepCalculationModal #stepContent,
+        #specialHolidayResultsModal .modal-body,
+        #weekendSkipResultsModal .modal-body,
+        #semiNormalSwapResultsModal .modal-body,
+        #normalSwapResultsModal .modal-body {
+            display: flex;
+            flex-direction: column;
+            max-height: 70vh;
+            overflow: hidden !important;
+        }
+
+        #stepByStepCalculationModal .table-responsive,
+        #specialHolidayResultsModal .table-responsive,
+        #weekendSkipResultsModal .table-responsive,
+        #semiNormalSwapResultsModal .table-responsive,
+        #normalSwapResultsModal .table-responsive {
+            flex: 1 1 auto;
+            max-height: none; /* flex container controls height */
             overflow: auto;
         }
 
@@ -784,7 +806,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.185</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.186</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">

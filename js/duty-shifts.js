@@ -7404,7 +7404,7 @@
                 message = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>Κανένας δεν παραλείφθηκε!</strong><br>Όλοι οι άνθρωποι που είχαν ειδική αργία τον ίδιο μήνα παραλείφθηκαν σωστά.</div>';
             } else {
                 message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Παραλείφθηκαν ' + skippedPeople.length + ' άτομα:</strong><br><br>';
-                message += '<table class="table table-sm table-bordered">';
+                message += '<div class="table-responsive"><table class="table table-sm table-bordered">';
                 message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
                 
                 skippedPeople.forEach(item => {
@@ -8050,7 +8050,7 @@
                 message = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>Κανένας δεν αλλάχθηκε!</strong><br>Δεν βρέθηκαν συνεχόμενες ημέρες που να απαιτούν αλλαγή.</div>';
             } else {
                 message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Αλλάχθηκαν ' + swappedPeople.length + ' άτομα:</strong><br><br>';
-                message += '<table class="table table-sm table-bordered">';
+                message += '<div class="table-responsive"><table class="table table-sm table-bordered">';
                 message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
                 
                 swappedPeople.forEach(item => {
@@ -9299,7 +9299,7 @@
                 message = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>Κανένας δεν αλλάχθηκε!</strong><br>Δεν βρέθηκαν συνεχόμενες ημέρες που να απαιτούν αλλαγή.</div>';
             } else {
                 message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Αλλάχθηκαν ' + swappedPeople.length + ' άτομα:</strong><br><br>';
-                message += '<table class="table table-sm table-bordered">';
+                message += '<div class="table-responsive"><table class="table table-sm table-bordered">';
                 message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
                 
                 swappedPeople.forEach(item => {
