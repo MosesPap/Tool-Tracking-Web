@@ -6822,6 +6822,36 @@
                                 }
                             }
 
+                            // PREVIEW DISPLAY: also show weekend skip changes (special holiday duty in same month),
+                            // using the same replacement rules as runWeekendSkipLogic().
+                            let displayPerson = assignedPerson;
+                            if (displayPerson) {
+                                const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(displayPerson) || false;
+                                const wasSkipped = skippedInMonth[monthKey][groupNum].has(displayPerson);
+
+                                if (hasSpecialHoliday || wasSkipped) {
+                                    skippedInMonth[monthKey][groupNum].add(displayPerson);
+
+                                    const currentIndex = groupPeople.indexOf(displayPerson);
+                                    let replacementPerson = null;
+                                    for (let offset = 1; offset < rotationDays; offset++) {
+                                        const nextIndex = (currentIndex + offset) % rotationDays;
+                                        const candidate = groupPeople[nextIndex];
+                                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) continue;
+
+                                        const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
+                                        const candidateWasSkipped = skippedInMonth[monthKey][groupNum].has(candidate);
+                                        if (!candidateHasSpecial && !candidateWasSkipped) {
+                                            replacementPerson = candidate;
+                                            break;
+                                        }
+                                    }
+                                    if (replacementPerson) {
+                                        displayPerson = replacementPerson;
+                                    }
+                                }
+                            }
+
                             // Step 1 is special-holidays only: preview should reflect missing replacement only (no weekend skip logic here).
                             
                             // Store assignment for saving
@@ -6860,7 +6890,7 @@
                                 }
                             }
                             
-                            html += `<td>${buildBaselineComputedCellHtml(rotationPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                            html += `<td>${buildBaselineComputedCellHtml(rotationPerson, displayPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
                     
@@ -10168,6 +10198,31 @@
                                     rotationPosition = res.index;
                                 }
                             }
+
+                            // PREVIEW DISPLAY: show the weekend skip changes (special holiday duty in same month),
+                            // using the same replacement rules as runWeekendSkipLogic().
+                            let displayPerson = assignedPerson;
+                            if (displayPerson) {
+                                const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(displayPerson) || false;
+                                const wasSkipped = skippedInMonth[monthKey][groupNum].has(displayPerson);
+                                if (hasSpecialHoliday || wasSkipped) {
+                                    skippedInMonth[monthKey][groupNum].add(displayPerson);
+                                    const currentIndex = groupPeople.indexOf(displayPerson);
+                                    let replacementPerson = null;
+                                    for (let offset = 1; offset < rotationDays; offset++) {
+                                        const nextIndex = (currentIndex + offset) % rotationDays;
+                                        const candidate = groupPeople[nextIndex];
+                                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) continue;
+                                        const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
+                                        const candidateWasSkipped = skippedInMonth[monthKey][groupNum].has(candidate);
+                                        if (!candidateHasSpecial && !candidateWasSkipped) {
+                                            replacementPerson = candidate;
+                                            break;
+                                        }
+                                    }
+                                    if (replacementPerson) displayPerson = replacementPerson;
+                                }
+                            }
                             
                             // Store assignment for saving
                             if (assignedPerson) {
@@ -10188,9 +10243,9 @@
                             // Get last duty date and days since for display
                             let lastDutyInfo = '';
                             let daysCountInfo = '';
-                            if (assignedPerson) {
-                                const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'weekend', dayTypeLists, startDate);
-                                    const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'weekend', groupPeople.length);
+                            if (displayPerson) {
+                                const daysSince = countDaysSinceLastDuty(dateKey, displayPerson, groupNum, 'weekend', dayTypeLists, startDate);
+                                    const dutyDates = getLastAndNextDutyDates(displayPerson, groupNum, 'weekend', groupPeople.length);
                                     lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
                                 
                                 // Show days counted in parentheses
@@ -10201,7 +10256,7 @@
                                 }
                             }
                             
-                            html += `<td>${buildBaselineComputedCellHtml(rotationPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                            html += `<td>${buildBaselineComputedCellHtml(rotationPerson, displayPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
                     
@@ -10269,41 +10324,58 @@
             const specialHolidays = dayTypeLists.special || [];
             const weekendHolidays = dayTypeLists.weekend || [];
             
-            // First, simulate what special holidays will be assigned (from Step 1)
+            // First, load special holiday assignments from Step 1 saved data (already includes missing replacements)
             const simulatedSpecialAssignments = {}; // monthKey -> { groupNum -> Set of person names }
             const sortedSpecial = [...specialHolidays].sort();
-            
-            sortedSpecial.forEach((dateKey, specialIndex) => {
+            sortedSpecial.forEach((dateKey) => {
                 const date = new Date(dateKey + 'T00:00:00');
-                const month = date.getMonth();
-                const year = date.getFullYear();
-                const monthKey = `${year}-${month}`;
-                
-                if (!simulatedSpecialAssignments[monthKey]) {
-                    simulatedSpecialAssignments[monthKey] = {};
-                }
-                
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupData = groups[groupNum] || { special: [] };
-                    const groupPeople = groupData.special || [];
-                    
-                    if (groupPeople.length > 0) {
-                        const rotationDays = groupPeople.length;
-                        const rotationPosition = getRotationPosition(date, 'special', groupNum) % rotationDays;
-                        const person = groupPeople[rotationPosition];
-                        
-                        if (person && !isPersonMissingOnDate(person, groupNum, date)) {
-                            if (!simulatedSpecialAssignments[monthKey][groupNum]) {
-                                simulatedSpecialAssignments[monthKey][groupNum] = new Set();
-                            }
-                            simulatedSpecialAssignments[monthKey][groupNum].add(person);
-                        }
-                    }
-                }
+                if (isNaN(date.getTime())) return;
+                const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+                if (!simulatedSpecialAssignments[monthKey]) simulatedSpecialAssignments[monthKey] = {};
+
+                const assignment = specialHolidayAssignments[dateKey];
+                if (!assignment) return;
+                const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
+                const parts = assignmentStr.split(',').map(p => p.trim());
+                parts.forEach(part => {
+                    const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                    if (!match) return;
+                    const personName = match[1].trim();
+                    const groupNum = parseInt(match[2]);
+                    if (!simulatedSpecialAssignments[monthKey][groupNum]) simulatedSpecialAssignments[monthKey][groupNum] = new Set();
+                    simulatedSpecialAssignments[monthKey][groupNum].add(personName);
+                });
             });
             
             // Second, simulate what weekends will be assigned (from Step 2)
             const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
+            // Prefer loading saved Step 2 weekend assignments (already includes skip logic)
+            let hasSavedWeekendAssignments = false;
+            for (const dateKey of [...weekendHolidays].sort()) {
+                const assignment = weekendAssignments[dateKey];
+                if (!assignment) continue;
+                hasSavedWeekendAssignments = true;
+                if (typeof assignment === 'string') {
+                    const parts = assignment.split(',').map(p => p.trim());
+                    parts.forEach(part => {
+                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                        if (!match) return;
+                        const personName = match[1].trim();
+                        const groupNum = parseInt(match[2]);
+                        if (!simulatedWeekendAssignments[dateKey]) simulatedWeekendAssignments[dateKey] = {};
+                        simulatedWeekendAssignments[dateKey][groupNum] = personName;
+                    });
+                } else if (typeof assignment === 'object' && !Array.isArray(assignment)) {
+                    for (const groupNum in assignment) {
+                        const personName = assignment[groupNum];
+                        if (!personName) continue;
+                        if (!simulatedWeekendAssignments[dateKey]) simulatedWeekendAssignments[dateKey] = {};
+                        simulatedWeekendAssignments[dateKey][parseInt(groupNum)] = personName;
+                    }
+                }
+            }
+
+            // Fallback (first-time run): recalculate weekends from rotation (no skip logic here)
             const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
             const globalWeekendRotationPosition = {}; // groupNum -> global position (continues across months)
             // IMPORTANT: Track weekend rotation persons (who SHOULD be assigned according to rotation)
@@ -10311,7 +10383,7 @@
             const weekendRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
             const sortedWeekends = [...weekendHolidays].sort();
             
-            sortedWeekends.forEach((dateKey, weekendIndex) => {
+            if (!hasSavedWeekendAssignments) sortedWeekends.forEach((dateKey, weekendIndex) => {
                 const date = new Date(dateKey + 'T00:00:00');
                 const month = date.getMonth();
                 const year = date.getFullYear();
