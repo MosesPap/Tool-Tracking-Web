@@ -6686,10 +6686,10 @@
                 html += '<tr>';
                 html += '<th>Ημερομηνία</th>';
                 html += '<th>Όνομα Αργίας</th>';
-                html += '<th>Ομάδα 1<br><small>ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</small></th>';
-                html += '<th>Ομάδα 2<br><small>ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</small></th>';
-                html += '<th>Ομάδα 3<br><small>ΤΕΧΝΙΚΟΣ Ε/Π AW139</small></th>';
-                html += '<th>Ομάδα 4<br><small>ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</small></th>';
+                html += `<th>${getGroupName(1)}</th>`;
+                html += `<th>${getGroupName(2)}</th>`;
+                html += `<th>${getGroupName(3)}</th>`;
+                html += `<th>${getGroupName(4)}</th>`;
                 html += '</tr>';
                 html += '</thead>';
                 html += '<tbody>';
@@ -6780,7 +6780,7 @@
                     }
                     
                     html += '<tr>';
-                    html += `<td><strong>${dateStr}</strong><br><small class="text-muted">${dayName}</small></td>`;
+                    html += `<td><strong>${dateStr}</strong></td>`;
                     html += `<td>${holidayName || 'Ειδική Αργία'}</td>`;
                     
                     // Calculate who will be assigned for each group based on rotation order
@@ -9880,10 +9880,10 @@
                 html += '<tr>';
                 html += '<th>Ημερομηνία</th>';
                 html += '<th>Όνομα Αργίας</th>';
-                html += '<th>Ομάδα 1<br><small>ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</small></th>';
-                html += '<th>Ομάδα 2<br><small>ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</small></th>';
-                html += '<th>Ομάδα 3<br><small>ΤΕΧΝΙΚΟΣ Ε/Π AW139</small></th>';
-                html += '<th>Ομάδα 4<br><small>ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</small></th>';
+                html += `<th>${getGroupName(1)}</th>`;
+                html += `<th>${getGroupName(2)}</th>`;
+                html += `<th>${getGroupName(3)}</th>`;
+                html += `<th>${getGroupName(4)}</th>`;
                 html += '</tr>';
                 html += '</thead>';
                 html += '<tbody>';
@@ -9931,7 +9931,7 @@
                     }
                     
                     html += '<tr>';
-                    html += `<td><strong>${dateStr}</strong><br><small class="text-muted">${dayName}</small></td>`;
+                    html += `<td><strong>${dateStr}</strong></td>`;
                     html += `<td>${holidayName || 'Αργία'}</td>`;
                     
                     // Calculate who will be assigned for each group based on rotation order
@@ -10270,11 +10270,11 @@
                 html += '<thead class="table-warning">';
                 html += '<tr>';
                 html += '<th>Ημερομηνία</th>';
-                html += '<th>Ημέρα</th>';
-                html += '<th>Ομάδα 1<br><small>ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</small></th>';
-                html += '<th>Ομάδα 2<br><small>ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</small></th>';
-                html += '<th>Ομάδα 3<br><small>ΤΕΧΝΙΚΟΣ Ε/Π AW139</small></th>';
-                html += '<th>Ομάδα 4<br><small>ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</small></th>';
+                // Date column should show only the date (no weekday); remove separate day column.
+                html += `<th>${getGroupName(1)}</th>`;
+                html += `<th>${getGroupName(2)}</th>`;
+                html += `<th>${getGroupName(3)}</th>`;
+                html += `<th>${getGroupName(4)}</th>`;
                 html += '</tr>';
                 html += '</thead>';
                 html += '<tbody>';
@@ -10305,7 +10305,7 @@
                     
                     html += '<tr>';
                     html += `<td><strong>${dateStr}</strong></td>`;
-                    html += `<td>${dayName}</td>`;
+                    // Removed day name column
                     
                     // Calculate who will be assigned for each group
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -10731,11 +10731,11 @@
                 html += '<thead class="table-primary">';
                 html += '<tr>';
                 html += '<th>Ημερομηνία</th>';
-                html += '<th>Ημέρα</th>';
-                html += '<th>Ομάδα 1<br><small>ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ</small></th>';
-                html += '<th>Ομάδα 2<br><small>ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ</small></th>';
-                html += '<th>Ομάδα 3<br><small>ΤΕΧΝΙΚΟΣ Ε/Π AW139</small></th>';
-                html += '<th>Ομάδα 4<br><small>ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ</small></th>';
+                // Date column should show only the date (no weekday); remove separate day column.
+                html += `<th>${getGroupName(1)}</th>`;
+                html += `<th>${getGroupName(2)}</th>`;
+                html += `<th>${getGroupName(3)}</th>`;
+                html += `<th>${getGroupName(4)}</th>`;
                 html += '</tr>';
                 html += '</thead>';
                 html += '<tbody>';
@@ -10783,7 +10783,7 @@
                     
                     html += '<tr>';
                     html += `<td><strong>${dateStr}</strong></td>`;
-                    html += `<td>${dayName}</td>`;
+                    // Removed day name column
                     
                     // Calculate who will be assigned for each group
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -11498,7 +11498,7 @@
                         
                         let rowHtml = '<tr>';
                         rowHtml += `<td><strong>${dateStr}</strong></td>`;
-                        rowHtml += `<td>${dayName}</td>`;
+                        // Removed day name column
                         
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
                             const groupData = groups[groupNum] || { normal: [] };
