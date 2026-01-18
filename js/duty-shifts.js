@@ -6985,14 +6985,15 @@
                 } else {
                     message = `<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Βρέθηκαν ${changes.length} αντικαταστάσεις στις ειδικές αργίες:</strong></div>`;
                     message += '<div class="table-responsive"><table class="table table-sm table-bordered">';
-                    message += '<thead><tr><th>Ημερομηνία</th><th>Αργία</th><th>Ομάδα</th><th>Baseline</th><th>Computed</th><th>Λόγος</th></tr></thead><tbody>';
+                    message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
                     for (const c of changes) {
+                        const service = `Ειδική Αργία - ${c.holidayName} (Ομάδα ${c.groupNum})`;
                         message += `<tr>
                             <td>${c.dayName} ${c.dateStr}</td>
-                            <td>${c.holidayName}</td>
-                            <td>${c.groupName}</td>
+                            <td>${service}</td>
                             <td><strong>${c.baseline}</strong></td>
                             <td><strong>${c.computed}</strong></td>
+                            <td>-</td>
                             <td>${c.reason}</td>
                         </tr>`;
                     }
@@ -7405,11 +7406,26 @@
             } else {
                 message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Παραλείφθηκαν ' + skippedPeople.length + ' άτομα:</strong><br><br>';
                 message += '<table class="table table-sm table-bordered">';
-                message += '<thead><tr><th>Ημερομηνία</th><th>Ομάδα</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th></tr></thead><tbody>';
+                message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
                 
                 skippedPeople.forEach(item => {
-                    const groupName = getGroupName(item.groupNum);
-                    message += `<tr><td>${item.dateStr}</td><td>${groupName}</td><td><strong>${item.skippedPerson}</strong></td><td><strong>${item.replacementPerson}</strong></td></tr>`;
+                    const dateObj = new Date(item.date + 'T00:00:00');
+                    const dayName = !isNaN(dateObj.getTime()) ? getGreekDayName(dateObj) : '';
+                    const service = `ΣΚ/Αργία (Ομάδα ${item.groupNum})`;
+                    const reasonObj = assignmentReasons?.[item.date]?.[item.groupNum]?.[item.replacementPerson] || null;
+                    const reasonText = (reasonObj && reasonObj.reason) ? String(reasonObj.reason) : '';
+                    const briefReason =
+                        reasonText.includes('ειδική αργία') ? 'Ειδική αργία στον ίδιο μήνα' :
+                        reasonText.includes('παραλειφθεί') ? 'Ήταν ήδη παραλειφθεί αυτόν τον μήνα' :
+                        (reasonText ? reasonText.split('.').filter(Boolean)[0] : '');
+                    message += `<tr>
+                        <td>${dayName} ${item.dateStr}</td>
+                        <td>${service}</td>
+                        <td><strong>${item.skippedPerson}</strong></td>
+                        <td><strong>${item.replacementPerson}</strong></td>
+                        <td>-</td>
+                        <td>${briefReason}</td>
+                    </tr>`;
                 });
                 
                 message += '</tbody></table></div>';
@@ -8036,13 +8052,25 @@
             } else {
                 message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Αλλάχθηκαν ' + swappedPeople.length + ' άτομα:</strong><br><br>';
                 message += '<table class="table table-sm table-bordered">';
-                message += '<thead><tr><th>Ημερομηνία</th><th>Ομάδα</th><th>Σύγκρουση</th><th>Αλλαγή με</th><th>Ημερομηνία Αλλαγής</th></tr></thead><tbody>';
+                message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
                 
                 swappedPeople.forEach(item => {
-                    const groupName = getGroupName(item.groupNum);
                     const conflictedPerson = item.conflictedPerson || item.skippedPerson;
                     const swapDateStr = item.swapDateStr || '-';
-                    message += `<tr><td>${item.dateStr}</td><td>${groupName}</td><td><strong>${conflictedPerson}</strong></td><td><strong>${item.swappedPerson}</strong></td><td>${swapDateStr}</td></tr>`;
+                    const service = `Ημιαργία (Ομάδα ${item.groupNum})`;
+                    const dateObj = new Date((item.date || '') + 'T00:00:00');
+                    const dayName = !isNaN(dateObj.getTime()) ? getGreekDayName(dateObj) : '';
+                    const reasonObj = assignmentReasons?.[item.date]?.[item.groupNum]?.[item.swappedPerson] || null;
+                    const reasonText = (reasonObj && reasonObj.reason) ? String(reasonObj.reason) : '';
+                    const briefReason = reasonText ? reasonText.split('.').filter(Boolean)[0] : 'Σύγκρουση (συνεχόμενη υπηρεσία)';
+                    message += `<tr>
+                        <td>${dayName} ${item.dateStr}</td>
+                        <td>${service}</td>
+                        <td><strong>${conflictedPerson}</strong></td>
+                        <td><strong>${item.swappedPerson}</strong></td>
+                        <td>${swapDateStr}</td>
+                        <td>${briefReason}</td>
+                    </tr>`;
                 });
                 
                 message += '</tbody></table></div>';
@@ -9273,12 +9301,24 @@
             } else {
                 message = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i><strong>Αλλάχθηκαν ' + swappedPeople.length + ' άτομα:</strong><br><br>';
                 message += '<table class="table table-sm table-bordered">';
-                message += '<thead><tr><th>Ημερομηνία</th><th>Ομάδα</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th></tr></thead><tbody>';
+                message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
                 
                 swappedPeople.forEach(item => {
-                    const groupName = getGroupName(item.groupNum);
+                    const service = `Καθημερινή (Ομάδα ${item.groupNum})`;
                     const swapDateStr = item.swapDateStr || item.dateStr;
-                    message += `<tr><td>${item.dateStr}</td><td>${groupName}</td><td><strong>${item.skippedPerson}</strong></td><td><strong>${item.swappedPerson}</strong></td><td>${swapDateStr}</td></tr>`;
+                    const dateObj = new Date((item.date || '') + 'T00:00:00');
+                    const dayName = !isNaN(dateObj.getTime()) ? getGreekDayName(dateObj) : '';
+                    const reasonObj = assignmentReasons?.[item.date]?.[item.groupNum]?.[item.swappedPerson] || null;
+                    const reasonText = (reasonObj && reasonObj.reason) ? String(reasonObj.reason) : '';
+                    const briefReason = reasonText ? reasonText.split('.').filter(Boolean)[0] : 'Σύγκρουση (συνεχόμενη υπηρεσία)';
+                    message += `<tr>
+                        <td>${dayName} ${item.dateStr}</td>
+                        <td>${service}</td>
+                        <td><strong>${item.skippedPerson}</strong></td>
+                        <td><strong>${item.swappedPerson}</strong></td>
+                        <td>${swapDateStr}</td>
+                        <td>${briefReason}</td>
+                    </tr>`;
                 });
                 
                 message += '</tbody></table></div>';
