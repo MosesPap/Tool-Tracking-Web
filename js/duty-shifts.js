@@ -21,6 +21,9 @@
         let rotationBaselineWeekendAssignments = {};
         let rotationBaselineSemiAssignments = {};
         let rotationBaselineNormalAssignments = {};
+        // Cached: last baseline rotation person per monthKey/group for fast seeding fallback
+        // rotationBaselineLastByType[dayType][monthKey][groupNum] = personName
+        let rotationBaselineLastByType = { normal: {}, semi: {}, weekend: {}, special: {} };
         // Legacy: Keep dutyAssignments for backward compatibility during migration
         let dutyAssignments = {};
         
@@ -51,6 +54,34 @@
 
         function getMonthKeyFromDate(date) {
             return `${date.getFullYear()}-${date.getMonth()}`;
+        }
+
+        function rebuildRotationBaselineLastByType() {
+            const out = { normal: {}, semi: {}, weekend: {}, special: {} };
+
+            const ingest = (dayType, flatDateMap) => {
+                if (!flatDateMap || typeof flatDateMap !== 'object') return;
+                const dateKeys = Object.keys(flatDateMap).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
+                for (const dateKey of dateKeys) {
+                    const d = new Date(dateKey + 'T00:00:00');
+                    if (isNaN(d.getTime())) continue;
+                    const monthKey = getMonthKeyFromDate(d);
+                    if (!out[dayType][monthKey]) out[dayType][monthKey] = {};
+                    const assignment = flatDateMap[dateKey];
+                    if (!assignment) continue;
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        const person = parseAssignedPersonForGroupFromAssignment(assignment, groupNum);
+                        if (person) out[dayType][monthKey][groupNum] = person; // sorted asc => last wins
+                    }
+                }
+            };
+
+            ingest('special', rotationBaselineSpecialAssignments);
+            ingest('weekend', rotationBaselineWeekendAssignments);
+            ingest('semi', rotationBaselineSemiAssignments);
+            ingest('normal', rotationBaselineNormalAssignments);
+
+            rotationBaselineLastByType = out;
         }
 
         // Convert dateKey -> {groupNum -> personName} into dateKey -> "Person (Ομάδα 1), Person (Ομάδα 2)..."
@@ -116,6 +147,12 @@
             // Legacy flat format fallback
             if (byType && byType[groupNum]) {
                 return byType[groupNum];
+            }
+
+            // Baseline fallback: derive last rotation person from rotationBaseline docs (previous month)
+            const baselineMonth = rotationBaselineLastByType?.[dayType]?.[prevMonthKey];
+            if (baselineMonth && baselineMonth[groupNum]) {
+                return baselineMonth[groupNum];
             }
             return null;
         }
@@ -401,7 +438,6 @@
                     rotationBaselineWeekendDoc,
                     rotationBaselineSemiDoc,
                     rotationBaselineNormalDoc,
-                    assignmentsDoc,
                     criticalAssignmentsDoc,
                     crossMonthSwapsDoc,
                     assignmentReasonsDoc,
@@ -420,7 +456,6 @@
                     dutyShifts.doc('rotationBaselineWeekendAssignments').get(),
                     dutyShifts.doc('rotationBaselineSemiAssignments').get(),
                     dutyShifts.doc('rotationBaselineNormalAssignments').get(),
-                    dutyShifts.doc('assignments').get(), // legacy
                     dutyShifts.doc('criticalAssignments').get(),
                     dutyShifts.doc('crossMonthSwaps').get(),
                     dutyShifts.doc('assignmentReasons').get(),
@@ -570,45 +605,12 @@
                 } else {
                     rotationBaselineNormalAssignments = {};
                 }
-                
-                // Also load legacy assignments document for backward compatibility
-                if (assignmentsDoc.exists) {
-                    const data = assignmentsDoc.data();
-                    delete data.lastUpdated;
-                    delete data.updatedBy;
-                    
-                    const isMonthOrganizedLegacy = data && typeof data === 'object' && Object.keys(data).some(key => {
-                        const val = data[key];
-                        return typeof val === 'object' && val !== null && !Array.isArray(val) &&
-                            !(key === 'lastUpdated' || key === 'updatedBy' || key === '_migratedFrom' || key === '_migrationDate') &&
-                            Object.keys(val).some(k => /^\d{4}-\d{2}-\d{2}$/.test(k));
-                    });
-                    
-                    dutyAssignments = isMonthOrganizedLegacy ? flattenAssignmentsByMonth(data) : (data || {});
-                    
-                    // Merge legacy assignments into day-type-specific documents if they don't exist
-                    for (const dateKey in dutyAssignments) {
-                        if (dateKey === 'lastUpdated' || dateKey === 'updatedBy') continue;
-                        try {
-                            const date = new Date(dateKey + 'T00:00:00');
-                            if (isNaN(date.getTime())) continue;
-                            const dayType = getDayType(date);
-                            const assignmentValue = dutyAssignments[dateKey];
-                            
-                            if (dayType === 'special-holiday' && !specialHolidayAssignments[dateKey]) {
-                                specialHolidayAssignments[dateKey] = assignmentValue;
-                            } else if (dayType === 'weekend-holiday' && !weekendAssignments[dateKey]) {
-                                weekendAssignments[dateKey] = assignmentValue;
-                            } else if (dayType === 'semi-normal-day' && !semiNormalAssignments[dateKey]) {
-                                semiNormalAssignments[dateKey] = assignmentValue;
-                            } else if (dayType === 'normal-day' && !normalDayAssignments[dateKey]) {
-                                normalDayAssignments[dateKey] = assignmentValue;
-                            }
-                        } catch (error) {
-                            console.error(`Error processing legacy assignment ${dateKey}:`, error);
-                        }
-                    }
-                }
+
+                // Deprecated: legacy dutyShifts/assignments is no longer loaded or merged.
+                dutyAssignments = {};
+
+                // Build cached baseline-last mapping for rotation seeding fallback
+                rebuildRotationBaselineLastByType();
                 
                 // Load critical assignments (history only)
                 if (criticalAssignmentsDoc.exists) {
@@ -832,33 +834,8 @@
                 specialHolidayAssignments = JSON.parse(savedSpecialHolidayAssignments);
             }
             
-            // Also load legacy assignments for backward compatibility
-            const savedAssignments = localStorage.getItem('dutyShiftsAssignments');
-            if (savedAssignments) {
-                dutyAssignments = JSON.parse(savedAssignments);
-                // Merge legacy assignments into day-type-specific documents if they don't exist
-                for (const dateKey in dutyAssignments) {
-                    if (dateKey === 'lastUpdated' || dateKey === 'updatedBy') continue;
-                    try {
-                        const date = new Date(dateKey + 'T00:00:00');
-                        if (isNaN(date.getTime())) continue;
-                        const dayType = getDayType(date);
-                        const assignmentValue = dutyAssignments[dateKey];
-                        
-                        if (dayType === 'special-holiday' && !specialHolidayAssignments[dateKey]) {
-                            specialHolidayAssignments[dateKey] = assignmentValue;
-                        } else if (dayType === 'weekend-holiday' && !weekendAssignments[dateKey]) {
-                            weekendAssignments[dateKey] = assignmentValue;
-                        } else if (dayType === 'semi-normal-day' && !semiNormalAssignments[dateKey]) {
-                            semiNormalAssignments[dateKey] = assignmentValue;
-                        } else if (dayType === 'normal-day' && !normalDayAssignments[dateKey]) {
-                            normalDayAssignments[dateKey] = assignmentValue;
-                        }
-                    } catch (error) {
-                        console.error(`Error processing legacy assignment ${dateKey}:`, error);
-                    }
-                }
-            }
+            // Deprecated: legacy dutyShiftsAssignments (dutyAssignments) is no longer used.
+            dutyAssignments = {};
             
             // Load critical assignments
             const savedCriticalAssignments = localStorage.getItem('dutyShiftsCriticalAssignments');
@@ -1292,8 +1269,7 @@
             localStorage.setItem('dutyShiftsSemiNormalAssignments', JSON.stringify(semiNormalAssignments));
             localStorage.setItem('dutyShiftsWeekendAssignments', JSON.stringify(weekendAssignments));
             localStorage.setItem('dutyShiftsSpecialHolidayAssignments', JSON.stringify(specialHolidayAssignments));
-            // Also save legacy dutyAssignments for backward compatibility
-            localStorage.setItem('dutyShiftsAssignments', JSON.stringify(dutyAssignments));
+            // Deprecated: do not persist dutyAssignments
             localStorage.setItem('dutyShiftsCriticalAssignments', JSON.stringify(criticalAssignments));
             localStorage.setItem('dutyShiftsAssignmentReasons', JSON.stringify(assignmentReasons));
             localStorage.setItem('dutyShiftsCrossMonthSwaps', JSON.stringify(crossMonthSwaps));
@@ -1373,7 +1349,7 @@
                 // Clear localStorage backups for these docs to prevent fallback re-populating them
                 [
                     'dutyShiftsAssignmentReasons',
-                    'dutyShiftsAssignments',
+                    // 'dutyShiftsAssignments', // deprecated
                     'dutyShiftsCrossMonthSwaps',
                     'dutyShiftsLastRotationPositions',
                     'dutyShiftsNormalDayAssignments',
@@ -7094,7 +7070,7 @@
                     Object.assign(rotationBaselineWeekendAssignments, formattedBaseline);
                 }
                 
-                // First, save weekend assignments to assignments document (pre-skip)
+                // NOTE: legacy dutyShifts/assignments is deprecated; we no longer save pre-skip snapshots there.
                 if (Object.keys(tempWeekendAssignments).length > 0) {
                     // Convert to format: dateKey -> "Person (Ομάδα 1), Person (Ομάδα 2), ..."
                     const formattedAssignments = {};
@@ -7111,39 +7087,7 @@
                         }
                     }
                     
-                    // Save to assignments document (pre-skip) - merge with existing data
-                    const organizedAssignments = organizeAssignmentsByMonth(formattedAssignments);
-                    const sanitizedAssignments = sanitizeForFirestore(organizedAssignments);
-                    
-                    // Load existing assignments to merge
-                    const existingAssignmentsDoc = await db.collection('dutyShifts').doc('assignments').get();
-                    let existingAssignments = {};
-                    if (existingAssignmentsDoc.exists) {
-                        const existingData = existingAssignmentsDoc.data();
-                        // Remove metadata fields
-                        delete existingData.lastUpdated;
-                        delete existingData.updatedBy;
-                        existingAssignments = existingData || {};
-                    }
-                    
-                    // Deep merge: merge at month level, then at date level
-                    const mergedAssignments = { ...existingAssignments };
-                    for (const monthKey in sanitizedAssignments) {
-                        if (!mergedAssignments[monthKey]) {
-                            mergedAssignments[monthKey] = {};
-                        }
-                        // Merge date assignments within this month
-                        mergedAssignments[monthKey] = { ...mergedAssignments[monthKey], ...sanitizedAssignments[monthKey] };
-                    }
-                    
-                    await db.collection('dutyShifts').doc('assignments').set({
-                        ...mergedAssignments,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
-                    console.log('Saved Step 2 weekend assignments (pre-skip) to assignments document (merged with existing):', Object.keys(tempWeekendAssignments).length, 'dates');
-                    
-                    // Also update local memory
+                    // Update local memory (for preview and subsequent steps)
                     Object.assign(weekendAssignments, formattedAssignments);
                 }
                 
@@ -7479,7 +7423,7 @@
                     Object.assign(rotationBaselineSemiAssignments, formattedBaseline);
                 }
                 
-                // First, save semi-normal assignments to assignments document (pre-logic)
+                // NOTE: legacy dutyShifts/assignments is deprecated; we no longer save pre-logic snapshots there.
                 if (Object.keys(tempSemiAssignments).length > 0) {
                     // Convert to format: dateKey -> "Person (Ομάδα 1), Person (Ομάδα 2), ..."
                     const formattedAssignments = {};
@@ -7496,39 +7440,7 @@
                         }
                     }
                     
-                    // Save to assignments document (pre-logic) - merge with existing data
-                    const organizedAssignments = organizeAssignmentsByMonth(formattedAssignments);
-                    const sanitizedAssignments = sanitizeForFirestore(organizedAssignments);
-                    
-                    // Load existing assignments to merge
-                    const existingAssignmentsDoc = await db.collection('dutyShifts').doc('assignments').get();
-                    let existingAssignments = {};
-                    if (existingAssignmentsDoc.exists) {
-                        const existingData = existingAssignmentsDoc.data();
-                        // Remove metadata fields
-                        delete existingData.lastUpdated;
-                        delete existingData.updatedBy;
-                        existingAssignments = existingData || {};
-                    }
-                    
-                    // Deep merge: merge at month level, then at date level
-                    const mergedAssignments = { ...existingAssignments };
-                    for (const monthKey in sanitizedAssignments) {
-                        if (!mergedAssignments[monthKey]) {
-                            mergedAssignments[monthKey] = {};
-                        }
-                        // Merge date assignments within this month
-                        mergedAssignments[monthKey] = { ...mergedAssignments[monthKey], ...sanitizedAssignments[monthKey] };
-                    }
-                    
-                    await db.collection('dutyShifts').doc('assignments').set({
-                        ...mergedAssignments,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
-                    console.log('Saved Step 3 semi-normal assignments (pre-logic) to assignments document (merged with existing):', Object.keys(tempSemiAssignments).length, 'dates');
-                    
-                    // Also update local memory
+                    // Update local memory (for preview and subsequent steps)
                     Object.assign(semiNormalAssignments, formattedAssignments);
                 }
                 
@@ -8163,7 +8075,7 @@
                     Object.assign(rotationBaselineNormalAssignments, formattedBaseline);
                 }
                 
-                // First, save normal assignments to assignments document (pre-logic)
+                // NOTE: legacy dutyShifts/assignments is deprecated; we no longer save pre-logic snapshots there.
                 if (Object.keys(tempNormalAssignments).length > 0) {
                     // Convert to format: dateKey -> "Person (Ομάδα 1), Person (Ομάδα 2), ..."
                     const formattedAssignments = {};
@@ -8180,41 +8092,7 @@
                         }
                     }
                     
-                    // Save to assignments document (pre-logic) - merge with existing data
-                    const organizedAssignments = organizeAssignmentsByMonth(formattedAssignments);
-                    const sanitizedAssignments = sanitizeForFirestore(organizedAssignments);
-                    
-                    // Load existing assignments to merge
-                    const existingAssignmentsDoc = await db.collection('dutyShifts').doc('assignments').get();
-                    let existingAssignments = {};
-                    if (existingAssignmentsDoc.exists) {
-                        const existingData = existingAssignmentsDoc.data();
-                        // Remove metadata fields
-                        delete existingData.lastUpdated;
-                        delete existingData.updatedBy;
-                        existingAssignments = existingData || {};
-                    }
-                    
-                    // Deep merge: merge at month level, then at date level
-                    const mergedAssignments = { ...existingAssignments };
-                    for (const monthKey in sanitizedAssignments) {
-                        if (!mergedAssignments[monthKey]) {
-                            mergedAssignments[monthKey] = {};
-                        }
-                        // Merge date assignments within this month
-                        mergedAssignments[monthKey] = { ...mergedAssignments[monthKey], ...sanitizedAssignments[monthKey] };
-                    }
-                    
-                    await db.collection('dutyShifts').doc('assignments').set({
-                        ...mergedAssignments,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
-                    console.log('Saved Step 4 normal assignments (pre-logic) to assignments document (merged with existing):', Object.keys(tempNormalAssignments).length, 'dates');
-                    
-                    // DO NOT update normalDayAssignments here - wait until after swap logic completes
-                    // This prevents the calendar from showing pre-logic assignments
-                    // Object.assign(normalDayAssignments, formattedAssignments);
+                    // No Firestore write here (legacy assignments doc deprecated).
                 }
                 
                 // Save last rotation positions for normal days (per month)
@@ -9703,18 +9581,6 @@
                 }
                 await saveData();
                 
-                // Delete temporary assignments document after saving permanently
-                try {
-                    const db = window.db || firebase.firestore();
-                    await db.collection('dutyShifts').doc('tempAssignments').delete();
-                    console.log('Temp assignments deleted from Firestore');
-                } catch (error) {
-                    console.error('Error deleting temp assignments:', error);
-                }
-                
-                // Clear temp assignments from memory
-                calculationSteps.tempAssignments = null;
-                
                 // Reload data from Firebase to refresh the display
                 if (loadingAlert && loadingAlert.parentNode) {
                     loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Φόρτωση δεδομένων...';
@@ -9783,6 +9649,18 @@
                 }
                 
                 alert('Σφάλμα κατά τον υπολογισμό: ' + error.message);
+            } finally {
+                // Always clear temp assignments when computation ends (success, early return, or error)
+                calculationSteps.tempAssignments = null;
+
+                try {
+                    if (window.firebase && firebase.firestore) {
+                        const db = window.db || firebase.firestore();
+                        await db.collection('dutyShifts').doc('tempAssignments').delete();
+                    }
+                } catch (error) {
+                    // Ignore cleanup errors (e.g. missing doc / offline) to avoid masking the real failure
+                }
             }
         }
 
