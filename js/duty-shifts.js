@@ -6822,36 +6822,7 @@
                                 }
                             }
 
-                            // PREVIEW DISPLAY: also simulate the weekend "skip if has special holiday duty in same month"
-                            // (This does NOT change what we save in calculationSteps.tempWeekendAssignments; it only changes what the user sees.)
-                            let displayPerson = assignedPerson;
-                            if (displayPerson) {
-                                const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(displayPerson) || false;
-                                const wasSkipped = skippedInMonth[monthKey][groupNum].has(displayPerson);
-
-                                if (hasSpecialHoliday || wasSkipped) {
-                                    skippedInMonth[monthKey][groupNum].add(displayPerson);
-
-                                    // Find replacement following the same rules as runWeekendSkipLogic()
-                                    const currentIndex = groupPeople.indexOf(displayPerson);
-                                    let replacementPerson = null;
-                                    for (let offset = 1; offset < rotationDays; offset++) {
-                                        const nextIndex = (currentIndex + offset) % rotationDays;
-                                        const candidate = groupPeople[nextIndex];
-                                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) continue;
-
-                                        const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
-                                        const candidateWasSkipped = skippedInMonth[monthKey][groupNum].has(candidate);
-                                        if (!candidateHasSpecial && !candidateWasSkipped) {
-                                            replacementPerson = candidate;
-                                            break;
-                                        }
-                                    }
-                                    if (replacementPerson) {
-                                        displayPerson = replacementPerson;
-                                    }
-                                }
-                            }
+                            // Step 1 is special-holidays only: preview should reflect missing replacement only (no weekend skip logic here).
                             
                             // Store assignment for saving
                             if (assignedPerson) {
@@ -6889,7 +6860,7 @@
                                 }
                             }
                             
-                            html += `<td>${buildBaselineComputedCellHtml(rotationPerson, displayPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                            html += `<td>${buildBaselineComputedCellHtml(rotationPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
                     
