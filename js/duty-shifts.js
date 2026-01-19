@@ -3386,6 +3386,80 @@
             auto: null // { year, month, matchesByType, chosenByType, ranksByType }
         };
 
+        // Undo support for last group transfer
+        let lastTransferUndo = null; // { person, fromGroup, toGroup, fromSnapshot, toSnapshot, createdAt }
+
+        function deepClonePlain(obj) {
+            if (!obj) return obj;
+            if (typeof structuredClone === 'function') {
+                try { return structuredClone(obj); } catch (_) {}
+            }
+            return JSON.parse(JSON.stringify(obj));
+        }
+
+        function ensureTransferUndoToastExists() {
+            if (document.getElementById('transferUndoToast')) return;
+            const html = `
+                <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 11000;">
+                    <div id="transferUndoToast" class="toast align-items-center text-bg-dark border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                        <div class="d-flex">
+                            <div class="toast-body" id="transferUndoToastBody">Έγινε μεταφορά.</div>
+                            <div class="d-flex align-items-center gap-2 me-2">
+                                <button type="button" class="btn btn-sm btn-warning" id="transferUndoToastButton">Αναίρεση</button>
+                                <button type="button" class="btn-close btn-close-white me-1 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', html);
+        }
+
+        function showTransferUndoToast() {
+            if (!lastTransferUndo) return;
+            ensureTransferUndoToastExists();
+            const toastEl = document.getElementById('transferUndoToast');
+            const bodyEl = document.getElementById('transferUndoToastBody');
+            const btnEl = document.getElementById('transferUndoToastButton');
+            if (!toastEl || !bodyEl || !btnEl) return;
+
+            const p = lastTransferUndo.person || '';
+            const fromName = getGroupName(lastTransferUndo.fromGroup);
+            const toName = getGroupName(lastTransferUndo.toGroup);
+            bodyEl.innerHTML = `<strong>Μεταφορά:</strong> ${p}<br><small class="text-white-50">${fromName} → ${toName}</small>`;
+
+            // Re-bind click handler each time (safe)
+            const newBtn = btnEl.cloneNode(true);
+            btnEl.parentNode.replaceChild(newBtn, btnEl);
+            newBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                undoLastGroupTransfer();
+                const toast = bootstrap.Toast.getInstance(toastEl) || new bootstrap.Toast(toastEl);
+                toast.hide();
+            });
+
+            const toast = bootstrap.Toast.getInstance(toastEl) || new bootstrap.Toast(toastEl, { delay: 12000 });
+            toast.show();
+        }
+
+        function undoLastGroupTransfer() {
+            if (!lastTransferUndo) {
+                alert('Δεν υπάρχει μεταφορά για αναίρεση.');
+                return;
+            }
+            const { fromGroup, toGroup, fromSnapshot, toSnapshot } = lastTransferUndo;
+            if (!fromSnapshot || !toSnapshot) {
+                alert('Δεν υπάρχουν αποθηκευμένα δεδομένα για αναίρεση.');
+                return;
+            }
+            groups[fromGroup] = deepClonePlain(fromSnapshot);
+            groups[toGroup] = deepClonePlain(toSnapshot);
+            saveData();
+            renderGroups();
+            updateStatistics();
+            lastTransferUndo = null;
+        }
+
         // Transfer person to another group - opens positioning modal
         function transferPerson(fromGroup, index, toGroup, listType) {
             const list = groups[fromGroup][listType];
@@ -3835,6 +3909,13 @@
 
         // Complete the transfer with selected positions
         function completeTransfer() {
+            // Snapshot for undo BEFORE any changes
+            const undoFromGroup = transferData.fromGroup;
+            const undoToGroup = transferData.toGroup;
+            const undoPerson = transferData.person;
+            const undoFromSnapshot = deepClonePlain(groups[undoFromGroup]);
+            const undoToSnapshot = deepClonePlain(groups[undoToGroup]);
+
             // Remove from current group's all lists
             const allListTypes = ['special', 'weekend', 'semi', 'normal'];
             allListTypes.forEach(lt => {
@@ -3844,11 +3925,30 @@
                     currentList.splice(currentIndex, 1);
                 }
             });
+
+            // Re-number priorities in source group lists to match their new order (prevents gaps / drift)
+            try {
+                if (groups[transferData.fromGroup]) {
+                    if (!groups[transferData.fromGroup].priorities) groups[transferData.fromGroup].priorities = {};
+                    allListTypes.forEach(listType => {
+                        const list = groups[transferData.fromGroup][listType] || [];
+                        list.forEach((personName, idx) => {
+                            if (!groups[transferData.fromGroup].priorities[personName]) {
+                                groups[transferData.fromGroup].priorities[personName] = {};
+                            }
+                            groups[transferData.fromGroup].priorities[personName][listType] = idx + 1;
+                        });
+                    });
+                }
+            } catch (_) {
+                // non-fatal
+            }
             
             // Initialize target group if needed
             if (!groups[transferData.toGroup]) {
-                groups[transferData.toGroup] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
+                groups[transferData.toGroup] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} };
             }
+            if (!groups[transferData.toGroup].priorities) groups[transferData.toGroup].priorities = {};
             
             // Add to target group with positioning
             allListTypes.forEach(listType => {
@@ -3889,6 +3989,17 @@
                     // No position selected, add at end
                     list.push(transferData.person);
                 }
+
+                // CRITICAL: priorities drive ordering (renderGroups sorts by priority).
+                // After inserting, re-number priorities to match the list order so:
+                // - The person is not pushed to the end (priority 999)
+                // - The UI shows a number instead of "?"
+                list.forEach((personName, idx) => {
+                    if (!groups[transferData.toGroup].priorities[personName]) {
+                        groups[transferData.toGroup].priorities[personName] = {};
+                    }
+                    groups[transferData.toGroup].priorities[personName][listType] = idx + 1;
+                });
             });
             
             // Transfer last duties
@@ -3921,6 +4032,17 @@
             saveData();
             renderGroups();
             updateStatistics();
+
+            // Store undo state and show undo button toast
+            lastTransferUndo = {
+                person: undoPerson,
+                fromGroup: undoFromGroup,
+                toGroup: undoToGroup,
+                fromSnapshot: undoFromSnapshot,
+                toSnapshot: undoToSnapshot,
+                createdAt: Date.now()
+            };
+            showTransferUndoToast();
             
             // Reset transfer data
             transferData = {
