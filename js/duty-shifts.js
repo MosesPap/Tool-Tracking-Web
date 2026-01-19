@@ -6929,6 +6929,126 @@
             
             html += '</div>';
             stepContent.innerHTML = html;
+
+            // PREVIEW: Apply semi-normal swap logic (display only) so baseline → replacement appears in Step 3
+            // This does NOT change what we save in Firestore; it only updates the step table view.
+            try {
+                if (semiNormalDays.length > 0) {
+                    const sortedSemiForPreview = [...semiNormalDays].sort();
+
+                    // Shallow clone assignments for preview swaps
+                    const previewSemiAssignments = {};
+                    for (const dk of Object.keys(semiAssignments || {})) {
+                        previewSemiAssignments[dk] = { ...(semiAssignments[dk] || {}) };
+                    }
+
+                    const hasSemiNeighborConflict = (targetDateKey, personName, groupNum) => {
+                        if (!personName) return false;
+                        const d = new Date(targetDateKey + 'T00:00:00');
+                        if (isNaN(d.getTime())) return false;
+
+                        const before = new Date(d);
+                        before.setDate(before.getDate() - 1);
+                        const after = new Date(d);
+                        after.setDate(after.getDate() + 1);
+
+                        const beforeKey = formatDateKey(before);
+                        const afterKey = formatDateKey(after);
+
+                        const beforeType = getDayType(before);
+                        const afterType = getDayType(after);
+
+                        // Weekend/holiday neighbor conflict
+                        if (beforeType === 'weekend-holiday' && simulatedWeekendAssignments?.[beforeKey]?.[groupNum] === personName) return true;
+                        if (afterType === 'weekend-holiday' && simulatedWeekendAssignments?.[afterKey]?.[groupNum] === personName) return true;
+
+                        // Special holiday neighbor conflict (month-scoped special sets)
+                        const beforeMonthKey = `${before.getFullYear()}-${before.getMonth()}`;
+                        const afterMonthKey = `${after.getFullYear()}-${after.getMonth()}`;
+                        if (beforeType === 'special-holiday' && simulatedSpecialAssignments?.[beforeMonthKey]?.[groupNum]?.has?.(personName)) return true;
+                        if (afterType === 'special-holiday' && simulatedSpecialAssignments?.[afterMonthKey]?.[groupNum]?.has?.(personName)) return true;
+
+                        return false;
+                    };
+
+                    for (let i = 0; i < sortedSemiForPreview.length; i++) {
+                        const dateKey = sortedSemiForPreview[i];
+                        const date = new Date(dateKey + 'T00:00:00');
+                        if (isNaN(date.getTime())) continue;
+
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            const currentPerson = previewSemiAssignments?.[dateKey]?.[groupNum] || null;
+                            if (!currentPerson) continue;
+
+                            if (!hasSemiNeighborConflict(dateKey, currentPerson, groupNum)) continue;
+
+                            // Try to swap with the next semi-normal day where BOTH people have no neighbor conflicts
+                            let swapped = false;
+                            for (let j = i + 1; j < sortedSemiForPreview.length; j++) {
+                                const swapKey = sortedSemiForPreview[j];
+                                const swapDate = new Date(swapKey + 'T00:00:00');
+                                if (isNaN(swapDate.getTime())) continue;
+
+                                const candidate = previewSemiAssignments?.[swapKey]?.[groupNum] || null;
+                                if (!candidate) continue;
+
+                                // Missing checks (keep consistent with missing rules)
+                                if (isPersonMissingOnDate(currentPerson, groupNum, swapDate)) continue;
+                                if (isPersonMissingOnDate(candidate, groupNum, date)) continue;
+
+                                // Conflicts after swap (only neighbor-day types matter here)
+                                if (hasSemiNeighborConflict(dateKey, candidate, groupNum)) continue;
+                                if (hasSemiNeighborConflict(swapKey, currentPerson, groupNum)) continue;
+
+                                // Swap for preview
+                                previewSemiAssignments[dateKey][groupNum] = candidate;
+                                previewSemiAssignments[swapKey][groupNum] = currentPerson;
+                                swapped = true;
+                                break;
+                            }
+
+                            // Note: cross-month swap preview is intentionally not applied here because
+                            // `getPersonFromNextMonth()` mutates `crossMonthSwaps` (side-effect) and we
+                            // don't want the preview step to alter saved swap state.
+                        }
+                    }
+
+                    // Re-render the table body using baseline (rotation) vs computed (preview after swaps)
+                    const tableBody = stepContent.querySelector('tbody');
+                    if (tableBody) {
+                        tableBody.innerHTML = '';
+                        for (const dateKey of sortedSemiForPreview) {
+                            const date = new Date(dateKey + 'T00:00:00');
+                            if (isNaN(date.getTime())) continue;
+                            const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                            const dayName = getGreekDayName(date);
+
+                            let rowHtml = '<tr>';
+                            rowHtml += `<td><strong>${dateStr}</strong></td>`;
+                            rowHtml += `<td>${dayName}</td>`;
+
+                            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                                const groupData = groups[groupNum] || { semi: [] };
+                                const groupPeople = groupData.semi || [];
+                                if (groupPeople.length === 0) {
+                                    rowHtml += '<td class="text-muted">-</td>';
+                                    continue;
+                                }
+
+                                const baselinePerson = semiRotationPersons?.[dateKey]?.[groupNum] || null;
+                                const computedPerson = previewSemiAssignments?.[dateKey]?.[groupNum] || null;
+                                rowHtml += `<td>${buildBaselineComputedCellHtml(baselinePerson, computedPerson)}</td>`;
+                            }
+
+                            rowHtml += '</tr>';
+                            tableBody.insertAdjacentHTML('beforeend', rowHtml);
+                        }
+                    }
+                }
+            } catch (e) {
+                // Display-only preview; never fail the step on preview issues.
+                console.error('Step 3 preview swap rendering failed:', e);
+            }
         }
 
         // Step 1 results modal: show baseline vs computed changes (missing replacements) for special holidays
