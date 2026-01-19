@@ -7161,7 +7161,7 @@
                     <div class="modal-dialog modal-xl modal-superwide">
                             <div class="modal-content results-modal-special">
                                 <div class="modal-header results-header results-header-special">
-                                    <h5 class="modal-title"><i class="fas fa-star me-2"></i>Αποτελέσματα Ειδικών Αργιών</h5>
+                                    <h5 class="modal-title"><i class="fas fa-star me-2"></i>Αποτελέσματα Αλλαγών Ειδικών Αργιών</h5>
                                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                 </div>
                                 <div class="modal-body">
@@ -7664,7 +7664,7 @@
                     <div class="modal-dialog modal-xl modal-superwide">
                         <div class="modal-content results-modal-weekend">
                             <div class="modal-header results-header results-header-weekend">
-                                <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Αποτελέσματα Παραλείψεων Σαββατοκύριακων</h5>
+                                <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Αποτελέσματα Αλλαγών Παραλείψεων Σαββατοκύριακων</h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
                             <div class="modal-body">
