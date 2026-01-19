@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.205 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.206 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -111,14 +111,14 @@
            ========================================================= */
         /* Light palette */
         :root {
-            --duty-special: #d8b4fe;  /* darker light purple */
-            --duty-weekend: #fed7aa;  /* light orange */
-            --duty-semi: #fef3c7;     /* light yellow */
-            --duty-normal: #bbf7d0;   /* light green */
+            --duty-special: #d8b4fe;  /* darker purple */
+            --duty-weekend: #fdba74;  /* darker orange */
+            --duty-semi: #fde68a;     /* darker yellow */
+            --duty-normal: #86efac;   /* darker green */
             --duty-border-special: #a855f7;
-            --duty-border-weekend: #fb923c;
-            --duty-border-semi: #f59e0b;
-            --duty-border-normal: #22c55e;
+            --duty-border-weekend: #f97316;
+            --duty-border-semi: #eab308;
+            --duty-border-normal: #16a34a;
         }
 
         .results-header {
@@ -139,9 +139,9 @@
 
         /* Info/summary alert styling inside result modals */
         .results-modal-special .alert { background: rgba(216, 180, 254, 0.55); border-color: rgba(168, 85, 247, 0.55); border-left: 6px solid var(--duty-border-special); }
-        .results-modal-weekend .alert { background: rgba(254, 215, 170, 0.55); border-color: rgba(251, 146, 60, 0.55); border-left: 6px solid var(--duty-border-weekend); }
-        .results-modal-semi .alert { background: rgba(254, 243, 199, 0.65); border-color: rgba(245, 158, 11, 0.55); border-left: 6px solid var(--duty-border-semi); }
-        .results-modal-normal .alert { background: rgba(187, 247, 208, 0.55); border-color: rgba(34, 197, 94, 0.55); border-left: 6px solid var(--duty-border-normal); }
+        .results-modal-weekend .alert { background: rgba(253, 186, 116, 0.55); border-color: rgba(249, 115, 22, 0.55); border-left: 6px solid var(--duty-border-weekend); }
+        .results-modal-semi .alert { background: rgba(253, 230, 138, 0.65); border-color: rgba(234, 179, 8, 0.55); border-left: 6px solid var(--duty-border-semi); }
+        .results-modal-normal .alert { background: rgba(134, 239, 172, 0.55); border-color: rgba(22, 163, 74, 0.55); border-left: 6px solid var(--duty-border-normal); }
 
         /* Close button on light headers */
         .results-modal-special .modal-header .btn-close,
@@ -175,15 +175,15 @@
         #stepByStepCalculationModal.calc-theme-normal .table thead th { background-color: var(--duty-normal) !important; }
 
         #stepByStepCalculationModal.calc-theme-special .modal-body .alert { background: rgba(216, 180, 254, 0.55); border-color: rgba(168, 85, 247, 0.55); border-left: 6px solid var(--duty-border-special); }
-        #stepByStepCalculationModal.calc-theme-weekend .modal-body .alert { background: rgba(254, 215, 170, 0.55); border-color: rgba(251, 146, 60, 0.55); border-left: 6px solid var(--duty-border-weekend); }
-        #stepByStepCalculationModal.calc-theme-semi .modal-body .alert { background: rgba(254, 243, 199, 0.65); border-color: rgba(245, 158, 11, 0.55); border-left: 6px solid var(--duty-border-semi); }
-        #stepByStepCalculationModal.calc-theme-normal .modal-body .alert { background: rgba(187, 247, 208, 0.55); border-color: rgba(34, 197, 94, 0.55); border-left: 6px solid var(--duty-border-normal); }
+        #stepByStepCalculationModal.calc-theme-weekend .modal-body .alert { background: rgba(253, 186, 116, 0.55); border-color: rgba(249, 115, 22, 0.55); border-left: 6px solid var(--duty-border-weekend); }
+        #stepByStepCalculationModal.calc-theme-semi .modal-body .alert { background: rgba(253, 230, 138, 0.65); border-color: rgba(234, 179, 8, 0.55); border-left: 6px solid var(--duty-border-semi); }
+        #stepByStepCalculationModal.calc-theme-normal .modal-body .alert { background: rgba(134, 239, 172, 0.55); border-color: rgba(22, 163, 74, 0.55); border-left: 6px solid var(--duty-border-normal); }
 
         /* Step "list header" (the h6 title inside each step content) */
         #stepByStepCalculationModal.calc-theme-special .step-content > h6 { background: rgba(216, 180, 254, 0.45); border-left: 6px solid var(--duty-border-special); padding: 10px 12px; border-radius: 10px; }
-        #stepByStepCalculationModal.calc-theme-weekend .step-content > h6 { background: rgba(254, 215, 170, 0.45); border-left: 6px solid var(--duty-border-weekend); padding: 10px 12px; border-radius: 10px; }
-        #stepByStepCalculationModal.calc-theme-semi .step-content > h6 { background: rgba(254, 243, 199, 0.60); border-left: 6px solid var(--duty-border-semi); padding: 10px 12px; border-radius: 10px; }
-        #stepByStepCalculationModal.calc-theme-normal .step-content > h6 { background: rgba(187, 247, 208, 0.45); border-left: 6px solid var(--duty-border-normal); padding: 10px 12px; border-radius: 10px; }
+        #stepByStepCalculationModal.calc-theme-weekend .step-content > h6 { background: rgba(253, 186, 116, 0.45); border-left: 6px solid var(--duty-border-weekend); padding: 10px 12px; border-radius: 10px; }
+        #stepByStepCalculationModal.calc-theme-semi .step-content > h6 { background: rgba(253, 230, 138, 0.60); border-left: 6px solid var(--duty-border-semi); padding: 10px 12px; border-radius: 10px; }
+        #stepByStepCalculationModal.calc-theme-normal .step-content > h6 { background: rgba(134, 239, 172, 0.45); border-left: 6px solid var(--duty-border-normal); padding: 10px 12px; border-radius: 10px; }
 
         /* Saving state (spinner + disabled look) */
         .btn.is-saving {
@@ -1035,7 +1035,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.205</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.206</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -1374,7 +1374,7 @@
                         <small class="text-muted">Αφήστε κενό για υπολογισμό μόνο του επιλεγμένου μήνα</small>
                     </div>
                     <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="preserveExistingAssignments" checked>
+                        <input class="form-check-input" type="checkbox" id="preserveExistingAssignments">
                         <label class="form-check-label" for="preserveExistingAssignments">
                             Διατήρηση υπαρχουσών αναθέσεων (μη αντικατάσταση)
                         </label>

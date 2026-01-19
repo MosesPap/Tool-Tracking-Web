@@ -6547,8 +6547,12 @@
                 endMonthInput.value = '';
             }
             if (preserveCheckbox) {
-                preserveCheckbox.checked = true;
+                // Default view should be UNCHECKED
+                preserveCheckbox.checked = false;
             }
+
+            // Make month picker open when clicking anywhere on the month fields (label/container too)
+            ensureMonthPickerClickTargets();
             
             // Add event listener to button as backup (remove old listeners first)
             const calculateButton = document.getElementById('calculateDutiesButton');
@@ -6566,6 +6570,53 @@
             
             const modal = new bootstrap.Modal(document.getElementById('calculateDutiesModal'));
             modal.show();
+        }
+
+        let monthPickerClickTargetsInstalled = false;
+        function ensureMonthPickerClickTargets() {
+            if (monthPickerClickTargetsInstalled) return;
+            monthPickerClickTargetsInstalled = true;
+
+            const installFor = (inputId) => {
+                const input = document.getElementById(inputId);
+                if (!input) return;
+
+                const openPicker = () => {
+                    try {
+                        input.focus({ preventScroll: true });
+                    } catch (_) {
+                        input.focus();
+                    }
+                    if (typeof input.showPicker === 'function') {
+                        try {
+                            input.showPicker();
+                        } catch (_) {
+                            // ignore (some browsers require user gesture; focus is still helpful)
+                        }
+                    }
+                };
+
+                // If the user clicks the input itself, try to open immediately.
+                input.addEventListener('click', () => openPicker());
+                // Some browsers open picker on focus; this makes it consistent.
+                input.addEventListener('focus', () => {
+                    if (typeof input.showPicker === 'function') {
+                        try { input.showPicker(); } catch (_) {}
+                    }
+                });
+
+                // Expand click target to the entire field block (label + help text + surrounding area)
+                const container = input.closest('.mb-3') || input.parentElement;
+                if (container) {
+                    container.addEventListener('click', (e) => {
+                        if (e.target === input) return;
+                        openPicker();
+                    });
+                }
+            };
+
+            installFor('calculateStartMonth');
+            installFor('calculateEndMonth');
         }
 
         // Calculate duties for selected months
