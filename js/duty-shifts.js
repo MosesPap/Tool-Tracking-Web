@@ -247,6 +247,50 @@
             }
         }
 
+        function getSortedRankingsList() {
+            const entries = [];
+            for (const name of Object.keys(rankings || {})) {
+                const r = parseInt(rankings[name], 10);
+                if (Number.isFinite(r) && r > 0) entries.push({ name, rank: r });
+            }
+            entries.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+            return entries;
+        }
+
+        function renderAutoAddRankingsPreview() {
+            const body = document.getElementById('autoAddRankingsPreviewBody');
+            const search = document.getElementById('autoAddRankingsSearch');
+            const rankEl = document.getElementById('autoAddHierarchyRank');
+            if (!body) return;
+
+            const q = (search?.value || '').trim().toLowerCase();
+            const selectedRank = parseInt(rankEl?.value || '', 10);
+
+            const rows = getSortedRankingsList()
+                .filter(e => !q || e.name.toLowerCase().includes(q))
+                .slice(0, 400); // keep UI snappy
+
+            body.innerHTML = rows.map(e => {
+                const selected = Number.isFinite(selectedRank) && e.rank === selectedRank;
+                return `<tr class="${selected ? 'rank-selected' : ''}" data-rank="${e.rank}" data-name="${e.name.replace(/"/g, '&quot;')}">
+                    <td><strong>${e.rank}</strong></td>
+                    <td>${e.name}</td>
+                </tr>`;
+            }).join('') || `<tr><td colspan="2" class="text-muted text-center">Δεν βρέθηκαν αποτελέσματα</td></tr>`;
+
+            // click to set rank
+            body.querySelectorAll('tr[data-rank]').forEach(tr => {
+                tr.addEventListener('click', () => {
+                    const r = parseInt(tr.dataset.rank || '', 10);
+                    if (rankEl && Number.isFinite(r)) {
+                        rankEl.value = String(r);
+                        // trigger recompute
+                        rankEl.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                });
+            });
+        }
+
         // Insert/overwrite person in rankings at desired rank, shifting others down if needed.
         function insertPersonIntoRankings(personName, desiredRank) {
             const rank = parseInt(desiredRank, 10);
@@ -327,6 +371,7 @@
             const groupEl = document.getElementById('autoAddTargetGroup');
             const arrivalEl = document.getElementById('autoAddArrivalDate');
             const rankEl = document.getElementById('autoAddHierarchyRank');
+            const rankingsSearchEl = document.getElementById('autoAddRankingsSearch');
             const recomputeBtn = document.getElementById('autoAddRecomputeBtn');
             const applyBtn = document.getElementById('autoAddApplyBtn');
 
@@ -363,6 +408,7 @@
                 autoAddPersonData.rank = Number.isFinite(r) && r > 0 ? r : null;
                 autoAddPersonData.placementByType = buildAutoPlacementForNewPerson(personName, g, autoAddPersonData.datesByType, autoAddPersonData.rank);
                 renderAutoAddPersonTable();
+                renderAutoAddRankingsPreview();
             };
 
             if (nameEl) nameEl.oninput = refreshFromInputs;
@@ -378,6 +424,7 @@
                 refreshFromInputs();
             };
             if (rankEl) rankEl.oninput = refreshFromInputs;
+            if (rankingsSearchEl) rankingsSearchEl.oninput = () => renderAutoAddRankingsPreview();
 
             if (recomputeBtn) {
                 recomputeBtn.onclick = () => {
@@ -394,6 +441,9 @@
 
             const modal = new bootstrap.Modal(modalEl);
             modal.show();
+
+            // initial render rankings preview
+            renderAutoAddRankingsPreview();
         }
 
         function applyAutoAddPerson() {

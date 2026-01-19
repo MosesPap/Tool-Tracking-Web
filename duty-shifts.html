@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.217 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.218 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -278,6 +278,26 @@
             .results-modal-normal .table {
                 font-size: 0.98rem;
             }
+        }
+
+        /* Auto-add: hierarchy preview list */
+        #autoAddPersonModal .rankings-preview {
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 12px;
+            background: rgba(255,255,255,0.85);
+        }
+        #autoAddPersonModal .rankings-preview .table-responsive {
+            max-height: 42vh;
+            overflow: auto;
+        }
+        #autoAddPersonModal .rankings-preview .table tbody tr {
+            cursor: pointer;
+        }
+        #autoAddPersonModal .rankings-preview .table tbody tr:hover td {
+            background: rgba(47,107,255,0.08);
+        }
+        #autoAddPersonModal .rankings-preview .rank-selected td {
+            background: rgba(34, 197, 94, 0.12) !important;
         }
 
         /* Backdrop: richer but still subtle */
@@ -1149,7 +1169,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.217</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.218</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -1430,6 +1450,29 @@
                             <label class="form-label">Ιεραρχία (Αριθμός)</label>
                             <input type="number" class="form-control" id="autoAddHierarchyRank" min="1" placeholder="π.χ. 25">
                             <small class="text-muted">Απαραίτητο για σωστή τοποθέτηση με βάση την ιεραρχία.</small>
+                        </div>
+                    </div>
+
+                    <div class="rankings-preview mt-3 p-3">
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div>
+                                <strong><i class="fas fa-sort-numeric-down me-2"></i>Προεπισκόπηση Ιεραρχίας</strong>
+                                <div class="small text-muted">Κάντε κλικ σε άτομο για να γεμίσει ο αριθμός ιεραρχίας (μπορείτε μετά να τον αλλάξετε).</div>
+                            </div>
+                            <div style="min-width: 260px;">
+                                <input type="text" class="form-control form-control-sm" id="autoAddRankingsSearch" placeholder="Αναζήτηση ονόματος...">
+                            </div>
+                        </div>
+                        <div class="table-responsive mt-2">
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 90px;">#</th>
+                                        <th>Όνομα</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="autoAddRankingsPreviewBody"></tbody>
+                            </table>
                         </div>
                     </div>
 
