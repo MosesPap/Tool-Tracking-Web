@@ -127,6 +127,319 @@
                 .toUpperCase();
         }
 
+        function dateToDateKey(date) {
+            if (!date || isNaN(date.getTime())) return null;
+            return formatDateKey(date);
+        }
+
+        function dateKeyToInputValue(dateKey) {
+            if (!dateKey || typeof dateKey !== 'string') return '';
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return '';
+            return dateKey;
+        }
+
+        function inputValueToDateKey(value) {
+            if (!value) return null;
+            const d = new Date(String(value) + 'T00:00:00');
+            if (isNaN(d.getTime())) return null;
+            return formatDateKey(d);
+        }
+
+        function shiftDate(date, days) {
+            const d = new Date(date);
+            d.setDate(d.getDate() + (days || 0));
+            d.setHours(0, 0, 0, 0);
+            return d;
+        }
+
+        function findPreviousDateKeyByDayType(beforeDate, desiredDayType, maxDaysBack = 3650) {
+            const d = new Date(beforeDate);
+            d.setHours(0, 0, 0, 0);
+            for (let i = 0; i < maxDaysBack; i++) {
+                const dt = getDayType(d);
+                if (dt === desiredDayType) return formatDateKey(d);
+                d.setDate(d.getDate() - 1);
+            }
+            return null;
+        }
+
+        function findNthPreviousSpecialHolidayDateKey(beforeDate, n = 3, maxDaysBack = 3650) {
+            let count = 0;
+            const d = new Date(beforeDate);
+            d.setHours(0, 0, 0, 0);
+            for (let i = 0; i < maxDaysBack; i++) {
+                if (getDayType(d) === 'special-holiday') {
+                    count++;
+                    if (count === n) return formatDateKey(d);
+                }
+                d.setDate(d.getDate() - 1);
+            }
+            return null;
+        }
+
+        function getRotationBaselineAssignmentForType(type, dateKey) {
+            if (type === 'special') return rotationBaselineSpecialAssignments?.[dateKey] || null;
+            if (type === 'weekend') return rotationBaselineWeekendAssignments?.[dateKey] || null;
+            if (type === 'semi') return rotationBaselineSemiAssignments?.[dateKey] || null;
+            return rotationBaselineNormalAssignments?.[dateKey] || null;
+        }
+
+        function getFinalAssignmentForType(type, dateKey) {
+            if (type === 'special') return specialHolidayAssignments?.[dateKey] || null;
+            if (type === 'weekend') return weekendAssignments?.[dateKey] || null;
+            if (type === 'semi') return semiNormalAssignments?.[dateKey] || null;
+            return normalDayAssignments?.[dateKey] || null;
+        }
+
+        function findPersonBInGroupForTypeOnDate(type, dateKey, groupNum) {
+            if (!dateKey) return { personB: null, sourceB: null };
+            const baseline = getRotationBaselineAssignmentForType(type, dateKey);
+            if (baseline) {
+                const b = parseAssignedPersonForGroupFromAssignment(baseline, groupNum);
+                if (b) return { personB: b, sourceB: 'baseline' };
+            }
+            const finalAssignment = getFinalAssignmentForType(type, dateKey);
+            if (finalAssignment) {
+                const b = parseAssignedPersonForGroupFromAssignment(finalAssignment, groupNum);
+                if (b) return { personB: b, sourceB: 'final' };
+            }
+            const critical = getCriticalAssignmentForDate(dateKey);
+            if (critical) {
+                const b = parseAssignedPersonForGroupFromAssignment(critical, groupNum);
+                if (b) return { personB: b, sourceB: 'critical' };
+            }
+            return { personB: null, sourceB: null };
+        }
+
+        let autoAddPersonData = null; // { personName, groupNum, arrivalDateKey, datesByType, placementByType }
+
+        function computeDefaultVirtualDatesForArrival(arrivalDateKey) {
+            const arrivalDate = new Date(arrivalDateKey + 'T00:00:00');
+            if (isNaN(arrivalDate.getTime())) return { normal: null, semi: null, weekend: null, special: null };
+
+            const dayBefore = shiftDate(arrivalDate, -1);
+            const normal = formatDateKey(dayBefore);
+            const semi = findPreviousDateKeyByDayType(dayBefore, 'semi-normal-day', 3650);
+            const weekend = findPreviousDateKeyByDayType(dayBefore, 'weekend-holiday', 3650);
+            const special = findNthPreviousSpecialHolidayDateKey(dayBefore, 3, 3650);
+            return { normal, semi, weekend, special };
+        }
+
+        function buildAutoPlacementForNewPerson(personName, groupNum, datesByType) {
+            const rankA = getRankValue(personName);
+            const out = {};
+            ['special', 'weekend', 'semi', 'normal'].forEach(type => {
+                const dateKey = datesByType?.[type] || null;
+                const { personB, sourceB } = findPersonBInGroupForTypeOnDate(type, dateKey, groupNum);
+                const rankB = personB ? getRankValue(personB) : null;
+                const position = personB ? (rankA < rankB ? 'below' : 'above') : 'end';
+                out[type] = { dateKey, personB, sourceB, rankA, rankB, position };
+            });
+            return out;
+        }
+
+        function renderAutoAddPersonTable() {
+            const tbody = document.getElementById('autoAddVirtualDatesBody');
+            if (!tbody || !autoAddPersonData) return;
+            const { datesByType, placementByType } = autoAddPersonData;
+            const rows = [
+                { type: 'normal', label: 'Καθημερινές' },
+                { type: 'semi', label: 'Ημιαργίες' },
+                { type: 'weekend', label: 'Αργίες/ΣΚ' },
+                { type: 'special', label: 'Ειδικές Αργίες (3η πριν)' }
+            ];
+
+            tbody.innerHTML = rows.map(r => {
+                const p = placementByType?.[r.type] || {};
+                const dateKey = datesByType?.[r.type] || null;
+                const dateVal = dateKeyToInputValue(dateKey);
+                const personB = p.personB || '-';
+                const src = p.sourceB ? `(${p.sourceB})` : '';
+                const ranks = p.personB ? `A:${p.rankA} / B:${p.rankB}` : `A:${p.rankA}`;
+                const posText = p.position === 'end'
+                    ? 'Στο τέλος'
+                    : (p.position === 'above' ? `Πάνω από ${p.personB}` : `Κάτω από ${p.personB}`);
+
+                return `<tr>
+                    <td><strong>${r.label}</strong></td>
+                    <td style="min-width: 180px;">
+                        <input type="date" class="form-control form-control-sm autoAddTypeDate" data-type="${r.type}" value="${dateVal}">
+                    </td>
+                    <td><strong>${personB}</strong> <span class="text-muted small">${src}</span></td>
+                    <td>${ranks}</td>
+                    <td><strong>${posText}</strong></td>
+                </tr>`;
+            }).join('');
+
+            // Bind change handlers (dates editable)
+            tbody.querySelectorAll('input.autoAddTypeDate').forEach(inp => {
+                inp.addEventListener('change', () => {
+                    const type = inp.dataset.type;
+                    const dk = inputValueToDateKey(inp.value);
+                    autoAddPersonData.datesByType[type] = dk;
+                    autoAddPersonData.placementByType = buildAutoPlacementForNewPerson(autoAddPersonData.personName, autoAddPersonData.groupNum, autoAddPersonData.datesByType);
+                    renderAutoAddPersonTable();
+                });
+            });
+        }
+
+        function openAutoAddPersonModal(groupNum) {
+            const modalEl = document.getElementById('autoAddPersonModal');
+            if (!modalEl) {
+                alert('Σφάλμα: Δεν βρέθηκε το παράθυρο Αυτόματης Προσθήκης.');
+                return;
+            }
+            const nameEl = document.getElementById('autoAddPersonName');
+            const groupEl = document.getElementById('autoAddTargetGroup');
+            const arrivalEl = document.getElementById('autoAddArrivalDate');
+            const recomputeBtn = document.getElementById('autoAddRecomputeBtn');
+            const applyBtn = document.getElementById('autoAddApplyBtn');
+
+            if (groupEl) groupEl.value = String(groupNum);
+            if (nameEl) nameEl.value = '';
+
+            const today = new Date();
+            const arrivalDefault = formatDateKey(today);
+            if (arrivalEl) arrivalEl.value = arrivalDefault;
+
+            autoAddPersonData = {
+                personName: '',
+                groupNum: parseInt(groupEl?.value || groupNum, 10),
+                arrivalDateKey: arrivalDefault,
+                datesByType: computeDefaultVirtualDatesForArrival(arrivalDefault),
+                placementByType: {}
+            };
+            autoAddPersonData.placementByType = buildAutoPlacementForNewPerson('', autoAddPersonData.groupNum, autoAddPersonData.datesByType);
+            renderAutoAddPersonTable();
+
+            const refreshFromInputs = () => {
+                const personName = (nameEl?.value || '').trim();
+                const g = parseInt(groupEl?.value || groupNum, 10);
+                const arrivalKey = inputValueToDateKey(arrivalEl?.value) || arrivalDefault;
+                autoAddPersonData.personName = personName;
+                autoAddPersonData.groupNum = g;
+                autoAddPersonData.arrivalDateKey = arrivalKey;
+                autoAddPersonData.placementByType = buildAutoPlacementForNewPerson(personName, g, autoAddPersonData.datesByType);
+                renderAutoAddPersonTable();
+            };
+
+            if (nameEl) nameEl.oninput = refreshFromInputs;
+            if (groupEl) groupEl.onchange = () => {
+                refreshFromInputs();
+            };
+            if (arrivalEl) arrivalEl.onchange = () => {
+                const arrivalKey = inputValueToDateKey(arrivalEl.value);
+                if (arrivalKey) {
+                    autoAddPersonData.arrivalDateKey = arrivalKey;
+                    autoAddPersonData.datesByType = computeDefaultVirtualDatesForArrival(arrivalKey);
+                }
+                refreshFromInputs();
+            };
+
+            if (recomputeBtn) {
+                recomputeBtn.onclick = () => {
+                    const arrivalKey = inputValueToDateKey(arrivalEl?.value) || arrivalDefault;
+                    autoAddPersonData.arrivalDateKey = arrivalKey;
+                    autoAddPersonData.datesByType = computeDefaultVirtualDatesForArrival(arrivalKey);
+                    refreshFromInputs();
+                };
+            }
+
+            if (applyBtn) {
+                applyBtn.onclick = () => applyAutoAddPerson();
+            }
+
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
+        function applyAutoAddPerson() {
+            if (!autoAddPersonData) return;
+            const personName = (autoAddPersonData.personName || '').trim();
+            const groupNum = autoAddPersonData.groupNum;
+            const arrivalDateKey = autoAddPersonData.arrivalDateKey;
+            const datesByType = autoAddPersonData.datesByType || {};
+            const placementByType = autoAddPersonData.placementByType || {};
+
+            if (!personName) {
+                alert('Παρακαλώ συμπληρώστε ονοματεπώνυμο.');
+                return;
+            }
+            if (!arrivalDateKey) {
+                alert('Παρακαλώ επιλέξτε ημερομηνία άφιξης.');
+                return;
+            }
+
+            // Prevent duplicates across groups
+            for (let g = 1; g <= 4; g++) {
+                const gd = groups[g];
+                if (!gd) continue;
+                const exists = ['special', 'weekend', 'semi', 'normal'].some(t => (gd[t] || []).includes(personName));
+                if (exists) {
+                    alert(`Το άτομο "${personName}" υπάρχει ήδη σε ομάδα.`);
+                    return;
+                }
+            }
+
+            if (!groups[groupNum]) {
+                groups[groupNum] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} };
+            }
+            if (!groups[groupNum].priorities) groups[groupNum].priorities = {};
+            if (!groups[groupNum].lastDuties) groups[groupNum].lastDuties = {};
+            if (!groups[groupNum].missingPeriods) groups[groupNum].missingPeriods = {};
+
+            // Ensure per-person objects exist
+            if (!groups[groupNum].priorities[personName]) groups[groupNum].priorities[personName] = {};
+            if (!groups[groupNum].lastDuties[personName]) groups[groupNum].lastDuties[personName] = {};
+            if (!groups[groupNum].missingPeriods[personName]) groups[groupNum].missingPeriods[personName] = [];
+
+            const listTypes = ['special', 'weekend', 'semi', 'normal'];
+            listTypes.forEach(type => {
+                if (!groups[groupNum][type]) groups[groupNum][type] = [];
+                const list = groups[groupNum][type];
+
+                // Insert using suggested position relative to personB (transfer-like)
+                const p = placementByType?.[type] || {};
+                const personB = p.personB;
+                const position = p.position || 'end';
+                // Remove if exists (shouldn't)
+                const existingIndex = list.indexOf(personName);
+                if (existingIndex !== -1) list.splice(existingIndex, 1);
+
+                if (position === 'end' || !personB) {
+                    list.push(personName);
+                } else {
+                    const refIndex = list.indexOf(personB);
+                    if (refIndex === -1) {
+                        list.push(personName);
+                    } else if (position === 'above') {
+                        list.splice(refIndex, 0, personName);
+                    } else {
+                        list.splice(refIndex + 1, 0, personName);
+                    }
+                }
+
+                // Re-number priorities to match the list order (priority drives ordering & badge)
+                list.forEach((pn, idx) => {
+                    if (!groups[groupNum].priorities[pn]) groups[groupNum].priorities[pn] = {};
+                    groups[groupNum].priorities[pn][type] = idx + 1;
+                });
+
+                // Store virtual duty date into lastDuties for the new person (used by UI and some logic)
+                if (datesByType?.[type]) {
+                    groups[groupNum].lastDuties[personName][type] = datesByType[type];
+                }
+            });
+
+            saveData();
+            renderGroups();
+            updateStatistics();
+
+            const modal = bootstrap.Modal.getInstance(document.getElementById('autoAddPersonModal'));
+            if (modal) modal.hide();
+            alert(`Προστέθηκε το άτομο "${personName}" στην ${getGroupName(groupNum)} με αυτόματη τοποθέτηση.\nΆφιξη: ${arrivalDateKey}`);
+        }
+
         function formatGreekMonthYear(date) {
             if (!date || isNaN(date.getTime())) return '';
             const month = greekUpperNoTones(date.toLocaleDateString('el-GR', { month: 'long' }));
@@ -3438,7 +3751,8 @@
                 toast.hide();
             });
 
-            const toast = bootstrap.Toast.getInstance(toastEl) || new bootstrap.Toast(toastEl, { delay: 12000 });
+            // Keep visible until user clicks Undo or closes it.
+            const toast = bootstrap.Toast.getInstance(toastEl) || new bootstrap.Toast(toastEl, { autohide: false });
             toast.show();
         }
 
