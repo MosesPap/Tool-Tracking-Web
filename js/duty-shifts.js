@@ -6602,6 +6602,7 @@
             const stepContent = document.getElementById('stepContent');
             const stepNumber = document.getElementById('currentStepNumber');
             const backButton = document.getElementById('backButton');
+            const cancelButton = document.getElementById('stepCancelButton');
             const nextButton = document.getElementById('nextButton');
             const calculateButton = document.getElementById('calculateButton');
             
@@ -6628,6 +6629,21 @@
                     renderStep4_Normal();
                     break;
             }
+        }
+
+        function setStepFooterBusy(isBusy) {
+            calculationSteps.isTransitioning = !!isBusy;
+            const backButton = document.getElementById('backButton');
+            const nextButton = document.getElementById('nextButton');
+            const cancelButton = document.getElementById('stepCancelButton');
+            const calculateButton = document.getElementById('calculateButton');
+
+            const buttons = [backButton, nextButton, cancelButton, calculateButton].filter(Boolean);
+            buttons.forEach(btn => {
+                btn.disabled = !!isBusy;
+                // Requirement: do not show command buttons until next step is calculated.
+                btn.style.visibility = isBusy ? 'hidden' : 'visible';
+            });
         }
 
         // Step 1: Check and show special holidays
@@ -7031,9 +7047,16 @@
                 const okButton = document.getElementById('specialHolidayOkButton');
                 if (okButton) {
                     okButton.addEventListener('click', async function() {
-                        await saveStep1_SpecialHolidays();
-                        calculationSteps.currentStep = 2;
-                        renderCurrentStep();
+                        okButton.disabled = true;
+                        setStepFooterBusy(true);
+                        try {
+                            await saveStep1_SpecialHolidays();
+                            calculationSteps.currentStep = 2;
+                            renderCurrentStep();
+                        } finally {
+                            requestAnimationFrame(() => setStepFooterBusy(false));
+                            okButton.disabled = false;
+                        }
                     });
                 }
             } catch (error) {
@@ -7523,10 +7546,17 @@
             const okButton = document.getElementById('weekendSkipOkButton');
             if (okButton) {
                 okButton.addEventListener('click', async function() {
-                    await saveFinalWeekendAssignments(updatedAssignments);
-                    // Proceed to Step 3
-                    calculationSteps.currentStep = 3;
-                    renderCurrentStep();
+                    okButton.disabled = true;
+                    setStepFooterBusy(true);
+                    try {
+                        await saveFinalWeekendAssignments(updatedAssignments);
+                        // Proceed to Step 3
+                        calculationSteps.currentStep = 3;
+                        renderCurrentStep();
+                    } finally {
+                        requestAnimationFrame(() => setStepFooterBusy(false));
+                        okButton.disabled = false;
+                    }
                 });
             }
         }
@@ -8218,10 +8248,17 @@
             const okButton = document.getElementById('semiNormalSwapOkButton');
             if (okButton) {
                 okButton.addEventListener('click', async function() {
-                    await saveFinalSemiNormalAssignments(updatedAssignments);
-                    // Proceed to Step 4
-                    calculationSteps.currentStep = 4;
-                    renderCurrentStep();
+                    okButton.disabled = true;
+                    setStepFooterBusy(true);
+                    try {
+                        await saveFinalSemiNormalAssignments(updatedAssignments);
+                        // Proceed to Step 4
+                        calculationSteps.currentStep = 4;
+                        renderCurrentStep();
+                    } finally {
+                        requestAnimationFrame(() => setStepFooterBusy(false));
+                        okButton.disabled = false;
+                    }
                 });
             }
         }
@@ -9517,14 +9554,20 @@
             const okButton = document.getElementById('normalSwapOkButton');
             if (okButton) {
                 okButton.addEventListener('click', async function() {
-                    await saveFinalNormalAssignments(updatedAssignments);
-                    // Close the step-by-step calculation modal
-                    const stepModal = bootstrap.Modal.getInstance(document.getElementById('stepByStepCalculationModal'));
-                    if (stepModal) {
-                        stepModal.hide();
+                    okButton.disabled = true;
+                    setStepFooterBusy(true);
+                    try {
+                        await saveFinalNormalAssignments(updatedAssignments);
+                        // Close the step-by-step calculation modal
+                        const stepModal = bootstrap.Modal.getInstance(document.getElementById('stepByStepCalculationModal'));
+                        if (stepModal) {
+                            stepModal.hide();
+                        }
+                        // Reload calendar to show results
+                        location.reload();
+                    } finally {
+                        okButton.disabled = false;
                     }
-                    // Reload calendar to show results
-                    location.reload();
                 });
             }
         }
