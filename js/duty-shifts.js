@@ -3443,6 +3443,40 @@
             return null;
         }
 
+        // Helper: normalize an "assignment" value to a { groupNum -> personName } map.
+        // Supports:
+        // - string: "Name (Ομάδα 1), Name (Ομάδα 2)..."
+        // - array: ["Name (Ομάδα 1)", ...]
+        // - object: { "1": "Name", "2": "Name" } or { 1: "Name", ... }
+        function extractGroupAssignmentsMap(assignment) {
+            const out = {};
+            if (!assignment) return out;
+
+            if (typeof assignment === 'object' && !Array.isArray(assignment)) {
+                for (const k of Object.keys(assignment)) {
+                    const g = parseInt(k, 10);
+                    if (!(g >= 1 && g <= 4)) continue;
+                    const v = assignment[k];
+                    if (typeof v === 'string' && v.trim()) out[g] = v.trim();
+                }
+                return out;
+            }
+
+            const str = Array.isArray(assignment)
+                ? assignment.filter(Boolean).join(', ')
+                : String(assignment);
+
+            const parts = str.split(',').map(p => p.trim()).filter(Boolean);
+            for (const part of parts) {
+                const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                if (!m) continue;
+                const person = m[1].trim();
+                const g = parseInt(m[2], 10);
+                if (person && g >= 1 && g <= 4) out[g] = person;
+            }
+            return out;
+        }
+
         // Transfer auto-positioning reference date selection (per duty type):
         // 1) Find the LAST date in the reference month where Person A appears in the *baseline rotation* (for that duty type).
         // 2) If none, search previous months (month-by-month backwards) for the most recent baseline date.
@@ -10191,24 +10225,17 @@
                     simulatedSpecialAssignments[monthKey] = {};
                 }
                 
-                // Get assignment from saved special holiday assignments
-                const assignment = specialHolidayAssignments[dateKey];
-                if (assignment) {
-                    // Ensure assignment is a string (it might be an object if data wasn't flattened correctly)
-                    const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
-                    // assignment is a string like "Person Name (Ομάδα 1), Person Name (Ομάδα 2), ..."
-                    const parts = assignmentStr.split(',').map(p => p.trim());
-                    parts.forEach(part => {
-                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
-                        if (match) {
-                            const personName = match[1].trim();
-                            const groupNum = parseInt(match[2]);
-                            if (!simulatedSpecialAssignments[monthKey][groupNum]) {
-                                simulatedSpecialAssignments[monthKey][groupNum] = new Set();
-                            }
-                            simulatedSpecialAssignments[monthKey][groupNum].add(personName);
-                        }
-                    });
+                // Prefer tempSpecialAssignments (canonical Step 1 preview format), fall back to specialHolidayAssignments
+                const fromTemp = calculationSteps.tempSpecialAssignments?.[dateKey] || null; // { groupNum -> personName }
+                const groupMap = fromTemp && typeof fromTemp === 'object'
+                    ? fromTemp
+                    : extractGroupAssignmentsMap(specialHolidayAssignments?.[dateKey]);
+
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const personName = groupMap?.[groupNum];
+                    if (!personName) continue;
+                    if (!simulatedSpecialAssignments[monthKey][groupNum]) simulatedSpecialAssignments[monthKey][groupNum] = new Set();
+                    simulatedSpecialAssignments[monthKey][groupNum].add(personName);
                 }
             });
             
@@ -10497,18 +10524,18 @@
                 const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
                 if (!simulatedSpecialAssignments[monthKey]) simulatedSpecialAssignments[monthKey] = {};
 
-                const assignment = specialHolidayAssignments[dateKey];
-                if (!assignment) return;
-                const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
-                const parts = assignmentStr.split(',').map(p => p.trim());
-                parts.forEach(part => {
-                    const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
-                    if (!match) return;
-                    const personName = match[1].trim();
-                    const groupNum = parseInt(match[2]);
+                // Prefer tempSpecialAssignments (canonical Step 1 preview format), fall back to specialHolidayAssignments
+                const fromTemp = calculationSteps.tempSpecialAssignments?.[dateKey] || null; // { groupNum -> personName }
+                const groupMap = fromTemp && typeof fromTemp === 'object'
+                    ? fromTemp
+                    : extractGroupAssignmentsMap(specialHolidayAssignments?.[dateKey]);
+
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const personName = groupMap?.[groupNum];
+                    if (!personName) continue;
                     if (!simulatedSpecialAssignments[monthKey][groupNum]) simulatedSpecialAssignments[monthKey][groupNum] = new Set();
                     simulatedSpecialAssignments[monthKey][groupNum].add(personName);
-                });
+                }
             });
             
             // Second, simulate what weekends will be assigned (from Step 2)
