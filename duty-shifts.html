@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.206 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.208 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -205,6 +205,31 @@
             box-shadow: var(--calc-shadow);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
+        }
+
+        /* Larger modal titles for calculation + results windows */
+        #calculateDutiesModal .modal-title,
+        #stepByStepCalculationModal .modal-title,
+        #specialHolidayResultsModal .modal-title,
+        #weekendSkipResultsModal .modal-title,
+        #semiNormalSwapResultsModal .modal-title,
+        #normalSwapResultsModal .modal-title,
+        .modal-dialog.modal-superwide .modal-title {
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: 0.2px;
+        }
+
+        @media (max-width: 576px) {
+            #calculateDutiesModal .modal-title,
+            #stepByStepCalculationModal .modal-title,
+            #specialHolidayResultsModal .modal-title,
+            #weekendSkipResultsModal .modal-title,
+            #semiNormalSwapResultsModal .modal-title,
+            #normalSwapResultsModal .modal-title,
+            .modal-dialog.modal-superwide .modal-title {
+                font-size: 1.15rem;
+            }
         }
 
         /* Header: glossy gradient bar */
@@ -1035,7 +1060,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.206</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.208</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -1396,7 +1421,8 @@
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title">
-                        <i class="fas fa-calculator me-2"></i>Υπολογισμός Υπηρεσιών - Βήμα <span id="currentStepNumber">1</span>
+                        <i class="fas fa-calculator me-2"></i><span id="stepByStepModalTitleText">Υπολογισμός Υπηρεσιών</span>
+                        <span id="currentStepNumber" style="display:none;">1</span>
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>

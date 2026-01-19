@@ -120,6 +120,40 @@
             `;
         }
 
+        function greekUpperNoTones(s) {
+            return String(s || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toUpperCase();
+        }
+
+        function formatGreekMonthYear(date) {
+            if (!date || isNaN(date.getTime())) return '';
+            const month = greekUpperNoTones(date.toLocaleDateString('el-GR', { month: 'long' }));
+            const year = date.getFullYear();
+            return `${month} ${year}`;
+        }
+
+        function buildPeriodLabel(startDate, endDate) {
+            if (!startDate || isNaN(startDate.getTime())) return '';
+            if (!endDate || isNaN(endDate.getTime())) return formatGreekMonthYear(startDate);
+
+            const startMY = formatGreekMonthYear(startDate);
+            const endMY = formatGreekMonthYear(endDate);
+
+            const sameYear = startDate.getFullYear() === endDate.getFullYear();
+            const sameMonth = sameYear && startDate.getMonth() === endDate.getMonth();
+            if (sameMonth) return startMY;
+
+            const startMonth = greekUpperNoTones(startDate.toLocaleDateString('el-GR', { month: 'long' }));
+            const endMonth = greekUpperNoTones(endDate.toLocaleDateString('el-GR', { month: 'long' }));
+
+            if (sameYear) {
+                return `${startMonth}-${endMonth} ${startDate.getFullYear()}`;
+            }
+            return `${startMY}-${endMY}`;
+        }
+
         function isDateKeyInRange(dateKey, startDate, endDate) {
             if (!dateKey || typeof dateKey !== 'string') return false;
             if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return false;
@@ -6686,13 +6720,22 @@
         function renderCurrentStep() {
             const stepContent = document.getElementById('stepContent');
             const stepNumber = document.getElementById('currentStepNumber');
+            const stepTitleText = document.getElementById('stepByStepModalTitleText');
             const backButton = document.getElementById('backButton');
             const cancelButton = document.getElementById('stepCancelButton');
             const nextButton = document.getElementById('nextButton');
             const calculateButton = document.getElementById('calculateButton');
             const stepModalEl = document.getElementById('stepByStepCalculationModal');
             
-            stepNumber.textContent = calculationSteps.currentStep;
+            if (stepNumber) stepNumber.textContent = calculationSteps.currentStep;
+
+            if (stepTitleText) {
+                if (calculationSteps.currentStep === 1) stepTitleText.textContent = 'Υπολογισμός Υπηρεσιών Ειδικών Αργιών';
+                else if (calculationSteps.currentStep === 2) stepTitleText.textContent = 'Υπολογισμός Υπηρεσιών Αργιών';
+                else if (calculationSteps.currentStep === 3) stepTitleText.textContent = 'Υπολογισμός Υπηρεσιών Ημιαργιών';
+                else if (calculationSteps.currentStep === 4) stepTitleText.textContent = 'Υπολογισμός Υπηρεσιών Καθημερινών';
+                else stepTitleText.textContent = 'Υπολογισμός Υπηρεσιών';
+            }
 
             // Apply per-step theme (Special/Weekend/Semi/Normal) to title bar, alerts, and table header fills.
             if (stepModalEl) {
@@ -6778,8 +6821,9 @@
             // Check for special holidays
             const specialHolidays = dayTypeLists.special;
             
+            const periodLabel = buildPeriodLabel(startDate, endDate);
             let html = '<div class="step-content">';
-            html += '<h6 class="mb-3"><i class="fas fa-star text-warning me-2"></i>Βήμα 1: Ειδικές Αργίες</h6>';
+            html += `<h6 class="mb-3"><i class="fas fa-calendar-alt me-2"></i>Περίοδος: ${periodLabel}</h6>`;
             
             if (specialHolidays.length === 0) {
                 html += '<div class="alert alert-info">';
@@ -10180,8 +10224,9 @@
                 }
             });
             
+            const periodLabel = buildPeriodLabel(startDate, endDate);
             let html = '<div class="step-content">';
-            html += '<h6 class="mb-3"><i class="fas fa-calendar-weekend text-info me-2"></i>Βήμα 2: Σαββατοκύριακα/Αργίες</h6>';
+            html += `<h6 class="mb-3"><i class="fas fa-calendar-alt me-2"></i>Περίοδος: ${periodLabel}</h6>`;
             
             if (weekendHolidays.length === 0) {
                 html += '<div class="alert alert-info">';
@@ -10618,8 +10663,9 @@
                 }
             });
             
+            const periodLabel = buildPeriodLabel(startDate, endDate);
             let html = '<div class="step-content">';
-            html += '<h6 class="mb-3"><i class="fas fa-calendar-day text-warning me-2"></i>Βήμα 3: Ημιαργίες</h6>';
+            html += `<h6 class="mb-3"><i class="fas fa-calendar-alt me-2"></i>Περίοδος: ${periodLabel}</h6>`;
             
             if (semiNormalDays.length === 0) {
                 html += '<div class="alert alert-info">';
@@ -11238,8 +11284,9 @@
                 }
             });
             
+            const periodLabel = buildPeriodLabel(startDate, endDate);
             let html = '<div class="step-content">';
-            html += '<h6 class="mb-3"><i class="fas fa-calendar-day text-primary me-2"></i>Βήμα 4: Καθημερινές</h6>';
+            html += `<h6 class="mb-3"><i class="fas fa-calendar-alt me-2"></i>Περίοδος: ${periodLabel}</h6>`;
             
             // Sort normal days by date (define at function scope so it's accessible for swap logic)
             const sortedNormal = [...normalDays].sort();
