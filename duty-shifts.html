@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.210 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.211 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -217,6 +217,45 @@
             .results-modal-semi .alert.alert-success strong,
             .results-modal-normal .alert.alert-success strong {
                 font-size: 1.15rem;
+            }
+        }
+
+        /* Results windows: make "changes made" content larger (alert-info + table) */
+        .results-modal-special .alert.alert-info,
+        .results-modal-weekend .alert.alert-info,
+        .results-modal-semi .alert.alert-info,
+        .results-modal-normal .alert.alert-info {
+            font-size: 1.1rem;
+            line-height: 1.35;
+        }
+
+        .results-modal-special .table,
+        .results-modal-weekend .table,
+        .results-modal-semi .table,
+        .results-modal-normal .table {
+            font-size: 1.05rem;
+        }
+
+        .results-modal-special .table td,
+        .results-modal-weekend .table td,
+        .results-modal-semi .table td,
+        .results-modal-normal .table td {
+            padding-top: 0.65rem;
+            padding-bottom: 0.65rem;
+        }
+
+        @media (max-width: 576px) {
+            .results-modal-special .alert.alert-info,
+            .results-modal-weekend .alert.alert-info,
+            .results-modal-semi .alert.alert-info,
+            .results-modal-normal .alert.alert-info {
+                font-size: 1.02rem;
+            }
+            .results-modal-special .table,
+            .results-modal-weekend .table,
+            .results-modal-semi .table,
+            .results-modal-normal .table {
+                font-size: 0.98rem;
             }
         }
 
@@ -1089,7 +1128,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.210</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.211</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
