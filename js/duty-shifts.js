@@ -225,8 +225,8 @@
             return { normal, semi, weekend, special };
         }
 
-        function buildAutoPlacementForNewPerson(personName, groupNum, datesByType) {
-            const rankA = getRankValue(personName);
+        function buildAutoPlacementForNewPerson(personName, groupNum, datesByType, rankAOverride = null) {
+            const rankA = Number.isFinite(parseInt(rankAOverride, 10)) ? parseInt(rankAOverride, 10) : getRankValue(personName);
             const out = {};
             ['special', 'weekend', 'semi', 'normal'].forEach(type => {
                 const dateKey = datesByType?.[type] || null;
@@ -236,6 +236,40 @@
                 out[type] = { dateKey, personB, sourceB, rankA, rankB, position };
             });
             return out;
+        }
+
+        function getMaxRankValue() {
+            try {
+                const vals = Object.values(rankings || {}).map(v => parseInt(v, 10)).filter(n => Number.isFinite(n) && n > 0);
+                return vals.length ? Math.max(...vals) : 0;
+            } catch (_) {
+                return 0;
+            }
+        }
+
+        // Insert/overwrite person in rankings at desired rank, shifting others down if needed.
+        function insertPersonIntoRankings(personName, desiredRank) {
+            const rank = parseInt(desiredRank, 10);
+            if (!Number.isFinite(rank) || rank < 1) return;
+
+            // Remove existing occurrence (if any)
+            const current = parseInt(rankings?.[personName], 10);
+            const hasCurrent = Number.isFinite(current) && current > 0;
+
+            const updated = { ...(rankings || {}) };
+            if (hasCurrent) delete updated[personName];
+
+            // Shift everyone >= rank by +1
+            Object.keys(updated).forEach(p => {
+                const v = parseInt(updated[p], 10);
+                if (Number.isFinite(v) && v >= rank) {
+                    updated[p] = v + 1;
+                }
+            });
+
+            updated[personName] = rank;
+            rankings = updated;
+            rankingsModified = true;
         }
 
         function renderAutoAddPersonTable() {
@@ -292,6 +326,7 @@
             const nameEl = document.getElementById('autoAddPersonName');
             const groupEl = document.getElementById('autoAddTargetGroup');
             const arrivalEl = document.getElementById('autoAddArrivalDate');
+            const rankEl = document.getElementById('autoAddHierarchyRank');
             const recomputeBtn = document.getElementById('autoAddRecomputeBtn');
             const applyBtn = document.getElementById('autoAddApplyBtn');
 
@@ -302,6 +337,10 @@
             const arrivalDefault = formatDateKey(today);
             if (arrivalEl) arrivalEl.value = arrivalDefault;
 
+            // Default hierarchy rank = after last (max+1)
+            const defaultRank = getMaxRankValue() + 1;
+            if (rankEl) rankEl.value = String(defaultRank);
+
             autoAddPersonData = {
                 personName: '',
                 groupNum: parseInt(groupEl?.value || groupNum, 10),
@@ -309,17 +348,20 @@
                 datesByType: computeDefaultVirtualDatesForArrival(arrivalDefault),
                 placementByType: {}
             };
-            autoAddPersonData.placementByType = buildAutoPlacementForNewPerson('', autoAddPersonData.groupNum, autoAddPersonData.datesByType);
+            autoAddPersonData.rank = defaultRank;
+            autoAddPersonData.placementByType = buildAutoPlacementForNewPerson('', autoAddPersonData.groupNum, autoAddPersonData.datesByType, autoAddPersonData.rank);
             renderAutoAddPersonTable();
 
             const refreshFromInputs = () => {
                 const personName = (nameEl?.value || '').trim();
                 const g = parseInt(groupEl?.value || groupNum, 10);
                 const arrivalKey = inputValueToDateKey(arrivalEl?.value) || arrivalDefault;
+                const r = parseInt(rankEl?.value || '', 10);
                 autoAddPersonData.personName = personName;
                 autoAddPersonData.groupNum = g;
                 autoAddPersonData.arrivalDateKey = arrivalKey;
-                autoAddPersonData.placementByType = buildAutoPlacementForNewPerson(personName, g, autoAddPersonData.datesByType);
+                autoAddPersonData.rank = Number.isFinite(r) && r > 0 ? r : null;
+                autoAddPersonData.placementByType = buildAutoPlacementForNewPerson(personName, g, autoAddPersonData.datesByType, autoAddPersonData.rank);
                 renderAutoAddPersonTable();
             };
 
@@ -335,6 +377,7 @@
                 }
                 refreshFromInputs();
             };
+            if (rankEl) rankEl.oninput = refreshFromInputs;
 
             if (recomputeBtn) {
                 recomputeBtn.onclick = () => {
@@ -360,6 +403,7 @@
             const arrivalDateKey = autoAddPersonData.arrivalDateKey;
             const datesByType = autoAddPersonData.datesByType || {};
             const placementByType = autoAddPersonData.placementByType || {};
+            const rank = parseInt(autoAddPersonData.rank, 10);
 
             if (!personName) {
                 alert('Παρακαλώ συμπληρώστε ονοματεπώνυμο.');
@@ -369,6 +413,13 @@
                 alert('Παρακαλώ επιλέξτε ημερομηνία άφιξης.');
                 return;
             }
+            if (!Number.isFinite(rank) || rank < 1) {
+                alert('Παρακαλώ συμπληρώστε έγκυρο αριθμό ιεραρχίας (>=1).');
+                return;
+            }
+
+            // First: put person into hierarchy so placement is consistent system-wide
+            insertPersonIntoRankings(personName, rank);
 
             // Prevent duplicates across groups
             for (let g = 1; g <= 4; g++) {
