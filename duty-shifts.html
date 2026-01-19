@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.218 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.219 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -280,23 +280,18 @@
             }
         }
 
-        /* Auto-add: hierarchy preview list */
-        #autoAddPersonModal .rankings-preview {
-            border: 1px solid rgba(0,0,0,0.08);
-            border-radius: 12px;
-            background: rgba(255,255,255,0.85);
-        }
-        #autoAddPersonModal .rankings-preview .table-responsive {
-            max-height: 42vh;
+        /* Auto-add: hierarchy picker list */
+        #autoAddRankPickerModal .table-responsive {
+            max-height: 65vh;
             overflow: auto;
         }
-        #autoAddPersonModal .rankings-preview .table tbody tr {
+        #autoAddRankPickerModal .table tbody tr {
             cursor: pointer;
         }
-        #autoAddPersonModal .rankings-preview .table tbody tr:hover td {
+        #autoAddRankPickerModal .table tbody tr:hover td {
             background: rgba(47,107,255,0.08);
         }
-        #autoAddPersonModal .rankings-preview .rank-selected td {
+        #autoAddRankPickerModal .rank-selected td {
             background: rgba(34, 197, 94, 0.12) !important;
         }
 
@@ -1169,7 +1164,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.218</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.219</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -1448,31 +1443,13 @@
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Ιεραρχία (Αριθμός)</label>
-                            <input type="number" class="form-control" id="autoAddHierarchyRank" min="1" placeholder="π.χ. 25">
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="autoAddHierarchyRank" min="1" placeholder="π.χ. 25">
+                                <button class="btn btn-outline-primary" type="button" id="autoAddOpenRankPickerBtn" title="Επιλογή από λίστα ιεραρχίας">
+                                    <i class="fas fa-list-ol me-1"></i>Λίστα
+                                </button>
+                            </div>
                             <small class="text-muted">Απαραίτητο για σωστή τοποθέτηση με βάση την ιεραρχία.</small>
-                        </div>
-                    </div>
-
-                    <div class="rankings-preview mt-3 p-3">
-                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                            <div>
-                                <strong><i class="fas fa-sort-numeric-down me-2"></i>Προεπισκόπηση Ιεραρχίας</strong>
-                                <div class="small text-muted">Κάντε κλικ σε άτομο για να γεμίσει ο αριθμός ιεραρχίας (μπορείτε μετά να τον αλλάξετε).</div>
-                            </div>
-                            <div style="min-width: 260px;">
-                                <input type="text" class="form-control form-control-sm" id="autoAddRankingsSearch" placeholder="Αναζήτηση ονόματος...">
-                            </div>
-                        </div>
-                        <div class="table-responsive mt-2">
-                            <table class="table table-sm table-bordered mb-0">
-                                <thead>
-                                    <tr>
-                                        <th style="width: 90px;">#</th>
-                                        <th>Όνομα</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="autoAddRankingsPreviewBody"></tbody>
-                            </table>
                         </div>
                     </div>
 
@@ -1500,6 +1477,42 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
                     <button type="button" class="btn btn-outline-secondary" id="autoAddRecomputeBtn"><i class="fas fa-sync me-1"></i>Επαναφορά Ημερομηνιών</button>
                     <button type="button" class="btn btn-success" id="autoAddApplyBtn"><i class="fas fa-check me-1"></i>Προσθήκη &amp; Τοποθέτηση</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auto Add: Hierarchy Picker Modal -->
+    <div class="modal fade" id="autoAddRankPickerModal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-superwide">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-sort-numeric-down me-2"></i>Επιλογή Θέσης στην Ιεραρχία</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <div class="text-muted small">
+                            Κάντε κλικ σε άτομο για να συμπληρωθεί ο αριθμός ιεραρχίας και να επιστρέψετε.
+                        </div>
+                        <div style="min-width: 280px;">
+                            <input type="text" class="form-control form-control-sm" id="autoAddRankPickerSearch" placeholder="Αναζήτηση ονόματος...">
+                        </div>
+                    </div>
+                    <div class="table-responsive mt-2">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 90px;">#</th>
+                                    <th>Όνομα</th>
+                                </tr>
+                            </thead>
+                            <tbody id="autoAddRankPickerBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
                 </div>
             </div>
         </div>

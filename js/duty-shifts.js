@@ -257,9 +257,9 @@
             return entries;
         }
 
-        function renderAutoAddRankingsPreview() {
-            const body = document.getElementById('autoAddRankingsPreviewBody');
-            const search = document.getElementById('autoAddRankingsSearch');
+        function renderAutoAddRankingsPicker() {
+            const body = document.getElementById('autoAddRankPickerBody');
+            const search = document.getElementById('autoAddRankPickerSearch');
             const rankEl = document.getElementById('autoAddHierarchyRank');
             if (!body) return;
 
@@ -268,27 +268,62 @@
 
             const rows = getSortedRankingsList()
                 .filter(e => !q || e.name.toLowerCase().includes(q))
-                .slice(0, 400); // keep UI snappy
+                .slice(0, 600);
 
             body.innerHTML = rows.map(e => {
                 const selected = Number.isFinite(selectedRank) && e.rank === selectedRank;
-                return `<tr class="${selected ? 'rank-selected' : ''}" data-rank="${e.rank}" data-name="${e.name.replace(/"/g, '&quot;')}">
+                return `<tr class="${selected ? 'rank-selected' : ''}" data-rank="${e.rank}">
                     <td><strong>${e.rank}</strong></td>
                     <td>${e.name}</td>
                 </tr>`;
             }).join('') || `<tr><td colspan="2" class="text-muted text-center">Δεν βρέθηκαν αποτελέσματα</td></tr>`;
 
-            // click to set rank
             body.querySelectorAll('tr[data-rank]').forEach(tr => {
                 tr.addEventListener('click', () => {
                     const r = parseInt(tr.dataset.rank || '', 10);
                     if (rankEl && Number.isFinite(r)) {
                         rankEl.value = String(r);
-                        // trigger recompute
                         rankEl.dispatchEvent(new Event('input', { bubbles: true }));
                     }
+                    const pickerModal = bootstrap.Modal.getInstance(document.getElementById('autoAddRankPickerModal'));
+                    if (pickerModal) pickerModal.hide();
                 });
             });
+        }
+
+        let autoAddReturnToModalAfterRankPicker = false;
+        function openAutoAddRankPickerModal() {
+            const autoAddEl = document.getElementById('autoAddPersonModal');
+            const pickerEl = document.getElementById('autoAddRankPickerModal');
+            if (!pickerEl) return;
+
+            // Hide auto-add modal so picker doesn't stack and hide content awkwardly
+            const autoAddModal = bootstrap.Modal.getInstance(autoAddEl);
+            if (autoAddModal) {
+                autoAddReturnToModalAfterRankPicker = true;
+                autoAddModal.hide();
+            } else {
+                autoAddReturnToModalAfterRankPicker = false;
+            }
+
+            // Reset search
+            const search = document.getElementById('autoAddRankPickerSearch');
+            if (search) search.value = '';
+            renderAutoAddRankingsPicker();
+
+            const pickerModal = new bootstrap.Modal(pickerEl);
+            pickerModal.show();
+
+            // On close, return to auto-add modal
+            const onHidden = () => {
+                pickerEl.removeEventListener('hidden.bs.modal', onHidden);
+                if (autoAddReturnToModalAfterRankPicker && autoAddEl) {
+                    const m = new bootstrap.Modal(autoAddEl);
+                    m.show();
+                    autoAddReturnToModalAfterRankPicker = false;
+                }
+            };
+            pickerEl.addEventListener('hidden.bs.modal', onHidden);
         }
 
         // Insert/overwrite person in rankings at desired rank, shifting others down if needed.
@@ -371,7 +406,7 @@
             const groupEl = document.getElementById('autoAddTargetGroup');
             const arrivalEl = document.getElementById('autoAddArrivalDate');
             const rankEl = document.getElementById('autoAddHierarchyRank');
-            const rankingsSearchEl = document.getElementById('autoAddRankingsSearch');
+            const openRankPickerBtn = document.getElementById('autoAddOpenRankPickerBtn');
             const recomputeBtn = document.getElementById('autoAddRecomputeBtn');
             const applyBtn = document.getElementById('autoAddApplyBtn');
 
@@ -408,7 +443,6 @@
                 autoAddPersonData.rank = Number.isFinite(r) && r > 0 ? r : null;
                 autoAddPersonData.placementByType = buildAutoPlacementForNewPerson(personName, g, autoAddPersonData.datesByType, autoAddPersonData.rank);
                 renderAutoAddPersonTable();
-                renderAutoAddRankingsPreview();
             };
 
             if (nameEl) nameEl.oninput = refreshFromInputs;
@@ -424,7 +458,7 @@
                 refreshFromInputs();
             };
             if (rankEl) rankEl.oninput = refreshFromInputs;
-            if (rankingsSearchEl) rankingsSearchEl.oninput = () => renderAutoAddRankingsPreview();
+            if (openRankPickerBtn) openRankPickerBtn.onclick = () => openAutoAddRankPickerModal();
 
             if (recomputeBtn) {
                 recomputeBtn.onclick = () => {
@@ -441,9 +475,6 @@
 
             const modal = new bootstrap.Modal(modalEl);
             modal.show();
-
-            // initial render rankings preview
-            renderAutoAddRankingsPreview();
         }
 
         function applyAutoAddPerson() {
