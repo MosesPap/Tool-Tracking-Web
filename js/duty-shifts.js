@@ -7140,17 +7140,17 @@
                 const modalHtml = `
                     <div class="modal fade" id="specialHolidayResultsModal" tabindex="-1">
                     <div class="modal-dialog modal-xl modal-superwide">
-                            <div class="modal-content">
-                                <div class="modal-header">
+                            <div class="modal-content results-modal-special">
+                                <div class="modal-header results-header results-header-special">
                                     <h5 class="modal-title"><i class="fas fa-star me-2"></i>Αποτελέσματα Ειδικών Αργιών</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                 </div>
                                 <div class="modal-body">
                                     ${message}
                                 </div>
                                 <div class="modal-footer">
                                     <button type="button" class="btn btn-secondary" id="specialHolidayCancelButton" data-bs-dismiss="modal">Ακύρωση</button>
-                                    <button type="button" class="btn btn-primary" id="specialHolidayOkButton" data-bs-dismiss="modal">OK</button>
+                                    <button type="button" class="btn btn-primary" id="specialHolidayOkButton">OK</button>
                                 </div>
                             </div>
                         </div>
@@ -7165,17 +7165,27 @@
                 modal.show();
 
                 const okButton = document.getElementById('specialHolidayOkButton');
+                const cancelButton = document.getElementById('specialHolidayCancelButton');
                 if (okButton) {
                     okButton.addEventListener('click', async function() {
+                        const originalOkHtml = okButton.innerHTML;
                         okButton.disabled = true;
+                        okButton.classList.add('is-saving');
+                        if (cancelButton) cancelButton.disabled = true;
+                        okButton.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Αποθήκευση...`;
                         setStepFooterBusy(true);
                         try {
                             await saveStep1_SpecialHolidays();
                             calculationSteps.currentStep = 2;
                             renderCurrentStep();
+                            const m = bootstrap.Modal.getInstance(document.getElementById('specialHolidayResultsModal'));
+                            if (m) m.hide();
                         } finally {
                             requestAnimationFrame(() => setStepFooterBusy(false));
+                            okButton.innerHTML = originalOkHtml;
+                            okButton.classList.remove('is-saving');
                             okButton.disabled = false;
+                            if (cancelButton) cancelButton.disabled = false;
                         }
                     });
                 }
@@ -7633,16 +7643,16 @@
             const modalHtml = `
                 <div class="modal fade" id="weekendSkipResultsModal" tabindex="-1">
                     <div class="modal-dialog modal-xl modal-superwide">
-                        <div class="modal-content">
-                            <div class="modal-header">
+                        <div class="modal-content results-modal-weekend">
+                            <div class="modal-header results-header results-header-weekend">
                                 <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Αποτελέσματα Παραλείψεων Σαββατοκύριακων</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
                             <div class="modal-body">
                                 ${message}
                             </div>
                             <div class="modal-footer">
-                                <button type="button" class="btn btn-primary" id="weekendSkipOkButton" data-bs-dismiss="modal">OK</button>
+                                <button type="button" class="btn btn-primary" id="weekendSkipOkButton">OK</button>
                             </div>
                         </div>
                     </div>
@@ -7666,15 +7676,22 @@
             const okButton = document.getElementById('weekendSkipOkButton');
             if (okButton) {
                 okButton.addEventListener('click', async function() {
+                    const originalOkHtml = okButton.innerHTML;
                     okButton.disabled = true;
+                    okButton.classList.add('is-saving');
+                    okButton.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Αποθήκευση...`;
                     setStepFooterBusy(true);
                     try {
                         await saveFinalWeekendAssignments(updatedAssignments);
                         // Proceed to Step 3
                         calculationSteps.currentStep = 3;
                         renderCurrentStep();
+                        const m = bootstrap.Modal.getInstance(document.getElementById('weekendSkipResultsModal'));
+                        if (m) m.hide();
                     } finally {
                         requestAnimationFrame(() => setStepFooterBusy(false));
+                        okButton.innerHTML = originalOkHtml;
+                        okButton.classList.remove('is-saving');
                         okButton.disabled = false;
                     }
                 });
@@ -8335,16 +8352,16 @@
             const modalHtml = `
                 <div class="modal fade" id="semiNormalSwapResultsModal" tabindex="-1">
                     <div class="modal-dialog modal-xl modal-superwide">
-                        <div class="modal-content">
-                            <div class="modal-header">
+                        <div class="modal-content results-modal-semi">
+                            <div class="modal-header results-header results-header-semi">
                                 <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Αποτελέσματα Αλλαγών Ημιαργιών</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
                             <div class="modal-body">
                                 ${message}
                             </div>
                             <div class="modal-footer">
-                                <button type="button" class="btn btn-primary" id="semiNormalSwapOkButton" data-bs-dismiss="modal">OK</button>
+                                <button type="button" class="btn btn-primary" id="semiNormalSwapOkButton">OK</button>
                             </div>
                         </div>
                     </div>
@@ -8368,15 +8385,22 @@
             const okButton = document.getElementById('semiNormalSwapOkButton');
             if (okButton) {
                 okButton.addEventListener('click', async function() {
+                    const originalOkHtml = okButton.innerHTML;
                     okButton.disabled = true;
+                    okButton.classList.add('is-saving');
+                    okButton.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Αποθήκευση...`;
                     setStepFooterBusy(true);
                     try {
                         await saveFinalSemiNormalAssignments(updatedAssignments);
                         // Proceed to Step 4
                         calculationSteps.currentStep = 4;
                         renderCurrentStep();
+                        const m = bootstrap.Modal.getInstance(document.getElementById('semiNormalSwapResultsModal'));
+                        if (m) m.hide();
                     } finally {
                         requestAnimationFrame(() => setStepFooterBusy(false));
+                        okButton.innerHTML = originalOkHtml;
+                        okButton.classList.remove('is-saving');
                         okButton.disabled = false;
                     }
                 });
@@ -9641,16 +9665,16 @@
             const modalHtml = `
                 <div class="modal fade" id="normalSwapResultsModal" tabindex="-1">
                     <div class="modal-dialog modal-xl modal-superwide">
-                        <div class="modal-content">
-                            <div class="modal-header">
+                        <div class="modal-content results-modal-normal">
+                            <div class="modal-header results-header results-header-normal">
                                 <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Αποτελέσματα Αλλαγών Καθημερινών</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
                             <div class="modal-body">
                                 ${message}
                             </div>
                             <div class="modal-footer">
-                                <button type="button" class="btn btn-primary" id="normalSwapOkButton" data-bs-dismiss="modal">OK</button>
+                                <button type="button" class="btn btn-primary" id="normalSwapOkButton">OK</button>
                             </div>
                         </div>
                     </div>
@@ -9674,7 +9698,10 @@
             const okButton = document.getElementById('normalSwapOkButton');
             if (okButton) {
                 okButton.addEventListener('click', async function() {
+                    const originalOkHtml = okButton.innerHTML;
                     okButton.disabled = true;
+                    okButton.classList.add('is-saving');
+                    okButton.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Αποθήκευση...`;
                     setStepFooterBusy(true);
                     try {
                         await saveFinalNormalAssignments(updatedAssignments);
@@ -9683,9 +9710,13 @@
                         if (stepModal) {
                             stepModal.hide();
                         }
+                        const m = bootstrap.Modal.getInstance(document.getElementById('normalSwapResultsModal'));
+                        if (m) m.hide();
                         // Reload calendar to show results
                         location.reload();
                     } finally {
+                        okButton.innerHTML = originalOkHtml;
+                        okButton.classList.remove('is-saving');
                         okButton.disabled = false;
                     }
                 });
