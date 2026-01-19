@@ -6639,8 +6639,18 @@
             const cancelButton = document.getElementById('stepCancelButton');
             const nextButton = document.getElementById('nextButton');
             const calculateButton = document.getElementById('calculateButton');
+            const stepModalEl = document.getElementById('stepByStepCalculationModal');
             
             stepNumber.textContent = calculationSteps.currentStep;
+
+            // Apply per-step theme (Special/Weekend/Semi/Normal) to title bar, alerts, and table header fills.
+            if (stepModalEl) {
+                stepModalEl.classList.remove('calc-theme-special', 'calc-theme-weekend', 'calc-theme-semi', 'calc-theme-normal');
+                if (calculationSteps.currentStep === 1) stepModalEl.classList.add('calc-theme-special');
+                else if (calculationSteps.currentStep === 2) stepModalEl.classList.add('calc-theme-weekend');
+                else if (calculationSteps.currentStep === 3) stepModalEl.classList.add('calc-theme-semi');
+                else if (calculationSteps.currentStep === 4) stepModalEl.classList.add('calc-theme-normal');
+            }
             
             // Show/hide navigation buttons
             backButton.style.display = calculationSteps.currentStep > 1 ? 'inline-block' : 'none';
