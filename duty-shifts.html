@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.220 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.221 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -1164,7 +1164,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.220</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.221</span></h4>
             </div>
             <div>
                 <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
@@ -1726,6 +1726,15 @@
                                 <label for="missingPeriodEnd" class="form-label">Ημερομηνία Λήξης</label>
                                 <input type="date" class="form-control" id="missingPeriodEnd" required>
                             </div>
+                            <div class="col-12 mb-3">
+                                <label for="missingPeriodReason" class="form-label">Λόγος Απουσίας</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="missingPeriodReason"></select>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="openMissingReasonsModal()" title="Διαχείριση λίστας λόγων">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                         <button type="button" class="btn btn-primary" onclick="addMissingPeriod()">
                             <i class="fas fa-plus me-1"></i>Προσθήκη Περιόδου
@@ -1736,6 +1745,28 @@
                         <h6>Υπάρχουσες Περίοδοι Απουσίας</h6>
                         <div id="missingPeriodsList"></div>
                     </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Missing Reasons Modal -->
+    <div class="modal fade" id="missingReasonsModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-list me-2"></i>Λόγοι Απουσίας</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control" id="missingReasonNewText" placeholder="π.χ. Άδεια, Ασθένεια, Εκπαίδευση">
+                        <button class="btn btn-primary" type="button" onclick="addMissingReason()"><i class="fas fa-plus me-1"></i>Προσθήκη</button>
+                    </div>
+                    <div id="missingReasonsList" class="list-group"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
@@ -1823,6 +1854,9 @@
                     <div class="d-grid gap-2">
                         <button type="button" class="btn btn-outline-info" onclick="openEditPersonFromActions()">
                             <i class="fas fa-edit me-2"></i>Επεξεργασία Στοιχείων
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="toggleDisablePersonButton" onclick="toggleDisablePersonFromActions()">
+                            <i class="fas fa-user-slash me-2"></i><span id="toggleDisablePersonButtonText">Απενεργοποίηση (Παράλειψη)</span>
                         </button>
                         <button type="button" class="btn btn-outline-warning" onclick="openMissingPeriodFromActions()">
                             <i class="fas fa-calendar-times me-2"></i>Διαχείριση Περιόδων Απουσίας

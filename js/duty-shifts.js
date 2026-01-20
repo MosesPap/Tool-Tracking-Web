@@ -1,10 +1,10 @@
         // Data storage - each group has four order lists: special, weekend, semi, normal
         // Each person also has last duty dates for each type, missing periods, and priorities
         let groups = {
-            1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
-            2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
-            3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
-            4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} }
+            1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
+            2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
+            3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
+            4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} }
         };
         // Organizational rankings - separate from priority, doesn't affect list order
         let rankings = {}; // Format: { "Person Name": rankNumber }
@@ -515,7 +515,7 @@
             }
 
             if (!groups[groupNum]) {
-                groups[groupNum] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} };
+                groups[groupNum] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} };
             }
             if (!groups[groupNum].priorities) groups[groupNum].priorities = {};
             if (!groups[groupNum].lastDuties) groups[groupNum].lastDuties = {};
@@ -900,6 +900,10 @@
             { name: 'Πάσχα', type: 'easter-relative', offset: 0 } // Easter Sunday
         ];
 
+        // Missing-period reasons (global list)
+        let missingReasons = ['Άδεια', 'Ασθένεια', 'Εκπαίδευση', 'Υπηρεσιακό'];
+        let missingReasonsModified = false;
+
         // Track data loading to prevent duplicate loads
         let dataLastLoaded = null;
         let isLoadingData = false;
@@ -1022,7 +1026,8 @@
                     crossMonthSwapsDoc,
                     assignmentReasonsDoc,
                     lastRotationPositionsDoc,
-                    rankingsDoc
+                    rankingsDoc,
+                    missingReasonsDoc
                 ] = await Promise.all([
                     dutyShifts.doc('groups').get(),
                     dutyShifts.doc('holidays').get(),
@@ -1040,7 +1045,8 @@
                     dutyShifts.doc('crossMonthSwaps').get(),
                     dutyShifts.doc('assignmentReasons').get(),
                     dutyShifts.doc('lastRotationPositions').get(),
-                    dutyShifts.doc('rankings').get()
+                    dutyShifts.doc('rankings').get(),
+                    dutyShifts.doc('missingReasons').get()
                 ]);
                 
                 // Load groups
@@ -1050,13 +1056,16 @@
                     delete data.updatedBy;
                     groups = migrateGroupsFormat(data) || { 1: { regular: [], special: [] }, 2: { regular: [], special: [] }, 3: { regular: [], special: [] }, 4: { regular: [], special: [] } };
                     
-                    // CRITICAL: Always ensure priorities object exists and is properly initialized
+                    // CRITICAL: Always ensure priorities/disabled objects exist and are properly initialized
                     for (let i = 1; i <= 4; i++) {
                         if (!groups[i]) {
-                            groups[i] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} };
+                            groups[i] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} };
                         }
                         if (!groups[i].priorities) {
                             groups[i].priorities = {};
+                        }
+                        if (!groups[i].disabledPersons) {
+                            groups[i].disabledPersons = {};
                         }
                         
                         // Ensure all people in lists have priority entries (only if they don't already exist)
@@ -1072,6 +1081,14 @@
                                 }
                             });
                         });
+                    }
+                }
+
+                // Load missing reasons list (Firestore)
+                if (missingReasonsDoc && missingReasonsDoc.exists) {
+                    const data = missingReasonsDoc.data() || {};
+                    if (Array.isArray(data.list) && data.list.length) {
+                        missingReasons = data.list.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
                     }
                 }
                 
@@ -1660,6 +1677,19 @@
                 } catch (error) {
                     console.error('Error saving specialHolidays to Firestore:', error);
                 }
+
+                // Save missing reasons list
+                try {
+                    const list = Array.isArray(missingReasons) ? missingReasons.filter(Boolean).map(x => String(x).trim()).filter(Boolean) : [];
+                    await db.collection('dutyShifts').doc('missingReasons').set({
+                        list,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    missingReasonsModified = false;
+                } catch (error) {
+                    console.error('Error saving missingReasons to Firestore:', error);
+                }
                 
                 // Save assignments to separate documents by day type, organized by month
                 // Only save if there are actual assignments to avoid overwriting with empty data
@@ -1974,10 +2004,10 @@
             if (!data) return null;
             
             const migrated = {
-                1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
-                2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
-                3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} },
-                4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} }
+                1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
+                2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
+                3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
+                4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} }
             };
             
             for (let i = 1; i <= 4; i++) {
@@ -2412,8 +2442,9 @@
             personDiv.dataset.index = index;
             personDiv.dataset.listType = listType;
             
-            // Check if person is currently missing
-            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
+            // Check if person is currently missing/disabled
+            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
+            const isDisabled = !!groupData.disabledPersons?.[person];
             const missingPeriods = groupData.missingPeriods?.[person] || [];
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -2422,7 +2453,8 @@
                 const end = new Date(period.end + 'T00:00:00');
                 return today >= start && today <= end;
             });
-            const missingBadge = isCurrentlyMissing ? '<span class="badge bg-warning ms-2"><i class="fas fa-user-slash me-1"></i>Απουσία</span>' : '';
+            const disabledBadge = isDisabled ? '<span class="badge bg-secondary ms-2"><i class="fas fa-user-slash me-1"></i>Απενεργοποιημένος</span>' : '';
+            const missingBadge = !isDisabled && isCurrentlyMissing ? '<span class="badge bg-warning ms-2"><i class="fas fa-user-slash me-1"></i>Απουσία</span>' : '';
             
             // Get last duty date and calculate next duty date
             const dutyDates = getLastAndNextDutyDates(person, groupNum, listType, listArray.length);
@@ -2453,7 +2485,7 @@
                         <div style="display: flex; align-items: center;">
                             <i class="fas fa-grip-vertical text-muted me-2" style="cursor: move;"></i>
                             ${priorityBadge}
-                            <span>${person}${missingBadge}</span>
+                            <span>${person}${disabledBadge}${missingBadge}</span>
                         </div>
                         <div style="font-size: 0.75rem; color: #666; margin-top: 0.25rem; margin-left: 1.5rem;">
                             <div><strong>Τελευταία:</strong> ${dutyDates.lastDuty}</div>
@@ -2647,7 +2679,7 @@
             editingPersonName = personName;
             currentGroup = groupNumber;
             
-            const groupData = groups[groupNumber] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} };
+            const groupData = groups[groupNumber] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} };
             const lastDuties = groupData.lastDuties?.[personName] || {};
             const priorities = groupData.priorities?.[personName] || {};
             
@@ -3220,9 +3252,42 @@
             
             document.getElementById('personActionsName').textContent = personName;
             document.getElementById('personActionsGroup').textContent = getGroupName(groupNum);
+
+            // Update disable/enable button label
+            try {
+                if (!groups[groupNum].disabledPersons) groups[groupNum].disabledPersons = {};
+                const isDisabled = !!groups[groupNum].disabledPersons[personName];
+                const textEl = document.getElementById('toggleDisablePersonButtonText');
+                if (textEl) {
+                    textEl.textContent = isDisabled ? 'Ενεργοποίηση (Επιστροφή στην Εναλλαγή)' : 'Απενεργοποίηση (Παράλειψη)';
+                }
+            } catch (_) {
+                // ignore
+            }
             
             const modal = new bootstrap.Modal(document.getElementById('personActionsModal'));
             modal.show();
+        }
+
+        function toggleDisablePersonFromActions() {
+            if (!currentPersonActionsGroup || !currentPersonActionsName) return;
+            const g = groups[currentPersonActionsGroup];
+            if (!g) return;
+            if (!g.disabledPersons) g.disabledPersons = {};
+            const isDisabled = !!g.disabledPersons[currentPersonActionsName];
+            if (isDisabled) {
+                delete g.disabledPersons[currentPersonActionsName];
+            } else {
+                g.disabledPersons[currentPersonActionsName] = true;
+            }
+            saveData();
+            renderGroups();
+
+            // Refresh label without closing modal
+            const textEl = document.getElementById('toggleDisablePersonButtonText');
+            if (textEl) {
+                textEl.textContent = isDisabled ? 'Απενεργοποίηση (Παράλειψη)' : 'Ενεργοποίηση (Επιστροφή στην Εναλλαγή)';
+            }
         }
         
         // Open edit person from actions modal
@@ -3329,6 +3394,23 @@
                 }
                 if (groups[currentPersonActionsGroup].missingPeriods) {
                     delete groups[currentPersonActionsGroup].missingPeriods[currentPersonActionsName];
+                }
+                if (groups[currentPersonActionsGroup].disabledPersons) {
+                    delete groups[currentPersonActionsGroup].disabledPersons[currentPersonActionsName];
+                }
+                if (groups[currentPersonActionsGroup].priorities) {
+                    delete groups[currentPersonActionsGroup].priorities[currentPersonActionsName];
+                }
+
+                // Re-number priorities for ALL lists in this group (remove gaps, preserve order)
+                normalizeGroupPriorities(currentPersonActionsGroup);
+
+                // If person no longer exists in ANY group lists, also remove from hierarchy and close gaps
+                if (!isPersonInAnyGroupLists(currentPersonActionsName)) {
+                    if (rankings && rankings[currentPersonActionsName] !== undefined) {
+                        delete rankings[currentPersonActionsName];
+                        normalizeRankingsSequential();
+                    }
                 }
                 
                 // Remove from critical assignments and duty assignments
@@ -4450,7 +4532,7 @@
             
             // Initialize target group if needed
             if (!groups[transferData.toGroup]) {
-                groups[transferData.toGroup] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {} };
+                groups[transferData.toGroup] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} };
             }
             if (!groups[transferData.toGroup].priorities) groups[transferData.toGroup].priorities = {};
             
@@ -7599,7 +7681,6 @@
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
-                                    rotationPosition = res.index;
                                 }
                             }
 
@@ -7740,9 +7821,12 @@
                         let reason = '';
                         if (isPersonMissingOnDate(base, groupNum, date)) {
                             const mp = getPersonMissingPeriod(base, groupNum, date);
-                            const startStr = mp ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                            const endStr = mp ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                            reason = mp ? `Κώλυμα/Απουσία (${startStr}–${endStr})` : 'Κώλυμα/Απουσία';
+                            const startStr = (mp && mp.start) ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                            const endStr = (mp && mp.end) ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                            const reasonPart = (mp && mp.reason) ? ` - ${mp.reason}` : '';
+                            reason = (startStr && endStr)
+                                ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
+                                : `Κώλυμα/Απουσία${reasonPart}`;
                         } else {
                             reason = 'Αλλαγή (κανόνας/σύγκρουση)';
                         }
@@ -10998,7 +11082,6 @@
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
-                                    rotationPosition = res.index;
                                 }
                             }
 
@@ -11271,7 +11354,6 @@
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
-                                    rotationPosition = res.index;
                                 }
                         }
                         
@@ -11442,7 +11524,6 @@
                                     });
                                     if (res) {
                                         assignedPerson = res.person;
-                                        rotationPosition = res.index;
                                     }
                                     }
                                     
@@ -11859,7 +11940,6 @@
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
-                                    rotationPosition = res.index;
                                 }
                             }
                             
@@ -12169,7 +12249,6 @@
                                     });
                                     if (res) {
                                         assignedPerson = res.person;
-                                        rotationPosition = res.index;
                                     }
                                 }
                                     
@@ -13324,9 +13403,12 @@
                     if (expected && expected !== person.name) {
                         if (isPersonMissingOnDate(expected, person.group, date)) {
                             const mp = getPersonMissingPeriod(expected, person.group, date);
-                            const startStr = mp ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                            const endStr = mp ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                            const missingReason = mp ? `Κώλυμα/Απουσία (${startStr}–${endStr})` : 'Κώλυμα/Απουσία';
+                            const startStr = (mp && mp.start) ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                            const endStr = (mp && mp.end) ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                            const reasonPart = (mp && mp.reason) ? ` - ${mp.reason}` : '';
+                            const missingReason = (startStr && endStr)
+                                ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
+                                : `Κώλυμα/Απουσία${reasonPart}`;
                             derivedReasonText = `Αντικατέστησε τον/την ${expected} λόγω ${missingReason}.`;
                         } else if (dayTypeCategory === 'weekend' && hasSpecialHolidayDutyInMonth(expected, person.group, month, year)) {
                             const specialKey = getSpecialHolidayDutyDateInMonth(expected, person.group, year, month);
@@ -13569,7 +13651,8 @@
 
         // Check if person is missing on a specific date
         function isPersonMissingOnDate(person, groupNum, date) {
-            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
+            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
+            if (groupData.disabledPersons && groupData.disabledPersons[person]) return true;
             const missingPeriods = groupData.missingPeriods?.[person] || [];
             if (missingPeriods.length === 0) return false;
             
@@ -13621,6 +13704,8 @@
             document.getElementById('missingPeriodPersonName').textContent = person;
             document.getElementById('missingPeriodStart').value = '';
             document.getElementById('missingPeriodEnd').value = '';
+
+            renderMissingReasonsSelect();
             
             renderMissingPeriodsList();
             
@@ -13652,6 +13737,8 @@
                 if (isActive) statusBadge = '<span class="badge bg-warning ms-2">Ενεργή</span>';
                 else if (isPast) statusBadge = '<span class="badge bg-secondary ms-2">Παρελθούσα</span>';
                 else if (isFuture) statusBadge = '<span class="badge bg-info ms-2">Μελλοντική</span>';
+                const reason = (period.reason || '').trim();
+                const reasonHtml = reason ? `<div class="mt-1"><small class="text-muted"><i class="fas fa-tag me-1"></i>${escapeHtml(reason)}</small></div>` : '';
                 
                 return `
                     <div class="card mb-2">
@@ -13660,6 +13747,7 @@
                                 <div>
                                     <strong>${formatDate(startDate)}</strong> - <strong>${formatDate(endDate)}</strong>
                                     ${statusBadge}
+                                    ${reasonHtml}
                                 </div>
                                 <button class="btn btn-sm btn-outline-danger" onclick="removeMissingPeriod(${index})">
                                     <i class="fas fa-trash"></i>
@@ -13675,6 +13763,7 @@
         function addMissingPeriod() {
             const start = document.getElementById('missingPeriodStart').value;
             const end = document.getElementById('missingPeriodEnd').value;
+            const reason = (document.getElementById('missingPeriodReason')?.value || '').trim();
             
             if (!start || !end) {
                 alert('Παρακαλώ συμπληρώστε και τις δύο ημερομηνίες');
@@ -13697,7 +13786,8 @@
             
             groupData.missingPeriods[currentMissingPeriodPerson].push({
                 start: start,
-                end: end
+                end: end,
+                reason: reason || null
             });
             
             // Sort periods by start date
@@ -13711,6 +13801,74 @@
             saveData();
             renderMissingPeriodsList();
             renderGroups();
+        }
+
+        function renderMissingReasonsSelect() {
+            const select = document.getElementById('missingPeriodReason');
+            if (!select) return;
+            const list = Array.isArray(missingReasons) ? missingReasons : [];
+            const currentValue = (select.value || '').trim();
+            const options = (list.length ? list : ['Άλλο']).map(r => String(r).trim()).filter(Boolean);
+            select.innerHTML = options.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+            if (currentValue && options.includes(currentValue)) {
+                select.value = currentValue;
+            }
+        }
+
+        function openMissingReasonsModal() {
+            renderMissingReasonsList();
+            const modal = new bootstrap.Modal(document.getElementById('missingReasonsModal'));
+            modal.show();
+        }
+
+        function renderMissingReasonsList() {
+            const container = document.getElementById('missingReasonsList');
+            if (!container) return;
+            const list = Array.isArray(missingReasons) ? missingReasons : [];
+            if (!list.length) {
+                container.innerHTML = '<div class="text-muted small text-center">Δεν υπάρχουν λόγοι.</div>';
+                return;
+            }
+            container.innerHTML = list.map((r, idx) => {
+                const txt = String(r || '').trim();
+                if (!txt) return '';
+                return `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>${escapeHtml(txt)}</span>
+                        <button class="btn btn-sm btn-outline-danger" onclick="removeMissingReason(${idx})"><i class="fas fa-trash"></i></button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function addMissingReason() {
+            const input = document.getElementById('missingReasonNewText');
+            const raw = (input?.value || '').trim();
+            if (!raw) return;
+            const list = Array.isArray(missingReasons) ? missingReasons : [];
+            const exists = list.some(x => String(x).trim().toLowerCase() === raw.toLowerCase());
+            if (exists) {
+                input.value = '';
+                return;
+            }
+            list.push(raw);
+            missingReasons = list.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
+            missingReasonsModified = true;
+            input.value = '';
+            renderMissingReasonsList();
+            renderMissingReasonsSelect();
+            saveData();
+        }
+
+        function removeMissingReason(index) {
+            const list = Array.isArray(missingReasons) ? [...missingReasons] : [];
+            if (index < 0 || index >= list.length) return;
+            list.splice(index, 1);
+            missingReasons = list.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
+            missingReasonsModified = true;
+            renderMissingReasonsList();
+            renderMissingReasonsSelect();
+            saveData();
         }
 
         // Remove missing period
@@ -13875,6 +14033,9 @@
         // Helper function to get missing period for a person on a specific date
         function getPersonMissingPeriod(person, groupNum, date) {
             const groupData = groups[groupNum] || {};
+            if (groupData.disabledPersons && groupData.disabledPersons[person]) {
+                return { start: null, end: null, reason: 'Απενεργοποιημένος' };
+            }
             const personData = groupData.missingPeriods?.[person];
             if (!personData || !Array.isArray(personData)) return null;
             
@@ -13884,7 +14045,8 @@
                 if (date >= startDate && date <= endDate) {
                     return {
                         start: startDate,
-                        end: endDate
+                        end: endDate,
+                        reason: (period.reason || '').trim() || null
                     };
                 }
             }
@@ -14009,9 +14171,12 @@
                     // If we had to skip the base expected person due to missing, show it explicitly (even if assignments follow the adjusted rotation)
                     if (baseExpectedPerson && baseExpectedPerson !== expectedPerson && isPersonMissingOnDate(baseExpectedPerson, groupNum, date)) {
                         const mp = getPersonMissingPeriod(baseExpectedPerson, groupNum, date);
-                        const startStr = mp ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                        const endStr = mp ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                        const missingReason = mp ? `Κώλυμα/Απουσία (${startStr}–${endStr})` : 'Κώλυμα/Απουσία';
+                        const startStr = (mp && mp.start) ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                        const endStr = (mp && mp.end) ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                        const reasonPart = (mp && mp.reason) ? ` - ${mp.reason}` : '';
+                        const missingReason = (startStr && endStr)
+                            ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
+                            : `Κώλυμα/Απουσία${reasonPart}`;
                         const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
                         const swapOrSkipReasonText = assignmentReason?.reason || '';
 
@@ -14240,9 +14405,12 @@
                         if (isMissing) {
                             const mp = getPersonMissingPeriod(expectedPerson, groupNum, date);
                             if (mp) {
-                                const startStr = mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                const endStr = mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                skippedReason = `Κώλυμα/Απουσία (${startStr}–${endStr})`;
+                                const startStr = mp.start ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                                const endStr = mp.end ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                                const reasonPart = mp.reason ? ` - ${mp.reason}` : '';
+                                skippedReason = (startStr && endStr)
+                                    ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
+                                    : `Κώλυμα/Απουσία${reasonPart}`;
                             } else {
                                 skippedReason = 'Κώλυμα/Απουσία';
                             }
