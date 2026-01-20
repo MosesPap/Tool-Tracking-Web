@@ -6807,7 +6807,16 @@
                                     rotationPosition = getRotationPosition(dayAfter, 'normal', groupNum) % rotationDays;
                                 }
                                 
-                                const expectedPerson = groupPeople[rotationPosition];
+                                // Predict who would be assigned on dayAfter, but respect disabled/missing skips
+                                let expectedPerson = null;
+                                for (let off = 0; off < rotationDays; off++) {
+                                    const idx = (rotationPosition + off) % rotationDays;
+                                    const cand = groupPeople[idx];
+                                    if (!cand) continue;
+                                    if (isPersonMissingOnDate(cand, groupNum, dayAfter, 'normal')) continue;
+                                    expectedPerson = cand;
+                                    break;
+                                }
                                 
                                 // If this person is expected to be assigned to day after, it's a conflict
                                 if (expectedPerson === person && !isPersonMissingOnDate(person, groupNum, dayAfter, 'normal')) {
@@ -6840,7 +6849,16 @@
                                     rotationPosition = getRotationPosition(dayAfter, 'normal', groupNum) % rotationDays;
                                 }
                                 
-                                const expectedPerson = groupPeople[rotationPosition];
+                                // Predict who would be assigned on dayAfter (next month), but respect disabled/missing skips
+                                let expectedPerson = null;
+                                for (let off = 0; off < rotationDays; off++) {
+                                    const idx = (rotationPosition + off) % rotationDays;
+                                    const cand = groupPeople[idx];
+                                    if (!cand) continue;
+                                    if (isPersonMissingOnDate(cand, groupNum, dayAfter, 'normal')) continue;
+                                    expectedPerson = cand;
+                                    break;
+                                }
                                 
                                 // If this person is expected to be assigned to day after in next month, it's a conflict
                                 if (expectedPerson === person && !isPersonMissingOnDate(person, groupNum, dayAfter, 'normal')) {
@@ -7843,6 +7861,8 @@
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
+                                    // Advance rotation based on the person ACTUALLY assigned (skip disabled/missing without consuming their turn)
+                                    rotationPosition = res.index;
                                 }
                             }
 
@@ -11249,6 +11269,8 @@
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
+                                    // Advance rotation based on the person ACTUALLY assigned (skip disabled/missing without consuming their turn)
+                                    rotationPosition = res.index;
                                 }
                             }
 
@@ -11262,17 +11284,17 @@
                                     skippedInMonth[monthKey][groupNum].add(displayPerson);
                                     const currentIndex = groupPeople.indexOf(displayPerson);
                                     let replacementPerson = null;
-                                    for (let offset = 1; offset < rotationDays; offset++) {
+                                for (let offset = 1; offset < rotationDays; offset++) {
                                         const nextIndex = (currentIndex + offset) % rotationDays;
-                                        const candidate = groupPeople[nextIndex];
+                                    const candidate = groupPeople[nextIndex];
                                         if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                                        const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
-                                        const candidateWasSkipped = skippedInMonth[monthKey][groupNum].has(candidate);
-                                        if (!candidateHasSpecial && !candidateWasSkipped) {
+                                    const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
+                                    const candidateWasSkipped = skippedInMonth[monthKey][groupNum].has(candidate);
+                                    if (!candidateHasSpecial && !candidateWasSkipped) {
                                             replacementPerson = candidate;
-                                            break;
-                                        }
+                                        break;
                                     }
+                                }
                                     if (replacementPerson) displayPerson = replacementPerson;
                                 }
                             }
@@ -11376,7 +11398,7 @@
             const semiNormalDays = dayTypeLists.semi || [];
             const specialHolidays = dayTypeLists.special || [];
             const weekendHolidays = dayTypeLists.weekend || [];
-
+            
             // For Step 3 display-only swap preview we need these after initial table render.
             let sortedSemiForPreview = [];
             const semiAssignmentsForPreview = {}; // dateKey -> { groupNum -> person }
@@ -11396,7 +11418,7 @@
                 const groupMap = fromTemp && typeof fromTemp === 'object'
                     ? fromTemp
                     : extractGroupAssignmentsMap(specialHolidayAssignments?.[dateKey]);
-
+                
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const personName = groupMap?.[groupNum];
                     if (!personName) continue;
@@ -11525,8 +11547,8 @@
                                 }
                         }
                         
-                        // Advance rotation position (always advance based on rotation person, not assigned person)
-                        // This ensures rotation continues correctly even if person was skipped
+                        // Advance rotation position based on the person ACTUALLY assigned
+                        // (skip disabled/missing without consuming their turn)
                         globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                         
                         if (assignedPerson) {
@@ -11693,6 +11715,8 @@
                                     });
                                     if (res) {
                                         assignedPerson = res.person;
+                                        // Advance rotation based on the person ACTUALLY assigned (skip disabled/missing without consuming their turn)
+                                        rotationPosition = res.index;
                                     }
                                     }
                                     
@@ -12110,6 +12134,8 @@
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
+                                    // Advance rotation based on the person ACTUALLY assigned (skip disabled/missing without consuming their turn)
+                                    rotationPosition = res.index;
                                 }
                             }
                             
@@ -12420,6 +12446,8 @@
                                     });
                                     if (res) {
                                         assignedPerson = res.person;
+                                        // Advance rotation based on the person ACTUALLY assigned (skip disabled/missing without consuming their turn)
+                                        rotationPosition = res.index;
                                     }
                                 }
                                     
@@ -12989,7 +13017,7 @@
                 });
                 }
             }
-
+            
             // (Intentionally no always-visible summary section in step modal)
             
             // Store preview assignments and save them temporarily to Firestore
