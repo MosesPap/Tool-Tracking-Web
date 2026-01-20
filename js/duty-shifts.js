@@ -2060,11 +2060,13 @@
                     if (data[i].lastDuties) migrated[i].lastDuties = data[i].lastDuties;
                     if (data[i].missingPeriods) migrated[i].missingPeriods = data[i].missingPeriods;
                     if (data[i].priorities) migrated[i].priorities = data[i].priorities;
+                    if (data[i].disabledPersons) migrated[i].disabledPersons = data[i].disabledPersons;
                 } else if (data[i] && typeof data[i] === 'object') {
                     // ALWAYS preserve lastDuties, missingPeriods, and priorities if they exist
                     if (data[i].lastDuties) migrated[i].lastDuties = data[i].lastDuties;
                     if (data[i].missingPeriods) migrated[i].missingPeriods = data[i].missingPeriods;
                     if (data[i].priorities) migrated[i].priorities = data[i].priorities;
+                    if (data[i].disabledPersons) migrated[i].disabledPersons = data[i].disabledPersons;
                     
                     // Check if old format (regular/special) or new format
                     if (data[i].regular || data[i].special) {
@@ -2092,6 +2094,7 @@
                     if (data[i].lastDuties) migrated[i].lastDuties = data[i].lastDuties;
                     if (data[i].missingPeriods) migrated[i].missingPeriods = data[i].missingPeriods;
                     if (data[i].priorities) migrated[i].priorities = data[i].priorities;
+                    if (data[i].disabledPersons) migrated[i].disabledPersons = data[i].disabledPersons;
                 }
             }
             
@@ -3415,6 +3418,17 @@
             if (st.all) return true;
             if (!dutyCategory) return false;
             return !!st[dutyCategory];
+        }
+
+        function getDisabledReasonText(person, groupNum) {
+            const st = getDisabledState(groupNum, person);
+            if (st.all) return 'Απενεργοποιημένος (όλες οι υπηρεσίες)';
+            const parts = [];
+            if (st.special) parts.push('Ειδικές Αργίες');
+            if (st.weekend) parts.push('Σαββατοκύριακα/Αργίες');
+            if (st.semi) parts.push('Ημιαργίες');
+            if (st.normal) parts.push('Καθημερινές');
+            return parts.length ? `Απενεργοποιημένος (${parts.join(', ')})` : 'Απενεργοποιημένος';
         }
         
         // Open edit person from actions modal
@@ -7967,7 +7981,9 @@
                         if (base === comp) continue;
 
                         let reason = '';
-                        if (isPersonMissingOnDate(base, groupNum, date, 'special')) {
+                        if (isPersonDisabledForDuty(base, groupNum, 'special')) {
+                            reason = getDisabledReasonText(base, groupNum);
+                        } else if (isPersonMissingOnDate(base, groupNum, date, 'special')) {
                             const mp = getPersonMissingPeriod(base, groupNum, date);
                             const startStr = (mp && mp.start) ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
                             const endStr = (mp && mp.end) ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
@@ -8471,7 +8487,8 @@
                     const briefReason =
                         reasonText.includes('ειδική αργία') ? 'Ειδική αργία στον ίδιο μήνα' :
                         reasonText.includes('παραλειφθεί') ? 'Ήταν ήδη παραλειφθεί αυτόν τον μήνα' :
-                        (isPersonMissingOnDate(base, groupNum, dateObj, 'weekend') ? 'Κώλυμα/Απουσία' : (reasonText ? reasonText.split('.').filter(Boolean)[0] : 'Αλλαγή'));
+                        (isPersonDisabledForDuty(base, groupNum, 'weekend') ? 'Απενεργοποιημένος' :
+                            (isPersonMissingOnDate(base, groupNum, dateObj, 'weekend') ? 'Κώλυμα/Απουσία' : (reasonText ? reasonText.split('.').filter(Boolean)[0] : 'Αλλαγή')));
 
                     // Weekend skip has no swap-date; keep '-' (but support future swapPairId logic if it appears)
                     const swapOtherKey = reasonObj?.type === 'swap'
@@ -9183,7 +9200,7 @@
                     const reasonText = reasonObj?.reason ? String(reasonObj.reason) : '';
                     const briefReason = reasonText
                         ? reasonText.split('.').filter(Boolean)[0]
-                        : (isPersonMissingOnDate(base, groupNum, dateObj, 'semi') ? 'Κώλυμα/Απουσία' : 'Αλλαγή');
+                        : (isPersonDisabledForDuty(base, groupNum, 'semi') ? 'Απενεργοποιημένος' : (isPersonMissingOnDate(base, groupNum, dateObj, 'semi') ? 'Κώλυμα/Απουσία' : 'Αλλαγή'));
 
                     const otherKey = reasonObj?.type === 'swap'
                         ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
@@ -10496,7 +10513,7 @@
                     const reasonText = reasonObj?.reason ? String(reasonObj.reason) : '';
                     const briefReason = reasonText
                         ? reasonText.split('.').filter(Boolean)[0]
-                        : (isPersonMissingOnDate(base, groupNum, dateObj, 'normal') ? 'Κώλυμα/Απουσία' : 'Αλλαγή');
+                        : (isPersonDisabledForDuty(base, groupNum, 'normal') ? 'Απενεργοποιημένος' : (isPersonMissingOnDate(base, groupNum, dateObj, 'normal') ? 'Κώλυμα/Απουσία' : 'Αλλαγή'));
 
                     const otherKey = reasonObj?.type === 'swap'
                         ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
@@ -13555,14 +13572,16 @@
                 if (!reason && person.name && person.group) {
                     const expected = getExpectedPersonForDay(person.group);
                     if (expected && expected !== person.name) {
-                        if (isPersonMissingOnDate(expected, person.group, date)) {
+                        if (isPersonMissingOnDate(expected, person.group, date, dayTypeCategory)) {
                             const mp = getPersonMissingPeriod(expected, person.group, date);
                             const startStr = (mp && mp.start) ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
                             const endStr = (mp && mp.end) ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
                             const reasonPart = (mp && mp.reason) ? ` - ${mp.reason}` : '';
-                            const missingReason = (startStr && endStr)
-                                ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
-                                : `Κώλυμα/Απουσία${reasonPart}`;
+                            const missingReason = isPersonDisabledForDuty(expected, person.group, dayTypeCategory)
+                                ? getDisabledReasonText(expected, person.group)
+                                : ((startStr && endStr)
+                                    ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
+                                    : `Κώλυμα/Απουσία${reasonPart}`);
                             derivedReasonText = `Αντικατέστησε τον/την ${expected} λόγω ${missingReason}.`;
                         } else if (dayTypeCategory === 'weekend' && hasSpecialHolidayDutyInMonth(expected, person.group, month, year)) {
                             const specialKey = getSpecialHolidayDutyDateInMonth(expected, person.group, year, month);
