@@ -218,7 +218,8 @@
             if (isNaN(arrivalDate.getTime())) return { normal: null, semi: null, weekend: null, special: null };
 
             const dayBefore = shiftDate(arrivalDate, -1);
-            const normal = formatDateKey(dayBefore);
+            // Normal: last NORMAL DAY before arrival (not simply day-before)
+            const normal = findPreviousDateKeyByDayType(dayBefore, 'normal-day', 3650);
             const semi = findPreviousDateKeyByDayType(dayBefore, 'semi-normal-day', 3650);
             const weekend = findPreviousDateKeyByDayType(dayBefore, 'weekend-holiday', 3650);
             const special = findNthPreviousSpecialHolidayDateKey(dayBefore, 3, 3650);
@@ -3762,6 +3763,42 @@
             alert('Η ιεραρχία αποθηκεύτηκε επιτυχώς στο Firestore!');
         }
 
+        function normalizeGroupPriorities(groupNumber) {
+            const g = groups?.[groupNumber];
+            if (!g) return;
+            if (!g.priorities) g.priorities = {};
+            const types = ['special', 'weekend', 'semi', 'normal'];
+            types.forEach(t => {
+                const list = g[t] || [];
+                list.forEach((personName, idx) => {
+                    if (!g.priorities[personName]) g.priorities[personName] = {};
+                    g.priorities[personName][t] = idx + 1;
+                });
+            });
+        }
+
+        function normalizeRankingsSequential() {
+            // Preserve current ordering by rank, just remove gaps.
+            const entries = getSortedRankingsList(); // already sorted ascending by rank
+            const out = {};
+            entries.forEach((e, idx) => {
+                out[e.name] = idx + 1;
+            });
+            rankings = out;
+            rankingsModified = true;
+        }
+
+        function isPersonInAnyGroupLists(personName) {
+            for (let g = 1; g <= 4; g++) {
+                const gd = groups?.[g];
+                if (!gd) continue;
+                if (['special', 'weekend', 'semi', 'normal'].some(t => (gd[t] || []).includes(personName))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         // Remove person from specific list
         function removePerson(groupNumber, index, listType) {
             if (confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτό το άτομο από αυτή τη λίστα;')) {
@@ -3785,6 +3822,27 @@
                 const stillInAnyList = allListTypes.some(lt => (groups[groupNumber][lt] || []).includes(person));
                 if (!stillInAnyList && groups[groupNumber].lastDuties) {
                     delete groups[groupNumber].lastDuties[person];
+                }
+
+                // Also remove missingPeriods and priorities for that person in this group
+                if (!stillInAnyList) {
+                    if (groups[groupNumber].missingPeriods) {
+                        delete groups[groupNumber].missingPeriods[person];
+                    }
+                    if (groups[groupNumber].priorities) {
+                        delete groups[groupNumber].priorities[person];
+                    }
+                }
+
+                // Re-number priorities for ALL lists in this group (remove gaps, preserve current order)
+                normalizeGroupPriorities(groupNumber);
+
+                // If person no longer exists in ANY group, also remove from hierarchy and close gaps
+                if (!isPersonInAnyGroupLists(person)) {
+                    if (rankings && rankings[person] !== undefined) {
+                        delete rankings[person];
+                        normalizeRankingsSequential();
+                    }
                 }
                 
                 saveData();
