@@ -901,7 +901,7 @@
         ];
 
         // Missing-period reasons (global list)
-        let missingReasons = ['Άδεια', 'Ασθένεια', 'Εκπαίδευση', 'Υπηρεσιακό'];
+        let missingReasons = ['Κανονική Άδεια', 'Αναρρωτικη Άδεια', 'Φύλλο Πορείας'];
         let missingReasonsModified = false;
 
         // Track data loading to prevent duplicate loads
@@ -3420,8 +3420,9 @@
                 if (!isPersonInAnyGroupLists(currentPersonActionsName)) {
                     if (rankings && rankings[currentPersonActionsName] !== undefined) {
                         delete rankings[currentPersonActionsName];
-                        normalizeRankingsSequential();
                     }
+                    // Always normalize to close any numbering gaps, and persist to Firestore via saveData()
+                    normalizeRankingsSequential();
                 }
                 
                 // Remove from critical assignments and duty assignments
@@ -3883,7 +3884,9 @@
 
         function normalizeRankingsSequential() {
             // Preserve current ordering by rank, just remove gaps.
-            const entries = getSortedRankingsList(); // already sorted ascending by rank
+            // Also drop any rankings entries for people who no longer exist in any group lists.
+            const all = new Set(getAllPeople());
+            const entries = getSortedRankingsList().filter(e => all.has(e.name)); // already sorted ascending by rank
             const out = {};
             entries.forEach((e, idx) => {
                 out[e.name] = idx + 1;
@@ -3943,10 +3946,9 @@
 
                 // If person no longer exists in ANY group, also remove from hierarchy and close gaps
                 if (!isPersonInAnyGroupLists(person)) {
-                    if (rankings && rankings[person] !== undefined) {
-                        delete rankings[person];
-                        normalizeRankingsSequential();
-                    }
+                    if (rankings && rankings[person] !== undefined) delete rankings[person];
+                    // Always normalize to close any numbering gaps, and persist to Firestore via saveData()
+                    normalizeRankingsSequential();
                 }
                 
                 saveData();
