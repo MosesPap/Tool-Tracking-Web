@@ -3430,6 +3430,21 @@
             if (st.normal) parts.push('Καθημερινές');
             return parts.length ? `Απενεργοποιημένος (${parts.join(', ')})` : 'Απενεργοποιημένος';
         }
+
+        // Short (single-label) reason to display in UI when someone is unavailable.
+        // User preference:
+        // - Disabled => "Απενεργοποιημένος"
+        // - Missing period => the selected reason (e.g. "Κανονική Άδεια"), otherwise "Κώλυμα/Απουσία"
+        function getUnavailableReasonShort(person, groupNum, dateObj, dutyCategory = null) {
+            if (!person) return '';
+            if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return 'Απενεργοποιημένος';
+            const mp = getPersonMissingPeriod(person, groupNum, dateObj);
+            if (mp) {
+                const r = (mp.reason || '').trim();
+                return r || 'Κώλυμα/Απουσία';
+            }
+            return 'Κώλυμα/Απουσία';
+        }
         
         // Open edit person from actions modal
         function openEditPersonFromActions() {
@@ -8001,16 +8016,8 @@
                         if (base === comp) continue;
 
                         let reason = '';
-                        if (isPersonDisabledForDuty(base, groupNum, 'special')) {
-                            reason = getDisabledReasonText(base, groupNum);
-                        } else if (isPersonMissingOnDate(base, groupNum, date, 'special')) {
-                            const mp = getPersonMissingPeriod(base, groupNum, date);
-                            const startStr = (mp && mp.start) ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                            const endStr = (mp && mp.end) ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                            const reasonPart = (mp && mp.reason) ? ` - ${mp.reason}` : '';
-                            reason = (startStr && endStr)
-                                ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
-                                : `Κώλυμα/Απουσία${reasonPart}`;
+                        if (isPersonDisabledForDuty(base, groupNum, 'special') || isPersonMissingOnDate(base, groupNum, date, 'special')) {
+                            reason = getUnavailableReasonShort(base, groupNum, date, 'special');
                         } else {
                             reason = 'Αλλαγή (κανόνας/σύγκρουση)';
                         }
@@ -13601,15 +13608,7 @@
                     const expected = getExpectedPersonForDay(person.group);
                     if (expected && expected !== person.name) {
                         if (isPersonMissingOnDate(expected, person.group, date, dayTypeCategory)) {
-                            const mp = getPersonMissingPeriod(expected, person.group, date);
-                            const startStr = (mp && mp.start) ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                            const endStr = (mp && mp.end) ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                            const reasonPart = (mp && mp.reason) ? ` - ${mp.reason}` : '';
-                            const missingReason = isPersonDisabledForDuty(expected, person.group, dayTypeCategory)
-                                ? getDisabledReasonText(expected, person.group)
-                                : ((startStr && endStr)
-                                    ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
-                                    : `Κώλυμα/Απουσία${reasonPart}`);
+                            const missingReason = getUnavailableReasonShort(expected, person.group, date, dayTypeCategory);
                             derivedReasonText = `Αντικατέστησε τον/την ${expected} λόγω ${missingReason}.`;
                         } else if (dayTypeCategory === 'weekend' && hasSpecialHolidayDutyInMonth(expected, person.group, month, year)) {
                             const specialKey = getSpecialHolidayDutyDateInMonth(expected, person.group, year, month);
@@ -14236,9 +14235,6 @@
         // Helper function to get missing period for a person on a specific date
         function getPersonMissingPeriod(person, groupNum, date) {
             const groupData = groups[groupNum] || {};
-            if (groupData.disabledPersons && groupData.disabledPersons[person]) {
-                return { start: null, end: null, reason: 'Απενεργοποιημένος' };
-            }
             const personData = groupData.missingPeriods?.[person];
             if (!personData || !Array.isArray(personData)) return null;
             
@@ -14389,13 +14385,7 @@
                     
                     // If we had to skip the base expected person due to missing, show it explicitly (even if assignments follow the adjusted rotation)
                     if (baseExpectedPerson && baseExpectedPerson !== expectedPerson && isPersonMissingOnDate(baseExpectedPerson, groupNum, date, dayTypeCategory)) {
-                        const mp = getPersonMissingPeriod(baseExpectedPerson, groupNum, date);
-                        const startStr = (mp && mp.start) ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                        const endStr = (mp && mp.end) ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                        const reasonPart = (mp && mp.reason) ? ` - ${mp.reason}` : '';
-                        const missingReason = (startStr && endStr)
-                            ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
-                            : `Κώλυμα/Απουσία${reasonPart}`;
+                        const missingReason = getUnavailableReasonShort(baseExpectedPerson, groupNum, date, dayTypeCategory);
                         const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
                         const swapOrSkipReasonText = assignmentReason?.reason || '';
 
@@ -14641,19 +14631,9 @@
                         // Determine why the EXPECTED person was skipped (missing vs special holiday in month, etc.)
                         let skippedReason = '';
                         if (isDisabled) {
-                            skippedReason = getDisabledReasonText(expectedPerson, groupNum);
+                            skippedReason = 'Απενεργοποιημένος';
                         } else if (isMissingPeriod) {
-                            const mp = getPersonMissingPeriod(expectedPerson, groupNum, date);
-                            if (mp) {
-                                const startStr = mp.start ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                                const endStr = mp.end ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                                const reasonPart = mp.reason ? ` - ${mp.reason}` : '';
-                                skippedReason = (startStr && endStr)
-                                    ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
-                                    : `Κώλυμα/Απουσία${reasonPart}`;
-                            } else {
-                                skippedReason = 'Κώλυμα/Απουσία';
-                            }
+                            skippedReason = getUnavailableReasonShort(expectedPerson, groupNum, date, dayTypeCategory);
                         } else if (dayTypeCategory === 'weekend') {
                             const specialKey = getSpecialHolidayDutyDateInMonth(expectedPerson, groupNum, year, month);
                             if (specialKey) {
@@ -14678,15 +14658,9 @@
                         let derivedSwapReason = '';
                         if (!swapOrSkipReasonText && hasLegitimateConflict) {
                             if (isDisabled) {
-                                derivedSwapReason = `Αντικατέστησε τον/την ${expectedPerson} επειδή ήταν ${getDisabledReasonText(expectedPerson, groupNum)}. Ανατέθηκε ο/η ${assignedPerson}.`;
+                                derivedSwapReason = `Αντικατέστησε τον/την ${expectedPerson} επειδή ήταν Απενεργοποιημένος. Ανατέθηκε ο/η ${assignedPerson}.`;
                             } else if (isMissingPeriod) {
-                                const mp = getPersonMissingPeriod(expectedPerson, groupNum, date);
-                                const startStr = (mp && mp.start) ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                                const endStr = (mp && mp.end) ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                                const reasonPart = (mp && mp.reason) ? ` - ${mp.reason}` : '';
-                                const missingReason = (startStr && endStr)
-                                    ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
-                                    : `Κώλυμα/Απουσία${reasonPart}`;
+                                const missingReason = getUnavailableReasonShort(expectedPerson, groupNum, date, dayTypeCategory);
                                 derivedSwapReason = `Αντικατέστησε τον/την ${expectedPerson} επειδή είχε ${missingReason}. Ανατέθηκε ο/η ${assignedPerson}.`;
                             } else if (dayTypeCategory === 'normal') {
                                 // Normal-day conflict is typically with a semi-normal day on the next day
