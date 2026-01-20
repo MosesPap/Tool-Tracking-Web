@@ -901,7 +901,7 @@
         ];
 
         // Missing-period reasons (global list)
-        let missingReasons = ['Κανονική Άδεια', 'Αναρρωτικη Άδεια', 'Φύλλο Πορείας'];
+        let missingReasons = ['Κανονική Άδεια', 'Αναρρωτική Άδεια', 'Φύλλο Πορείας'];
         let missingReasonsModified = false;
 
         // Track data loading to prevent duplicate loads
