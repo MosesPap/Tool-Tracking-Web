@@ -1067,6 +1067,13 @@
                         if (!groups[i].disabledPersons) {
                             groups[i].disabledPersons = {};
                         }
+
+                        // Migrate old boolean disabled flag to per-type object
+                        for (const name of Object.keys(groups[i].disabledPersons || {})) {
+                            if (groups[i].disabledPersons[name] === true) {
+                                groups[i].disabledPersons[name] = { all: true, special: false, weekend: false, semi: false, normal: false };
+                            }
+                        }
                         
                         // Ensure all people in lists have priority entries (only if they don't already exist)
                         const listTypes = ['special', 'weekend', 'semi', 'normal'];
@@ -2475,7 +2482,8 @@
             
             // Check if person is currently missing/disabled
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
-            const isDisabled = !!groupData.disabledPersons?.[person];
+            const isDisabledForThisList = isPersonDisabledForDuty(person, groupNum, listType);
+            const st = getDisabledState(groupNum, person);
             const missingPeriods = groupData.missingPeriods?.[person] || [];
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -2484,8 +2492,20 @@
                 const end = new Date(period.end + 'T00:00:00');
                 return today >= start && today <= end;
             });
-            const disabledBadge = isDisabled ? '<span class="badge bg-secondary ms-2"><i class="fas fa-user-slash me-1"></i>Απενεργοποιημένος</span>' : '';
-            const missingBadge = !isDisabled && isCurrentlyMissing ? '<span class="badge bg-warning ms-2"><i class="fas fa-user-slash me-1"></i>Απουσία</span>' : '';
+            const disabledTitle = (() => {
+                if (!st || (!st.all && !st.special && !st.weekend && !st.semi && !st.normal)) return '';
+                if (st.all) return 'Απενεργοποίηση: Όλες οι υπηρεσίες';
+                const parts = [];
+                if (st.special) parts.push('Ειδικές Αργίες');
+                if (st.weekend) parts.push('Σαββατοκύριακα/Αργίες');
+                if (st.semi) parts.push('Ημιαργίες');
+                if (st.normal) parts.push('Καθημερινές');
+                return `Απενεργοποίηση: ${parts.join(', ')}`;
+            })();
+            const disabledBadge = isDisabledForThisList
+                ? `<span class="badge bg-secondary ms-2" title="${escapeHtml(disabledTitle)}"><i class="fas fa-user-slash me-1"></i>OFF</span>`
+                : '';
+            const missingBadge = isCurrentlyMissing ? '<span class="badge bg-warning ms-2"><i class="fas fa-user-slash me-1"></i>Απουσία</span>' : '';
             
             // Get last duty date and calculate next duty date
             const dutyDates = getLastAndNextDutyDates(person, groupNum, listType, listArray.length);
@@ -3284,41 +3304,117 @@
             document.getElementById('personActionsName').textContent = personName;
             document.getElementById('personActionsGroup').textContent = getGroupName(groupNum);
 
-            // Update disable/enable button label
+            // Update disable settings button label (summary)
             try {
-                if (!groups[groupNum].disabledPersons) groups[groupNum].disabledPersons = {};
-                const isDisabled = !!groups[groupNum].disabledPersons[personName];
+                const st = getDisabledState(groupNum, personName);
+                const enabledTypes = ['special', 'weekend', 'semi', 'normal'].filter(t => !!st[t]);
+                const isAll = !!st.all;
                 const textEl = document.getElementById('toggleDisablePersonButtonText');
                 if (textEl) {
-                    textEl.textContent = isDisabled ? 'Ενεργοποίηση (Επιστροφή στην Εναλλαγή)' : 'Απενεργοποίηση (Παράλειψη)';
+                    textEl.textContent = isAll
+                        ? 'Απενεργοποίηση (Πλήρης)'
+                        : (enabledTypes.length ? `Απενεργοποίηση (${enabledTypes.length} τύποι)` : 'Απενεργοποίηση (Ρυθμίσεις)');
                 }
-            } catch (_) {
-                // ignore
-            }
+            } catch (_) {}
             
             const modal = new bootstrap.Modal(document.getElementById('personActionsModal'));
             modal.show();
         }
 
-        function toggleDisablePersonFromActions() {
+        function openDisableSettingsFromActions() {
             if (!currentPersonActionsGroup || !currentPersonActionsName) return;
-            const g = groups[currentPersonActionsGroup];
+            const groupNum = currentPersonActionsGroup;
+            const personName = currentPersonActionsName;
+            document.getElementById('disableSettingsPersonName').textContent = personName;
+            document.getElementById('disableSettingsGroupName').textContent = getGroupName(groupNum);
+
+            const st = getDisabledState(groupNum, personName);
+            const allEl = document.getElementById('disableAllSwitch');
+            const spEl = document.getElementById('disableSpecialSwitch');
+            const weEl = document.getElementById('disableWeekendSwitch');
+            const seEl = document.getElementById('disableSemiSwitch');
+            const noEl = document.getElementById('disableNormalSwitch');
+
+            if (allEl) allEl.checked = !!st.all;
+            if (spEl) spEl.checked = !!st.special;
+            if (weEl) weEl.checked = !!st.weekend;
+            if (seEl) seEl.checked = !!st.semi;
+            if (noEl) noEl.checked = !!st.normal;
+
+            // If "all" is on, disable individual toggles for clarity
+            const setDisabled = (disabled) => {
+                if (spEl) spEl.disabled = disabled;
+                if (weEl) weEl.disabled = disabled;
+                if (seEl) seEl.disabled = disabled;
+                if (noEl) noEl.disabled = disabled;
+            };
+            setDisabled(!!st.all);
+
+            if (allEl) {
+                allEl.onchange = () => {
+                    const on = !!allEl.checked;
+                    setDisabled(on);
+                };
+            }
+
+            const actionsModal = bootstrap.Modal.getInstance(document.getElementById('personActionsModal'));
+            if (actionsModal) actionsModal.hide();
+            const modal = new bootstrap.Modal(document.getElementById('disableSettingsModal'));
+            modal.show();
+        }
+
+        function saveDisableSettings() {
+            if (!currentPersonActionsGroup || !currentPersonActionsName) return;
+            const groupNum = currentPersonActionsGroup;
+            const personName = currentPersonActionsName;
+            const g = groups[groupNum];
             if (!g) return;
             if (!g.disabledPersons) g.disabledPersons = {};
-            const isDisabled = !!g.disabledPersons[currentPersonActionsName];
-            if (isDisabled) {
-                delete g.disabledPersons[currentPersonActionsName];
+
+            const all = !!document.getElementById('disableAllSwitch')?.checked;
+            const st = {
+                all,
+                special: all ? false : !!document.getElementById('disableSpecialSwitch')?.checked,
+                weekend: all ? false : !!document.getElementById('disableWeekendSwitch')?.checked,
+                semi: all ? false : !!document.getElementById('disableSemiSwitch')?.checked,
+                normal: all ? false : !!document.getElementById('disableNormalSwitch')?.checked
+            };
+
+            const any = st.all || st.special || st.weekend || st.semi || st.normal;
+            if (!any) {
+                delete g.disabledPersons[personName];
             } else {
-                g.disabledPersons[currentPersonActionsName] = true;
+                g.disabledPersons[personName] = st;
             }
+
             saveData();
             renderGroups();
 
-            // Refresh label without closing modal
-            const textEl = document.getElementById('toggleDisablePersonButtonText');
-            if (textEl) {
-                textEl.textContent = isDisabled ? 'Απενεργοποίηση (Παράλειψη)' : 'Ενεργοποίηση (Επιστροφή στην Εναλλαγή)';
-            }
+            const modal = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
+            if (modal) modal.hide();
+            const actionsModal = new bootstrap.Modal(document.getElementById('personActionsModal'));
+            actionsModal.show();
+        }
+
+        function getDisabledState(groupNum, personName) {
+            const g = groups?.[groupNum];
+            const raw = g?.disabledPersons?.[personName];
+            if (raw === true) return { all: true, special: false, weekend: false, semi: false, normal: false };
+            if (!raw || typeof raw !== 'object') return { all: false, special: false, weekend: false, semi: false, normal: false };
+            return {
+                all: !!raw.all,
+                special: !!raw.special,
+                weekend: !!raw.weekend,
+                semi: !!raw.semi,
+                normal: !!raw.normal
+            };
+        }
+
+        function isPersonDisabledForDuty(person, groupNum, dutyCategory) {
+            const st = getDisabledState(groupNum, person);
+            if (st.all) return true;
+            if (!dutyCategory) return false;
+            return !!st[dutyCategory];
         }
         
         // Open edit person from actions modal
@@ -6211,7 +6307,14 @@
                                         const expected = monthExpectedByDateGroup[key]?.[g];
                                         if (expected && expected !== personName) {
                                             // Underline if expected person was missing on this date
-                                            if (isPersonMissingOnDate(expected, g, date)) {
+                                            const dayTypeCategory = (dayType === 'special-holiday')
+                                                ? 'special'
+                                                : (dayType === 'weekend-holiday')
+                                                    ? 'weekend'
+                                                    : (dayType === 'semi-normal-day')
+                                                        ? 'semi'
+                                                        : 'normal';
+                                            if (isPersonMissingOnDate(expected, g, date, dayTypeCategory)) {
                                                 underline = true;
                                             } else if (dayType === 'weekend-holiday') {
                                                 // Underline if expected person was skipped from weekend due to special holiday in same month
@@ -6693,7 +6796,7 @@
                                 const expectedPerson = groupPeople[rotationPosition];
                                 
                                 // If this person is expected to be assigned to day after, it's a conflict
-                                if (expectedPerson === person && !isPersonMissingOnDate(person, groupNum, dayAfter)) {
+                                if (expectedPerson === person && !isPersonMissingOnDate(person, groupNum, dayAfter, 'normal')) {
                                     hasDutyAfter = true;
                                 }
                             }
@@ -6726,7 +6829,7 @@
                                 const expectedPerson = groupPeople[rotationPosition];
                                 
                                 // If this person is expected to be assigned to day after in next month, it's a conflict
-                                if (expectedPerson === person && !isPersonMissingOnDate(person, groupNum, dayAfter)) {
+                                if (expectedPerson === person && !isPersonMissingOnDate(person, groupNum, dayAfter, 'normal')) {
                                     hasDutyAfter = true;
                                 }
                             }
@@ -7076,7 +7179,7 @@
                 const nextMonthPerson = groupPeople[nextMonthRotationPosition];
                 
                 // Check if this person from next month has conflicts on the current day
-                if (nextMonthPerson && !isPersonMissingOnDate(nextMonthPerson, groupNum, date)) {
+                if (nextMonthPerson && !isPersonMissingOnDate(nextMonthPerson, groupNum, date, 'normal')) {
                     const hasConflict = hasConsecutiveDuty(dayKey, nextMonthPerson, groupNum);
                     
                     if (!hasConflict) {
@@ -7142,7 +7245,7 @@
             const nextMonthPerson = groupPeople[nextMonthRotationPosition];
             
             // Check if this person from next month has conflicts on the current day
-            if (nextMonthPerson && !isPersonMissingOnDate(nextMonthPerson, groupNum, date)) {
+            if (nextMonthPerson && !isPersonMissingOnDate(nextMonthPerson, groupNum, date, dayTypeCategory)) {
                 const hasConflict = hasConsecutiveDuty(dayKey, nextMonthPerson, groupNum);
                 
                 // Also check if they have special holiday in current month (for weekends)
@@ -7713,7 +7816,7 @@
                             let assignedPerson = rotationPerson;
                             
                             // Check if assigned person is missing, if so find next in rotation
-                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
+                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special')) {
                                 const simulatedAssignments = { special: simulatedSpecialAssignmentsForConflict };
                                 const res = findNextEligiblePersonAfterMissing({
                                     dateKey,
@@ -7721,6 +7824,7 @@
                                     groupNum,
                                     groupPeople,
                                     startRotationPosition: rotationPosition,
+                                    dutyCategory: 'special',
                                     simulatedAssignments
                                 });
                                 if (res) {
@@ -7863,7 +7967,7 @@
                         if (base === comp) continue;
 
                         let reason = '';
-                        if (isPersonMissingOnDate(base, groupNum, date)) {
+                        if (isPersonMissingOnDate(base, groupNum, date, 'special')) {
                             const mp = getPersonMissingPeriod(base, groupNum, date);
                             const startStr = (mp && mp.start) ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
                             const endStr = (mp && mp.end) ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
@@ -8270,7 +8374,7 @@
                                 const nextIndex = (currentIndex + offset) % rotationDays;
                                 const candidate = groupPeople[nextIndex];
                                 
-                                if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) {
+                                if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) {
                                     continue;
                                 }
                                 
@@ -8367,7 +8471,7 @@
                     const briefReason =
                         reasonText.includes('ειδική αργία') ? 'Ειδική αργία στον ίδιο μήνα' :
                         reasonText.includes('παραλειφθεί') ? 'Ήταν ήδη παραλειφθεί αυτόν τον μήνα' :
-                        (isPersonMissingOnDate(base, groupNum, dateObj) ? 'Κώλυμα/Απουσία' : (reasonText ? reasonText.split('.').filter(Boolean)[0] : 'Αλλαγή'));
+                        (isPersonMissingOnDate(base, groupNum, dateObj, 'weekend') ? 'Κώλυμα/Απουσία' : (reasonText ? reasonText.split('.').filter(Boolean)[0] : 'Αλλαγή'));
 
                     // Weekend skip has no swap-date; keep '-' (but support future swapPairId logic if it appears)
                     const swapOtherKey = reasonObj?.type === 'swap'
@@ -8836,8 +8940,8 @@
                                 if (swappedSemiSet.has(`${candidateDateKey}:${groupNum}`)) continue;
 
                                 // Both must be available on their new dates
-                                if (isPersonMissingOnDate(candidatePerson, groupNum, date)) continue;
-                                if (isPersonMissingOnDate(currentPerson, groupNum, candidateDate)) continue;
+                                if (isPersonMissingOnDate(candidatePerson, groupNum, date, 'semi')) continue;
+                                if (isPersonMissingOnDate(currentPerson, groupNum, candidateDate, 'semi')) continue;
 
                                 // Validate: after swap, neither person has a semi consecutive conflict on their new semi day
                                 const candidateWouldConflict = hasSemiConsecutiveConflictForPerson(dateKey, candidatePerson, groupNum);
@@ -8944,7 +9048,7 @@
                                     }
                                     
                                     // Also check if next month person is missing on current day
-                                    if (!nextMonthPersonHasConflict && isPersonMissingOnDate(nextMonthPerson, groupNum, date)) {
+                                    if (!nextMonthPersonHasConflict && isPersonMissingOnDate(nextMonthPerson, groupNum, date, 'semi')) {
                                         nextMonthPersonHasConflict = true;
                                     }
                                     
@@ -9079,7 +9183,7 @@
                     const reasonText = reasonObj?.reason ? String(reasonObj.reason) : '';
                     const briefReason = reasonText
                         ? reasonText.split('.').filter(Boolean)[0]
-                        : (isPersonMissingOnDate(base, groupNum, dateObj) ? 'Κώλυμα/Απουσία' : 'Αλλαγή');
+                        : (isPersonMissingOnDate(base, groupNum, dateObj, 'semi') ? 'Κώλυμα/Απουσία' : 'Αλλαγή');
 
                     const otherKey = reasonObj?.type === 'swap'
                         ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
@@ -9615,7 +9719,7 @@
                                     if (!hasRealConflict) {
                                         console.log(`[SWAP LOGIC] ✗ Step 1 PREVENTED: Unnecessary swap - ${currentPerson} on ${dateKey} doesn't have a real conflict (both days are normal)`);
                                     } else {
-                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate) &&
+                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate, 'normal') &&
                                             !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                             swapDayKey = sameWeekKey;
                                             swapDayIndex = normalDays.indexOf(sameWeekKey);
@@ -9639,7 +9743,7 @@
                                             const swapCandidate = updatedAssignments[nextSameDayKey][groupNum];
                                             console.log(`[SWAP LOGIC] Step 2: Found candidate ${swapCandidate} on ${nextSameDayKey}`);
                                             
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay) &&
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay, 'normal') &&
                                                 !hasConsecutiveDuty(nextSameDayKey, swapCandidate, groupNum, simulatedAssignments) &&
                                                 !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 swapDayKey = nextSameDayKey;
@@ -9673,7 +9777,7 @@
                                         const swapCandidate = updatedAssignments[weekAfterNextKey][groupNum];
                                         console.log(`[SWAP LOGIC] Step 3a: Found candidate ${swapCandidate} on ${weekAfterNextKey} (week after next)`);
                                         
-                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, weekAfterNextDate) &&
+                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, weekAfterNextDate, 'normal') &&
                                             !hasConsecutiveDuty(weekAfterNextKey, swapCandidate, groupNum, simulatedAssignments) &&
                                             !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                             swapDayKey = weekAfterNextKey;
@@ -9704,10 +9808,10 @@
                                             const nextMonthSwapDate = new Date(nextMonthSwapDayKey + 'T00:00:00');
                                             if (nextMonthSwapDate.getDay() === alternativeDayOfWeek) {
                                                 // Check if swap candidate is valid for current date
-                                                if (!isPersonMissingOnDate(swapCandidate, groupNum, date) &&
+                                                if (!isPersonMissingOnDate(swapCandidate, groupNum, date, 'normal') &&
                                                     !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                     // Check if swap candidate is valid for next month swap day
-                                                    if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate) &&
+                                                    if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate, 'normal') &&
                                                         !hasConsecutiveDuty(nextMonthSwapDayKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                         swapDayKey = nextMonthSwapDayKey;
                                                         swapDayIndex = normalDays.includes(nextMonthSwapDayKey) ? normalDays.indexOf(nextMonthSwapDayKey) : -1;
@@ -9771,10 +9875,10 @@
                                                 const nextMonthSwapDate = new Date(nextMonthSwapDayKey + 'T00:00:00');
                                                 if (nextMonthSwapDate.getDay() === dayOfWeek) {
                                                     // Check if swap candidate is valid for current date
-                                                    if (!isPersonMissingOnDate(swapCandidate, groupNum, date) &&
+                                                    if (!isPersonMissingOnDate(swapCandidate, groupNum, date, 'normal') &&
                                                         !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                         // Check if swap candidate is valid for next month swap day
-                                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate) &&
+                                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate, 'normal') &&
                                                             !hasConsecutiveDuty(nextMonthSwapDayKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                             swapDayKey = nextMonthSwapDayKey;
                                                             swapDayIndex = normalDays.includes(nextMonthSwapDayKey) ? normalDays.indexOf(nextMonthSwapDayKey) : -1;
@@ -9847,10 +9951,10 @@
                                                 const nextMonthSwapDate = new Date(nextMonthSwapDayKey + 'T00:00:00');
                                                 if (nextMonthSwapDate.getDay() === alternativeDayOfWeek) {
                                                     // Check if swap candidate is valid for current date
-                                                    if (!isPersonMissingOnDate(swapCandidate, groupNum, date) &&
+                                                    if (!isPersonMissingOnDate(swapCandidate, groupNum, date, 'normal') &&
                                                         !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                         // Check if swap candidate is valid for next month swap day
-                                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate) &&
+                                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate, 'normal') &&
                                                             !hasConsecutiveDuty(nextMonthSwapDayKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                             swapDayKey = nextMonthSwapDayKey;
                                                             swapDayIndex = normalDays.includes(nextMonthSwapDayKey) ? normalDays.indexOf(nextMonthSwapDayKey) : -1;
@@ -9948,7 +10052,7 @@
                                     if (!hasRealConflict) {
                                         console.log(`[SWAP LOGIC] ✗ Step 1a PREVENTED: Unnecessary swap - ${currentPerson} on ${dateKey} doesn't have a real conflict (both days are normal)`);
                                     } else {
-                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay) &&
+                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay, 'normal') &&
                                             !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                             swapDayKey = nextSameDayKey;
                                             swapDayIndex = normalDays.indexOf(nextSameDayKey);
@@ -9974,10 +10078,10 @@
                                         const nextMonthSwapDate = new Date(nextMonthSwapDayKey + 'T00:00:00');
                                         if (nextMonthSwapDate.getDay() === dayOfWeek) {
                                             // Check if swap candidate is valid for current date
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, date) &&
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, date, 'normal') &&
                                                 !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 // Check if swap candidate is valid for next month swap day
-                                                if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate) &&
+                                                if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate, 'normal') &&
                                                     !hasConsecutiveDuty(nextMonthSwapDayKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                     swapDayKey = nextMonthSwapDayKey;
                                                     swapDayIndex = -1; // Not in normalDays array
@@ -10026,11 +10130,11 @@
                                         console.log(`[SWAP LOGIC] Step 1b: Found candidate ${swapCandidate} from next month on ${nextMonthSwapDayKey}`);
                                         
                                         // Check if swap candidate is valid for current date
-                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, date) &&
+                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, date, 'normal') &&
                                             !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                             // Check if swap candidate is valid for next month swap day
                                             const nextMonthSwapDate = new Date(nextMonthSwapDayKey + 'T00:00:00');
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate) &&
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate, 'normal') &&
                                                 !hasConsecutiveDuty(nextMonthSwapDayKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 swapDayKey = nextMonthSwapDayKey;
                                                 swapDayIndex = normalDays.includes(nextMonthSwapDayKey) ? normalDays.indexOf(nextMonthSwapDayKey) : -1;
@@ -10069,7 +10173,7 @@
                                             const swapCandidate = updatedAssignments[sameWeekKey][groupNum];
                                             console.log(`[SWAP LOGIC] Step 2: Found candidate ${swapCandidate} on ${sameWeekKey}`);
                                             
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate) &&
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate, 'normal') &&
                                                 !hasConsecutiveDuty(sameWeekKey, swapCandidate, groupNum, simulatedAssignments) &&
                                                 !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 swapDayKey = sameWeekKey;
@@ -10392,7 +10496,7 @@
                     const reasonText = reasonObj?.reason ? String(reasonObj.reason) : '';
                     const briefReason = reasonText
                         ? reasonText.split('.').filter(Boolean)[0]
-                        : (isPersonMissingOnDate(base, groupNum, dateObj) ? 'Κώλυμα/Απουσία' : 'Αλλαγή');
+                        : (isPersonMissingOnDate(base, groupNum, dateObj, 'normal') ? 'Κώλυμα/Απουσία' : 'Αλλαγή');
 
                     const otherKey = reasonObj?.type === 'swap'
                         ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
@@ -10695,14 +10799,15 @@
                                 const rotationPosition = getRotationPosition(dateIterator, 'special', groupNum) % rotationDays;
                                 let assignedPerson = groupPeople[rotationPosition];
                                 
-                                // Check if assigned person is missing, if so find next in rotation
-                                if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, dateIterator)) {
+                                // Check if assigned person is missing/disabled for special, if so find next in rotation
+                                if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, dateIterator, 'special')) {
                                     const res = findNextEligiblePersonAfterMissing({
                                         dateKey,
                                         date: dateIterator,
                                         groupNum,
                                         groupPeople,
                                         startRotationPosition: rotationPosition,
+                                        dutyCategory: 'special',
                                         simulatedAssignments: null // conversion path: keep missing-only (no full simulated sets here)
                                     });
                                     if (res) {
@@ -11111,7 +11216,7 @@
                             let assignedPerson = rotationPerson;
                             
                             // Check if assigned person is missing, if so find next in rotation
-                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
+                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
                                 const simulatedAssignments = {
                                     special: simulatedSpecialAssignments,
                                     weekend: simulatedWeekendAssignments
@@ -11122,6 +11227,7 @@
                                     groupNum,
                                     groupPeople,
                                     startRotationPosition: rotationPosition,
+                                    dutyCategory: 'weekend',
                                     simulatedAssignments
                                 });
                                 if (res) {
@@ -11142,7 +11248,7 @@
                                     for (let offset = 1; offset < rotationDays; offset++) {
                                         const nextIndex = (currentIndex + offset) % rotationDays;
                                         const candidate = groupPeople[nextIndex];
-                                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) continue;
+                                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
                                         const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
                                         const candidateWasSkipped = skippedInMonth[monthKey][groupNum].has(candidate);
                                         if (!candidateHasSpecial && !candidateWasSkipped) {
@@ -11383,7 +11489,7 @@
                             let assignedPerson = rotationPerson;
                             
                             // Check if assigned person is missing, if so find next in rotation
-                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
+                                if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
                                 const simulatedAssignments = {
                                     special: simulatedSpecialAssignments,
                                     weekend: simulatedWeekendAssignments
@@ -11394,6 +11500,7 @@
                                     groupNum,
                                     groupPeople,
                                     startRotationPosition: rotationPosition,
+                                        dutyCategory: 'weekend',
                                     simulatedAssignments
                                 });
                                 if (res) {
@@ -11552,7 +11659,7 @@
                                 // Swap logic will run when Next is pressed
                                 
                                 // Check if assigned person is missing, if so find next in rotation
-                                if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
+                                if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
                                     const simulatedAssignments = {
                                         special: simulatedSpecialAssignments,
                                         weekend: simulatedWeekendAssignments,
@@ -11564,6 +11671,7 @@
                                         groupNum,
                                         groupPeople,
                                         startRotationPosition: rotationPosition,
+                                        dutyCategory: 'semi',
                                         simulatedAssignments
                                     });
                                     if (res) {
@@ -11749,8 +11857,8 @@
                                 if (!candidatePerson) continue;
                                 if (swappedSemiSet.has(`${candidateDateKey}:${groupNum}`)) continue;
 
-                                if (isPersonMissingOnDate(candidatePerson, groupNum, date)) continue;
-                                if (isPersonMissingOnDate(currentPerson, groupNum, candidateDate)) continue;
+                                if (isPersonMissingOnDate(candidatePerson, groupNum, date, 'semi')) continue;
+                                if (isPersonMissingOnDate(currentPerson, groupNum, candidateDate, 'semi')) continue;
 
                                 const candidateWouldConflict = hasSemiConsecutiveConflictForPerson(dateKey, candidatePerson, groupNum);
                                 const currentWouldConflict = hasSemiConsecutiveConflictForPerson(candidateDateKey, currentPerson, groupNum);
@@ -11868,7 +11976,7 @@
                         const rotationPosition = getRotationPosition(date, 'special', groupNum) % rotationDays;
                         const person = groupPeople[rotationPosition];
                         
-                        if (person && !isPersonMissingOnDate(person, groupNum, date)) {
+                        if (person && !isPersonMissingOnDate(person, groupNum, date, 'special')) {
                             if (!simulatedSpecialAssignments[monthKey][groupNum]) {
                                 simulatedSpecialAssignments[monthKey][groupNum] = new Set();
                             }
@@ -11967,7 +12075,7 @@
                         let assignedPerson = groupPeople[rotationPosition];
                         
                             // Check if assigned person is missing, if so find next in rotation
-                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
+                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
                                 // In preview fallback, use improved missing replacement that also validates conflicts
                                 // against already-known assignments (special + weekend).
                                 const simulatedAssignments = {
@@ -11980,6 +12088,7 @@
                                     groupNum,
                                     groupPeople,
                                     startRotationPosition: rotationPosition,
+                                    dutyCategory: 'weekend',
                                     simulatedAssignments
                                 });
                                 if (res) {
@@ -12242,7 +12351,7 @@
                                     const nextIndex = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[nextIndex];
                                     
-                                    if (!candidate || isPersonMissingOnDate(candidate, groupNum, date)) {
+                                    if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'normal')) {
                                         continue;
                                     }
                                     
@@ -12274,7 +12383,7 @@
                                 // PREVIEW MODE: Just show basic rotation WITHOUT swap logic
                                 // Swap logic will run when Next is pressed
                                 // Check if assigned person is missing, if so find next in rotation
-                                if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date)) {
+                                if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
                                     const simulatedAssignments = {
                                         special: simulatedSpecialAssignments,
                                         weekend: simulatedWeekendAssignments,
@@ -12288,6 +12397,7 @@
                                         groupNum,
                                         groupPeople,
                                         startRotationPosition: rotationPosition,
+                                        dutyCategory: 'normal',
                                         simulatedAssignments,
                                         alreadyAssignedSet: assignedPeoplePreview?.[monthKey]?.[groupNum] || null
                                     });
@@ -12299,7 +12409,7 @@
                                     // Check if assigned person has a conflict (will be swapped later)
                                     // If so, DO NOT assign anyone to this day - leave it for swap logic to handle
                                     // Also DO NOT assign the next person in rotation to this day
-                                    if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date)) {
+                                    if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
                                         // Build simulated assignments for conflict checking
                                     const simulatedAssignments = {
                                         special: simulatedSpecialAssignments,
@@ -12492,7 +12602,7 @@
                                                        (hasDutyAfter && afterType !== 'normal-day');
                                 
                                 if (hasRealConflict && 
-                                    !isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate) &&
+                                    !isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate, 'normal') &&
                                     !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                     swapDayKey = sameWeekKey;
                                                             swapFound = true;
@@ -12506,7 +12616,7 @@
                                     const nextSameDayKey = formatDateKey(nextSameDay);
                                     if (normalAssignments[nextSameDayKey]?.[groupNum]) {
                                         const swapCandidate = normalAssignments[nextSameDayKey][groupNum];
-                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay) &&
+                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay, 'normal') &&
                                             !hasConsecutiveDuty(nextSameDayKey, swapCandidate, groupNum, simulatedAssignments) &&
                                             !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                             swapDayKey = nextSameDayKey;
@@ -12528,7 +12638,7 @@
                                 
                                 if (isWeekAfterNext(date, weekAfterNextDate) && normalAssignments[weekAfterNextKey]?.[groupNum]) {
                                     const swapCandidate = normalAssignments[weekAfterNextKey][groupNum];
-                                    if (!isPersonMissingOnDate(swapCandidate, groupNum, weekAfterNextDate) &&
+                                    if (!isPersonMissingOnDate(swapCandidate, groupNum, weekAfterNextDate, 'normal') &&
                                         !hasConsecutiveDuty(weekAfterNextKey, swapCandidate, groupNum, simulatedAssignments) &&
                                         !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                         swapDayKey = weekAfterNextKey;
@@ -12569,7 +12679,7 @@
                             if (normalDays.includes(nextSameDayKey) && normalAssignments[nextSameDayKey]?.[groupNum]) {
                                 // Next same day is in calculation range - use it
                                 const swapCandidate = normalAssignments[nextSameDayKey][groupNum];
-                                if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay) &&
+                                if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay, 'normal') &&
                                     !hasConsecutiveDuty(nextSameDayKey, swapCandidate, groupNum, simulatedAssignments) &&
                                     !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                     swapDayKey = nextSameDayKey;
@@ -12589,10 +12699,10 @@
                                     const nextMonthSwapDate = new Date(nextMonthSwapDayKey + 'T00:00:00');
                                     if (nextMonthSwapDate.getDay() === dayOfWeek) {
                                         // Check if swap candidate is valid for current date
-                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, date) &&
+                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, date, 'normal') &&
                                             !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                             // Check if swap candidate is valid for next month swap day
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate) &&
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate, 'normal') &&
                                                 !hasConsecutiveDuty(nextMonthSwapDayKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 swapDayKey = nextMonthSwapDayKey;
                                                 swapFound = true;
@@ -12618,7 +12728,7 @@
                                 
                                 if (isSameWeek(date, sameWeekDate) && normalAssignments[sameWeekKey]?.[groupNum]) {
                                     const swapCandidate = normalAssignments[sameWeekKey][groupNum];
-                                    if (!isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate) &&
+                                    if (!isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate, 'normal') &&
                                         !hasConsecutiveDuty(sameWeekKey, swapCandidate, groupNum, simulatedAssignments) &&
                                         !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                         swapDayKey = sameWeekKey;
@@ -12639,7 +12749,7 @@
                                     const nextAlternativeKey = formatDateKey(nextAlternativeDay);
                                     if (normalAssignments[nextAlternativeKey]?.[groupNum]) {
                                         const swapCandidate = normalAssignments[nextAlternativeKey][groupNum];
-                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, nextAlternativeDay) &&
+                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, nextAlternativeDay, 'normal') &&
                                             !hasConsecutiveDuty(nextAlternativeKey, swapCandidate, groupNum, simulatedAssignments) &&
                                             !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                             swapDayKey = nextAlternativeKey;
@@ -12666,10 +12776,10 @@
                                     const nextMonthSwapDate = new Date(nextMonthSwapDayKey + 'T00:00:00');
                                     if (nextMonthSwapDate.getDay() === alternativeDayOfWeek) {
                                         // Check if swap candidate is valid for current date
-                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, date) &&
+                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, date, 'normal') &&
                                             !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                             // Check if swap candidate is valid for next month swap day
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate) &&
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate, 'normal') &&
                                                 !hasConsecutiveDuty(nextMonthSwapDayKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 swapDayKey = nextMonthSwapDayKey;
                                                 swapFound = true;
@@ -12697,7 +12807,7 @@
                                     const nextMonthAltKey = formatDateKey(nextMonthAlternative);
                                     if (normalDays.includes(nextMonthAltKey) && normalAssignments[nextMonthAltKey]?.[groupNum]) {
                                         const swapCandidate = normalAssignments[nextMonthAltKey][groupNum];
-                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthAlternative) &&
+                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthAlternative, 'normal') &&
                                             !hasConsecutiveDuty(nextMonthAltKey, swapCandidate, groupNum, simulatedAssignments) &&
                                             !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                             swapDayKey = nextMonthAltKey;
@@ -13044,7 +13154,7 @@
             const dayDate = new Date(dayKey + 'T00:00:00');
             
             // Skip if person is missing on this date
-            if (isPersonMissingOnDate(person, groupNum, dayDate)) return false;
+            if (isPersonMissingOnDate(person, groupNum, dayDate, dayTypeCategory)) return false;
             
             const priorityLevel = dayTypeCategory === 'special' ? 1 : 
                                 (dayTypeCategory === 'weekend' ? 2 : 
@@ -13169,7 +13279,7 @@
                 const dayDate = new Date(dayKey + 'T00:00:00');
                 
                 // Skip if person is missing on this date
-                if (isPersonMissingOnDate(person, groupNum, dayDate)) continue;
+                if (isPersonMissingOnDate(person, groupNum, dayDate, dayTypeCategory)) continue;
                 
                 // Skip critical assignments
                 const isCritical = criticalAssignments[dayKey] && 
@@ -13693,10 +13803,11 @@
 
         // Manual assignment feature removed (UI + handlers).
 
-        // Check if person is missing on a specific date
-        function isPersonMissingOnDate(person, groupNum, date) {
+        // Check if person is unavailable on a specific date (missing period OR disabled)
+        // dutyCategory: 'special' | 'weekend' | 'semi' | 'normal' | null
+        function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
-            if (groupData.disabledPersons && groupData.disabledPersons[person]) return true;
+            if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return true;
             const missingPeriods = groupData.missingPeriods?.[person] || [];
             if (missingPeriods.length === 0) return false;
             
@@ -13720,6 +13831,7 @@
             groupNum,
             groupPeople,
             startRotationPosition,
+            dutyCategory = null,
             simulatedAssignments = null,
             alreadyAssignedSet = null
         }) {
@@ -13730,7 +13842,7 @@
                 const candidate = groupPeople[idx];
                 if (!candidate) continue;
                 if (alreadyAssignedSet && alreadyAssignedSet.has(candidate)) continue;
-                if (isPersonMissingOnDate(candidate, groupNum, date)) continue;
+                if (isPersonMissingOnDate(candidate, groupNum, date, dutyCategory)) continue;
                 if (simulatedAssignments && hasConsecutiveDuty(dateKey, candidate, groupNum, simulatedAssignments)) continue;
                 return { person: candidate, index: idx };
             }
@@ -14201,11 +14313,11 @@
                     let expectedPerson = baseExpectedPerson;
                     
                     // If expected person is missing, find next in rotation
-                    if (expectedPerson && isPersonMissingOnDate(expectedPerson, groupNum, date)) {
+                    if (expectedPerson && isPersonMissingOnDate(expectedPerson, groupNum, date, dayTypeCategory)) {
                         for (let offset = 1; offset < rotationDays; offset++) {
                             const nextIndex = (rotationPosition + offset) % rotationDays;
                             const candidate = groupPeople[nextIndex];
-                            if (candidate && !isPersonMissingOnDate(candidate, groupNum, date)) {
+                            if (candidate && !isPersonMissingOnDate(candidate, groupNum, date, dayTypeCategory)) {
                                 expectedPerson = candidate;
                             break;
                         }
@@ -14213,7 +14325,7 @@
                     }
                     
                     // If we had to skip the base expected person due to missing, show it explicitly (even if assignments follow the adjusted rotation)
-                    if (baseExpectedPerson && baseExpectedPerson !== expectedPerson && isPersonMissingOnDate(baseExpectedPerson, groupNum, date)) {
+                    if (baseExpectedPerson && baseExpectedPerson !== expectedPerson && isPersonMissingOnDate(baseExpectedPerson, groupNum, date, dayTypeCategory)) {
                         const mp = getPersonMissingPeriod(baseExpectedPerson, groupNum, date);
                         const startStr = (mp && mp.start) ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
                         const endStr = (mp && mp.end) ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
@@ -14249,7 +14361,7 @@
                         const swapOrSkipType = assignmentReason?.type || '';
 
                         // Always define isMissing for this mismatch (used later in multiple branches)
-                        const isMissing = isPersonMissingOnDate(expectedPerson, groupNum, date);
+                        const isMissing = isPersonMissingOnDate(expectedPerson, groupNum, date, dayTypeCategory);
                         // Always define conflictDetails in this mismatch scope (used later for table output)
                         let conflictDetails = [];
                         let hasLegitimateConflict = false;
