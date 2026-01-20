@@ -1564,6 +1564,17 @@
             return sanitized;
         }
 
+        // Escape text for safe HTML interpolation (prevents breaking markup / XSS in dynamic strings)
+        function escapeHtml(value) {
+            const s = value === null || value === undefined ? '' : String(value);
+            return s
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
         // Merge month-organized assignment blocks into an existing Firestore doc without deleting older months.
         // This prevents the "only last calculated month exists" issue when recalculating month-by-month.
         async function mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, docId, monthOrganizedData) {
