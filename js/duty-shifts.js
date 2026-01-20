@@ -1085,10 +1085,30 @@
                 }
 
                 // Load missing reasons list (Firestore)
+                // NOTE: If Firestore contains the old default seed list, migrate it to the new 3-item seed list.
+                const DEFAULT_MISSING_REASONS = ['Κανονική Άδεια', 'Αναρρωτική Άδεια', 'Φύλλο Πορείας'];
+                const LEGACY_MISSING_REASONS = ['Άδεια', 'Ασθένεια', 'Εκπαίδευση', 'Υπηρεσιακό'];
                 if (missingReasonsDoc && missingReasonsDoc.exists) {
                     const data = missingReasonsDoc.data() || {};
                     if (Array.isArray(data.list) && data.list.length) {
-                        missingReasons = data.list.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
+                        const list = data.list.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
+                        const norm = (arr) => arr.map(s => String(s).trim()).filter(Boolean).map(s => s.toLowerCase()).sort().join('|');
+                        const isLegacyOnly = norm(list) === norm(LEGACY_MISSING_REASONS);
+                        if (isLegacyOnly) {
+                            missingReasons = [...DEFAULT_MISSING_REASONS];
+                            try {
+                                await db.collection('dutyShifts').doc('missingReasons').set({
+                                    list: missingReasons,
+                                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                    updatedBy: user.uid,
+                                    _migratedFrom: 'legacy-defaults'
+                                });
+                            } catch (_) {
+                                // ignore migration write errors
+                            }
+                        } else {
+                            missingReasons = list;
+                        }
                     }
                 }
                 
