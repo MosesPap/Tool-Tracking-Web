@@ -14283,7 +14283,7 @@
         // Analyze rotation violations
         function analyzeRotationViolations() {
             const violations = [];
-            const seenSwapPairs = new Set(); // group|swapPairId -> keep only one row per swap pair (earliest date)
+            const seenSwapPairs = new Set(); // dayType|group|swapPairId -> dedupe swap rows
             
             // Get dates only for the current month being viewed
             const year = currentDate.getFullYear();
@@ -14298,6 +14298,16 @@
                 const date = new Date(year, month, day);
                 allDates.push(formatDateKey(date));
             }
+
+            // Build expected rotation per day type, but SKIP unavailable persons without consuming their turn.
+            // This matches the calculation logic: if someone is disabled/missing for this duty type,
+            // rotation advances from the person actually assigned, not from the unavailable person.
+            const rotationPointerByType = {
+                special: {},
+                weekend: {},
+                semi: {},
+                normal: {}
+            };
             
             // For each date, check each group
             for (const dayKey of allDates) {
@@ -14332,6 +14342,31 @@
                     }
                     
                     if (groupPeople.length === 0) continue;
+
+                    // Compute who SHOULD be assigned using skip-aware rotation simulation for THIS month
+                    const rotationDays = groupPeople.length;
+                    if (rotationPointerByType[dayTypeCategory][groupNum] === undefined) {
+                        const seed = getLastRotationPersonForDate(dayTypeCategory, firstDay, groupNum);
+                        const seedIdx = (seed && groupPeople.includes(seed)) ? groupPeople.indexOf(seed) : -1;
+                        rotationPointerByType[dayTypeCategory][groupNum] = seedIdx >= 0 ? ((seedIdx + 1) % rotationDays) : 0;
+                    }
+                    let rotationPosition = rotationPointerByType[dayTypeCategory][groupNum] % rotationDays;
+                    const baseExpectedPerson = groupPeople[rotationPosition];
+                    let expectedPerson = null;
+                    let expectedIndex = null;
+                    for (let offset = 0; offset < rotationDays; offset++) {
+                        const idx = (rotationPosition + offset) % rotationDays;
+                        const candidate = groupPeople[idx];
+                        if (!candidate) continue;
+                        if (isPersonMissingOnDate(candidate, groupNum, date, dayTypeCategory)) continue; // includes disabled when category provided
+                        expectedPerson = candidate;
+                        expectedIndex = idx;
+                        break;
+                    }
+                    // Advance pointer for next same-type day in this month
+                    rotationPointerByType[dayTypeCategory][groupNum] = (expectedIndex !== null && expectedIndex !== undefined)
+                        ? ((expectedIndex + 1) % rotationDays)
+                        : ((rotationPosition + 1) % rotationDays);
                     
                     // Get who is actually assigned (from correct day-type document)
                     const assignment = getAssignmentForDate(dayKey) || '';
@@ -14352,38 +14387,15 @@
                     // Skip if no one is assigned (shouldn't happen, but handle it)
                     if (!assignedPerson) continue;
                     
-                    // Determine who SHOULD be assigned based on strict rotation order from February 2026
-                    const rotationDays = groupPeople.length;
-                    
-                    // Calculate rotation position based on days since February 2026
-                    const rotationPosition = getRotationPosition(date, dayTypeCategory, groupNum) % rotationDays;
-                    const baseExpectedPerson = groupPeople[rotationPosition];
-                    let expectedPerson = baseExpectedPerson;
-                    
-                    // If expected person is missing, find next in rotation
-                    if (expectedPerson && isPersonMissingOnDate(expectedPerson, groupNum, date, dayTypeCategory)) {
-                        for (let offset = 1; offset < rotationDays; offset++) {
-                            const nextIndex = (rotationPosition + offset) % rotationDays;
-                            const candidate = groupPeople[nextIndex];
-                            if (candidate && !isPersonMissingOnDate(candidate, groupNum, date, dayTypeCategory)) {
-                                expectedPerson = candidate;
-                            break;
-                        }
-                    }
-                    }
-                    
                     // If we had to skip the base expected person due to missing, show it explicitly (even if assignments follow the adjusted rotation)
                     if (baseExpectedPerson && baseExpectedPerson !== expectedPerson && isPersonMissingOnDate(baseExpectedPerson, groupNum, date, dayTypeCategory)) {
-                        const baseIsDisabled = isPersonDisabledForDuty(baseExpectedPerson, groupNum, dayTypeCategory);
-                        const mp = baseIsDisabled ? null : getPersonMissingPeriod(baseExpectedPerson, groupNum, date);
+                        const mp = getPersonMissingPeriod(baseExpectedPerson, groupNum, date);
                         const startStr = (mp && mp.start) ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
                         const endStr = (mp && mp.end) ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
                         const reasonPart = (mp && mp.reason) ? ` - ${mp.reason}` : '';
-                        const missingReason = baseIsDisabled
-                            ? getDisabledReasonText(baseExpectedPerson, groupNum)
-                            : ((startStr && endStr)
-                                ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
-                                : `Κώλυμα/Απουσία${reasonPart}`);
+                        const missingReason = (startStr && endStr)
+                            ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
+                            : `Κώλυμα/Απουσία${reasonPart}`;
                         const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
                         const swapOrSkipReasonText = assignmentReason?.reason || '';
 
@@ -14393,8 +14405,7 @@
                             group: groupNum,
                             groupName: getGroupName(groupNum),
                             assignedPerson: assignedPerson,
-                            // If the base expected person is disabled, don't show them as "expected" in the violations table
-                            expectedPerson: baseIsDisabled ? '-' : baseExpectedPerson,
+                            expectedPerson: baseExpectedPerson,
                             conflicts: '',
                             swapReason: swapOrSkipReasonText || `Παράλειψη λόγω ${missingReason}`,
                             skippedReason: missingReason,
@@ -14412,14 +14423,10 @@
                         const swapOrSkipReasonText = assignmentReason?.reason || '';
                         const swapOrSkipType = assignmentReason?.type || '';
                         const swapPairId = assignmentReason?.swapPairId;
-
-                        // Don't show both dates for the same swap in this window: keep only the first/earliest date row
-                        if (swapOrSkipType === 'swap' && swapPairId) {
-                            const swapKey = `${groupNum}|${swapPairId}`;
-                            if (seenSwapPairs.has(swapKey)) {
-                                continue;
-                            }
-                            seenSwapPairs.add(swapKey);
+                        if (swapOrSkipType === 'swap' && swapPairId !== null && swapPairId !== undefined) {
+                            const k = `${dayTypeCategory}|${groupNum}|${swapPairId}`;
+                            if (seenSwapPairs.has(k)) continue; // only show one row per swap pair
+                            seenSwapPairs.add(k);
                         }
 
                         // Always define isDisabled/isMissingPeriod for this mismatch (used later in multiple branches)
@@ -14704,8 +14711,7 @@
                             group: groupNum,
                             groupName: getGroupName(groupNum),
                             assignedPerson: assignedPerson,
-                            // If expected person is disabled, don't show them as "expected" in the violations table
-                            expectedPerson: isDisabled ? '-' : expectedPerson,
+                            expectedPerson: expectedPerson,
                             conflicts: conflictSummary,
                             swapReason: swapOrSkipReasonText || derivedSwapReason || violationReason,
                             skippedReason: skippedReason,
@@ -14806,10 +14812,10 @@
                         return `${escapeHtml(main)}${extra}`;
                     })();
                     row.innerHTML = `
-                        <td>${escapeHtml(violation.dateFormatted || '')}</td>
-                        <td><span class="badge bg-primary">${escapeHtml(violation.groupName || '')}</span></td>
-                        <td><strong>${escapeHtml(violation.assignedPerson || '')}</strong></td>
-                        <td><strong class="text-danger">${escapeHtml(violation.expectedPerson || '')}</strong></td>
+                        <td>${violation.dateFormatted}</td>
+                        <td><span class="badge bg-primary">${violation.groupName}</span></td>
+                        <td><strong>${violation.assignedPerson}</strong></td>
+                        <td><strong class="text-danger">${violation.expectedPerson}</strong></td>
                         <td><small>${violation.conflicts || '-'}</small></td>
                         <td><small>${reasonHtml}</small></td>
                         <td><small>${escapeHtml(violation.dayType || '-')}</small></td>
