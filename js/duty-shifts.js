@@ -14283,6 +14283,7 @@
         // Analyze rotation violations
         function analyzeRotationViolations() {
             const violations = [];
+            const seenSwapPairs = new Set(); // group|swapPairId -> keep only one row per swap pair (earliest date)
             
             // Get dates only for the current month being viewed
             const year = currentDate.getFullYear();
@@ -14373,13 +14374,16 @@
                     
                     // If we had to skip the base expected person due to missing, show it explicitly (even if assignments follow the adjusted rotation)
                     if (baseExpectedPerson && baseExpectedPerson !== expectedPerson && isPersonMissingOnDate(baseExpectedPerson, groupNum, date, dayTypeCategory)) {
-                        const mp = getPersonMissingPeriod(baseExpectedPerson, groupNum, date);
+                        const baseIsDisabled = isPersonDisabledForDuty(baseExpectedPerson, groupNum, dayTypeCategory);
+                        const mp = baseIsDisabled ? null : getPersonMissingPeriod(baseExpectedPerson, groupNum, date);
                         const startStr = (mp && mp.start) ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
                         const endStr = (mp && mp.end) ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
                         const reasonPart = (mp && mp.reason) ? ` - ${mp.reason}` : '';
-                        const missingReason = (startStr && endStr)
-                            ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
-                            : `Κώλυμα/Απουσία${reasonPart}`;
+                        const missingReason = baseIsDisabled
+                            ? getDisabledReasonText(baseExpectedPerson, groupNum)
+                            : ((startStr && endStr)
+                                ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
+                                : `Κώλυμα/Απουσία${reasonPart}`);
                         const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
                         const swapOrSkipReasonText = assignmentReason?.reason || '';
 
@@ -14389,7 +14393,8 @@
                             group: groupNum,
                             groupName: getGroupName(groupNum),
                             assignedPerson: assignedPerson,
-                            expectedPerson: baseExpectedPerson,
+                            // If the base expected person is disabled, don't show them as "expected" in the violations table
+                            expectedPerson: baseIsDisabled ? '-' : baseExpectedPerson,
                             conflicts: '',
                             swapReason: swapOrSkipReasonText || `Παράλειψη λόγω ${missingReason}`,
                             skippedReason: missingReason,
@@ -14406,6 +14411,16 @@
                         const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
                         const swapOrSkipReasonText = assignmentReason?.reason || '';
                         const swapOrSkipType = assignmentReason?.type || '';
+                        const swapPairId = assignmentReason?.swapPairId;
+
+                        // Don't show both dates for the same swap in this window: keep only the first/earliest date row
+                        if (swapOrSkipType === 'swap' && swapPairId) {
+                            const swapKey = `${groupNum}|${swapPairId}`;
+                            if (seenSwapPairs.has(swapKey)) {
+                                continue;
+                            }
+                            seenSwapPairs.add(swapKey);
+                        }
 
                         // Always define isDisabled/isMissingPeriod for this mismatch (used later in multiple branches)
                         const isDisabled = isPersonDisabledForDuty(expectedPerson, groupNum, dayTypeCategory);
@@ -14689,7 +14704,8 @@
                             group: groupNum,
                             groupName: getGroupName(groupNum),
                             assignedPerson: assignedPerson,
-                            expectedPerson: expectedPerson,
+                            // If expected person is disabled, don't show them as "expected" in the violations table
+                            expectedPerson: isDisabled ? '-' : expectedPerson,
                             conflicts: conflictSummary,
                             swapReason: swapOrSkipReasonText || derivedSwapReason || violationReason,
                             skippedReason: skippedReason,
@@ -14790,10 +14806,10 @@
                         return `${escapeHtml(main)}${extra}`;
                     })();
                     row.innerHTML = `
-                        <td>${violation.dateFormatted}</td>
-                        <td><span class="badge bg-primary">${violation.groupName}</span></td>
-                        <td><strong>${violation.assignedPerson}</strong></td>
-                        <td><strong class="text-danger">${violation.expectedPerson}</strong></td>
+                        <td>${escapeHtml(violation.dateFormatted || '')}</td>
+                        <td><span class="badge bg-primary">${escapeHtml(violation.groupName || '')}</span></td>
+                        <td><strong>${escapeHtml(violation.assignedPerson || '')}</strong></td>
+                        <td><strong class="text-danger">${escapeHtml(violation.expectedPerson || '')}</strong></td>
                         <td><small>${violation.conflicts || '-'}</small></td>
                         <td><small>${reasonHtml}</small></td>
                         <td><small>${escapeHtml(violation.dayType || '-')}</small></td>
