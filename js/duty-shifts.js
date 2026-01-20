@@ -3546,9 +3546,20 @@
                 
                 container.appendChild(item);
             });
+
+            // IMPORTANT: Always show continuous numbering (1..N) with no gaps,
+            // even if Firestore ranks have gaps (e.g. after deletions) or the modal reopens mid-scroll.
+            // This does NOT change the order, only the displayed numbers (and what will be saved if user clicks Save).
+            updateRankingsAfterMove();
             
             const modal = new bootstrap.Modal(document.getElementById('rankingsModal'));
             modal.show();
+
+            // Reset scroll to top so the list starts from rank 1 visually.
+            setTimeout(() => {
+                const scroller = document.getElementById('rankingsListContainer');
+                if (scroller) scroller.scrollTop = 0;
+            }, 0);
         }
 
         // Drag and drop variables for rankings
