@@ -14379,8 +14379,9 @@
                         const swapOrSkipReasonText = assignmentReason?.reason || '';
                         const swapOrSkipType = assignmentReason?.type || '';
 
-                        // Always define isMissing for this mismatch (used later in multiple branches)
-                        const isMissing = isPersonMissingOnDate(expectedPerson, groupNum, date, dayTypeCategory);
+                        // Always define isDisabled/isMissingPeriod for this mismatch (used later in multiple branches)
+                        const isDisabled = isPersonDisabledForDuty(expectedPerson, groupNum, dayTypeCategory);
+                        const isMissingPeriod = !isDisabled && isPersonMissingOnDate(expectedPerson, groupNum, date, dayTypeCategory);
                         // Always define conflictDetails in this mismatch scope (used later for table output)
                         let conflictDetails = [];
                         let hasLegitimateConflict = false;
@@ -14399,14 +14400,21 @@
                             conflictDetails = [];
                             hasLegitimateConflict = false;
                             
-                            // Check if person is missing
-                            if (isMissing) {
+                            // Check if person is disabled (distinct from missing periods)
+                            if (isDisabled) {
+                                hasLegitimateConflict = true;
+                                conflictDetails.push(getDisabledReasonText(expectedPerson, groupNum));
+                            }
+
+                            // Check if person is missing (missing period)
+                            if (isMissingPeriod) {
                                 hasLegitimateConflict = true;
                                 const missingPeriod = getPersonMissingPeriod(expectedPerson, groupNum, date);
-                                if (missingPeriod) {
+                                if (missingPeriod && missingPeriod.start && missingPeriod.end) {
                                     const startStr = missingPeriod.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                     const endStr = missingPeriod.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                    conflictDetails.push(`Άτομο λείπει: ${startStr} - ${endStr}`);
+                                    const reasonPart = missingPeriod.reason ? ` - ${missingPeriod.reason}` : '';
+                                    conflictDetails.push(`Άτομο λείπει: ${startStr} - ${endStr}${reasonPart}`);
                                 } else {
                                     conflictDetails.push(`Άτομο λείπει`);
                                 }
@@ -14540,7 +14548,12 @@
                             // Only show violation if there's a legitimate conflict
                             if (hasLegitimateConflict) {
                             // Build detailed violation reason
-                            if (isMissing) {
+                            if (isDisabled) {
+                                violationReason = 'Άτομο είναι απενεργοποιημένο';
+                                if (conflictDetails.length > 0) {
+                                    violationReason += ` (${conflictDetails.join('; ')})`;
+                                }
+                            } else if (isMissingPeriod) {
                                 violationReason = 'Άτομο λείπει την ημερομηνία';
                                 if (conflictDetails.length > 0) {
                                     violationReason += ` (${conflictDetails.join('; ')})`;
@@ -14577,7 +14590,9 @@
                         
                         // Determine why the EXPECTED person was skipped (missing vs special holiday in month, etc.)
                         let skippedReason = '';
-                        if (isMissing) {
+                        if (isDisabled) {
+                            skippedReason = getDisabledReasonText(expectedPerson, groupNum);
+                        } else if (isMissingPeriod) {
                             const mp = getPersonMissingPeriod(expectedPerson, groupNum, date);
                             if (mp) {
                                 const startStr = mp.start ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
@@ -14608,6 +14623,37 @@
 
                         // Conflicts: show the computed conflict details (what it conflicted with)
                         const conflictSummary = (conflictDetails && conflictDetails.length > 0) ? conflictDetails.join(' | ') : '';
+
+                        // If we don't have a stored assignmentReason, derive a reason in the same style requested by the user.
+                        let derivedSwapReason = '';
+                        if (!swapOrSkipReasonText && hasLegitimateConflict) {
+                            if (isDisabled) {
+                                derivedSwapReason = `Αντικατέστησε τον/την ${expectedPerson} επειδή ήταν ${getDisabledReasonText(expectedPerson, groupNum)}. Ανατέθηκε ο/η ${assignedPerson}.`;
+                            } else if (isMissingPeriod) {
+                                const mp = getPersonMissingPeriod(expectedPerson, groupNum, date);
+                                const startStr = (mp && mp.start) ? mp.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                                const endStr = (mp && mp.end) ? mp.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                                const reasonPart = (mp && mp.reason) ? ` - ${mp.reason}` : '';
+                                const missingReason = (startStr && endStr)
+                                    ? `Κώλυμα/Απουσία (${startStr}–${endStr})${reasonPart}`
+                                    : `Κώλυμα/Απουσία${reasonPart}`;
+                                derivedSwapReason = `Αντικατέστησε τον/την ${expectedPerson} επειδή είχε ${missingReason}. Ανατέθηκε ο/η ${assignedPerson}.`;
+                            } else if (dayTypeCategory === 'normal') {
+                                // Normal-day conflict is typically with a semi-normal day on the next day
+                                const dayAfter = new Date(date);
+                                dayAfter.setDate(dayAfter.getDate() + 1);
+                                const afterKey = formatDateKey(dayAfter);
+                                const afterType = getDayType(dayAfter);
+                                if (afterType === 'semi-normal-day') {
+                                    const dd = formatGreekDayDate(afterKey);
+                                    derivedSwapReason = `Αντικατέστησε τον/την ${expectedPerson} επειδή είχε σύγκρουση με Ημιαργία την ${dd.dayName} ${dd.dateStr}. Ανατέθηκε ο/η ${assignedPerson}.`;
+                                } else {
+                                    derivedSwapReason = violationReason;
+                                }
+                            } else {
+                                derivedSwapReason = violationReason;
+                            }
+                        }
                         
                         violations.push({
                             date: dayKey,
@@ -14617,7 +14663,7 @@
                             assignedPerson: assignedPerson,
                             expectedPerson: expectedPerson,
                             conflicts: conflictSummary,
-                            swapReason: swapOrSkipReasonText || violationReason,
+                            swapReason: swapOrSkipReasonText || derivedSwapReason || violationReason,
                             skippedReason: skippedReason,
                             dayType: getDayTypeLabel(dayType)
                         });
@@ -14710,14 +14756,19 @@
                 
                 violations.forEach(violation => {
                     const row = document.createElement('tr');
+                    const reasonHtml = (() => {
+                        const main = violation.swapReason || '-';
+                        const extra = violation.skippedReason ? `<br><span class="text-muted">(${escapeHtml(violation.skippedReason)})</span>` : '';
+                        return `${escapeHtml(main)}${extra}`;
+                    })();
                     row.innerHTML = `
                         <td>${violation.dateFormatted}</td>
                         <td><span class="badge bg-primary">${violation.groupName}</span></td>
                         <td><strong>${violation.assignedPerson}</strong></td>
                         <td><strong class="text-danger">${violation.expectedPerson}</strong></td>
                         <td><small>${violation.conflicts || '-'}</small></td>
-                        <td><small>${violation.swapReason || '-'}</small></td>
-                        <td><small>${violation.skippedReason || '-'}</small></td>
+                        <td><small>${reasonHtml}</small></td>
+                        <td><small>${escapeHtml(violation.dayType || '-')}</small></td>
                     `;
                     tableBody.appendChild(row);
                 });
