@@ -14821,11 +14821,27 @@
                                 // treat it as legitimate so the popup shows the reason.
                                 if (!hasLegitimateConflict && swapOrSkipType === 'swap' && swapOrSkipReasonText) {
                                     hasLegitimateConflict = true;
-                                    const dow = date.getDay(); // 1=Mon,2=Tue,3=Wed,4=Thu
-                                    let swapRule = 'Καθημερινών';
-                                    if (dow === 1 || dow === 3) swapRule = 'Δευτέρα↔Τετάρτη';
-                                    else if (dow === 2 || dow === 4) swapRule = 'Τρίτη↔Πέμπτη';
-                                    conflictDetails.push(`Αλλαγή βάσει κανόνα ${swapRule} (από λόγους ανάθεσης)`);
+                                    // Prefer showing the actual affected/conflict dates in the "Σύγκρουση" column,
+                                    // not a generic rule label.
+                                    // Try to parse the conflict date from the saved swap reason text.
+                                    const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                    const dateMatches = String(swapOrSkipReasonText).match(/(\d{2}\/\d{2}\/\d{4})/g) || [];
+                                    // The first dd/MM/yyyy in the sentence is the conflict date ("είχε σύγκρουση ..."),
+                                    // the second is the assignment date ("ανατέθηκε ...").
+                                    const conflictDateStr = dateMatches.length ? dateMatches[0] : null;
+                                    if (conflictDateStr) {
+                                        const [dd, mm, yyyy] = conflictDateStr.split('/').map(x => parseInt(x, 10));
+                                        const conflictDateObj = new Date(yyyy, (mm || 1) - 1, dd || 1);
+                                        const conflictDayType = getDayType(conflictDateObj);
+                                        const conflictLabel = (conflictDayType === 'special-holiday')
+                                            ? 'Ειδική Αργία'
+                                            : (conflictDayType === 'weekend-holiday')
+                                                ? 'Σαββατοκύριακο/Αργία'
+                                                : (conflictDayType === 'semi-normal-day')
+                                                    ? 'Ημιαργία'
+                                                    : 'Καθημερινή';
+                                        conflictDetails.push(`Ημερομηνία επηρεασμένη: ${currentDateStr}, Συνεχόμενη ${conflictLabel}: ${conflictDateStr}`);
+                                    }
                                 }
                             }
                             
