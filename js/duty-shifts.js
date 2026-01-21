@@ -14629,7 +14629,8 @@
                             groupName: getGroupName(groupNum),
                             assignedPerson: assignedPerson,
                             expectedPerson: baseExpectedPerson,
-                            conflicts: '',
+                            // Show the short reason in "Σύγκρουση" instead of a dash
+                            conflicts: missingReason,
                             swapReason: swapOrSkipReasonText || `Παράλειψη λόγω ${missingReason}`,
                             skippedReason: missingReason,
                             dayType: getDayTypeLabel(dayType)
@@ -14681,7 +14682,8 @@
                             // regardless of the person's CURRENT disabled/missing status (history must not change).
                             if (swapOrSkipType === 'skip' && swapOrSkipReasonText) {
                                 hasLegitimateConflict = true;
-                                conflictDetails.push(`Παράλειψη (${extractShortReasonFromSavedText(swapOrSkipReasonText)})`);
+                                // For "Σύγκρουση" show only the short reason (Απενεργοποιημένος / Αναρρωτική Άδεια / ...)
+                                conflictDetails.push(extractShortReasonFromSavedText(swapOrSkipReasonText));
                             }
                             
                             // Check if person is disabled (distinct from missing periods)
