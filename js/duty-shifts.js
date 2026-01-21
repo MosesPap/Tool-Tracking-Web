@@ -3500,6 +3500,31 @@
                 .replace(/\s+/g, ' ')
                 .trim();
         }
+
+        // Normalize legacy swap-reason strings so UI always shows the canonical:
+        // "Έγινε η αλλαγή γιατι ο/η X είχε σύγκρουση ..., και ανατέθηκε ...".
+        function normalizeSwapReasonText(reasonText) {
+            const raw = String(reasonText || '').trim();
+            if (!raw) return raw;
+            if (raw.startsWith('Έγινε η αλλαγή γιατι ')) return raw;
+
+            // Convert old "Αλλάχθηκε με <name> επειδή ..." -> canonical by stripping the "Αλλάχθηκε με <name>" part.
+            // Support both accented and unaccented variants.
+            const idxEpeidi = raw.indexOf('επειδή') >= 0 ? raw.indexOf('επειδή') : raw.indexOf('επειδη');
+            const lowered = raw.toLowerCase();
+            const looksLikeOldSwap = lowered.startsWith('αλλάχθηκε με') || lowered.startsWith('αλλαχθηκε με');
+            if (looksLikeOldSwap && idxEpeidi >= 0) {
+                const after = raw.slice(idxEpeidi + 'επειδή'.length).trim();
+                // after typically starts with "ο/η <name> είχε σύγκρουση ..."
+                return `Έγινε η αλλαγή γιατι ${after}`;
+            }
+
+            // If it already contains the canonical core, just ensure it starts correctly.
+            if (raw.includes('είχε σύγκρουση') && raw.includes('ανατέθηκε')) {
+                return raw.replace(/^Αλλάχθηκε με .*?επειδή\s+/i, 'Έγινε η αλλαγή γιατι ');
+            }
+            return raw;
+        }
         
         // Open edit person from actions modal
         function openEditPersonFromActions() {
@@ -6608,17 +6633,14 @@
         }
 
         // Build swap reason in Greek.
-        // If subjectName === conflictedPersonName, we omit repeating the name: "επειδή είχε σύγκρουση..."
-        // otherwise we use: "επειδή ο <conflicted> είχε σύγκρουση..."
         function buildSwapReasonGreek({ changedWithName, conflictedPersonName, conflictDateKey, newAssignmentDateKey, subjectName = null }) {
             const conflict = formatGreekDayDate(conflictDateKey);
             const assigned = formatGreekDayDate(newAssignmentDateKey);
             const conflictArt = getGreekDayAccusativeArticle(new Date(conflictDateKey + 'T00:00:00'));
             const assignedArt = getGreekDayAccusativeArticle(new Date(newAssignmentDateKey + 'T00:00:00'));
-            const prefix = (subjectName && conflictedPersonName && subjectName === conflictedPersonName)
-                ? `Αλλάχθηκε με ${changedWithName} επειδή ο/η ${conflictedPersonName} είχε σύγκρουση ${conflictArt} ${conflict.dayName} ${conflict.dateStr}`
-                : `Έγινε η αλλαγή γιατι ο/η ${conflictedPersonName} είχε σύγκρουση ${conflictArt} ${conflict.dayName} ${conflict.dateStr}`;
-            return `${prefix}, και ανατέθηκε ${assignedArt} ${assigned.dayName} ${assigned.dateStr}.`;
+            // Canonical swap sentence (used everywhere: results, cell popup, violations)
+            // NOTE: keep "γιατι" spelling to match user preference.
+            return `Έγινε η αλλαγή γιατι ο/η ${conflictedPersonName} είχε σύγκρουση ${conflictArt} ${conflict.dayName} ${conflict.dateStr}, και ανατέθηκε ${assignedArt} ${assigned.dayName} ${assigned.dateStr}.`;
         }
 
         function buildSkipReasonGreek({ skippedPersonName, replacementPersonName, dateKey, monthKey = null }) {
@@ -8595,7 +8617,9 @@
                     if (base === comp) continue;
 
                     const reasonObj = assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null;
-                    const reasonText = reasonObj?.reason ? String(reasonObj.reason) : '';
+                    const reasonText = reasonObj?.reason
+                        ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
+                        : '';
                     const derivedUnavailable = (isPersonDisabledForDuty(base, groupNum, 'weekend') || isPersonMissingOnDate(base, groupNum, dateObj, 'weekend'))
                         ? (reasonText ? reasonText.split('.').filter(Boolean)[0] : buildUnavailableReplacementReason({
                             skippedPersonName: base,
@@ -9318,7 +9342,9 @@
                     if (base === comp) continue;
 
                     const reasonObj = assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null;
-                    const reasonText = reasonObj?.reason ? String(reasonObj.reason) : '';
+                    const reasonText = reasonObj?.reason
+                        ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
+                        : '';
                     const briefReason = reasonText
                         ? reasonText.split('.').filter(Boolean)[0]
                         : ((isPersonDisabledForDuty(base, groupNum, 'semi') || isPersonMissingOnDate(base, groupNum, dateObj, 'semi'))
@@ -10639,7 +10665,9 @@
                     if (base === comp) continue;
 
                     const reasonObj = assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null;
-                    const reasonText = reasonObj?.reason ? String(reasonObj.reason) : '';
+                    const reasonText = reasonObj?.reason
+                        ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
+                        : '';
                     const briefReason = reasonText
                         ? reasonText.split('.').filter(Boolean)[0]
                         : ((isPersonDisabledForDuty(base, groupNum, 'normal') || isPersonMissingOnDate(base, groupNum, dateObj, 'normal'))
@@ -13767,7 +13795,8 @@
                         const displayReason = normalizeSkipReasonText(reason.reason);
                         reasonBadge = `<span class="badge bg-warning ms-2" title="${displayReason}"><i class="fas fa-arrow-right me-1"></i>Παραλείφθηκε</span>`;
                     } else if (reason.type === 'swap') {
-                        reasonBadge = `<span class="badge bg-info ms-2" title="${reason.reason}"><i class="fas fa-exchange-alt me-1"></i>Αλλαγή${reason.swappedWith ? ` με ${reason.swappedWith}` : ''}</span>`;
+                        const displayReason = normalizeSwapReasonText(reason.reason);
+                        reasonBadge = `<span class="badge bg-info ms-2" title="${displayReason}"><i class="fas fa-exchange-alt me-1"></i>Αλλαγή${reason.swappedWith ? ` με ${reason.swappedWith}` : ''}</span>`;
                     }
                 }
                 
@@ -13808,7 +13837,9 @@
                     }
                 }
                 const reasonDisplayText = reason
-                    ? (reason.type === 'skip' ? normalizeSkipReasonText(reason.reason) : reason.reason)
+                    ? (reason.type === 'skip'
+                        ? normalizeSkipReasonText(reason.reason)
+                        : (reason.type === 'swap' ? normalizeSwapReasonText(reason.reason) : reason.reason))
                     : derivedReasonText;
                 const reasonDisplay = (reason || derivedReasonText)
                     ? `<div class="mt-2 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${reasonDisplayText}</div>`
@@ -14614,7 +14645,9 @@
                         const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
                         const swapOrSkipReasonText = assignmentReason?.type === 'skip'
                             ? normalizeSkipReasonText(assignmentReason?.reason || '')
-                            : (assignmentReason?.reason || '');
+                            : (assignmentReason?.type === 'swap'
+                                ? normalizeSwapReasonText(assignmentReason?.reason || '')
+                                : (assignmentReason?.reason || ''));
                         const swapOrSkipType = assignmentReason?.type || '';
                         const swapPairId = assignmentReason?.swapPairId;
                         if (swapOrSkipType === 'swap' && swapPairId !== null && swapPairId !== undefined) {
