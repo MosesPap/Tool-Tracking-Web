@@ -8629,11 +8629,22 @@
                             dutyCategory: 'weekend'
                         }).split('.').filter(Boolean)[0])
                         : '';
-                    const briefReason =
-                        derivedUnavailable ? derivedUnavailable :
-                        (reasonText.includes('ειδική αργία') ? 'Ειδική αργία στον ίδιο μήνα' :
-                        reasonText.includes('παραλειφθεί') ? 'Ήταν ήδη παραλειφθεί αυτόν τον μήνα' :
-                            (reasonText ? reasonText.split('.').filter(Boolean)[0] : 'Αλλαγή'));
+                    // Prefer the saved reason sentence (first sentence) when available.
+                    // This keeps the results window consistent with the requested style:
+                    // "Αντικατέστησε τον/την ... επειδή είχε ειδική αργία στον ίδιο μήνα ..."
+                    let briefReason = '';
+                    if (derivedUnavailable) {
+                        briefReason = derivedUnavailable;
+                    } else if (reasonText) {
+                        briefReason = reasonText.split('.').filter(Boolean)[0] || '';
+                    } else if (hasSpecialHolidayDutyInMonth(base, groupNum, dateObj.getMonth(), dateObj.getFullYear())) {
+                        // Fallback: no saved reason (older data) — still show the sentence style.
+                        const dayArt = getGreekDayAccusativeArticle(dateObj);
+                        const dayName = getGreekDayName(dateObj);
+                        briefReason = `Αντικατέστησε τον/την ${base} επειδή είχε ειδική αργία στον ίδιο μήνα ${dayArt} ${dayName} ${dateStr}`;
+                    } else {
+                        briefReason = 'Αλλαγή';
+                    }
 
                     // Weekend skip has no swap-date; keep '-' (but support future swapPairId logic if it appears)
                     const swapOtherKey = reasonObj?.type === 'swap'
