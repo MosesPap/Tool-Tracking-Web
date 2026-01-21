@@ -11352,7 +11352,7 @@
                                                 replacementPersonName: assignedPerson,
                                                 dateObj: date,
                                                 groupNum,
-                                                dutyCategory: 'normal'
+                                                dutyCategory: 'weekend'
                                             }),
                                             rotationPerson,
                                             null
@@ -12561,7 +12561,7 @@
                                                 replacementPersonName: assignedPerson,
                                                 dateObj: date,
                                                 groupNum,
-                                                dutyCategory: 'special'
+                                                dutyCategory: 'normal'
                                             }),
                                             rotationPerson,
                                             null
