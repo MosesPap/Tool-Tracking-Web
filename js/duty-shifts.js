@@ -3416,10 +3416,7 @@
         function isPersonDisabledForDuty(person, groupNum, dutyCategory) {
             const st = getDisabledState(groupNum, person);
             if (st.all) return true;
-            if (!dutyCategory) {
-                // If category is not specified, treat any per-type disabled as disabled for display/availability helpers.
-                return !!(st.special || st.weekend || st.semi || st.normal);
-            }
+            if (!dutyCategory) return false;
             // Accept both internal categories and day-type strings defensively
             let cat = dutyCategory;
             if (cat === 'special-holiday') cat = 'special';
@@ -3459,8 +3456,9 @@
             const reasonShort = getUnavailableReasonShort(skippedPersonName, groupNum, dateObj, dutyCategory);
             const verb = reasonShort === 'Απενεργοποιημένος' ? 'ήταν' : 'είχε';
             const dayName = getGreekDayName(dateObj);
+            const dayArt = getGreekDayAccusativeArticle(dateObj);
             const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            return `Αντικατέστησε τον/την ${skippedPersonName} επειδή ${verb} ${reasonShort} την ${dayName} ${dateStr}. Ανατέθηκε ο/η ${replacementPersonName}.`;
+            return `Αντικατέστησε τον/την ${skippedPersonName} επειδή ${verb} ${reasonShort} ${dayArt} ${dayName} ${dateStr}. Ανατέθηκε ο/η ${replacementPersonName}.`;
         }
 
         // Normalize legacy/odd skip-reason strings for DISABLED persons so UI always shows:
@@ -5596,6 +5594,17 @@
             const days = ['Κυριακή', 'Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτη', 'Παρασκευή', 'Σάββατο'];
             return days[date.getDay()];
         }
+
+        // Greek article for day name in accusative:
+        // - "το Σάββατο"
+        // - "την Κυριακή/Δευτέρα/..."
+        function getGreekDayAccusativeArticle(date) {
+            try {
+                return date && typeof date.getDay === 'function' && date.getDay() === 6 ? 'το' : 'την';
+            } catch (_) {
+                return 'την';
+            }
+        }
         
         // Get Greek day name in uppercase for Excel
         function getGreekDayNameUppercase(date) {
@@ -6601,16 +6610,19 @@
         function buildSwapReasonGreek({ changedWithName, conflictedPersonName, conflictDateKey, newAssignmentDateKey, subjectName = null }) {
             const conflict = formatGreekDayDate(conflictDateKey);
             const assigned = formatGreekDayDate(newAssignmentDateKey);
+            const conflictArt = getGreekDayAccusativeArticle(new Date(conflictDateKey + 'T00:00:00'));
+            const assignedArt = getGreekDayAccusativeArticle(new Date(newAssignmentDateKey + 'T00:00:00'));
             const prefix = (subjectName && conflictedPersonName && subjectName === conflictedPersonName)
-                ? `Αλλάχθηκε με ${changedWithName} επειδή ο/η ${conflictedPersonName} είχε σύγκρουση την ${conflict.dayName} ${conflict.dateStr}`
-                : `Έγινε η αλλαγή γιατι ο/η ${conflictedPersonName} είχε σύγκρουση την ${conflict.dayName} ${conflict.dateStr}`;
-            return `${prefix}, και ανατέθηκε την ${assigned.dayName} ${assigned.dateStr}.`;
+                ? `Αλλάχθηκε με ${changedWithName} επειδή ο/η ${conflictedPersonName} είχε σύγκρουση ${conflictArt} ${conflict.dayName} ${conflict.dateStr}`
+                : `Έγινε η αλλαγή γιατι ο/η ${conflictedPersonName} είχε σύγκρουση ${conflictArt} ${conflict.dayName} ${conflict.dateStr}`;
+            return `${prefix}, και ανατέθηκε ${assignedArt} ${assigned.dayName} ${assigned.dateStr}.`;
         }
 
         function buildSkipReasonGreek({ skippedPersonName, replacementPersonName, dateKey, monthKey = null }) {
             const d = formatGreekDayDate(dateKey);
+            const dayArt = getGreekDayAccusativeArticle(new Date(dateKey + 'T00:00:00'));
             const monthPart = monthKey ? ` (${monthKey})` : '';
-            return `Αντικατέστησε τον/την ${skippedPersonName} επειδή είχε κώλυμα${monthPart} την ${d.dayName} ${d.dateStr}. Ανατέθηκε ο/η ${replacementPersonName}.`;
+            return `Αντικατέστησε τον/την ${skippedPersonName} επειδή είχε κώλυμα${monthPart} ${dayArt} ${d.dayName} ${d.dateStr}. Ανατέθηκε ο/η ${replacementPersonName}.`;
         }
 
         // Return the adjacent day (before/after) that causes the consecutive-duty conflict.
@@ -8522,7 +8534,7 @@
                                     groupNum,
                                     replacementPerson,
                                     'skip',
-                                    `Αντικατέστησε τον/την ${currentPerson} επειδή είχε ${monthReason} την ${getGreekDayName(date)} ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ο/η ${replacementPerson}.`,
+                                    `Αντικατέστησε τον/την ${currentPerson} επειδή είχε ${monthReason} ${getGreekDayAccusativeArticle(date)} ${getGreekDayName(date)} ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ο/η ${replacementPerson}.`,
                                     currentPerson,
                                     null
                                 );
@@ -10338,7 +10350,7 @@
                                             const swapCandidate = updatedAssignments[nextAlternativeKey][groupNum];
                                             console.log(`[SWAP LOGIC] Step 3: Found candidate ${swapCandidate} on ${nextAlternativeKey}`);
                                             
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextAlternativeDay) &&
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextAlternativeDay, 'normal') &&
                                                 !hasConsecutiveDuty(nextAlternativeKey, swapCandidate, groupNum, simulatedAssignments) &&
                                                 !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 swapDayKey = nextAlternativeKey;
@@ -10375,10 +10387,10 @@
                                         const nextMonthSwapDate = new Date(nextMonthSwapDayKey + 'T00:00:00');
                                         if (nextMonthSwapDate.getDay() === alternativeDayOfWeek) {
                                             // Check if swap candidate is valid for current date
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, date) &&
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, date, 'normal') &&
                                                 !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 // Check if swap candidate is valid for next month swap day
-                                                if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate) &&
+                                                if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate, 'normal') &&
                                                     !hasConsecutiveDuty(nextMonthSwapDayKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                     swapDayKey = nextMonthSwapDayKey;
                                                     swapDayIndex = normalDays.includes(nextMonthSwapDayKey) ? normalDays.indexOf(nextMonthSwapDayKey) : -1;
@@ -10423,10 +10435,10 @@
                                         const nextMonthSwapDate = new Date(nextMonthSwapDayKey + 'T00:00:00');
                                         if (nextMonthSwapDate.getDay() === alternativeDayOfWeek) {
                                             // Check if swap candidate is valid for current date
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, date) &&
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, date, 'normal') &&
                                                 !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 // Check if swap candidate is valid for next month swap day
-                                                if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate) &&
+                                                if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate, 'normal') &&
                                                     !hasConsecutiveDuty(nextMonthSwapDayKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                     swapDayKey = nextMonthSwapDayKey;
                                                     swapDayIndex = normalDays.includes(nextMonthSwapDayKey) ? normalDays.indexOf(nextMonthSwapDayKey) : -1;
@@ -12851,7 +12863,7 @@
                                         const nextMonthKey = formatDateKey(nextMonthDate);
                                         if (normalDays.includes(nextMonthKey) && normalAssignments[nextMonthKey]?.[groupNum]) {
                                             const swapCandidate = normalAssignments[nextMonthKey][groupNum];
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthDate) &&
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthDate, 'normal') &&
                                                 !hasConsecutiveDuty(nextMonthKey, swapCandidate, groupNum, simulatedAssignments) &&
                                                 !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 swapDayKey = nextMonthKey;
