@@ -8080,7 +8080,14 @@
 
                         let reason = '';
                         if (isPersonDisabledForDuty(base, groupNum, 'special') || isPersonMissingOnDate(base, groupNum, date, 'special')) {
-                            reason = getUnavailableReasonShort(base, groupNum, date, 'special');
+                            // Keep the same style as other steps: show the first sentence (without "Ανατέθηκε...")
+                            reason = buildUnavailableReplacementReason({
+                                skippedPersonName: base,
+                                replacementPersonName: comp,
+                                dateObj: date,
+                                groupNum,
+                                dutyCategory: 'special'
+                            }).split('.').filter(Boolean)[0] || '';
                         } else {
                             reason = 'Αλλαγή (κανόνας/σύγκρουση)';
                         }
@@ -8574,11 +8581,20 @@
 
                     const reasonObj = assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null;
                     const reasonText = reasonObj?.reason ? String(reasonObj.reason) : '';
+                    const derivedUnavailable = (isPersonDisabledForDuty(base, groupNum, 'weekend') || isPersonMissingOnDate(base, groupNum, dateObj, 'weekend'))
+                        ? (reasonText ? reasonText.split('.').filter(Boolean)[0] : buildUnavailableReplacementReason({
+                            skippedPersonName: base,
+                            replacementPersonName: comp,
+                            dateObj,
+                            groupNum,
+                            dutyCategory: 'weekend'
+                        }).split('.').filter(Boolean)[0])
+                        : '';
                     const briefReason =
-                        reasonText.includes('ειδική αργία') ? 'Ειδική αργία στον ίδιο μήνα' :
+                        derivedUnavailable ? derivedUnavailable :
+                        (reasonText.includes('ειδική αργία') ? 'Ειδική αργία στον ίδιο μήνα' :
                         reasonText.includes('παραλειφθεί') ? 'Ήταν ήδη παραλειφθεί αυτόν τον μήνα' :
-                        (isPersonDisabledForDuty(base, groupNum, 'weekend') ? 'Απενεργοποιημένος' :
-                            (isPersonMissingOnDate(base, groupNum, dateObj, 'weekend') ? 'Κώλυμα/Απουσία' : (reasonText ? reasonText.split('.').filter(Boolean)[0] : 'Αλλαγή')));
+                            (reasonText ? reasonText.split('.').filter(Boolean)[0] : 'Αλλαγή'));
 
                     // Weekend skip has no swap-date; keep '-' (but support future swapPairId logic if it appears)
                     const swapOtherKey = reasonObj?.type === 'swap'
@@ -9290,7 +9306,15 @@
                     const reasonText = reasonObj?.reason ? String(reasonObj.reason) : '';
                     const briefReason = reasonText
                         ? reasonText.split('.').filter(Boolean)[0]
-                        : (isPersonDisabledForDuty(base, groupNum, 'semi') ? 'Απενεργοποιημένος' : (isPersonMissingOnDate(base, groupNum, dateObj, 'semi') ? 'Κώλυμα/Απουσία' : 'Αλλαγή'));
+                        : ((isPersonDisabledForDuty(base, groupNum, 'semi') || isPersonMissingOnDate(base, groupNum, dateObj, 'semi'))
+                            ? (buildUnavailableReplacementReason({
+                                skippedPersonName: base,
+                                replacementPersonName: comp,
+                                dateObj,
+                                groupNum,
+                                dutyCategory: 'semi'
+                            }).split('.').filter(Boolean)[0] || '')
+                            : 'Αλλαγή');
 
                     const otherKey = reasonObj?.type === 'swap'
                         ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
@@ -10603,7 +10627,15 @@
                     const reasonText = reasonObj?.reason ? String(reasonObj.reason) : '';
                     const briefReason = reasonText
                         ? reasonText.split('.').filter(Boolean)[0]
-                        : (isPersonDisabledForDuty(base, groupNum, 'normal') ? 'Απενεργοποιημένος' : (isPersonMissingOnDate(base, groupNum, dateObj, 'normal') ? 'Κώλυμα/Απουσία' : 'Αλλαγή'));
+                        : ((isPersonDisabledForDuty(base, groupNum, 'normal') || isPersonMissingOnDate(base, groupNum, dateObj, 'normal'))
+                            ? (buildUnavailableReplacementReason({
+                                skippedPersonName: base,
+                                replacementPersonName: comp,
+                                dateObj,
+                                groupNum,
+                                dutyCategory: 'normal'
+                            }).split('.').filter(Boolean)[0] || '')
+                            : 'Αλλαγή');
 
                     const otherKey = reasonObj?.type === 'swap'
                         ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
