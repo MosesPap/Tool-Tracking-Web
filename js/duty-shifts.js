@@ -3447,8 +3447,9 @@
         }
 
         function buildUnavailableReplacementReason({ skippedPersonName, replacementPersonName, dateObj, groupNum, dutyCategory = null }) {
-            const reasonShort = getUnavailableReasonShort(skippedPersonName, groupNum, dateObj, dutyCategory);
-            const verb = reasonShort === 'Απενεργοποιημένος' ? 'ήταν' : 'είχε';
+            const isDisabled = isPersonDisabledForDuty(skippedPersonName, groupNum, dutyCategory);
+            const reasonShort = isDisabled ? 'Απενεργοποιημένος' : getUnavailableReasonShort(skippedPersonName, groupNum, dateObj, dutyCategory);
+            const verb = isDisabled ? 'ήταν' : 'είχε';
             const dayName = getGreekDayName(dateObj);
             const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
             return `Αντικατέστησε τον/την ${skippedPersonName} επειδή ${verb} ${reasonShort} την ${dayName} ${dateStr}. Ανατέθηκε ο/η ${replacementPersonName}.`;
