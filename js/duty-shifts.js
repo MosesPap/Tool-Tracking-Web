@@ -7951,7 +7951,7 @@
                                             replacementPersonName: assignedPerson,
                                             dateObj: date,
                                             groupNum,
-                                            dutyCategory: 'weekend'
+                                            dutyCategory: 'special'
                                         }),
                                         rotationPerson,
                                         null
