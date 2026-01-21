@@ -14687,21 +14687,15 @@
                             // Check if person is disabled (distinct from missing periods)
                             if (isDisabled) {
                                 hasLegitimateConflict = true;
-                                conflictDetails.push(getDisabledReasonText(expectedPerson, groupNum));
+                                // For "Σύγκρουση" column we want a short label, not long per-type text.
+                                conflictDetails.push('Απενεργοποιημένος');
                             }
 
                             // Check if person is missing (missing period)
                             if (isMissingPeriod) {
                                 hasLegitimateConflict = true;
-                                const missingPeriod = getPersonMissingPeriod(expectedPerson, groupNum, date);
-                                if (missingPeriod && missingPeriod.start && missingPeriod.end) {
-                                    const startStr = missingPeriod.start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                    const endStr = missingPeriod.end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                    const reasonPart = missingPeriod.reason ? ` - ${missingPeriod.reason}` : '';
-                                    conflictDetails.push(`Άτομο λείπει: ${startStr} - ${endStr}${reasonPart}`);
-                                } else {
-                                    conflictDetails.push(`Άτομο λείπει`);
-                                }
+                                // Prefer the selected missing reason (Κανονική Άδεια / Αναρρωτική Άδεια / Φύλλο Πορείας / ...)
+                                conflictDetails.push(getUnavailableReasonShort(expectedPerson, groupNum, date, dayTypeCategory));
                             }
                             
                             // Check conflicts based on day type (matching calculation logic)
