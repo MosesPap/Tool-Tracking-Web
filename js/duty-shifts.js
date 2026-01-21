@@ -3416,8 +3416,17 @@
         function isPersonDisabledForDuty(person, groupNum, dutyCategory) {
             const st = getDisabledState(groupNum, person);
             if (st.all) return true;
-            if (!dutyCategory) return false;
-            return !!st[dutyCategory];
+            if (!dutyCategory) {
+                // If category is not specified, treat any per-type disabled as disabled for display/availability helpers.
+                return !!(st.special || st.weekend || st.semi || st.normal);
+            }
+            // Accept both internal categories and day-type strings defensively
+            let cat = dutyCategory;
+            if (cat === 'special-holiday') cat = 'special';
+            else if (cat === 'weekend-holiday') cat = 'weekend';
+            else if (cat === 'semi-normal-day') cat = 'semi';
+            else if (cat === 'normal-day') cat = 'normal';
+            return !!st[cat];
         }
 
         function getDisabledReasonText(person, groupNum) {
