@@ -3447,12 +3447,48 @@
         }
 
         function buildUnavailableReplacementReason({ skippedPersonName, replacementPersonName, dateObj, groupNum, dutyCategory = null }) {
-            const isDisabled = isPersonDisabledForDuty(skippedPersonName, groupNum, dutyCategory);
-            const reasonShort = isDisabled ? 'Απενεργοποιημένος' : getUnavailableReasonShort(skippedPersonName, groupNum, dateObj, dutyCategory);
-            const verb = isDisabled ? 'ήταν' : 'είχε';
+            const reasonShort = getUnavailableReasonShort(skippedPersonName, groupNum, dateObj, dutyCategory);
+            const verb = reasonShort === 'Απενεργοποιημένος' ? 'ήταν' : 'είχε';
             const dayName = getGreekDayName(dateObj);
             const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
             return `Αντικατέστησε τον/την ${skippedPersonName} επειδή ${verb} ${reasonShort} την ${dayName} ${dateStr}. Ανατέθηκε ο/η ${replacementPersonName}.`;
+        }
+
+        // Normalize legacy/odd skip-reason strings for DISABLED persons so UI always shows:
+        // "επειδή ήταν Απενεργοποιημένος ..." (and not "είχε Κώλυμα/Απουσία ... (Απενεργοποιημένος)")
+        function normalizeSkipReasonText(reasonText) {
+            const raw = String(reasonText || '').trim();
+            if (!raw) return raw;
+            if (!raw.includes('Απενεργοποιημένος')) return raw;
+
+            // If it's already in the correct form, keep it.
+            if (raw.includes('επειδή ήταν Απενεργοποιημένος')) return raw;
+
+            // Try to rebuild the sentence from the parts we can parse.
+            const skippedMatch = raw.match(/Αντικατέστησε\s+τον\/την\s+(.+?)\s+επειδή/i);
+            const replacementMatch = raw.match(/Ανατέθηκε\s+ο\/η\s+(.+?)\s*\./i);
+            const skipped = skippedMatch ? skippedMatch[1].trim() : null;
+            const replacement = replacementMatch ? replacementMatch[1].trim() : null;
+
+            let datePart = '';
+            const idxTin = raw.indexOf('την ');
+            const idxAssign = raw.indexOf('. Ανατέθηκε');
+            if (idxTin >= 0 && idxAssign > idxTin) {
+                datePart = raw.slice(idxTin + 3, idxAssign).trim();
+            }
+
+            if (skipped && replacement) {
+                const tail = datePart ? ` την ${datePart}` : '';
+                return `Αντικατέστησε τον/την ${skipped} επειδή ήταν Απενεργοποιημένος${tail}. Ανατέθηκε ο/η ${replacement}.`;
+            }
+
+            // Fallback: remove any "(Απενεργοποιημένος ...)" suffixes and force the key phrase.
+            return raw
+                .replace(/\s*\(Απενεργοποιημένος[^)]*\)\s*/g, ' ')
+                .replace(/επειδή\s+είχε\s+[^.]*Απενεργοποιημένος/i, 'επειδή ήταν Απενεργοποιημένος')
+                .replace(/επειδή\s+είχε\s+Κώλυμα\/Απουσία/gi, 'επειδή ήταν Απενεργοποιημένος')
+                .replace(/\s+/g, ' ')
+                .trim();
         }
         
         // Open edit person from actions modal
@@ -13655,7 +13691,8 @@
                 let reasonBadge = '';
                 if (reason) {
                     if (reason.type === 'skip') {
-                        reasonBadge = `<span class="badge bg-warning ms-2" title="${reason.reason}"><i class="fas fa-arrow-right me-1"></i>Παραλείφθηκε</span>`;
+                        const displayReason = normalizeSkipReasonText(reason.reason);
+                        reasonBadge = `<span class="badge bg-warning ms-2" title="${displayReason}"><i class="fas fa-arrow-right me-1"></i>Παραλείφθηκε</span>`;
                     } else if (reason.type === 'swap') {
                         reasonBadge = `<span class="badge bg-info ms-2" title="${reason.reason}"><i class="fas fa-exchange-alt me-1"></i>Αλλαγή${reason.swappedWith ? ` με ${reason.swappedWith}` : ''}</span>`;
                     }
@@ -13674,8 +13711,18 @@
                     const expected = getExpectedPersonForDay(person.group);
                     if (expected && expected !== person.name) {
                         if (isPersonMissingOnDate(expected, person.group, date, dayTypeCategory)) {
-                            const missingReason = getUnavailableReasonShort(expected, person.group, date, dayTypeCategory);
-                            derivedReasonText = `Αντικατέστησε τον/την ${expected} λόγω ${missingReason}.`;
+                            if (isPersonDisabledForDuty(expected, person.group, dayTypeCategory)) {
+                                derivedReasonText = buildUnavailableReplacementReason({
+                                    skippedPersonName: expected,
+                                    replacementPersonName: person.name,
+                                    dateObj: date,
+                                    groupNum: person.group,
+                                    dutyCategory: dayTypeCategory
+                                });
+                            } else {
+                                const missingReason = getUnavailableReasonShort(expected, person.group, date, dayTypeCategory);
+                                derivedReasonText = `Αντικατέστησε τον/την ${expected} λόγω ${missingReason}.`;
+                            }
                         } else if (dayTypeCategory === 'weekend' && hasSpecialHolidayDutyInMonth(expected, person.group, month, year)) {
                             const specialKey = getSpecialHolidayDutyDateInMonth(expected, person.group, year, month);
                             if (specialKey) {
@@ -13687,8 +13734,11 @@
                         }
                     }
                 }
+                const reasonDisplayText = reason
+                    ? (reason.type === 'skip' ? normalizeSkipReasonText(reason.reason) : reason.reason)
+                    : derivedReasonText;
                 const reasonDisplay = (reason || derivedReasonText)
-                    ? `<div class="mt-2 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${reason ? reason.reason : derivedReasonText}</div>`
+                    ? `<div class="mt-2 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${reasonDisplayText}</div>`
                     : '';
                 
                 // Get all people from this group for dropdown
@@ -14489,7 +14539,9 @@
                         // Pull swap/skip reason from assignmentReasons (same text shown in day-details popup)
                         // We need this early because it may indicate a legitimate "skip" even when we can't re-derive the rule.
                         const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
-                        const swapOrSkipReasonText = assignmentReason?.reason || '';
+                        const swapOrSkipReasonText = assignmentReason?.type === 'skip'
+                            ? normalizeSkipReasonText(assignmentReason?.reason || '')
+                            : (assignmentReason?.reason || '');
                         const swapOrSkipType = assignmentReason?.type || '';
                         const swapPairId = assignmentReason?.swapPairId;
                         if (swapOrSkipType === 'swap' && swapPairId !== null && swapPairId !== undefined) {
