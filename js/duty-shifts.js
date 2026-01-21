@@ -3445,6 +3445,14 @@
             }
             return 'Κώλυμα/Απουσία';
         }
+
+        function buildUnavailableReplacementReason({ skippedPersonName, replacementPersonName, dateObj, groupNum, dutyCategory = null }) {
+            const reasonShort = getUnavailableReasonShort(skippedPersonName, groupNum, dateObj, dutyCategory);
+            const verb = reasonShort === 'Απενεργοποιημένος' ? 'ήταν' : 'είχε';
+            const dayName = getGreekDayName(dateObj);
+            const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            return `Αντικατέστησε τον/την ${skippedPersonName} επειδή ${verb} ${reasonShort} την ${dayName} ${dateStr}. Ανατέθηκε ο/η ${replacementPersonName}.`;
+        }
         
         // Open edit person from actions modal
         function openEditPersonFromActions() {
@@ -6328,29 +6336,22 @@
                                         swapStyle = `border: 2px solid ${c.border}; background-color: ${c.bg};`;
                                     }
                                     if (r && r.type === 'skip') {
-                                        const txt = (r.reason || '').toString().toLowerCase();
-                                        if (txt.includes('κώλυμα') || txt.includes('απουσία') || txt.includes('ειδική αργία')) {
+                                        // IMPORTANT: Underline is historical and must not depend on current missing/disabled state.
+                                        // If we have a saved skip reason, always underline.
+                                        underline = true;
+                                    } else if (!r) {
+                                        // Fallback for older data: if baseline rotation differs from final assignment, underline.
+                                        const dayTypeCategory = (dayType === 'special-holiday')
+                                            ? 'special'
+                                            : (dayType === 'weekend-holiday')
+                                                ? 'weekend'
+                                                : (dayType === 'semi-normal-day')
+                                                    ? 'semi'
+                                                    : 'normal';
+                                        const baselineStr = getRotationBaselineAssignmentForType(dayTypeCategory, key);
+                                        const baselinePerson = parseAssignedPersonForGroupFromAssignment(baselineStr, g);
+                                        if (baselinePerson && baselinePerson !== personName) {
                                             underline = true;
-                                        }
-                            } else {
-                                        const expected = monthExpectedByDateGroup[key]?.[g];
-                                        if (expected && expected !== personName) {
-                                            // Underline if expected person was missing on this date
-                                            const dayTypeCategory = (dayType === 'special-holiday')
-                                                ? 'special'
-                                                : (dayType === 'weekend-holiday')
-                                                    ? 'weekend'
-                                                    : (dayType === 'semi-normal-day')
-                                                        ? 'semi'
-                                                        : 'normal';
-                                            if (isPersonMissingOnDate(expected, g, date, dayTypeCategory)) {
-                                                underline = true;
-                                            } else if (dayType === 'weekend-holiday') {
-                                                // Underline if expected person was skipped from weekend due to special holiday in same month
-                                                if (specialDutyInMonthByGroup[g].has(expected)) {
-                                                    underline = true;
-                                                }
-                                            }
                                         }
                                     }
                                 }
@@ -7878,6 +7879,22 @@
                                     assignedPerson = res.person;
                                     // Advance rotation based on the person ACTUALLY assigned (skip disabled/missing without consuming their turn)
                                     rotationPosition = res.index;
+                                    // Persist a skip reason so history (underline + violations) doesn't change if the person is re-enabled later.
+                                    storeAssignmentReason(
+                                        dateKey,
+                                        groupNum,
+                                        assignedPerson,
+                                        'skip',
+                                        buildUnavailableReplacementReason({
+                                            skippedPersonName: rotationPerson,
+                                            replacementPersonName: assignedPerson,
+                                            dateObj: date,
+                                            groupNum,
+                                            dutyCategory: 'weekend'
+                                        }),
+                                        rotationPerson,
+                                        null
+                                    );
                                 }
                             }
 
@@ -11278,6 +11295,22 @@
                                     assignedPerson = res.person;
                                     // Advance rotation based on the person ACTUALLY assigned (skip disabled/missing without consuming their turn)
                                     rotationPosition = res.index;
+                                        // Persist a skip reason so history (underline + violations) doesn't change if the person is re-enabled later.
+                                        storeAssignmentReason(
+                                            dateKey,
+                                            groupNum,
+                                            assignedPerson,
+                                            'skip',
+                                            buildUnavailableReplacementReason({
+                                                skippedPersonName: rotationPerson,
+                                                replacementPersonName: assignedPerson,
+                                                dateObj: date,
+                                                groupNum,
+                                                dutyCategory: 'normal'
+                                            }),
+                                            rotationPerson,
+                                            null
+                                        );
                                 }
                             }
 
@@ -11724,6 +11757,22 @@
                                         assignedPerson = res.person;
                                         // Advance rotation based on the person ACTUALLY assigned (skip disabled/missing without consuming their turn)
                                         rotationPosition = res.index;
+                                        // Persist a skip reason so history (underline + violations) doesn't change if the person is re-enabled later.
+                                        storeAssignmentReason(
+                                            dateKey,
+                                            groupNum,
+                                            assignedPerson,
+                                            'skip',
+                                            buildUnavailableReplacementReason({
+                                                skippedPersonName: rotationPerson,
+                                                replacementPersonName: assignedPerson,
+                                                dateObj: date,
+                                                groupNum,
+                                                dutyCategory: 'semi'
+                                            }),
+                                            rotationPerson,
+                                            null
+                                        );
                                     }
                                     }
                                     
@@ -12455,6 +12504,22 @@
                                         assignedPerson = res.person;
                                         // Advance rotation based on the person ACTUALLY assigned (skip disabled/missing without consuming their turn)
                                         rotationPosition = res.index;
+                                        // Persist a skip reason so history (underline + violations) doesn't change if the person is re-enabled later.
+                                        storeAssignmentReason(
+                                            dateKey,
+                                            groupNum,
+                                            assignedPerson,
+                                            'skip',
+                                            buildUnavailableReplacementReason({
+                                                skippedPersonName: rotationPerson,
+                                                replacementPersonName: assignedPerson,
+                                                dateObj: date,
+                                                groupNum,
+                                                dutyCategory: 'special'
+                                            }),
+                                            rotationPerson,
+                                            null
+                                        );
                                     }
                                 }
                                     
@@ -14280,6 +14345,19 @@
         function analyzeRotationViolations() {
             const violations = [];
             const seenSwapPairs = new Set(); // dayType|group|swapPairId -> dedupe swap rows
+
+            const extractShortReasonFromSavedText = (reasonText) => {
+                const t = String(reasonText || '');
+                if (!t) return '';
+                if (t.includes('Απενεργοποιημένος')) return 'Απενεργοποιημένος';
+                // Match common missing reasons explicitly
+                if (t.includes('Κανονική Άδεια')) return 'Κανονική Άδεια';
+                if (t.includes('Αναρρωτική Άδεια')) return 'Αναρρωτική Άδεια';
+                if (t.includes('Φύλλο Πορείας')) return 'Φύλλο Πορείας';
+                if (t.toLowerCase().includes('ειδική αργία')) return 'Ειδική αργία στον ίδιο μήνα';
+                if (t.toLowerCase().includes('κώλυμα') || t.toLowerCase().includes('απουσία')) return 'Κώλυμα/Απουσία';
+                return 'Παράλειψη';
+            };
             
             // Get dates only for the current month being viewed
             const year = currentDate.getFullYear();
@@ -14439,6 +14517,13 @@
                             // Get detailed information about conflicts based on day type
                             conflictDetails = [];
                             hasLegitimateConflict = false;
+
+                            // IMPORTANT: If we have a saved SKIP reason for the assigned person, treat it as legitimate
+                            // regardless of the person's CURRENT disabled/missing status (history must not change).
+                            if (swapOrSkipType === 'skip' && swapOrSkipReasonText) {
+                                hasLegitimateConflict = true;
+                                conflictDetails.push(`Παράλειψη (${extractShortReasonFromSavedText(swapOrSkipReasonText)})`);
+                            }
                             
                             // Check if person is disabled (distinct from missing periods)
                             if (isDisabled) {
@@ -14634,6 +14719,8 @@
                             skippedReason = 'Απενεργοποιημένος';
                         } else if (isMissingPeriod) {
                             skippedReason = getUnavailableReasonShort(expectedPerson, groupNum, date, dayTypeCategory);
+                        } else if (swapOrSkipType === 'skip' && swapOrSkipReasonText) {
+                            skippedReason = extractShortReasonFromSavedText(swapOrSkipReasonText);
                         } else if (dayTypeCategory === 'weekend') {
                             const specialKey = getSpecialHolidayDutyDateInMonth(expectedPerson, groupNum, year, month);
                             if (specialKey) {
