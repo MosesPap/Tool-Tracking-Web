@@ -9915,11 +9915,16 @@
                     }
                     return null;
                 };
-                const canAssignPersonToNormalDay = (dateKey, personName, groupNum, assignmentsByDate, globalRotationPositions, simulatedSpecial, simulatedWeekend, simulatedSemi) => {
+                // For reinsertion/shift feasibility:
+                // - We MUST NOT assign someone when they are missing/disabled on that date.
+                // - We can allow consecutive-duty conflicts here because the existing normal swap logic runs AFTER reinsertion
+                //   and will resolve conflicts (Monday/Wed, Tuesday/Thu logic + cross-month).
+                const canAssignPersonToNormalDay = (dateKey, personName, groupNum, assignmentsByDate, globalRotationPositions, simulatedSpecial, simulatedWeekend, simulatedSemi, { allowConsecutiveConflicts = false } = {}) => {
                     if (!dateKey || !personName) return false;
                     const dateObj = dateKeyToDate(dateKey);
                     if (isNaN(dateObj.getTime())) return false;
                     if (isPersonMissingOnDate(personName, groupNum, dateObj, 'normal')) return false;
+                    if (allowConsecutiveConflicts) return true;
                     const simulatedAssignments = {
                         special: simulatedSpecial,
                         weekend: simulatedWeekend,
@@ -9941,7 +9946,17 @@
                     for (let i = idx; i < sortedNormalKeys.length; i++) {
                         const dk = sortedNormalKeys[i];
                         if (carry) {
-                            const ok = canAssignPersonToNormalDay(dk, carry, groupNum, mergedAssignments, globalRotationPositions, simulatedSpecial, simulatedWeekend, simulatedSemi);
+                            const ok = canAssignPersonToNormalDay(
+                                dk,
+                                carry,
+                                groupNum,
+                                mergedAssignments,
+                                globalRotationPositions,
+                                simulatedSpecial,
+                                simulatedWeekend,
+                                simulatedSemi,
+                                { allowConsecutiveConflicts: true }
+                            );
                             if (!ok) return { ok: false, reason: 'unavailable-or-conflict', dateKey: dk, person: carry };
                         }
                         // Record the proposed assignment for dk before moving carry forward.
@@ -10210,7 +10225,8 @@
                                             globalNormalRotationPosition,
                                             simulatedSpecialAssignments,
                                             simulatedWeekendAssignments,
-                                            simulatedSemiAssignments
+                                            simulatedSemiAssignments,
+                                            { allowConsecutiveConflicts: true }
                                         );
                                         if (okReturning) {
                                             const chainOk = canShiftInsertFromDate(
