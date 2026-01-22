@@ -4521,6 +4521,33 @@
             const idx = dateKeysNormalSorted.indexOf(targetKey);
             if (idx < 0) return { ok: false, reason: 'target-not-in-range' };
 
+            // For normal-day reinsertion we must ONLY validate real adjacent-day conflicts against already-final
+            // non-normal assignments (semi/weekend/special). We must NOT use hasConsecutiveDuty() here because it
+            // contains "predictive" rotation checks that are correct during step-by-step construction, but can
+            // incorrectly block a post-processing normal shift-insert.
+            const hasAdjacentNonNormalDutyConflictForNormal = (normalDayKey, personName) => {
+                const d = new Date(normalDayKey + 'T00:00:00');
+                if (isNaN(d.getTime())) return false;
+
+                const checkNeighbor = (neighborDate) => {
+                    const neighborKey = formatDateKey(neighborDate);
+                    const neighborType = getDayType(neighborDate);
+                    // Normal↔Normal is allowed; only check semi/weekend/special neighbors.
+                    if (neighborType === 'normal-day') return false;
+                    return hasDutyOnDay(neighborKey, personName, groupNum);
+                };
+
+                const before = new Date(d);
+                before.setDate(before.getDate() - 1);
+                if (checkNeighbor(before)) return true;
+
+                const after = new Date(d);
+                after.setDate(after.getDate() + 1);
+                if (checkNeighbor(after)) return true;
+
+                return false;
+            };
+
             // Build proposed mapping for this group's normal days from targetKey to end of calculated range:
             // new[idx] = insertedPerson, new[idx+1] = old[idx], ..., new[last] = old[last-1]
             const oldPeople = [];
@@ -4541,9 +4568,8 @@
                 if (isPersonMissingOnDate(person, groupNum, dateObj, 'normal')) {
                     return { ok: false, reason: 'unavailable', dateKey: dk, person };
                 }
-                // Must not create consecutive-duty conflict (before/after) with existing non-normal duties.
-                // Note: Normal↔Normal does not conflict; shifting among normal days does not change these checks.
-                if (hasConsecutiveDuty(dk, person, groupNum)) {
+                // Must not create adjacent-day conflict with existing non-normal duties.
+                if (hasAdjacentNonNormalDutyConflictForNormal(dk, person)) {
                     return { ok: false, reason: 'consecutive-conflict', dateKey: dk, person };
                 }
             }
@@ -4610,6 +4636,31 @@
                             const missed = { special: false, weekend: false, semi: false, normal: false };
                             let missedNormalDow = null; // 1/3 or 2/4 track from a missed baseline normal
 
+                            // Detect "missed duty" robustly:
+                            // - Primary signal: during the missing window, the person is replaced and we store a skip reason
+                            //   where `swappedWith` is the skipped person (the one who was unavailable).
+                            // - Secondary signal: rotation baseline / pure rotation fallback.
+                            const wasPersonSkippedOnDateKey = (typeCat, dk) => {
+                                try {
+                                    const d = new Date(dk + 'T00:00:00');
+                                    if (isNaN(d.getTime())) return false;
+                                    const cat = getDayTypeCategoryFromDayType(getDayType(d));
+                                    if (cat !== typeCat) return false;
+                                    const byGroup = assignmentReasons?.[dk]?.[groupNum];
+                                    if (!byGroup || typeof byGroup !== 'object') return false;
+                                    for (const assignedName of Object.keys(byGroup)) {
+                                        const r = byGroup[assignedName];
+                                        if (!r) continue;
+                                        if (r.type === 'skip' && r.swappedWith === personName) {
+                                            return true;
+                                        }
+                                    }
+                                    return false;
+                                } catch (_) {
+                                    return false;
+                                }
+                            };
+
                             const getBaselinePersonForTypeOnDateKey = (typeCat, dk) => {
                                 // Prefer THIS RUN's rotation baseline (preview) when available.
                                 // This is the most accurate source during executeCalculation(), because
@@ -4651,6 +4702,18 @@
                             const scanKeys = (typeCat, keysList) => {
                                 for (const dk of keysList) {
                                     if (dk < overlapStart || dk > overlapEnd) continue;
+                                    // If we already replaced this person on this date due to missing/disabled,
+                                    // we know they "missed" this duty within the overlap window.
+                                    if (wasPersonSkippedOnDateKey(typeCat, dk)) {
+                                        missed[typeCat] = true;
+                                        if (typeCat === 'normal' && missedNormalDow === null) {
+                                            const dd = new Date(dk + 'T00:00:00');
+                                            const dow = dd.getDay(); // 1=Mon,2=Tue,3=Wed,4=Thu
+                                            if (dow === 1 || dow === 3) missedNormalDow = 1;
+                                            else if (dow === 2 || dow === 4) missedNormalDow = 2;
+                                        }
+                                        continue;
+                                    }
                                     const p = getBaselinePersonForTypeOnDateKey(typeCat, dk);
                                     if (p && p === personName) {
                                         missed[typeCat] = true;
@@ -4703,7 +4766,21 @@
                                 while (candidate) {
                                     const cd = new Date(candidate + 'T00:00:00');
                                     const returningUnavailable = isPersonMissingOnDate(personName, groupNum, cd, 'normal');
-                                    const returningConflict = hasConsecutiveDuty(candidate, personName, groupNum);
+                                    // For normal reinsertion, only check REAL adjacent-day conflicts against already-final
+                                    // non-normal assignments (semi/weekend/special). Avoid predictive hasConsecutiveDuty().
+                                    const returningConflict = (() => {
+                                        const d = new Date(candidate + 'T00:00:00');
+                                        if (isNaN(d.getTime())) return false;
+                                        const before = new Date(d);
+                                        before.setDate(before.getDate() - 1);
+                                        const after = new Date(d);
+                                        after.setDate(after.getDate() + 1);
+                                        const beforeType = getDayType(before);
+                                        const afterType = getDayType(after);
+                                        if (beforeType !== 'normal-day' && hasDutyOnDay(formatDateKey(before), personName, groupNum)) return true;
+                                        if (afterType !== 'normal-day' && hasDutyOnDay(formatDateKey(after), personName, groupNum)) return true;
+                                        return false;
+                                    })();
                                     const chainOk = canInsertNormalByShiftingForwardWithoutConflicts(dateKeys.normal, candidate, groupNum, personName);
                                     if (!returningUnavailable && !returningConflict && chainOk.ok) {
                                         normalTarget = candidate;
