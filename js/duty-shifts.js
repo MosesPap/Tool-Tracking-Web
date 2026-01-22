@@ -4463,6 +4463,21 @@
             return null;
         }
 
+        function getAllFinalDateKeysForType(typeCategory) {
+            try {
+                const obj = (typeCategory === 'special')
+                    ? (specialHolidayAssignments || {})
+                    : (typeCategory === 'weekend')
+                        ? (weekendAssignments || {})
+                        : (typeCategory === 'semi')
+                            ? (semiNormalAssignments || {})
+                            : (normalDayAssignments || {});
+                return Object.keys(obj || {}).filter(Boolean).sort();
+            } catch (_) {
+                return [];
+            }
+        }
+
         function swapFinalAssignmentsForGroup(typeCategory, dateKeyA, dateKeyB, groupNum) {
             if (!dateKeyA || !dateKeyB || dateKeyA === dateKeyB) return null;
             const aStr = getFinalAssignmentForType(typeCategory, dateKeyA) || '';
@@ -4501,6 +4516,7 @@
         }
 
         function applyReturnFromMissingReinsertionForRange(startDate, endDate) {
+            const report = [];
             try {
                 if (!startDate || !endDate) return;
                 const startKey = formatDateKey(startDate);
@@ -4533,35 +4549,35 @@
                             // Only act when the return date is inside the calculated range
                             if (returnKey < startKey || returnKey > endKey) continue;
 
-                            // Determine which duties were missed inside the missing window by checking baseline assignments.
-                            // Use baselines saved for the month(s); this does NOT affect rotation pointers.
-                            const overlapStart = pStart < startKey ? startKey : pStart;
-                            const overlapEnd = pEnd > endKey ? endKey : pEnd;
-
                             const missed = { special: false, weekend: false, semi: false, normal: false };
                             let missedNormalDow = null; // 1/3 or 2/4 track from a missed baseline normal
 
-                            const scanKeys = (typeCat, keysList) => {
-                                for (const dk of keysList) {
-                                    if (dk < overlapStart || dk > overlapEnd) continue;
+                            // Determine which duties were missed inside the missing window by checking baseline assignments.
+                            // IMPORTANT: scan the whole missing window (not just the calculation range), but only where baseline exists.
+                            const scanIt = new Date(pStart + 'T00:00:00');
+                            const scanEnd = new Date(pEnd + 'T00:00:00');
+                            while (scanIt <= scanEnd) {
+                                const dk = formatDateKey(scanIt);
+                                const dt = getDayType(scanIt);
+                                const typeCat = (dt === 'special-holiday') ? 'special'
+                                    : (dt === 'weekend-holiday') ? 'weekend'
+                                        : (dt === 'semi-normal-day') ? 'semi'
+                                            : (dt === 'normal-day') ? 'normal'
+                                                : null;
+                                if (typeCat) {
                                     const baseline = getRotationBaselineAssignmentForType(typeCat, dk);
                                     const p = parseAssignedPersonForGroupFromAssignment(baseline, groupNum);
                                     if (p === personName) {
                                         missed[typeCat] = true;
                                         if (typeCat === 'normal' && missedNormalDow === null) {
-                                            const dd = new Date(dk + 'T00:00:00');
-                                            const dow = dd.getDay(); // 1=Mon,2=Tue,3=Wed,4=Thu
+                                            const dow = scanIt.getDay(); // 1=Mon,2=Tue,3=Wed,4=Thu
                                             if (dow === 1 || dow === 3) missedNormalDow = 1;
                                             else if (dow === 2 || dow === 4) missedNormalDow = 2;
                                         }
                                     }
                                 }
-                            };
-
-                            scanKeys('special', dateKeys.special);
-                            scanKeys('weekend', dateKeys.weekend);
-                            scanKeys('semi', dateKeys.semi);
-                            scanKeys('normal', dateKeys.normal);
+                                scanIt.setDate(scanIt.getDate() + 1);
+                            }
 
                             if (!missed.special && !missed.weekend && !missed.semi && !missed.normal) continue;
 
@@ -4586,7 +4602,13 @@
                             const applyForType = (typeCat, targetKey) => {
                                 if (!targetKey) return;
                                 // Find the person's next natural assignment after missing end; swap to preserve counts.
-                                const naturalKey = findFirstAssignedDateForPerson(typeCat, groupNum, personName, dateKeys[typeCat], pEnd);
+                                let naturalKey = findFirstAssignedDateForPerson(typeCat, groupNum, personName, dateKeys[typeCat], pEnd);
+                                if (!naturalKey) {
+                                    // fallback: allow swapping with their next assignment even outside the selected range,
+                                    // if those months are already present in loaded data.
+                                    const allKeys = getAllFinalDateKeysForType(typeCat);
+                                    naturalKey = findFirstAssignedDateForPerson(typeCat, groupNum, personName, allKeys, pEnd);
+                                }
                                 if (!naturalKey) return;
                                 if (naturalKey === targetKey) return;
                                 const swapped = swapFinalAssignmentsForGroup(typeCat, targetKey, naturalKey, groupNum);
@@ -4610,6 +4632,18 @@
                                     null,
                                     { returnFromMissing: true, naturalKey }
                                 );
+
+                                report.push({
+                                    personName,
+                                    groupNum,
+                                    typeCat,
+                                    periodStart: pStart,
+                                    periodEnd: pEnd,
+                                    returnKey,
+                                    targetKey,
+                                    naturalKey,
+                                    swappedOut: targetOriginalPerson
+                                });
                             };
 
                             // Apply in the requested sequence
@@ -4623,6 +4657,7 @@
             } catch (e) {
                 console.warn('Return-from-missing reinsertion failed:', e);
             }
+            return report;
         }
 
         // Transfer auto-positioning reference date selection (per duty type):
@@ -11351,7 +11386,8 @@
                 try {
                     // Apply "return-from-missing" re-insertion swaps BEFORE persisting assignments/reasons.
                     // This does NOT change baseline rotation or lastRotationPositions; it only swaps final assignments.
-                    applyReturnFromMissingReinsertionForRange(startDate, endDate);
+                    const returnFromMissingReport = applyReturnFromMissingReinsertionForRange(startDate, endDate) || [];
+                    calculationSteps.returnFromMissingReport = returnFromMissingReport;
 
                     if (!window.db) {
                         console.log('Firebase not ready, skipping lastRotationPositions save');
@@ -11390,6 +11426,74 @@
                 renderRecurringHolidays();
             renderCalendar();
                 updateStatistics();
+
+                // Show a small report for "επιστροφή από απουσία" swaps (if any)
+                try {
+                    const rows = Array.isArray(calculationSteps.returnFromMissingReport) ? calculationSteps.returnFromMissingReport : [];
+                    if (rows.length) {
+                        const existing = document.getElementById('returnFromMissingReportModal');
+                        if (existing) existing.remove();
+                        const modalHtml = `
+                            <div class="modal fade" id="returnFromMissingReportModal" tabindex="-1">
+                                <div class="modal-dialog modal-xl modal-superwide">
+                                    <div class="modal-content results-modal-normal">
+                                        <div class="modal-header results-header results-header-normal">
+                                            <h5 class="modal-title"><i class="fas fa-undo me-2"></i>Αποτελέσματα Αλλαγών Επιστροφής από Απουσία</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="alert alert-info"><strong>${rows.length}</strong> αλλαγές επανένταξης μετά από απουσία.</div>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-bordered">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Άτομο</th>
+                                                            <th>Υπηρεσία</th>
+                                                            <th>Τύπος</th>
+                                                            <th>Περίοδος Απουσίας</th>
+                                                            <th>Επιστροφή</th>
+                                                            <th>Ημερομηνία Στόχος</th>
+                                                            <th>Αντικατέστησε</th>
+                                                            <th>Ανταλλαγή με (αρχική ανάθεση)</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        ${rows.map(r => {
+                                                            const typeLabel = r.typeCat === 'special' ? 'Ειδική' : r.typeCat === 'weekend' ? 'Σ/Κ-Αργία' : r.typeCat === 'semi' ? 'Ημιαργία' : 'Καθημερινή';
+                                                            const ps = r.periodStart ? new Date(r.periodStart + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                                                            const pe = r.periodEnd ? new Date(r.periodEnd + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                                                            const ret = r.returnKey ? new Date(r.returnKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                                                            const tgt = r.targetKey ? new Date(r.targetKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                                                            const nat = r.naturalKey ? new Date(r.naturalKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+                                                            return `<tr>
+                                                                <td><strong>${escapeHtml(String(r.personName || ''))}</strong></td>
+                                                                <td>${escapeHtml(getGroupName(r.groupNum))}</td>
+                                                                <td>${escapeHtml(typeLabel)}</td>
+                                                                <td>${escapeHtml(ps && pe ? `${ps}–${pe}` : '')}</td>
+                                                                <td>${escapeHtml(ret)}</td>
+                                                                <td>${escapeHtml(tgt)}</td>
+                                                                <td>${escapeHtml(String(r.swappedOut || ''))}</td>
+                                                                <td>${escapeHtml(nat)}</td>
+                                                            </tr>`;
+                                                        }).join('')}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        document.body.insertAdjacentHTML('beforeend', modalHtml);
+                        const m = new bootstrap.Modal(document.getElementById('returnFromMissingReportModal'));
+                        m.show();
+                    }
+                } catch (e) {
+                    console.warn('Failed to show return-from-missing report:', e);
+                }
                 
                 // Remove loading indicator
                 if (loadingAlert && loadingAlert.parentNode) {
