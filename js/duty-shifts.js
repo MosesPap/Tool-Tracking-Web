@@ -4611,11 +4611,33 @@
                             let missedNormalDow = null; // 1/3 or 2/4 track from a missed baseline normal
 
                             const getBaselinePersonForTypeOnDateKey = (typeCat, dk) => {
-                                // Prefer saved baseline (history), but if it's missing (first-time month), compute baseline from pure rotation.
+                                // Prefer THIS RUN's rotation baseline (preview) when available.
+                                // This is the most accurate source during executeCalculation(), because
+                                // rotationBaseline* docs may not yet be saved/loaded for the current run.
+                                try {
+                                    const tempBaselineByType =
+                                        typeCat === 'special' ? calculationSteps?.tempSpecialBaselineAssignments :
+                                        typeCat === 'weekend' ? calculationSteps?.tempWeekendBaselineAssignments :
+                                        typeCat === 'semi' ? calculationSteps?.tempSemiBaselineAssignments :
+                                        calculationSteps?.tempNormalBaselineAssignments;
+                                    const tb = tempBaselineByType?.[dk];
+                                    if (tb) {
+                                        // temp baselines are usually { [groupNum]: personName } objects, but be defensive.
+                                        if (tb[groupNum]) return tb[groupNum];
+                                        const map = extractGroupAssignmentsMap(tb);
+                                        if (map && map[groupNum]) return map[groupNum];
+                                    }
+                                } catch (_) {
+                                    // ignore and continue
+                                }
+
+                                // Next: Prefer saved baseline (history). Fall back to pure-rotation if missing.
                                 const baseline = getRotationBaselineAssignmentForType(typeCat, dk);
                                 if (baseline) {
                                     const p = parseAssignedPersonForGroupFromAssignment(baseline, groupNum);
                                     if (p) return p;
+                                    const map = extractGroupAssignmentsMap(baseline);
+                                    if (map && map[groupNum]) return map[groupNum];
                                 }
                                 const groupPeople = groups?.[groupNum]?.[typeCat] || [];
                                 if (!Array.isArray(groupPeople) || groupPeople.length === 0) return null;
