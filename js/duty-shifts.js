@@ -5903,6 +5903,18 @@
                     URL.revokeObjectURL(url);
                 };
 
+                const downloadBlob = (fileName, blob, mimeType) => {
+                    const safeBlob = blob instanceof Blob ? blob : new Blob([blob], { type: mimeType || 'application/octet-stream' });
+                    const url = URL.createObjectURL(safeBlob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = fileName;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                };
+
                 // If supported (Chrome/Edge), ask user for a base folder and create a month subfolder (e.g. "ΙΑΝ 26")
                 // Otherwise we fall back to normal browser downloads (cannot auto-create folders there).
                 let monthDirHandle = null;
@@ -5915,6 +5927,11 @@
                         monthDirHandle = null;
                     }
                 }
+
+                // If folder saving isn't available/allowed, optionally package everything into a zip (so user gets a "folder-like" download).
+                const zipAvailable = typeof JSZip !== 'undefined';
+                const zip = (!monthDirHandle && zipAvailable) ? new JSZip() : null;
+                const zipFolder = zip ? zip.folder(monthFolderName) : null;
 
                 const saveBytesToMonthFolder = async (fileName, bytes) => {
                     if (!monthDirHandle) return false;
@@ -6141,7 +6158,8 @@
                         const buffer = await workbook.xlsx.writeBuffer();
                         const saved = await saveBytesToMonthFolder(fileName, buffer);
                         if (!saved) {
-                            downloadBytes(fileName, buffer);
+                            if (zipFolder) zipFolder.file(fileName, buffer);
+                            else downloadBytes(fileName, buffer);
                         }
                     } else {
                         // Fallback to SheetJS (limited styling)
@@ -6249,9 +6267,16 @@
                         const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
                         const saved = await saveBytesToMonthFolder(fileName, out);
                         if (!saved) {
-                            downloadBytes(fileName, out);
+                            if (zipFolder) zipFolder.file(fileName, out);
+                            else downloadBytes(fileName, out);
                         }
                     }
+                }
+
+                // If we couldn't create a real folder, but we did collect files into a zip, download it once here.
+                if (zipFolder && zip) {
+                    const zipBlob = await zip.generateAsync({ type: 'blob' });
+                    downloadBlob(`${monthFolderName}.zip`, zipBlob, 'application/zip');
                 }
                 
                 // Remove loading message
@@ -6269,7 +6294,9 @@
                 
                 alert(monthDirHandle
                     ? `Τα Excel αρχεία αποθηκεύτηκαν στον φάκελο "${monthFolderName}".`
-                    : 'Τα Excel αρχεία δημιουργήθηκαν επιτυχώς!');
+                    : (zipFolder
+                        ? `Τα Excel αρχεία δημιουργήθηκαν ως "${monthFolderName}.zip" (περιέχει φάκελο "${monthFolderName}").`
+                        : 'Τα Excel αρχεία δημιουργήθηκαν επιτυχώς!'));
             } catch (error) {
                 console.error('Error generating Excel files:', error);
                 alert('Σφάλμα κατά τη δημιουργία των Excel αρχείων: ' + error.message);
@@ -6320,10 +6347,11 @@
             }
             
             // Match all patterns like "Name (Ομάδα X)"
-            const matches = assignmentStr.matchAll(/([^(]+)\s*\(Ομάδα\s*(\d+)\)/g);
+            // NOTE: do NOT use String.prototype.matchAll here (some WebViews lack it).
             const persons = [];
-            
-            for (const match of matches) {
+            const re = /([^(]+)\s*\(Ομάδα\s*(\d+)\)/g;
+            let match;
+            while ((match = re.exec(assignmentStr)) !== null) {
                 if (match[1]) {
                     persons.push({
                         name: match[1].trim(),
@@ -6331,7 +6359,6 @@
                     });
                 }
             }
-            
             return persons;
         }
 
@@ -9823,13 +9850,21 @@
                 const canShiftInsertFromDate = (sortedNormalKeys, startKey, groupNum, insertedPerson, assignmentsByDate, globalRotationPositions, simulatedSpecial, simulatedWeekend, simulatedSemi) => {
                     const idx = sortedNormalKeys.indexOf(startKey);
                     if (idx < 0) return { ok: false, reason: 'start-not-in-range' };
+                    // Track proposed shifts so conflict checks see the new "normal" schedule (for already-shifted days).
+                    const proposed = {};
+                    const mergedAssignments = new Proxy(assignmentsByDate || {}, {
+                        get: (t, p) => (Object.prototype.hasOwnProperty.call(proposed, p) ? proposed[p] : t[p])
+                    });
                     let carry = insertedPerson;
                     for (let i = idx; i < sortedNormalKeys.length; i++) {
                         const dk = sortedNormalKeys[i];
                         if (carry) {
-                            const ok = canAssignPersonToNormalDay(dk, carry, groupNum, assignmentsByDate, globalRotationPositions, simulatedSpecial, simulatedWeekend, simulatedSemi);
+                            const ok = canAssignPersonToNormalDay(dk, carry, groupNum, mergedAssignments, globalRotationPositions, simulatedSpecial, simulatedWeekend, simulatedSemi);
                             if (!ok) return { ok: false, reason: 'unavailable-or-conflict', dateKey: dk, person: carry };
                         }
+                        // Record the proposed assignment for dk before moving carry forward.
+                        proposed[dk] = { ...(assignmentsByDate?.[dk] || {}) };
+                        proposed[dk][groupNum] = carry;
                         carry = assignmentsByDate?.[dk]?.[groupNum] || null;
                     }
                     return { ok: true };
@@ -10075,7 +10110,9 @@
                                     let targetKey = findFirstMatchingTrackOnOrAfter(sortedNormal, thirdNormalKey, track);
                                     if (!targetKey) continue;
 
-                                    // Find a feasible targetKey (if returning person is unavailable/conflict on that day, try next matching track day).
+                                    // Find a feasible targetKey:
+                                    // - returning person must be assignable on targetKey
+                                    // - AND the whole shift-forward chain must be conflict-free for everyone displaced.
                                     while (targetKey) {
                                         const okReturning = canAssignPersonToNormalDay(
                                             targetKey,
@@ -10087,50 +10124,7 @@
                                             simulatedWeekendAssignments,
                                             simulatedSemiAssignments
                                         );
-                                        if (okReturning) break;
-                                        const nextThreshold = addDaysToDateKey(targetKey, 1);
-                                        targetKey = nextThreshold ? findFirstMatchingTrackOnOrAfter(sortedNormal, nextThreshold, track) : null;
-                                    }
-                                    if (!targetKey) continue;
-
-                                    // Prefer minimal disruption: swap returning person into targetKey with their first future occurrence in the final schedule.
-                                    // If they never appear again in-range, fall back to safe shift-insert from targetKey.
-                                    const naturalKey = findFirstAssignedNormalDateForPersonAfter(sortedNormal, groupNum, personName, pEndKey, updatedAssignments);
-                                    if (naturalKey && naturalKey !== targetKey) {
-                                        const displaced = updatedAssignments?.[targetKey]?.[groupNum] || null;
-                                        if (!displaced) continue;
-
-                                        // Temporarily apply swap for conflict checks.
-                                        const tmp = {};
-                                        tmp[targetKey] = { ...(updatedAssignments[targetKey] || {}) };
-                                        tmp[naturalKey] = { ...(updatedAssignments[naturalKey] || {}) };
-                                        tmp[targetKey][groupNum] = personName;
-                                        tmp[naturalKey][groupNum] = displaced;
-                                        const mergedAssignments = Object.assign({}, updatedAssignments, tmp);
-
-                                        const okReturningAtTarget = canAssignPersonToNormalDay(
-                                            targetKey,
-                                            personName,
-                                            groupNum,
-                                            mergedAssignments,
-                                            globalNormalRotationPosition,
-                                            simulatedSpecialAssignments,
-                                            simulatedWeekendAssignments,
-                                            simulatedSemiAssignments
-                                        );
-                                        const okDisplacedAtNatural = canAssignPersonToNormalDay(
-                                            naturalKey,
-                                            displaced,
-                                            groupNum,
-                                            mergedAssignments,
-                                            globalNormalRotationPosition,
-                                            simulatedSpecialAssignments,
-                                            simulatedWeekendAssignments,
-                                            simulatedSemiAssignments
-                                        );
-
-                                        if (!okReturningAtTarget || !okDisplacedAtNatural) {
-                                            // If swap would create conflicts, try shift-insert fallback instead.
+                                        if (okReturning) {
                                             const chainOk = canShiftInsertFromDate(
                                                 sortedNormal,
                                                 targetKey,
@@ -10142,76 +10136,27 @@
                                                 simulatedWeekendAssignments,
                                                 simulatedSemiAssignments
                                             );
-                                            if (!chainOk.ok) continue;
-                                            const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, updatedAssignments);
-                                            if (!ins.ok) continue;
-                                            storeAssignmentReason(
-                                                targetKey,
-                                                groupNum,
-                                                personName,
-                                                'skip',
-                                                `Επέστρεψε από απουσία και επανεντάχθηκε στις καθημερινές μετά από 3 καθημερινές ημέρες (λογική ${track === 1 ? 'Δευτέρα/Τετάρτη' : 'Τρίτη/Πέμπτη'}).`,
-                                                ins.originalAtTarget || null,
-                                                null,
-                                                { returnFromMissing: true, insertedByShift: true, missingEnd: pEndKey }
-                                            );
-                                            continue;
+                                            if (chainOk.ok) break;
                                         }
-
-                                        // Apply swap to updatedAssignments
-                                        if (!updatedAssignments[targetKey]) updatedAssignments[targetKey] = {};
-                                        if (!updatedAssignments[naturalKey]) updatedAssignments[naturalKey] = {};
-                                        updatedAssignments[targetKey][groupNum] = personName;
-                                        updatedAssignments[naturalKey][groupNum] = displaced;
-
-                                        // Store reasons for visibility
-                                        storeAssignmentReason(
-                                            targetKey,
-                                            groupNum,
-                                            personName,
-                                            'skip',
-                                            `Επέστρεψε από απουσία και επανεντάχθηκε στις καθημερινές μετά από 3 καθημερινές ημέρες (λογική ${track === 1 ? 'Δευτέρα/Τετάρτη' : 'Τρίτη/Πέμπτη'}).`,
-                                            displaced,
-                                            null,
-                                            { returnFromMissing: true, swappedWith: displaced, naturalKey, missingEnd: pEndKey }
-                                        );
-                                        storeAssignmentReason(
-                                            naturalKey,
-                                            groupNum,
-                                            displaced,
-                                            'swap',
-                                            `Μεταφέρθηκε λόγω επανένταξης του/της ${personName} μετά από απουσία.`,
-                                            personName,
-                                            null,
-                                            { returnFromMissing: true, swappedWith: personName, targetKey, missingEnd: pEndKey }
-                                        );
-                                    } else {
-                                        // No naturalKey in-range: safe shift-insert within the remaining calculated normal days.
-                                        const chainOk = canShiftInsertFromDate(
-                                            sortedNormal,
-                                            targetKey,
-                                            groupNum,
-                                            personName,
-                                            updatedAssignments,
-                                            globalNormalRotationPosition,
-                                            simulatedSpecialAssignments,
-                                            simulatedWeekendAssignments,
-                                            simulatedSemiAssignments
-                                        );
-                                        if (!chainOk.ok) continue;
-                                        const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, updatedAssignments);
-                                        if (!ins.ok) continue;
-                                        storeAssignmentReason(
-                                            targetKey,
-                                            groupNum,
-                                            personName,
-                                            'skip',
-                                            `Επέστρεψε από απουσία και επανεντάχθηκε στις καθημερινές μετά από 3 καθημερινές ημέρες (λογική ${track === 1 ? 'Δευτέρα/Τετάρτη' : 'Τρίτη/Πέμπτη'}).`,
-                                            ins.originalAtTarget || null,
-                                            null,
-                                            { returnFromMissing: true, insertedByShift: true, missingEnd: pEndKey }
-                                        );
+                                        const nextThreshold = addDaysToDateKey(targetKey, 1);
+                                        targetKey = nextThreshold ? findFirstMatchingTrackOnOrAfter(sortedNormal, nextThreshold, track) : null;
                                     }
+                                    if (!targetKey) continue;
+
+                                    // Apply shift insertion (follow rotation): everyone moves to the next normal day.
+                                    const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, updatedAssignments);
+                                    if (!ins.ok) continue;
+
+                                    storeAssignmentReason(
+                                        targetKey,
+                                        groupNum,
+                                        personName,
+                                        'skip',
+                                        `Επέστρεψε από απουσία και επανεντάχθηκε στις καθημερινές μετά από 3 καθημερινές ημέρες (λογική ${track === 1 ? 'Δευτέρα/Τετάρτη' : 'Τρίτη/Πέμπτη'}).`,
+                                        ins.originalAtTarget || null,
+                                        null,
+                                        { returnFromMissing: true, insertedByShift: true, missingEnd: pEndKey }
+                                    );
                                 }
                             }
                         }
