@@ -6826,14 +6826,24 @@
         }
         
         // Helper function to store assignment reason
+        function normalizePersonKey(personName) {
+            return String(personName || '')
+                .trim()
+                .replace(/^,+\s*/, '')
+                .replace(/\s*,+$/, '')
+                .replace(/\s+/g, ' ');
+        }
+
         function storeAssignmentReason(dateKey, groupNum, personName, type, reason, swappedWith = null, swapPairId = null, meta = null) {
+            const keyName = normalizePersonKey(personName);
+            if (!keyName) return;
             if (!assignmentReasons[dateKey]) {
                 assignmentReasons[dateKey] = {};
             }
             if (!assignmentReasons[dateKey][groupNum]) {
                 assignmentReasons[dateKey][groupNum] = {};
             }
-            assignmentReasons[dateKey][groupNum][personName] = {
+            assignmentReasons[dateKey][groupNum][keyName] = {
                 type: type, // 'skip' or 'swap'
                 reason: reason,
                 swappedWith: swappedWith,
@@ -6932,7 +6942,10 @@
         
         // Helper function to get assignment reason
         function getAssignmentReason(dateKey, groupNum, personName) {
-            return assignmentReasons[dateKey]?.[groupNum]?.[personName] || null;
+            const gmap = assignmentReasons[dateKey]?.[groupNum] || null;
+            if (!gmap) return null;
+            // Backward compatible: try exact key first, then normalized key.
+            return gmap[personName] || gmap[normalizePersonKey(personName)] || null;
         }
 
         // Previous month
@@ -10160,7 +10173,11 @@
                                     for (const dk of sortedNormal) {
                                         if (dk < scanStartKey) continue;
                                         if (dk > scanEndKey) break;
-                                        const baselinePerson = baselineNormalByDate?.[dk]?.[groupNum] || null;
+                                        // Prefer in-memory baseline map from Step 4 preview; fall back to saved baseline doc if missing.
+                                        const baselinePerson =
+                                            baselineNormalByDate?.[dk]?.[groupNum] ||
+                                            parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
+                                            null;
                                         if (baselinePerson === personName) {
                                             firstMissedKey = dk;
                                             break;
@@ -11574,9 +11591,14 @@
                 }
                 
                 // Normal day assignments: dateKey -> { groupNum -> person }
-                for (const dateKey in tempAssignments.normal || {}) {
-                    for (const groupNum in tempAssignments.normal[dateKey] || {}) {
-                        const person = tempAssignments.normal[dateKey][groupNum];
+                // IMPORTANT: For multi-month calculations, prefer the FINAL Step 4 result if available
+                // (includes return-from-missing reinsertion + swap logic), otherwise fall back to tempAssignments.normal.
+                const normalSource = (calculationSteps && calculationSteps.finalNormalAssignments)
+                    ? calculationSteps.finalNormalAssignments
+                    : (tempAssignments.normal || {});
+                for (const dateKey in normalSource) {
+                    for (const groupNum in normalSource[dateKey] || {}) {
+                        const person = normalSource[dateKey]?.[groupNum];
                         if (person) {
                             if (!normalDayAssignments[dateKey]) {
                                 normalDayAssignments[dateKey] = '';
