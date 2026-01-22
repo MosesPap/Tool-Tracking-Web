@@ -5957,8 +5957,8 @@
                         const workbook = new ExcelJS.Workbook();
                         const worksheet = workbook.addWorksheet('Υπηρεσίες');
                         
-                        // Set title - merge cells A1 through D1 (we add a 4-col table below)
-                        worksheet.mergeCells('A1:D1');
+                        // Set title - merge cells A1 through C1 (do not affect duty-table columns)
+                        worksheet.mergeCells('A1:C1');
                         const titleCell = worksheet.getCell('A1');
                         titleCell.value = `ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`;
                         titleCell.font = { 
@@ -6029,7 +6029,6 @@
                         worksheet.getColumn(1).width = 12;
                         worksheet.getColumn(2).width = 15;
                         worksheet.getColumn(3).width = 30;
-                        worksheet.getColumn(4).width = 30;
                         
                         // Data rows
                         for (let day = 1; day <= daysInMonth; day++) {
@@ -6101,14 +6100,46 @@
                         const rotationStartRow = daysInMonth + 5; // blank row at +4, header row at +5
                         worksheet.getRow(daysInMonth + 4).height = 5;
 
+                        // Make the 4 "columns" wider by merging cells (without changing duty-table column widths A–C).
+                        // Each rotation column is a merged block of 3 Excel columns:
+                        // 1) ΚΑΘΗΜΕΡΙΝΕΣ: A–C
+                        // 2) ΗΜΙΑΡΓΙΕΣ: D–F
+                        // 3) ΑΡΓΙΕΣ: G–I
+                        // 4) ΕΙΔΙΚΕΣ: J–L
                         const rotationHeaderTitles = ['ΚΑΘΗΜΕΡΙΝΕΣ', 'ΗΜΙΑΡΓΙΕΣ', 'ΑΡΓΙΕΣ', 'ΕΙΔΙΚΕΣ'];
-                        const rotationHeaderRow = worksheet.getRow(rotationStartRow);
-                        rotationHeaderTitles.forEach((title, idx) => {
-                            const cell = rotationHeaderRow.getCell(idx + 1);
-                            cell.value = title;
+                        const blockCols = 3;
+                        const rotationTotalCols = rotationHeaderTitles.length * blockCols; // 12
+
+                        // Set widths for the extra columns only (D–L). Leave A–C as duty-table widths.
+                        for (let col = 4; col <= rotationTotalCols; col++) {
+                            worksheet.getColumn(col).width = 14;
+                        }
+
+                        const mergeBlock = (rowNumber, blockIndex) => {
+                            const startCol = 1 + blockIndex * blockCols;
+                            const endCol = startCol + blockCols - 1;
+                            worksheet.mergeCells(rowNumber, startCol, rowNumber, endCol);
+                            return { startCol, endCol };
+                        };
+
+                        const styleRotationHeaderCell = (cell) => {
                             cell.font = { name: 'Arial', bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
                             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF428BCA' } };
                             cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        };
+
+                        const styleRotationValueCell = (cell) => {
+                            cell.font = { name: 'Arial', size: 12 };
+                            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                        };
+
+                        // Header row (merged blocks)
+                        const rotationHeaderRow = worksheet.getRow(rotationStartRow);
+                        rotationHeaderTitles.forEach((title, idx) => {
+                            const { startCol } = mergeBlock(rotationStartRow, idx);
+                            const cell = rotationHeaderRow.getCell(startCol);
+                            cell.value = title;
+                            styleRotationHeaderCell(cell);
                         });
                         rotationHeaderRow.height = 22;
 
@@ -6118,25 +6149,26 @@
                         ];
 
                         rotationRows.forEach((values, offset) => {
-                            const row = worksheet.getRow(rotationStartRow + 1 + offset);
+                            const rowNumber = rotationStartRow + 1 + offset;
+                            const row = worksheet.getRow(rowNumber);
                             values.forEach((val, idx) => {
-                                const cell = row.getCell(idx + 1);
+                                const { startCol } = mergeBlock(rowNumber, idx);
+                                const cell = row.getCell(startCol);
                                 cell.value = val || '';
-                                cell.font = { name: 'Arial', size: 12 };
-                                cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                                styleRotationValueCell(cell);
                             });
                             row.height = 22;
                         });
 
-                        // Add borders around the 4x3 block (header + 2 rows)
+                        // Borders around the full merged table (12 cols x 3 rows)
                         const rotationEndRow = rotationStartRow + 2;
                         for (let r = rotationStartRow; r <= rotationEndRow; r++) {
-                            for (let c = 1; c <= 4; c++) {
+                            for (let c = 1; c <= rotationTotalCols; c++) {
                                 const cell = worksheet.getRow(r).getCell(c);
                                 const isTop = r === rotationStartRow;
                                 const isBottom = r === rotationEndRow;
                                 const isLeft = c === 1;
-                                const isRight = c === 4;
+                                const isRight = c === rotationTotalCols;
                                 cell.border = {
                                     top: isTop ? { style: 'thick' } : { style: 'thin' },
                                     bottom: isBottom ? { style: 'thick' } : { style: 'thin' },
@@ -6195,17 +6227,52 @@
                         data.push([]);
                         rowDayTypes.push(null);
                         const rotationHeaderRowIndex = data.length; // 0-indexed row position of the header to style
-                        data.push(['ΚΑΘΗΜΕΡΙΝΕΣ', 'ΗΜΙΑΡΓΙΕΣ', 'ΑΡΓΙΕΣ', 'ΕΙΔΙΚΕΣ']);
+                        // Rotation table as 4 "wide" columns (each is 3 merged Excel columns, total 12).
+                        // This lets long names fit without changing duty-table column widths A–C.
+                        data.push([
+                            'ΚΑΘΗΜΕΡΙΝΕΣ', '', '',
+                            'ΗΜΙΑΡΓΙΕΣ', '', '',
+                            'ΑΡΓΙΕΣ', '', '',
+                            'ΕΙΔΙΚΕΣ', '', ''
+                        ]);
                         rowDayTypes.push(null);
-                        data.push([rotationInfo.next.normal[0], rotationInfo.next.semi[0], rotationInfo.next.weekend[0], rotationInfo.next.special[0]]);
+                        data.push([
+                            rotationInfo.next.normal[0], '', '',
+                            rotationInfo.next.semi[0], '', '',
+                            rotationInfo.next.weekend[0], '', '',
+                            rotationInfo.next.special[0], '', ''
+                        ]);
                         rowDayTypes.push(null);
-                        data.push([rotationInfo.next.normal[1], rotationInfo.next.semi[1], rotationInfo.next.weekend[1], rotationInfo.next.special[1]]);
+                        data.push([
+                            rotationInfo.next.normal[1], '', '',
+                            rotationInfo.next.semi[1], '', '',
+                            rotationInfo.next.weekend[1], '', '',
+                            rotationInfo.next.special[1], '', ''
+                        ]);
                         rowDayTypes.push(null);
                         
                         const ws = XLSX.utils.aoa_to_sheet(data);
-                        ws['!cols'] = [{ wch: 12 }, { wch: 15 }, { wch: 30 }, { wch: 30 }];
+                        // A–C are duty-table columns. D–L are used only for the merged rotation table.
+                        ws['!cols'] = [
+                            { wch: 12 }, { wch: 15 }, { wch: 30 },
+                            { wch: 14 }, { wch: 14 }, { wch: 14 },
+                            { wch: 14 }, { wch: 14 }, { wch: 14 },
+                            { wch: 14 }, { wch: 14 }, { wch: 14 }
+                        ];
                         if (!ws['!merges']) ws['!merges'] = [];
-                        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } });
+                        // Keep title merge on A1:C1 (duty table width)
+                        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } });
+
+                        // Merge rotation table blocks (3 columns per logical column) for header + 2 rows
+                        const addRotationMerges = (rowIdx0Based) => {
+                            ws['!merges'].push({ s: { r: rowIdx0Based, c: 0 }, e: { r: rowIdx0Based, c: 2 } });  // A–C
+                            ws['!merges'].push({ s: { r: rowIdx0Based, c: 3 }, e: { r: rowIdx0Based, c: 5 } });  // D–F
+                            ws['!merges'].push({ s: { r: rowIdx0Based, c: 6 }, e: { r: rowIdx0Based, c: 8 } });  // G–I
+                            ws['!merges'].push({ s: { r: rowIdx0Based, c: 9 }, e: { r: rowIdx0Based, c: 11 } }); // J–L
+                        };
+                        addRotationMerges(rotationHeaderRowIndex);
+                        addRotationMerges(rotationHeaderRowIndex + 1);
+                        addRotationMerges(rotationHeaderRowIndex + 2);
                         
                         // Style title row (row 1)
                         const titleCell = 'A1';
@@ -6226,10 +6293,10 @@
                             ws[cellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
                         });
 
-                        // Style "next on rotation" header row
-                        ['A', 'B', 'C', 'D'].forEach((col, idx) => {
+                        // Style "next on rotation" header row (only the start cells of each merged block)
+                        ['A', 'D', 'G', 'J'].forEach((col, idx) => {
                             const cellRef = col + (rotationHeaderRowIndex + 1);
-                            if (!ws[cellRef]) ws[cellRef] = { t: 's', v: (data[rotationHeaderRowIndex]?.[idx] || '') };
+                            if (!ws[cellRef]) ws[cellRef] = { t: 's', v: (data[rotationHeaderRowIndex]?.[idx * 3] || '') };
                             if (!ws[cellRef].s) ws[cellRef].s = {};
                             ws[cellRef].s.font = { name: 'Arial', bold: true, sz: 12, color: { rgb: 'FFFFFF' } };
                             ws[cellRef].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
