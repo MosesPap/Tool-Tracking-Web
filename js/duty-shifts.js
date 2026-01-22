@@ -4517,6 +4517,40 @@
             return { ok: true, originalAtTarget };
         }
 
+        function canInsertNormalByShiftingForwardWithoutConflicts(dateKeysNormalSorted, targetKey, groupNum, insertedPerson) {
+            const idx = dateKeysNormalSorted.indexOf(targetKey);
+            if (idx < 0) return { ok: false, reason: 'target-not-in-range' };
+
+            // Build proposed mapping for this group's normal days from targetKey to end of calculated range:
+            // new[idx] = insertedPerson, new[idx+1] = old[idx], ..., new[last] = old[last-1]
+            const oldPeople = [];
+            for (let i = idx; i < dateKeysNormalSorted.length; i++) {
+                const dk = dateKeysNormalSorted[i];
+                const curStr = getFinalAssignmentForType('normal', dk) || '';
+                oldPeople.push(parseAssignedPersonForGroupFromAssignment(curStr, groupNum) || null);
+            }
+            const newPeople = [insertedPerson, ...oldPeople.slice(0, Math.max(0, oldPeople.length - 1))];
+
+            for (let i = 0; i < newPeople.length; i++) {
+                const dk = dateKeysNormalSorted[idx + i];
+                const person = newPeople[i];
+                if (!person) continue;
+                const dateObj = new Date(dk + 'T00:00:00');
+
+                // Must not be unavailable on that day (missing or disabled for normal).
+                if (isPersonMissingOnDate(person, groupNum, dateObj, 'normal')) {
+                    return { ok: false, reason: 'unavailable', dateKey: dk, person };
+                }
+                // Must not create consecutive-duty conflict (before/after) with existing non-normal duties.
+                // Note: Normal↔Normal does not conflict; shifting among normal days does not change these checks.
+                if (hasConsecutiveDuty(dk, person, groupNum)) {
+                    return { ok: false, reason: 'consecutive-conflict', dateKey: dk, person };
+                }
+            }
+
+            return { ok: true };
+        }
+
         function buildReturnFromMissingReason({ returningPerson, replacedPerson, period, returnDateKey, targetDateKey }) {
             const startStr = period?.start ? new Date(period.start + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
             const endStr = period?.end ? new Date(period.end + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
@@ -4631,13 +4665,32 @@
                                     return dateKeys.normal[idx0 + 2] || null; // 3rd normal day
                                 })()
                                 : null;
-                            const normalTarget = (missed.normal && missedNormalDow && normalLimitKey)
-                                ? findFirstDateKeyOnOrAfterMatching(dateKeys.normal, normalLimitKey, (dk) => {
+                            let normalTarget = null;
+                            if (missed.normal && missedNormalDow && normalLimitKey) {
+                                const matchesTrack = (dk) => {
                                     const d = new Date(dk + 'T00:00:00');
                                     const dow = d.getDay();
                                     return missedNormalDow === 1 ? (dow === 1 || dow === 3) : (dow === 2 || dow === 4);
-                                })
-                                : null;
+                                };
+
+                                // Find nearest track day on/after normalLimitKey that is:
+                                // - available for the returning person
+                                // - no consecutive-duty conflict for the returning person
+                                // - and shifting forward from that day does not create conflicts/unavailability for others
+                                let candidate = findFirstDateKeyOnOrAfterMatching(dateKeys.normal, normalLimitKey, matchesTrack);
+                                while (candidate) {
+                                    const cd = new Date(candidate + 'T00:00:00');
+                                    const returningUnavailable = isPersonMissingOnDate(personName, groupNum, cd, 'normal');
+                                    const returningConflict = hasConsecutiveDuty(candidate, personName, groupNum);
+                                    const chainOk = canInsertNormalByShiftingForwardWithoutConflicts(dateKeys.normal, candidate, groupNum, personName);
+                                    if (!returningUnavailable && !returningConflict && chainOk.ok) {
+                                        normalTarget = candidate;
+                                        break;
+                                    }
+                                    const nextThreshold = getDateKeyPlusDays(candidate, 1);
+                                    candidate = nextThreshold ? findFirstDateKeyOnOrAfterMatching(dateKeys.normal, nextThreshold, matchesTrack) : null;
+                                }
+                            }
 
                             const normalPlus3 = normalTarget ? getDateKeyPlusDays(normalTarget, 3) : returnPlus3;
                             const semiTarget = missed.semi ? findFirstDateKeyOnOrAfterMatching(dateKeys.semi, normalPlus3, () => true) : null;
