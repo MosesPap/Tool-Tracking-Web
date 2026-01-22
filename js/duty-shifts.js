@@ -4420,447 +4420,6 @@
             return out;
         }
 
-        function setGroupAssignmentInString(assignmentStr, groupNum, personName) {
-            const map = extractGroupAssignmentsMap(assignmentStr);
-            map[groupNum] = personName;
-            const parts = Object.keys(map)
-                .map(k => parseInt(k, 10))
-                .filter(g => Number.isFinite(g) && g >= 1 && g <= 4)
-                .sort((a, b) => a - b)
-                .map(g => `${map[g]} (Ομάδα ${g})`);
-            return parts.join(', ');
-        }
-
-        function getDateKeyPlusDays(dateKey, days) {
-            const d = new Date(dateKey + 'T00:00:00');
-            if (isNaN(d.getTime())) return null;
-            d.setDate(d.getDate() + (days || 0));
-            return formatDateKey(d);
-        }
-
-        function findFirstDateKeyAfter(dateKeysSorted, afterDateKey) {
-            for (const dk of dateKeysSorted) {
-                if (dk > afterDateKey) return dk;
-            }
-            return null;
-        }
-
-        function findFirstDateKeyOnOrAfterMatching(dateKeysSorted, thresholdDateKey, predicate) {
-            for (const dk of dateKeysSorted) {
-                if (dk < thresholdDateKey) continue;
-                if (predicate(dk)) return dk;
-            }
-            return null;
-        }
-
-        function findFirstAssignedDateForPerson(typeCategory, groupNum, personName, dateKeysSorted, afterDateKey) {
-            for (const dk of dateKeysSorted) {
-                if (afterDateKey && dk <= afterDateKey) continue;
-                const a = getFinalAssignmentForType(typeCategory, dk);
-                const p = parseAssignedPersonForGroupFromAssignment(a, groupNum);
-                if (p === personName) return dk;
-            }
-            return null;
-        }
-
-        function swapFinalAssignmentsForGroup(typeCategory, dateKeyA, dateKeyB, groupNum) {
-            if (!dateKeyA || !dateKeyB || dateKeyA === dateKeyB) return null;
-            const aStr = getFinalAssignmentForType(typeCategory, dateKeyA) || '';
-            const bStr = getFinalAssignmentForType(typeCategory, dateKeyB) || '';
-            const aPerson = parseAssignedPersonForGroupFromAssignment(aStr, groupNum);
-            const bPerson = parseAssignedPersonForGroupFromAssignment(bStr, groupNum);
-            if (!aPerson || !bPerson) return null;
-
-            const newA = setGroupAssignmentInString(aStr, groupNum, bPerson);
-            const newB = setGroupAssignmentInString(bStr, groupNum, aPerson);
-
-            if (typeCategory === 'special') {
-                specialHolidayAssignments[dateKeyA] = newA;
-                specialHolidayAssignments[dateKeyB] = newB;
-            } else if (typeCategory === 'weekend') {
-                weekendAssignments[dateKeyA] = newA;
-                weekendAssignments[dateKeyB] = newB;
-            } else if (typeCategory === 'semi') {
-                semiNormalAssignments[dateKeyA] = newA;
-                semiNormalAssignments[dateKeyB] = newB;
-            } else {
-                normalDayAssignments[dateKeyA] = newA;
-                normalDayAssignments[dateKeyB] = newB;
-            }
-            return { aPerson, bPerson };
-        }
-
-        // For NORMAL re-insertion after missing: insert the returning person on a target normal day
-        // by shifting the group assignments forward for subsequent normal days in the calculated range.
-        // This preserves the "order after the previous day" behavior (everyone moves by 1 normal-day slot),
-        // without requiring a future-month swap partner.
-        function insertNormalAssignmentByShiftingForward(dateKeysNormalSorted, targetKey, groupNum, insertedPerson) {
-            const idx = dateKeysNormalSorted.indexOf(targetKey);
-            if (idx < 0) return { ok: false, originalAtTarget: null };
-
-            const originalStrAtTarget = getFinalAssignmentForType('normal', targetKey) || '';
-            const originalAtTarget = parseAssignedPersonForGroupFromAssignment(originalStrAtTarget, groupNum) || null;
-
-            let carry = insertedPerson;
-            for (let i = idx; i < dateKeysNormalSorted.length; i++) {
-                const dk = dateKeysNormalSorted[i];
-                const curStr = getFinalAssignmentForType('normal', dk) || '';
-                const curPerson = parseAssignedPersonForGroupFromAssignment(curStr, groupNum) || null;
-                const nextStr = setGroupAssignmentInString(curStr, groupNum, carry);
-                // Use setAssignmentForDate to keep legacy dutyAssignments in sync.
-                setAssignmentForDate(dk, nextStr);
-                carry = curPerson;
-            }
-
-            // The final "carry" falls off the end of the calculated range; it will naturally appear
-            // on the next month's schedule when that month is calculated (order is preserved).
-            return { ok: true, originalAtTarget };
-        }
-
-        function canInsertNormalByShiftingForwardWithoutConflicts(dateKeysNormalSorted, targetKey, groupNum, insertedPerson) {
-            const idx = dateKeysNormalSorted.indexOf(targetKey);
-            if (idx < 0) return { ok: false, reason: 'target-not-in-range' };
-
-            // For normal-day reinsertion we must ONLY validate real adjacent-day conflicts against already-final
-            // non-normal assignments (semi/weekend/special). We must NOT use hasConsecutiveDuty() here because it
-            // contains "predictive" rotation checks that are correct during step-by-step construction, but can
-            // incorrectly block a post-processing normal shift-insert.
-            const hasAdjacentNonNormalDutyConflictForNormal = (normalDayKey, personName) => {
-                const d = new Date(normalDayKey + 'T00:00:00');
-                if (isNaN(d.getTime())) return false;
-
-                const checkNeighbor = (neighborDate) => {
-                    const neighborKey = formatDateKey(neighborDate);
-                    const neighborType = getDayType(neighborDate);
-                    // Normal↔Normal is allowed; only check semi/weekend/special neighbors.
-                    if (neighborType === 'normal-day') return false;
-                    return hasDutyOnDay(neighborKey, personName, groupNum);
-                };
-
-                const before = new Date(d);
-                before.setDate(before.getDate() - 1);
-                if (checkNeighbor(before)) return true;
-
-                const after = new Date(d);
-                after.setDate(after.getDate() + 1);
-                if (checkNeighbor(after)) return true;
-
-                return false;
-            };
-
-            // Build proposed mapping for this group's normal days from targetKey to end of calculated range:
-            // new[idx] = insertedPerson, new[idx+1] = old[idx], ..., new[last] = old[last-1]
-            const oldPeople = [];
-            for (let i = idx; i < dateKeysNormalSorted.length; i++) {
-                const dk = dateKeysNormalSorted[i];
-                const curStr = getFinalAssignmentForType('normal', dk) || '';
-                oldPeople.push(parseAssignedPersonForGroupFromAssignment(curStr, groupNum) || null);
-            }
-            const newPeople = [insertedPerson, ...oldPeople.slice(0, Math.max(0, oldPeople.length - 1))];
-
-            for (let i = 0; i < newPeople.length; i++) {
-                const dk = dateKeysNormalSorted[idx + i];
-                const person = newPeople[i];
-                if (!person) continue;
-                const dateObj = new Date(dk + 'T00:00:00');
-
-                // Must not be unavailable on that day (missing or disabled for normal).
-                if (isPersonMissingOnDate(person, groupNum, dateObj, 'normal')) {
-                    return { ok: false, reason: 'unavailable', dateKey: dk, person };
-                }
-                // Must not create adjacent-day conflict with existing non-normal duties.
-                if (hasAdjacentNonNormalDutyConflictForNormal(dk, person)) {
-                    return { ok: false, reason: 'consecutive-conflict', dateKey: dk, person };
-                }
-            }
-
-            return { ok: true };
-        }
-
-        function buildReturnFromMissingReason({ returningPerson, replacedPerson, period, returnDateKey, targetDateKey }) {
-            const startStr = period?.start ? new Date(period.start + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-            const endStr = period?.end ? new Date(period.end + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-            const r = (period?.reason || '').trim() || 'Κώλυμα/Απουσία';
-            const d = formatGreekDayDate(targetDateKey);
-            const art = getGreekDayAccusativeArticle(new Date(targetDateKey + 'T00:00:00'));
-            const periodPart = (startStr && endStr) ? ` (${startStr}–${endStr})` : '';
-            return `Αντικατέστησε τον/την ${replacedPerson} επειδή ο/η ${returningPerson} επέστρεψε από ${r}${periodPart}. Ανατέθηκε ο/η ${returningPerson} ${art} ${d.dayName} ${d.dateStr}.`;
-        }
-
-        function applyReturnFromMissingReinsertionForRange(startDate, endDate) {
-            try {
-                if (!startDate || !endDate) return;
-                const startKey = formatDateKey(startDate);
-                const endKey = formatDateKey(endDate);
-
-                const dateKeys = { special: [], weekend: [], semi: [], normal: [] };
-                const it = new Date(startDate);
-                while (it <= endDate) {
-                    const dk = formatDateKey(it);
-                    const dt = getDayType(it);
-                    if (dt === 'special-holiday') dateKeys.special.push(dk);
-                    else if (dt === 'weekend-holiday') dateKeys.weekend.push(dk);
-                    else if (dt === 'semi-normal-day') dateKeys.semi.push(dk);
-                    else if (dt === 'normal-day') dateKeys.normal.push(dk);
-                    it.setDate(it.getDate() + 1);
-                }
-                for (const k of Object.keys(dateKeys)) dateKeys[k].sort();
-
-                const allFinalKeys = {
-                    special: Object.keys(specialHolidayAssignments || {}).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort(),
-                    weekend: Object.keys(weekendAssignments || {}).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort(),
-                    semi: Object.keys(semiNormalAssignments || {}).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort(),
-                    normal: Object.keys(normalDayAssignments || {}).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort()
-                };
-
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const g = groups?.[groupNum];
-                    const missingMap = g?.missingPeriods || {};
-                    for (const personName of Object.keys(missingMap)) {
-                        const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
-                        for (const period of periods) {
-                            const pStart = inputValueToDateKey(period.start);
-                            const pEnd = inputValueToDateKey(period.end);
-                            if (!pStart || !pEnd) continue;
-                            const returnKey = getDateKeyPlusDays(pEnd, 1);
-                            if (!returnKey) continue;
-                            // Only act when the return date is inside the calculated range
-                            if (returnKey < startKey || returnKey > endKey) continue;
-
-                            // Determine which duties were missed during the missing window, but ONLY within the calculated range.
-                            // Example: calculating March and missing started in Feb -> scan 01/03..missingEnd.
-                            const overlapStart = pStart < startKey ? startKey : pStart;
-                            const overlapEnd = pEnd > endKey ? endKey : pEnd;
-                            if (overlapStart > overlapEnd) continue;
-
-                            const missed = { special: false, weekend: false, semi: false, normal: false };
-                            let missedNormalDow = null; // 1/3 or 2/4 track from a missed baseline normal
-
-                            // Detect "missed duty" robustly:
-                            // - Primary signal: during the missing window, the person is replaced and we store a skip reason
-                            //   where `swappedWith` is the skipped person (the one who was unavailable).
-                            // - Secondary signal: rotation baseline / pure rotation fallback.
-                            const wasPersonSkippedOnDateKey = (typeCat, dk) => {
-                                try {
-                                    const d = new Date(dk + 'T00:00:00');
-                                    if (isNaN(d.getTime())) return false;
-                                    const cat = getDayTypeCategoryFromDayType(getDayType(d));
-                                    if (cat !== typeCat) return false;
-                                    const byGroup = assignmentReasons?.[dk]?.[groupNum];
-                                    if (!byGroup || typeof byGroup !== 'object') return false;
-                                    for (const assignedName of Object.keys(byGroup)) {
-                                        const r = byGroup[assignedName];
-                                        if (!r) continue;
-                                        if (r.type === 'skip' && r.swappedWith === personName) {
-                                            return true;
-                                        }
-                                    }
-                                    return false;
-                                } catch (_) {
-                                    return false;
-                                }
-                            };
-
-                            const getBaselinePersonForTypeOnDateKey = (typeCat, dk) => {
-                                // Prefer THIS RUN's rotation baseline (preview) when available.
-                                // This is the most accurate source during executeCalculation(), because
-                                // rotationBaseline* docs may not yet be saved/loaded for the current run.
-                                try {
-                                    const tempBaselineByType =
-                                        typeCat === 'special' ? calculationSteps?.tempSpecialBaselineAssignments :
-                                        typeCat === 'weekend' ? calculationSteps?.tempWeekendBaselineAssignments :
-                                        typeCat === 'semi' ? calculationSteps?.tempSemiBaselineAssignments :
-                                        calculationSteps?.tempNormalBaselineAssignments;
-                                    const tb = tempBaselineByType?.[dk];
-                                    if (tb) {
-                                        // temp baselines are usually { [groupNum]: personName } objects, but be defensive.
-                                        if (tb[groupNum]) return tb[groupNum];
-                                        const map = extractGroupAssignmentsMap(tb);
-                                        if (map && map[groupNum]) return map[groupNum];
-                                    }
-                                } catch (_) {
-                                    // ignore and continue
-                                }
-
-                                // Next: Prefer saved baseline (history). Fall back to pure-rotation if missing.
-                                const baseline = getRotationBaselineAssignmentForType(typeCat, dk);
-                                if (baseline) {
-                                    const p = parseAssignedPersonForGroupFromAssignment(baseline, groupNum);
-                                    if (p) return p;
-                                    const map = extractGroupAssignmentsMap(baseline);
-                                    if (map && map[groupNum]) return map[groupNum];
-                                }
-                                const groupPeople = groups?.[groupNum]?.[typeCat] || [];
-                                if (!Array.isArray(groupPeople) || groupPeople.length === 0) return null;
-                                const d = new Date(dk + 'T00:00:00');
-                                if (isNaN(d.getTime())) return null;
-                                const rotationDays = groupPeople.length;
-                                const rotationPosition = getRotationPosition(d, typeCat, groupNum) % rotationDays;
-                                return groupPeople[rotationPosition] || null;
-                            };
-
-                            const scanKeys = (typeCat, keysList) => {
-                                for (const dk of keysList) {
-                                    if (dk < overlapStart || dk > overlapEnd) continue;
-                                    // If we already replaced this person on this date due to missing/disabled,
-                                    // we know they "missed" this duty within the overlap window.
-                                    if (wasPersonSkippedOnDateKey(typeCat, dk)) {
-                                        missed[typeCat] = true;
-                                        if (typeCat === 'normal' && missedNormalDow === null) {
-                                            const dd = new Date(dk + 'T00:00:00');
-                                            const dow = dd.getDay(); // 1=Mon,2=Tue,3=Wed,4=Thu
-                                            if (dow === 1 || dow === 3) missedNormalDow = 1;
-                                            else if (dow === 2 || dow === 4) missedNormalDow = 2;
-                                        }
-                                        continue;
-                                    }
-                                    const p = getBaselinePersonForTypeOnDateKey(typeCat, dk);
-                                    if (p && p === personName) {
-                                        missed[typeCat] = true;
-                                        if (typeCat === 'normal' && missedNormalDow === null) {
-                                            const dd = new Date(dk + 'T00:00:00');
-                                            const dow = dd.getDay(); // 1=Mon,2=Tue,3=Wed,4=Thu
-                                            if (dow === 1 || dow === 3) missedNormalDow = 1;
-                                            else if (dow === 2 || dow === 4) missedNormalDow = 2;
-                                        }
-                                    }
-                                }
-                            };
-
-                            scanKeys('special', dateKeys.special);
-                            scanKeys('weekend', dateKeys.weekend);
-                            scanKeys('semi', dateKeys.semi);
-                            scanKeys('normal', dateKeys.normal);
-
-                            if (!missed.special && !missed.weekend && !missed.semi && !missed.normal) continue;
-
-                            // Targets (re-insert) — do NOT change rotation; we swap with the person's next natural assignment.
-                            const specialTarget = missed.special ? findFirstDateKeyAfter(dateKeys.special, pEnd) : null;
-
-                            // NORMAL: user rule
-                            // - Determine the missed track (Mon/Wed or Tue/Thu) from the missed baseline date (missedNormalDow)
-                            // - Count 3 NORMAL days from returnKey (returnKey = missingEnd + 1)
-                            // - Then pick the nearest NORMAL day on/after that limit that matches the track
-                            // Example: missed on Thu => track Tue/Thu; returnKey=Mon 16/03; 3rd normal day limit=Wed 18/03; nearest Tue/Thu after = Thu 19/03.
-                            const returnPlus3 = getDateKeyPlusDays(returnKey, 3); // still used as calendar-gap base for semi/weekend when normal is absent
-                            const normalLimitKey = (missed.normal && missedNormalDow)
-                                ? (() => {
-                                    const idx0 = dateKeys.normal.findIndex(dk => dk >= returnKey);
-                                    if (idx0 < 0) return null;
-                                    return dateKeys.normal[idx0 + 2] || null; // 3rd normal day
-                                })()
-                                : null;
-                            let normalTarget = null;
-                            if (missed.normal && missedNormalDow && normalLimitKey) {
-                                const matchesTrack = (dk) => {
-                                    const d = new Date(dk + 'T00:00:00');
-                                    const dow = d.getDay();
-                                    return missedNormalDow === 1 ? (dow === 1 || dow === 3) : (dow === 2 || dow === 4);
-                                };
-
-                                // Find nearest track day on/after normalLimitKey that is:
-                                // - available for the returning person
-                                // - no consecutive-duty conflict for the returning person
-                                // - and shifting forward from that day does not create conflicts/unavailability for others
-                                let candidate = findFirstDateKeyOnOrAfterMatching(dateKeys.normal, normalLimitKey, matchesTrack);
-                                while (candidate) {
-                                    const cd = new Date(candidate + 'T00:00:00');
-                                    const returningUnavailable = isPersonMissingOnDate(personName, groupNum, cd, 'normal');
-                                    // For normal reinsertion, only check REAL adjacent-day conflicts against already-final
-                                    // non-normal assignments (semi/weekend/special). Avoid predictive hasConsecutiveDuty().
-                                    const returningConflict = (() => {
-                                        const d = new Date(candidate + 'T00:00:00');
-                                        if (isNaN(d.getTime())) return false;
-                                        const before = new Date(d);
-                                        before.setDate(before.getDate() - 1);
-                                        const after = new Date(d);
-                                        after.setDate(after.getDate() + 1);
-                                        const beforeType = getDayType(before);
-                                        const afterType = getDayType(after);
-                                        if (beforeType !== 'normal-day' && hasDutyOnDay(formatDateKey(before), personName, groupNum)) return true;
-                                        if (afterType !== 'normal-day' && hasDutyOnDay(formatDateKey(after), personName, groupNum)) return true;
-                                        return false;
-                                    })();
-                                    const chainOk = canInsertNormalByShiftingForwardWithoutConflicts(dateKeys.normal, candidate, groupNum, personName);
-                                    if (!returningUnavailable && !returningConflict && chainOk.ok) {
-                                        normalTarget = candidate;
-                                        break;
-                                    }
-                                    const nextThreshold = getDateKeyPlusDays(candidate, 1);
-                                    candidate = nextThreshold ? findFirstDateKeyOnOrAfterMatching(dateKeys.normal, nextThreshold, matchesTrack) : null;
-                                }
-                            }
-
-                            const normalPlus3 = normalTarget ? getDateKeyPlusDays(normalTarget, 3) : returnPlus3;
-                            const semiTarget = missed.semi ? findFirstDateKeyOnOrAfterMatching(dateKeys.semi, normalPlus3, () => true) : null;
-
-                            const refForWeekend = semiTarget || normalTarget || returnPlus3;
-                            const weekendTarget = missed.weekend ? findFirstDateKeyOnOrAfterMatching(dateKeys.weekend, getDateKeyPlusDays(refForWeekend, 3), () => true) : null;
-
-                            const applyForType = (typeCat, targetKey) => {
-                                if (!targetKey) return;
-                                // Find the person's next natural assignment after missing end; swap to preserve counts.
-                                const naturalKey = findFirstAssignedDateForPerson(typeCat, groupNum, personName, allFinalKeys[typeCat], pEnd);
-                                if (!naturalKey) return;
-                                if (naturalKey === targetKey) return;
-                                const swapped = swapFinalAssignmentsForGroup(typeCat, targetKey, naturalKey, groupNum);
-                                if (!swapped) return;
-                                const { aPerson: targetOriginalPerson, bPerson: naturalOriginalPerson } = swapped;
-                                // After swap, personName is now at targetKey and targetOriginalPerson moved to naturalKey.
-                                // Store a reason on the returning person at the target date.
-                                storeAssignmentReason(
-                                    targetKey,
-                                    groupNum,
-                                    personName,
-                                    'skip',
-                                    buildReturnFromMissingReason({
-                                        returningPerson: personName,
-                                        replacedPerson: targetOriginalPerson,
-                                        period,
-                                        returnDateKey: returnKey,
-                                        targetDateKey: targetKey
-                                    }),
-                                    targetOriginalPerson,
-                                    null,
-                                    { returnFromMissing: true, naturalKey }
-                                );
-                            };
-
-                            // Apply in the requested sequence
-                            if (specialTarget) applyForType('special', specialTarget);
-                            if (normalTarget) {
-                                // Normal uses shift-insert (not swap), so the order continues after the previous day,
-                                // and the returning person appears at the correct track-based reinsertion date.
-                                const ins = insertNormalAssignmentByShiftingForward(dateKeys.normal, normalTarget, groupNum, personName);
-                                if (ins && ins.ok) {
-                                    storeAssignmentReason(
-                                        normalTarget,
-                                        groupNum,
-                                        personName,
-                                        'skip',
-                                        buildReturnFromMissingReason({
-                                            returningPerson: personName,
-                                            replacedPerson: ins.originalAtTarget || '-',
-                                            period,
-                                            returnDateKey: returnKey,
-                                            targetDateKey: normalTarget
-                                        }),
-                                        ins.originalAtTarget || null,
-                                        null,
-                                        { returnFromMissing: true, insertedByShift: true }
-                                    );
-                                }
-                            }
-                            if (semiTarget) applyForType('semi', semiTarget);
-                            if (weekendTarget) applyForType('weekend', weekendTarget);
-                        }
-                    }
-                }
-            } catch (e) {
-                console.warn('Return-from-missing reinsertion failed:', e);
-            }
-        }
-
         // Transfer auto-positioning reference date selection (per duty type):
         // 1) Find the LAST date in the reference month where Person A appears in the *baseline rotation* (for that duty type).
         // 2) If none, search previous months (month-by-month backwards) for the most recent baseline date.
@@ -6088,6 +5647,66 @@
             return months[date.getMonth()];
         }
 
+        function mapDayTypeToRotationType(dayType) {
+            if (dayType === 'special-holiday') return 'special';
+            if (dayType === 'weekend-holiday') return 'weekend';
+            if (dayType === 'semi-normal-day') return 'semi';
+            return 'normal';
+        }
+
+        function getAssignedPersonNameForGroupFromAssignment(assignment, groupNum) {
+            try {
+                const persons = extractAllPersonNames(assignment);
+                const match = persons.find(p => p.group === groupNum);
+                return match
+                    ? (match.name || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '')
+                    : '';
+            } catch (_) {
+                return '';
+            }
+        }
+
+        function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
+            const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(year, month, day);
+                const dayKey = formatDateKey(date);
+                const dayType = getDayType(date);
+                const rotationType = mapDayTypeToRotationType(dayType);
+
+                const assignment = dutyAssignments?.[dayKey] || '';
+                const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
+                if (personName) lastAssigned[rotationType] = personName;
+            }
+
+            const nextTwoForType = (type) => {
+                const list = (groupData?.[type] || []).filter(Boolean);
+                if (list.length === 0) return ['', ''];
+
+                const last = lastAssigned[type];
+                let startIdx = 0;
+                if (last) {
+                    const idx = list.indexOf(last);
+                    startIdx = idx >= 0 ? (idx + 1) : 0;
+                }
+
+                const a = list[startIdx % list.length] || '';
+                const b = list.length >= 2 ? (list[(startIdx + 1) % list.length] || '') : '';
+                return [a, b];
+            };
+
+            return {
+                lastAssigned,
+                next: {
+                    normal: nextTwoForType('normal'),
+                    semi: nextTwoForType('semi'),
+                    weekend: nextTwoForType('weekend'),
+                    special: nextTwoForType('special')
+                }
+            };
+        }
+
         // Get day type background color for PDF
         function getDayTypeColor(dayType) {
             const colors = {
@@ -6326,8 +5945,8 @@
                         const workbook = new ExcelJS.Workbook();
                         const worksheet = workbook.addWorksheet('Υπηρεσίες');
                         
-                        // Set title - merge cells A1 through C1
-                        worksheet.mergeCells('A1:C1');
+                        // Set title - merge cells A1 through D1 (we add a 4-col table below)
+                        worksheet.mergeCells('A1:D1');
                         const titleCell = worksheet.getCell('A1');
                         titleCell.value = `ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`;
                         titleCell.font = { 
@@ -6398,6 +6017,7 @@
                         worksheet.getColumn(1).width = 12;
                         worksheet.getColumn(2).width = 15;
                         worksheet.getColumn(3).width = 30;
+                        worksheet.getColumn(4).width = 30;
                         
                         // Data rows
                         for (let day = 1; day <= daysInMonth; day++) {
@@ -6408,20 +6028,7 @@
                             
                             // Get assignment for this group
                             const assignment = dutyAssignments[dayKey] || '';
-                            let personName = '';
-                            
-                            if (assignment) {
-                                // Extract person name for this group - split by comma first to handle properly
-                                const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
-                                for (const part of parts) {
-                                    const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
-                                    if (match && parseInt(match[2]) === groupNum) {
-                                        // Remove any leading/trailing commas from the name
-                                        personName = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
-                                        break;
-                                    }
-                                }
-                            }
+                            const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
                             
                             // Format date as DD/MM/YYYY
                             const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
@@ -6469,6 +6076,63 @@
                             
                             row.height = 22;
                         }
+
+                        // Add "next on rotation" table (2 next persons per category) under the duty table
+                        const rotationInfo = getNextTwoRotationPeopleForCurrentMonth({
+                            year,
+                            month,
+                            daysInMonth,
+                            groupNum,
+                            groupData,
+                            dutyAssignments
+                        });
+                        const rotationStartRow = daysInMonth + 5; // blank row at +4, header row at +5
+                        worksheet.getRow(daysInMonth + 4).height = 5;
+
+                        const rotationHeaderTitles = ['ΚΑΘΗΜΕΡΙΝΕΣ', 'ΗΜΙΑΡΓΙΕΣ', 'ΑΡΓΙΕΣ', 'ΕΙΔΙΚΕΣ'];
+                        const rotationHeaderRow = worksheet.getRow(rotationStartRow);
+                        rotationHeaderTitles.forEach((title, idx) => {
+                            const cell = rotationHeaderRow.getCell(idx + 1);
+                            cell.value = title;
+                            cell.font = { name: 'Arial', bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF428BCA' } };
+                            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        });
+                        rotationHeaderRow.height = 22;
+
+                        const rotationRows = [
+                            [rotationInfo.next.normal[0], rotationInfo.next.semi[0], rotationInfo.next.weekend[0], rotationInfo.next.special[0]],
+                            [rotationInfo.next.normal[1], rotationInfo.next.semi[1], rotationInfo.next.weekend[1], rotationInfo.next.special[1]]
+                        ];
+
+                        rotationRows.forEach((values, offset) => {
+                            const row = worksheet.getRow(rotationStartRow + 1 + offset);
+                            values.forEach((val, idx) => {
+                                const cell = row.getCell(idx + 1);
+                                cell.value = val || '';
+                                cell.font = { name: 'Arial', size: 12 };
+                                cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                            });
+                            row.height = 22;
+                        });
+
+                        // Add borders around the 4x3 block (header + 2 rows)
+                        const rotationEndRow = rotationStartRow + 2;
+                        for (let r = rotationStartRow; r <= rotationEndRow; r++) {
+                            for (let c = 1; c <= 4; c++) {
+                                const cell = worksheet.getRow(r).getCell(c);
+                                const isTop = r === rotationStartRow;
+                                const isBottom = r === rotationEndRow;
+                                const isLeft = c === 1;
+                                const isRight = c === 4;
+                                cell.border = {
+                                    top: isTop ? { style: 'thick' } : { style: 'thin' },
+                                    bottom: isBottom ? { style: 'thick' } : { style: 'thin' },
+                                    left: isLeft ? { style: 'thick' } : { style: 'thin' },
+                                    right: isRight ? { style: 'thick' } : { style: 'thin' }
+                                };
+                            }
+                        }
                         
                         // Generate file name (keep Greek)
                         const fileName = buildExcelFilename(groupName, monthName, year);
@@ -6499,28 +6163,36 @@
                             const dayName = getGreekDayNameUppercase(date); // Use uppercase
                             
                             const assignment = dutyAssignments[dayKey] || '';
-                            let personName = '';
-                            
-                            if (assignment) {
-                                const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
-                                for (const part of parts) {
-                                    const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
-                                    if (match && parseInt(match[2]) === groupNum) {
-                                        personName = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
-                                        break;
-                                    }
-                                }
-                            }
+                            const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
                             
                             const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
                             data.push([dateStr, dayName, personName]);
                             rowDayTypes.push(dayType);
                         }
+
+                        // Add "next on rotation" table under the duty table
+                        const rotationInfo = getNextTwoRotationPeopleForCurrentMonth({
+                            year,
+                            month,
+                            daysInMonth,
+                            groupNum,
+                            groupData,
+                            dutyAssignments
+                        });
+                        data.push([]);
+                        rowDayTypes.push(null);
+                        const rotationHeaderRowIndex = data.length; // 0-indexed row position of the header to style
+                        data.push(['ΚΑΘΗΜΕΡΙΝΕΣ', 'ΗΜΙΑΡΓΙΕΣ', 'ΑΡΓΙΕΣ', 'ΕΙΔΙΚΕΣ']);
+                        rowDayTypes.push(null);
+                        data.push([rotationInfo.next.normal[0], rotationInfo.next.semi[0], rotationInfo.next.weekend[0], rotationInfo.next.special[0]]);
+                        rowDayTypes.push(null);
+                        data.push([rotationInfo.next.normal[1], rotationInfo.next.semi[1], rotationInfo.next.weekend[1], rotationInfo.next.special[1]]);
+                        rowDayTypes.push(null);
                         
                         const ws = XLSX.utils.aoa_to_sheet(data);
-                        ws['!cols'] = [{ wch: 12 }, { wch: 15 }, { wch: 30 }];
+                        ws['!cols'] = [{ wch: 12 }, { wch: 15 }, { wch: 30 }, { wch: 30 }];
                         if (!ws['!merges']) ws['!merges'] = [];
-                        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } });
+                        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } });
                         
                         // Style title row (row 1)
                         const titleCell = 'A1';
@@ -6535,6 +6207,16 @@
                         ['A', 'B', 'C'].forEach((col, idx) => {
                             const cellRef = col + (headerRow + 1);
                             if (!ws[cellRef]) ws[cellRef] = { t: 's', v: data[headerRow][idx] || '' };
+                            if (!ws[cellRef].s) ws[cellRef].s = {};
+                            ws[cellRef].s.font = { name: 'Arial', bold: true, sz: 12, color: { rgb: 'FFFFFF' } };
+                            ws[cellRef].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
+                            ws[cellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
+                        });
+
+                        // Style "next on rotation" header row
+                        ['A', 'B', 'C', 'D'].forEach((col, idx) => {
+                            const cellRef = col + (rotationHeaderRowIndex + 1);
+                            if (!ws[cellRef]) ws[cellRef] = { t: 's', v: (data[rotationHeaderRowIndex]?.[idx] || '') };
                             if (!ws[cellRef].s) ws[cellRef].s = {};
                             ws[cellRef].s.font = { name: 'Arial', bold: true, sz: 12, color: { rgb: 'FFFFFF' } };
                             ws[cellRef].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
@@ -10059,6 +9741,113 @@
                 const specialHolidays = dayTypeLists.special || [];
                 const weekendHolidays = dayTypeLists.weekend || [];
                 const semiNormalDays = dayTypeLists.semi || [];
+
+                // "Return from missing" reinsertion for NORMAL days:
+                // - Only matters in the month where the missing period ENDS.
+                // - Detect if the person missed any NORMAL duty (baseline rotation) from month-start to missing-end (within the missing window).
+                // - If yes: after return (end+1), count 3 NORMAL days, then re-insert on nearest matching track day:
+                //   Mon/Wed track or Tue/Thu track (based on the missed baseline normal day).
+                // - Do NOT change baseline rotation tracking (we only modify final assignments here).
+                const calcStartDateRaw = calculationSteps.startDate || null;
+                const calcEndDateRaw = calculationSteps.endDate || null;
+                const calcStartDate = (calcStartDateRaw instanceof Date) ? calcStartDateRaw : (calcStartDateRaw ? new Date(calcStartDateRaw) : null);
+                const calcEndDate = (calcEndDateRaw instanceof Date) ? calcEndDateRaw : (calcEndDateRaw ? new Date(calcEndDateRaw) : null);
+                const baselineNormalByDate = calculationSteps.tempNormalBaselineAssignments || {};
+
+                const isValidDateKey = (dk) => typeof dk === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dk);
+                const dateKeyToDate = (dk) => new Date(dk + 'T00:00:00');
+                const addDaysToDateKey = (dk, days) => {
+                    if (!isValidDateKey(dk)) return null;
+                    const d = dateKeyToDate(dk);
+                    if (isNaN(d.getTime())) return null;
+                    d.setDate(d.getDate() + (days || 0));
+                    return formatDateKey(d);
+                };
+                const maxDateKey = (a, b) => (!a ? b : (!b ? a : (a > b ? a : b)));
+                const minDateKey = (a, b) => (!a ? b : (!b ? a : (a < b ? a : b)));
+                const getTrackFromDow = (dow) => {
+                    // 1=Mon,2=Tue,3=Wed,4=Thu
+                    if (dow === 1 || dow === 3) return 1;
+                    if (dow === 2 || dow === 4) return 2;
+                    return null;
+                };
+                const trackMatches = (dk, track) => {
+                    const d = dateKeyToDate(dk);
+                    const dow = d.getDay();
+                    return track === 1 ? (dow === 1 || dow === 3) : (dow === 2 || dow === 4);
+                };
+                const findFirstNormalOnOrAfter = (sortedNormalKeys, thresholdKey) => {
+                    for (const dk of sortedNormalKeys) {
+                        if (dk >= thresholdKey) return dk;
+                    }
+                    return null;
+                };
+                const findThirdNormalOnOrAfter = (sortedNormalKeys, thresholdKey) => {
+                    let count = 0;
+                    for (const dk of sortedNormalKeys) {
+                        if (dk < thresholdKey) continue;
+                        count++;
+                        if (count === 3) return dk;
+                    }
+                    return null;
+                };
+                const findFirstMatchingTrackOnOrAfter = (sortedNormalKeys, thresholdKey, track) => {
+                    for (const dk of sortedNormalKeys) {
+                        if (dk < thresholdKey) continue;
+                        if (trackMatches(dk, track)) return dk;
+                    }
+                    return null;
+                };
+                const findFirstAssignedNormalDateForPersonAfter = (sortedNormalKeys, groupNum, personName, afterDateKey, assignmentsByDate) => {
+                    for (const dk of sortedNormalKeys) {
+                        if (afterDateKey && dk <= afterDateKey) continue;
+                        const p = assignmentsByDate?.[dk]?.[groupNum] || null;
+                        if (p === personName) return dk;
+                    }
+                    return null;
+                };
+                const canAssignPersonToNormalDay = (dateKey, personName, groupNum, assignmentsByDate, globalRotationPositions, simulatedSpecial, simulatedWeekend, simulatedSemi) => {
+                    if (!dateKey || !personName) return false;
+                    const dateObj = dateKeyToDate(dateKey);
+                    if (isNaN(dateObj.getTime())) return false;
+                    if (isPersonMissingOnDate(personName, groupNum, dateObj, 'normal')) return false;
+                    const simulatedAssignments = {
+                        special: simulatedSpecial,
+                        weekend: simulatedWeekend,
+                        semi: simulatedSemi,
+                        normal: assignmentsByDate,
+                        normalRotationPositions: globalRotationPositions
+                    };
+                    return !hasConsecutiveDuty(dateKey, personName, groupNum, simulatedAssignments);
+                };
+                const canShiftInsertFromDate = (sortedNormalKeys, startKey, groupNum, insertedPerson, assignmentsByDate, globalRotationPositions, simulatedSpecial, simulatedWeekend, simulatedSemi) => {
+                    const idx = sortedNormalKeys.indexOf(startKey);
+                    if (idx < 0) return { ok: false, reason: 'start-not-in-range' };
+                    let carry = insertedPerson;
+                    for (let i = idx; i < sortedNormalKeys.length; i++) {
+                        const dk = sortedNormalKeys[i];
+                        if (carry) {
+                            const ok = canAssignPersonToNormalDay(dk, carry, groupNum, assignmentsByDate, globalRotationPositions, simulatedSpecial, simulatedWeekend, simulatedSemi);
+                            if (!ok) return { ok: false, reason: 'unavailable-or-conflict', dateKey: dk, person: carry };
+                        }
+                        carry = assignmentsByDate?.[dk]?.[groupNum] || null;
+                    }
+                    return { ok: true };
+                };
+                const applyShiftInsertFromDate = (sortedNormalKeys, startKey, groupNum, insertedPerson, assignmentsByDate) => {
+                    const idx = sortedNormalKeys.indexOf(startKey);
+                    if (idx < 0) return { ok: false, originalAtTarget: null };
+                    const originalAtTarget = assignmentsByDate?.[startKey]?.[groupNum] || null;
+                    let carry = insertedPerson;
+                    for (let i = idx; i < sortedNormalKeys.length; i++) {
+                        const dk = sortedNormalKeys[i];
+                        const cur = assignmentsByDate?.[dk]?.[groupNum] || null;
+                        if (!assignmentsByDate[dk]) assignmentsByDate[dk] = {};
+                        assignmentsByDate[dk][groupNum] = carry;
+                        carry = cur;
+                    }
+                    return { ok: true, originalAtTarget };
+                };
                 
                 // Load special holiday assignments from Step 1 saved data (tempSpecialAssignments)
                 const tempSpecialAssignments = calculationSteps.tempSpecialAssignments || {};
@@ -10227,6 +10016,209 @@
                 
                 // Get global normal rotation positions for cross-month swap calculations
                 const globalNormalRotationPosition = calculationSteps.lastNormalRotationPositions || {};
+
+                // Apply "return-from-missing" reinsertion BEFORE swap logic, so swap logic can still resolve any new conflicts.
+                // This modifies ONLY updatedAssignments (final schedule), not baseline rotation persons.
+                try {
+                    if (calcStartDate && calcEndDate && Array.isArray(sortedNormal) && sortedNormal.length > 0) {
+                        const calcStartKey = formatDateKey(calcStartDate);
+                        const calcEndKey = formatDateKey(calcEndDate);
+                        const processed = new Set(); // "g|person|periodEnd"
+
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            const g = groups?.[groupNum];
+                            const missingMap = g?.missingPeriods || {};
+                            for (const personName of Object.keys(missingMap)) {
+                                const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
+                                for (const period of periods) {
+                                    const pStartKey = inputValueToDateKey(period?.start);
+                                    const pEndKey = inputValueToDateKey(period?.end);
+                                    if (!pStartKey || !pEndKey) continue;
+                                    if (pEndKey < calcStartKey || pEndKey > calcEndKey) continue; // only handle when the end is within the calculated range
+
+                                    const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
+                                    if (processed.has(dedupeKey)) continue;
+                                    processed.add(dedupeKey);
+
+                                    const pEndDate = dateKeyToDate(pEndKey);
+                                    if (isNaN(pEndDate.getTime())) continue;
+                                    const monthStartKey = formatDateKey(new Date(pEndDate.getFullYear(), pEndDate.getMonth(), 1));
+
+                                    // Only scan within missing window and within calculated range, but starting from month-start as requested.
+                                    const scanStartKey = maxDateKey(maxDateKey(monthStartKey, pStartKey), calcStartKey);
+                                    const scanEndKey = minDateKey(pEndKey, calcEndKey);
+                                    if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
+
+                                    // Find first missed baseline normal duty date in scan window.
+                                    let firstMissedKey = null;
+                                    for (const dk of sortedNormal) {
+                                        if (dk < scanStartKey) continue;
+                                        if (dk > scanEndKey) break;
+                                        const baselinePerson = baselineNormalByDate?.[dk]?.[groupNum] || null;
+                                        if (baselinePerson === personName) {
+                                            firstMissedKey = dk;
+                                            break;
+                                        }
+                                    }
+                                    if (!firstMissedKey) continue;
+
+                                    const track = getTrackFromDow(dateKeyToDate(firstMissedKey).getDay());
+                                    if (!track) continue;
+
+                                    // Return day is end+1
+                                    const returnKey = addDaysToDateKey(pEndKey, 1);
+                                    if (!returnKey) continue;
+
+                                    // Count 3 normal days starting at returnKey (on-or-after), then find nearest track day on/after that.
+                                    const thirdNormalKey = findThirdNormalOnOrAfter(sortedNormal, returnKey);
+                                    if (!thirdNormalKey) continue;
+                                    let targetKey = findFirstMatchingTrackOnOrAfter(sortedNormal, thirdNormalKey, track);
+                                    if (!targetKey) continue;
+
+                                    // Find a feasible targetKey (if returning person is unavailable/conflict on that day, try next matching track day).
+                                    while (targetKey) {
+                                        const okReturning = canAssignPersonToNormalDay(
+                                            targetKey,
+                                            personName,
+                                            groupNum,
+                                            updatedAssignments,
+                                            globalNormalRotationPosition,
+                                            simulatedSpecialAssignments,
+                                            simulatedWeekendAssignments,
+                                            simulatedSemiAssignments
+                                        );
+                                        if (okReturning) break;
+                                        const nextThreshold = addDaysToDateKey(targetKey, 1);
+                                        targetKey = nextThreshold ? findFirstMatchingTrackOnOrAfter(sortedNormal, nextThreshold, track) : null;
+                                    }
+                                    if (!targetKey) continue;
+
+                                    // Prefer minimal disruption: swap returning person into targetKey with their first future occurrence in the final schedule.
+                                    // If they never appear again in-range, fall back to safe shift-insert from targetKey.
+                                    const naturalKey = findFirstAssignedNormalDateForPersonAfter(sortedNormal, groupNum, personName, pEndKey, updatedAssignments);
+                                    if (naturalKey && naturalKey !== targetKey) {
+                                        const displaced = updatedAssignments?.[targetKey]?.[groupNum] || null;
+                                        if (!displaced) continue;
+
+                                        // Temporarily apply swap for conflict checks.
+                                        const tmp = {};
+                                        tmp[targetKey] = { ...(updatedAssignments[targetKey] || {}) };
+                                        tmp[naturalKey] = { ...(updatedAssignments[naturalKey] || {}) };
+                                        tmp[targetKey][groupNum] = personName;
+                                        tmp[naturalKey][groupNum] = displaced;
+                                        const mergedAssignments = Object.assign({}, updatedAssignments, tmp);
+
+                                        const okReturningAtTarget = canAssignPersonToNormalDay(
+                                            targetKey,
+                                            personName,
+                                            groupNum,
+                                            mergedAssignments,
+                                            globalNormalRotationPosition,
+                                            simulatedSpecialAssignments,
+                                            simulatedWeekendAssignments,
+                                            simulatedSemiAssignments
+                                        );
+                                        const okDisplacedAtNatural = canAssignPersonToNormalDay(
+                                            naturalKey,
+                                            displaced,
+                                            groupNum,
+                                            mergedAssignments,
+                                            globalNormalRotationPosition,
+                                            simulatedSpecialAssignments,
+                                            simulatedWeekendAssignments,
+                                            simulatedSemiAssignments
+                                        );
+
+                                        if (!okReturningAtTarget || !okDisplacedAtNatural) {
+                                            // If swap would create conflicts, try shift-insert fallback instead.
+                                            const chainOk = canShiftInsertFromDate(
+                                                sortedNormal,
+                                                targetKey,
+                                                groupNum,
+                                                personName,
+                                                updatedAssignments,
+                                                globalNormalRotationPosition,
+                                                simulatedSpecialAssignments,
+                                                simulatedWeekendAssignments,
+                                                simulatedSemiAssignments
+                                            );
+                                            if (!chainOk.ok) continue;
+                                            const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, updatedAssignments);
+                                            if (!ins.ok) continue;
+                                            storeAssignmentReason(
+                                                targetKey,
+                                                groupNum,
+                                                personName,
+                                                'skip',
+                                                `Επέστρεψε από απουσία και επανεντάχθηκε στις καθημερινές μετά από 3 καθημερινές ημέρες (λογική ${track === 1 ? 'Δευτέρα/Τετάρτη' : 'Τρίτη/Πέμπτη'}).`,
+                                                ins.originalAtTarget || null,
+                                                null,
+                                                { returnFromMissing: true, insertedByShift: true, missingEnd: pEndKey }
+                                            );
+                                            continue;
+                                        }
+
+                                        // Apply swap to updatedAssignments
+                                        if (!updatedAssignments[targetKey]) updatedAssignments[targetKey] = {};
+                                        if (!updatedAssignments[naturalKey]) updatedAssignments[naturalKey] = {};
+                                        updatedAssignments[targetKey][groupNum] = personName;
+                                        updatedAssignments[naturalKey][groupNum] = displaced;
+
+                                        // Store reasons for visibility
+                                        storeAssignmentReason(
+                                            targetKey,
+                                            groupNum,
+                                            personName,
+                                            'skip',
+                                            `Επέστρεψε από απουσία και επανεντάχθηκε στις καθημερινές μετά από 3 καθημερινές ημέρες (λογική ${track === 1 ? 'Δευτέρα/Τετάρτη' : 'Τρίτη/Πέμπτη'}).`,
+                                            displaced,
+                                            null,
+                                            { returnFromMissing: true, swappedWith: displaced, naturalKey, missingEnd: pEndKey }
+                                        );
+                                        storeAssignmentReason(
+                                            naturalKey,
+                                            groupNum,
+                                            displaced,
+                                            'swap',
+                                            `Μεταφέρθηκε λόγω επανένταξης του/της ${personName} μετά από απουσία.`,
+                                            personName,
+                                            null,
+                                            { returnFromMissing: true, swappedWith: personName, targetKey, missingEnd: pEndKey }
+                                        );
+                                    } else {
+                                        // No naturalKey in-range: safe shift-insert within the remaining calculated normal days.
+                                        const chainOk = canShiftInsertFromDate(
+                                            sortedNormal,
+                                            targetKey,
+                                            groupNum,
+                                            personName,
+                                            updatedAssignments,
+                                            globalNormalRotationPosition,
+                                            simulatedSpecialAssignments,
+                                            simulatedWeekendAssignments,
+                                            simulatedSemiAssignments
+                                        );
+                                        if (!chainOk.ok) continue;
+                                        const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, updatedAssignments);
+                                        if (!ins.ok) continue;
+                                        storeAssignmentReason(
+                                            targetKey,
+                                            groupNum,
+                                            personName,
+                                            'skip',
+                                            `Επέστρεψε από απουσία και επανεντάχθηκε στις καθημερινές μετά από 3 καθημερινές ημέρες (λογική ${track === 1 ? 'Δευτέρα/Τετάρτη' : 'Τρίτη/Πέμπτη'}).`,
+                                            ins.originalAtTarget || null,
+                                            null,
+                                            { returnFromMissing: true, insertedByShift: true, missingEnd: pEndKey }
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[STEP 4] Return-from-missing reinsertion (normal) failed:', e);
+                }
                 
                 // Track people who have already been swapped to prevent re-swapping
                 const swappedPeopleSet = new Set(); // Format: "dateKey:groupNum:personName"
@@ -11585,10 +11577,6 @@
                 // This tracks where rotation left off for each day type and group (ignoring swaps)
                 // The lastRotationPositions object is updated during calculation, so we just need to save it
                 try {
-                    // Apply "return-from-missing" re-insertion swaps BEFORE persisting assignments/reasons.
-                    // This does NOT change baseline rotation or lastRotationPositions; it only swaps final assignments.
-                    applyReturnFromMissingReinsertionForRange(startDate, endDate);
-
                     if (!window.db) {
                         console.log('Firebase not ready, skipping lastRotationPositions save');
                     } else {
