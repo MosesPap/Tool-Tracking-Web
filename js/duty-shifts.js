@@ -4490,6 +4490,33 @@
             return { aPerson, bPerson };
         }
 
+        // For NORMAL re-insertion after missing: insert the returning person on a target normal day
+        // by shifting the group assignments forward for subsequent normal days in the calculated range.
+        // This preserves the "order after the previous day" behavior (everyone moves by 1 normal-day slot),
+        // without requiring a future-month swap partner.
+        function insertNormalAssignmentByShiftingForward(dateKeysNormalSorted, targetKey, groupNum, insertedPerson) {
+            const idx = dateKeysNormalSorted.indexOf(targetKey);
+            if (idx < 0) return { ok: false, originalAtTarget: null };
+
+            const originalStrAtTarget = getFinalAssignmentForType('normal', targetKey) || '';
+            const originalAtTarget = parseAssignedPersonForGroupFromAssignment(originalStrAtTarget, groupNum) || null;
+
+            let carry = insertedPerson;
+            for (let i = idx; i < dateKeysNormalSorted.length; i++) {
+                const dk = dateKeysNormalSorted[i];
+                const curStr = getFinalAssignmentForType('normal', dk) || '';
+                const curPerson = parseAssignedPersonForGroupFromAssignment(curStr, groupNum) || null;
+                const nextStr = setGroupAssignmentInString(curStr, groupNum, carry);
+                // Use setAssignmentForDate to keep legacy dutyAssignments in sync.
+                setAssignmentForDate(dk, nextStr);
+                carry = curPerson;
+            }
+
+            // The final "carry" falls off the end of the calculated range; it will naturally appear
+            // on the next month's schedule when that month is calculated (order is preserved).
+            return { ok: true, originalAtTarget };
+        }
+
         function buildReturnFromMissingReason({ returningPerson, replacedPerson, period, returnDateKey, targetDateKey }) {
             const startStr = period?.start ? new Date(period.start + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
             const endStr = period?.end ? new Date(period.end + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
@@ -4591,9 +4618,21 @@
                             // Targets (re-insert) — do NOT change rotation; we swap with the person's next natural assignment.
                             const specialTarget = missed.special ? findFirstDateKeyAfter(dateKeys.special, pEnd) : null;
 
-                            const returnPlus3 = getDateKeyPlusDays(returnKey, 3); // must wait 3 days after return date
-                            const normalTarget = (missed.normal && missedNormalDow)
-                                ? findFirstDateKeyOnOrAfterMatching(dateKeys.normal, returnPlus3, (dk) => {
+                            // NORMAL: user rule
+                            // - Determine the missed track (Mon/Wed or Tue/Thu) from the missed baseline date (missedNormalDow)
+                            // - Count 3 NORMAL days from returnKey (returnKey = missingEnd + 1)
+                            // - Then pick the nearest NORMAL day on/after that limit that matches the track
+                            // Example: missed on Thu => track Tue/Thu; returnKey=Mon 16/03; 3rd normal day limit=Wed 18/03; nearest Tue/Thu after = Thu 19/03.
+                            const returnPlus3 = getDateKeyPlusDays(returnKey, 3); // still used as calendar-gap base for semi/weekend when normal is absent
+                            const normalLimitKey = (missed.normal && missedNormalDow)
+                                ? (() => {
+                                    const idx0 = dateKeys.normal.findIndex(dk => dk >= returnKey);
+                                    if (idx0 < 0) return null;
+                                    return dateKeys.normal[idx0 + 2] || null; // 3rd normal day
+                                })()
+                                : null;
+                            const normalTarget = (missed.normal && missedNormalDow && normalLimitKey)
+                                ? findFirstDateKeyOnOrAfterMatching(dateKeys.normal, normalLimitKey, (dk) => {
                                     const d = new Date(dk + 'T00:00:00');
                                     const dow = d.getDay();
                                     return missedNormalDow === 1 ? (dow === 1 || dow === 3) : (dow === 2 || dow === 4);
@@ -4637,7 +4676,29 @@
 
                             // Apply in the requested sequence
                             if (specialTarget) applyForType('special', specialTarget);
-                            if (normalTarget) applyForType('normal', normalTarget);
+                            if (normalTarget) {
+                                // Normal uses shift-insert (not swap), so the order continues after the previous day,
+                                // and the returning person appears at the correct track-based reinsertion date.
+                                const ins = insertNormalAssignmentByShiftingForward(dateKeys.normal, normalTarget, groupNum, personName);
+                                if (ins && ins.ok) {
+                                    storeAssignmentReason(
+                                        normalTarget,
+                                        groupNum,
+                                        personName,
+                                        'skip',
+                                        buildReturnFromMissingReason({
+                                            returningPerson: personName,
+                                            replacedPerson: ins.originalAtTarget || '-',
+                                            period,
+                                            returnDateKey: returnKey,
+                                            targetDateKey: normalTarget
+                                        }),
+                                        ins.originalAtTarget || null,
+                                        null,
+                                        { returnFromMissing: true, insertedByShift: true }
+                                    );
+                                }
+                            }
                             if (semiTarget) applyForType('semi', semiTarget);
                             if (weekendTarget) applyForType('weekend', weekendTarget);
                         }
