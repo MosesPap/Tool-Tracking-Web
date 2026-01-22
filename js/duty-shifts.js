@@ -5656,6 +5656,13 @@
 
         function getAssignedPersonNameForGroupFromAssignment(assignment, groupNum) {
             try {
+                // Support object format: { "1": "Name", "2": "Name", ... }
+                if (assignment && typeof assignment === 'object' && !Array.isArray(assignment)) {
+                    const direct = assignment[groupNum] ?? assignment[String(groupNum)];
+                    return direct
+                        ? String(direct).trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '')
+                        : '';
+                }
                 const persons = extractAllPersonNames(assignment);
                 const match = persons.find(p => p.group === groupNum);
                 return match
@@ -5675,7 +5682,7 @@
                 const dayType = getDayType(date);
                 const rotationType = mapDayTypeToRotationType(dayType);
 
-                const assignment = dutyAssignments?.[dayKey] || '';
+                const assignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
                 const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
                 if (personName) lastAssigned[rotationType] = personName;
             }
@@ -5779,21 +5786,9 @@
                     const dayType = getDayType(date);
                     const dayName = getGreekDayNameUppercase(date);
                     
-                    // Get assignment for this group
-                    const assignment = dutyAssignments[dayKey] || '';
-                    let personName = '';
-                    
-                    if (assignment) {
-                        // Extract person name for this group
-                        const parts = assignment.split(',').map(p => p.trim()).filter(p => p);
-                        for (const part of parts) {
-                            const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
-                            if (match && parseInt(match[2]) === groupNum) {
-                                personName = match[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
-                                break;
-                            }
-                        }
-                    }
+                    // Get assignment for this group (supports object or string formats)
+                    const assignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
+                    const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
                     
                     // Format date as DD/MM/YYYY
                     const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
@@ -6044,7 +6039,7 @@
                             const dayName = getGreekDayNameUppercase(date); // Use uppercase
                             
                             // Get assignment for this group
-                            const assignment = dutyAssignments[dayKey] || '';
+                            const assignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
                             const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
                             
                             // Format date as DD/MM/YYYY
@@ -6180,7 +6175,7 @@
                             const dayType = getDayType(date);
                             const dayName = getGreekDayNameUppercase(date); // Use uppercase
                             
-                            const assignment = dutyAssignments[dayKey] || '';
+                            const assignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
                             const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
                             
                             const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
@@ -6336,9 +6331,16 @@
                     if (Array.isArray(assignment)) {
                         assignmentStr = assignment.join(', ');
                     } else {
-                        // If it's an object, try to stringify or return empty
-                        console.warn('extractAllPersonNames: assignment is an object, cannot parse:', assignment);
-                        return [];
+                        // If it's an object like { groupNum: personName }, return it directly
+                        const persons = [];
+                        for (const key of Object.keys(assignment)) {
+                            const g = parseInt(key, 10);
+                            const name = assignment[key];
+                            if (!Number.isNaN(g) && name) {
+                                persons.push({ name: String(name).trim(), group: g });
+                            }
+                        }
+                        return persons;
                     }
                 } else {
                     // Try to convert to string
@@ -13824,13 +13826,18 @@
             // Look backwards from current day to find last assignment
             for (let i = currentDayIndex - 1; i >= 0; i--) {
                 const dayKey = sortedDays[i];
-                const assignment = dutyAssignments[dayKey] || '';
+                const assignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
                 if (assignment) {
-                    const parts = assignment.split(',').map(p => p.trim());
-                    for (const part of parts) {
-                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
-                        if (match && parseInt(match[2]) === groupNum && match[1].trim() === person) {
-                            return dayKey;
+                    if (typeof assignment === 'object' && !Array.isArray(assignment)) {
+                        const direct = assignment[groupNum] ?? assignment[String(groupNum)];
+                        if (direct && String(direct).trim() === person) return dayKey;
+                    } else {
+                        const parts = String(assignment).split(',').map(p => p.trim());
+                        for (const part of parts) {
+                            const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                            if (match && parseInt(match[2]) === groupNum && match[1].trim() === person) {
+                                return dayKey;
+                            }
                         }
                     }
                 }
