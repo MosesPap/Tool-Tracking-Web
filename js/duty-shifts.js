@@ -28,7 +28,7 @@
         let dutyAssignments = {};
         
         // Track skip/swap reasons for each assignment
-        // Structure: assignmentReasons[dateKey][groupNum][personName] = { type: 'skip'|'swap', reason: '...', swappedWith: '...', swapPairId, meta? }
+        // Structure: assignmentReasons[dateKey][groupNum][personName] = { type: 'skip'|'swap'|'shift', reason: '...', swappedWith: '...', swapPairId, meta? }
         let assignmentReasons = {};
         // Track critical assignments from last duties - these must NEVER be deleted
         // Format: { "2025-12-25": ["Person Name (Ομάδα 1)", ...], ... }
@@ -9875,15 +9875,17 @@
                     const idx = sortedNormalKeys.indexOf(startKey);
                     if (idx < 0) return { ok: false, originalAtTarget: null };
                     const originalAtTarget = assignmentsByDate?.[startKey]?.[groupNum] || null;
+                    const changes = []; // { dateKey, prevPerson, newPerson }
                     let carry = insertedPerson;
                     for (let i = idx; i < sortedNormalKeys.length; i++) {
                         const dk = sortedNormalKeys[i];
                         const cur = assignmentsByDate?.[dk]?.[groupNum] || null;
                         if (!assignmentsByDate[dk]) assignmentsByDate[dk] = {};
                         assignmentsByDate[dk][groupNum] = carry;
+                        changes.push({ dateKey: dk, prevPerson: cur, newPerson: carry });
                         carry = cur;
                     }
-                    return { ok: true, originalAtTarget };
+                    return { ok: true, originalAtTarget, changes };
                 };
                 
                 // Load special holiday assignments from Step 1 saved data (tempSpecialAssignments)
@@ -10159,6 +10161,29 @@
                                         null,
                                         { returnFromMissing: true, insertedByShift: true, missingEnd: pEndKey }
                                     );
+
+                                    // IMPORTANT: Do NOT underline / do NOT treat as swap the people that got pushed forward.
+                                    // We store a lightweight 'shift' marker so the calendar does NOT fall back to "baseline mismatch => underline".
+                                    // This stays silent in UI (see showDayDetails adjustments).
+                                    try {
+                                        const chain = Array.isArray(ins.changes) ? ins.changes : [];
+                                        for (const ch of chain) {
+                                            if (!ch || !ch.dateKey) continue;
+                                            if (ch.dateKey === targetKey) continue; // only underline the returning person
+                                            const newP = ch.newPerson;
+                                            if (!newP) continue;
+                                            storeAssignmentReason(
+                                                ch.dateKey,
+                                                groupNum,
+                                                newP,
+                                                'shift',
+                                                '',
+                                                ch.prevPerson || null,
+                                                null,
+                                                { returnFromMissing: true, shiftedByReturnFromMissing: true, anchorDateKey: targetKey, missingEnd: pEndKey }
+                                            );
+                                        }
+                                    } catch (_) {}
                                 }
                             }
                         }
@@ -10990,6 +11015,28 @@
                 
                 // Store final assignments (after swap logic) for saving when OK is pressed
                 calculationSteps.finalNormalAssignments = updatedAssignments;
+
+                // CRITICAL for multi-month ranges:
+                // The "executeCalculation()" flow persists assignments from calculationSteps.tempAssignments (or Firestore tempAssignments),
+                // so ensure tempAssignments.normal reflects the FINAL normal schedule (including reinsertion + swaps).
+                try {
+                    if (!calculationSteps.tempAssignments || typeof calculationSteps.tempAssignments !== 'object') {
+                        calculationSteps.tempAssignments = {
+                            special: calculationSteps.tempAssignments?.special || calculationSteps.tempSpecialAssignments || {},
+                            weekend: calculationSteps.tempAssignments?.weekend || calculationSteps.tempWeekendAssignments || {},
+                            semi: calculationSteps.tempAssignments?.semi || calculationSteps.tempSemiAssignments || {},
+                            normal: updatedAssignments,
+                            startDate: calculationSteps.startDate ? new Date(calculationSteps.startDate).toISOString() : null,
+                            endDate: calculationSteps.endDate ? new Date(calculationSteps.endDate).toISOString() : null
+                        };
+                    } else {
+                        calculationSteps.tempAssignments.normal = updatedAssignments;
+                    }
+                    // Best-effort: persist updated temp assignments so range-save uses the correct final normal schedule.
+                    if (typeof saveTempAssignmentsToFirestore === 'function') {
+                        saveTempAssignmentsToFirestore(calculationSteps.tempAssignments).catch(() => {});
+                    }
+                } catch (_) {}
                 
                 // Merge preview swaps with actual swaps (remove duplicates)
                 const previewSwaps = calculationSteps.previewNormalSwaps || [];
@@ -14183,8 +14230,11 @@
                     }
                 });
                 
-                // Get skip/swap reason
-                const reason = person.name ? getAssignmentReason(key, person.group, person.name) : null;
+                // Get skip/swap reason (ignore internal 'shift' markers in the UI)
+                let reason = person.name ? getAssignmentReason(key, person.group, person.name) : null;
+                if (reason && reason.type === 'shift') {
+                    reason = null;
+                }
                 let reasonBadge = '';
                 if (reason) {
                     if (reason.type === 'skip') {
