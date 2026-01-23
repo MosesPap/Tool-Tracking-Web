@@ -6026,8 +6026,8 @@
                         headerRow.height = 22;
                         
                         // Set column widths
-                        worksheet.getColumn(1).width = 13;
-                        worksheet.getColumn(2).width = 15;
+                        worksheet.getColumn(1).width = 18;
+                        worksheet.getColumn(2).width = 20;
                         worksheet.getColumn(3).width = 50;
                         worksheet.getColumn(4).width = 3;   // spacer column (D)
                         worksheet.getColumn(5).width = 45;  // right table main width (E)
@@ -6072,7 +6072,7 @@
                                     size: 12 
                                 };
                                 cell.alignment = { 
-                                    horizontal: 'left', 
+                                    horizontal: (colNum === 1 || colNum === 2) ? 'center' : 'left', 
                                     vertical: 'middle' 
                                 };
                                 
@@ -6233,8 +6233,8 @@
                         const ws = XLSX.utils.aoa_to_sheet(data);
                         // Column widths: A13, B15, C50, E45 (D spacer, F small tail)
                         ws['!cols'] = [
-                            { wch: 13 }, // A
-                            { wch: 15 }, // B
+                            { wch: 18 }, // A
+                            { wch: 20 }, // B
                             { wch: 50 }, // C
                             { wch: 3 },  // D spacer
                             { wch: 45 }, // E right table
@@ -6322,7 +6322,7 @@
                                 if (!ws[cellRef].s) ws[cellRef].s = {};
                                 ws[cellRef].s.fill = { fgColor: { rgb: hexColor }, patternType: 'solid' };
                                 ws[cellRef].s.font = { name: 'Arial', sz: 12 };
-                                ws[cellRef].s.alignment = { horizontal: 'left', vertical: 'center' };
+                                ws[cellRef].s.alignment = { horizontal: (colIdx === 0 || colIdx === 1) ? 'center' : 'left', vertical: 'center' };
                             });
                         }
                         
@@ -10304,6 +10304,36 @@
                                     const groupPeopleFinal = (groups?.[groupNum]?.normal || []);
                                     const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
                                     if (!ins.ok) continue;
+
+                                    // IMPORTANT: Enforce "after 3 normal days" by preventing any earlier normal-day assignment
+                                    // of the returning person between returnKey (inclusive) and targetKey (exclusive).
+                                    // This situation happens in multi-month ranges because the base rotation can assign them immediately after return.
+                                    // We replace those early occurrences with the next eligible person in rotation and mark as internal 'shift'
+                                    // so they won't be underlined and won't be shown as a swap.
+                                    try {
+                                        for (const dk of sortedNormal) {
+                                            if (dk < returnKey) continue;
+                                            if (dk >= targetKey) break;
+                                            if (updatedAssignments?.[dk]?.[groupNum] !== personName) continue;
+
+                                            const dateObj = dateKeyToDate(dk);
+                                            const idxP = Array.isArray(groupPeopleFinal) ? groupPeopleFinal.indexOf(personName) : -1;
+                                            const replacement = idxP >= 0 ? pickNextEligibleIgnoringConflicts(groupPeopleFinal, idxP, groupNum, dateObj) : null;
+                                            if (!replacement) continue;
+
+                                            updatedAssignments[dk][groupNum] = replacement;
+                                            storeAssignmentReason(
+                                                dk,
+                                                groupNum,
+                                                replacement,
+                                                'shift',
+                                                '',
+                                                personName,
+                                                null,
+                                                { returnFromMissing: true, clearedEarlyReturnAssignment: true, targetKey, missingEnd: pEndKey }
+                                            );
+                                        }
+                                    } catch (_) {}
 
                                     storeAssignmentReason(
                                         targetKey,
