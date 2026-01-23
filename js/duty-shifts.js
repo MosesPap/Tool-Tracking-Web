@@ -5957,14 +5957,14 @@
                         const workbook = new ExcelJS.Workbook();
                         const worksheet = workbook.addWorksheet('Υπηρεσίες');
                         
-                        // Set title - merge cells A1 through C1 (do not affect duty-table columns)
-                        worksheet.mergeCells('A1:C1');
+                        // Set title - merge cells A1 through E1
+                        worksheet.mergeCells('A1:E1');
                         const titleCell = worksheet.getCell('A1');
                         titleCell.value = `ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`;
                         titleCell.font = { 
                             name: 'Arial', 
                             bold: true, 
-                            size: 12 
+                            size: 16
                         };
                         titleCell.alignment = { 
                             horizontal: 'center', 
@@ -5983,7 +5983,7 @@
                             bottom: { style: 'thick' },
                             right: { style: 'thick' }
                         };
-                        worksheet.getRow(1).height = 22;
+                        worksheet.getRow(1).height = 30;
                         
                         // Empty row
                         worksheet.getRow(2).height = 5;
@@ -6000,7 +6000,7 @@
                             cell.font = { 
                                 name: 'Arial', 
                                 bold: true, 
-                                size: 12,
+                                size: 16,
                                 color: { argb: 'FFFFFFFF' } // White text
                             };
                             cell.fill = {
@@ -6023,15 +6023,14 @@
                         // Add thick left and right borders to first and last header cells
                         worksheet.getCell('A3').border.left = { style: 'thick' };
                         worksheet.getCell('C3').border.right = { style: 'thick' };
-                        headerRow.height = 22;
+                        headerRow.height = 30;
                         
                         // Set column widths
-                        worksheet.getColumn(1).width = 18;
-                        worksheet.getColumn(2).width = 20;
-                        worksheet.getColumn(3).width = 50;
+                        worksheet.getColumn(1).width = 14;
+                        worksheet.getColumn(2).width = 17;
+                        worksheet.getColumn(3).width = 57;
                         worksheet.getColumn(4).width = 3;   // spacer column (D)
-                        worksheet.getColumn(5).width = 45;  // right table main width (E)
-                        worksheet.getColumn(6).width = 2;   // small tail (F) for merged width without stretching too far
+                        worksheet.getColumn(5).width = 48;  // right table (E)
                         
                         // Data rows
                         for (let day = 1; day <= daysInMonth; day++) {
@@ -6069,7 +6068,7 @@
                                 };
                                 cell.font = { 
                                     name: 'Arial', 
-                                    size: 12 
+                                    size: 14
                                 };
                                 cell.alignment = { 
                                     horizontal: (colNum === 1 || colNum === 2) ? 'center' : 'left', 
@@ -6088,7 +6087,7 @@
                                 };
                             });
                             
-                            row.height = 22;
+                            row.height = 30;
                         }
 
                         // Add "next on rotation" table on the RIGHT of the main duty list (as in the screenshot)
@@ -6100,22 +6099,16 @@
                             groupData,
                             dutyAssignments
                         });
-                        const rightColStart = 5; // E
-                        const rightColEnd = 6;   // F
-
-                        const mergeEF = (r) => worksheet.mergeCells(r, rightColStart, r, rightColEnd);
+                        const rightCol = 5; // E
 
                         const setBlockBorder = (r, isTop, isBottom) => {
-                            // Apply borders to BOTH columns (E and F), so the merged cell shows a full box.
-                            for (let c = rightColStart; c <= rightColEnd; c++) {
-                                const cell = worksheet.getRow(r).getCell(c);
-                                cell.border = {
-                                    top: isTop ? { style: 'thick' } : { style: 'thin' },
-                                    bottom: isBottom ? { style: 'thick' } : { style: 'thin' },
-                                    left: c === rightColStart ? { style: 'thick' } : { style: 'thin' },
-                                    right: c === rightColEnd ? { style: 'thick' } : { style: 'thin' }
-                                };
-                            }
+                            const cell = worksheet.getRow(r).getCell(rightCol);
+                            cell.border = {
+                                top: isTop ? { style: 'thick' } : { style: 'thin' },
+                                bottom: isBottom ? { style: 'thick' } : { style: 'thin' },
+                                left: { style: 'thick' },
+                                right: { style: 'thick' }
+                            };
                         };
 
                         const fillHex = (rgbArr) => {
@@ -6130,15 +6123,14 @@
                         const specialFill = 'FFFF00FF';
 
                         const writeRightRow = (rowNum, text, { bold = false, center = false, fill = null } = {}) => {
-                            mergeEF(rowNum);
-                            const cell = worksheet.getRow(rowNum).getCell(rightColStart);
+                            const cell = worksheet.getRow(rowNum).getCell(rightCol);
                             cell.value = text || '';
-                            cell.font = { name: 'Arial', size: 12, bold: !!bold, color: { argb: 'FF000000' } };
+                            cell.font = { name: 'Arial', size: 14, bold: !!bold, color: { argb: 'FF000000' } };
                             cell.alignment = { horizontal: center ? 'center' : 'left', vertical: 'middle' };
                             if (fill) {
                                 cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
                             }
-                            worksheet.getRow(rowNum).height = 22;
+                            worksheet.getRow(rowNum).height = 30;
                         };
 
                         // Layout (matching screenshot): start around row 5, stacked blocks with blank separators.
@@ -6199,8 +6191,8 @@
                             const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
                             
                             const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
-                            // Add extra columns so we can place the right-side table in E–F
-                            data.push([dateStr, dayName, personName, '', '', '']);
+                            // Add extra columns so we can place the right-side table in E
+                            data.push([dateStr, dayName, personName, '', '']);
                             rowDayTypes.push(dayType);
                         }
 
@@ -6231,28 +6223,26 @@
                         ];
                         
                         const ws = XLSX.utils.aoa_to_sheet(data);
-                        // Column widths: A13, B15, C50, E45 (D spacer, F small tail)
+                        // Column widths: A14, B17, C57, E48 (D spacer)
                         ws['!cols'] = [
-                            { wch: 18 }, // A
-                            { wch: 20 }, // B
-                            { wch: 50 }, // C
+                            { wch: 14 }, // A
+                            { wch: 17 }, // B
+                            { wch: 57 }, // C
                             { wch: 3 },  // D spacer
-                            { wch: 45 }, // E right table
-                            { wch: 2 }   // F tail for merged width
+                            { wch: 48 }  // E right table
                         ];
                         if (!ws['!merges']) ws['!merges'] = [];
-                        // Title merge A1:C1
-                        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } });
-                        // Merge E:F for each right-table row we touch
-                        rightRows.forEach(rr => {
-                            ws['!merges'].push({ s: { r: rr.row, c: 4 }, e: { r: rr.row, c: 5 } }); // E–F
-                        });
+                        // Title merge A1:E1
+                        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } });
+
+                        // Row heights (30) for the whole produced sheet
+                        ws['!rows'] = Array.from({ length: data.length }, () => ({ hpt: 30 }));
                         
                         // Style title row (row 1)
                         const titleCell = 'A1';
                         if (!ws[titleCell]) ws[titleCell] = { t: 's', v: data[0][0] || '' };
                         if (!ws[titleCell].s) ws[titleCell].s = {};
-                        ws[titleCell].s.font = { name: 'Arial', bold: true, sz: 12, color: { rgb: 'FFFFFF' } };
+                        ws[titleCell].s.font = { name: 'Arial', bold: true, sz: 16, color: { rgb: 'FFFFFF' } };
                         ws[titleCell].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
                         ws[titleCell].s.alignment = { horizontal: 'center', vertical: 'center' };
                         
@@ -6262,7 +6252,7 @@
                             const cellRef = col + (headerRow + 1);
                             if (!ws[cellRef]) ws[cellRef] = { t: 's', v: data[headerRow][idx] || '' };
                             if (!ws[cellRef].s) ws[cellRef].s = {};
-                            ws[cellRef].s.font = { name: 'Arial', bold: true, sz: 12, color: { rgb: 'FFFFFF' } };
+                            ws[cellRef].s.font = { name: 'Arial', bold: true, sz: 16, color: { rgb: 'FFFFFF' } };
                             ws[cellRef].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
                             ws[cellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
                         });
@@ -6280,7 +6270,7 @@
                         const styleCell = (addr, { bold = false, center = false, fillRgb = null } = {}) => {
                             if (!ws[addr]) ws[addr] = { t: 's', v: '' };
                             if (!ws[addr].s) ws[addr].s = {};
-                            ws[addr].s.font = { name: 'Arial', bold: !!bold, sz: 12, color: { rgb: '000000' } };
+                            ws[addr].s.font = { name: 'Arial', bold: !!bold, sz: 14, color: { rgb: '000000' } };
                             ws[addr].s.alignment = { horizontal: center ? 'center' : 'left', vertical: 'center' };
                             if (fillRgb) ws[addr].s.fill = { fgColor: { rgb: fillRgb }, patternType: 'solid' };
                         };
@@ -6321,7 +6311,7 @@
                                 }
                                 if (!ws[cellRef].s) ws[cellRef].s = {};
                                 ws[cellRef].s.fill = { fgColor: { rgb: hexColor }, patternType: 'solid' };
-                                ws[cellRef].s.font = { name: 'Arial', sz: 12 };
+                                ws[cellRef].s.font = { name: 'Arial', sz: 14 };
                                 ws[cellRef].s.alignment = { horizontal: (colIdx === 0 || colIdx === 1) ? 'center' : 'left', vertical: 'center' };
                             });
                         }
@@ -9949,6 +9939,17 @@
                     return null;
                 };
 
+                const normName = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                const indexOfPersonInList = (list, personName) => {
+                    if (!Array.isArray(list) || list.length === 0) return -1;
+                    const target = normName(personName);
+                    if (!target) return -1;
+                    for (let i = 0; i < list.length; i++) {
+                        if (normName(list[i]) === target) return i;
+                    }
+                    return -1;
+                };
+
                 const canShiftInsertFromDate = (sortedNormalKeys, startKey, groupNum, insertedPerson, groupPeople, assignmentsByDate, globalRotationPositions, simulatedSpecial, simulatedWeekend, simulatedSemi) => {
                     const idx = sortedNormalKeys.indexOf(startKey);
                     if (idx < 0) return { ok: false, reason: 'start-not-in-range' };
@@ -9967,7 +9968,7 @@
                         if (desired) {
                             // If the carried person is missing/disabled on this date, skip their turn and use the next eligible in rotation.
                             if (isPersonMissingOnDate(desired, groupNum, dateObj, 'normal')) {
-                                const startIdx = Array.isArray(groupPeople) ? groupPeople.indexOf(desired) : -1;
+                                const startIdx = indexOfPersonInList(groupPeople, desired);
                                 const replacement = startIdx >= 0 ? pickNextEligibleIgnoringConflicts(groupPeople, startIdx, groupNum, dateObj) : null;
                                 desired = replacement || null;
                             }
@@ -9996,7 +9997,7 @@
                         // IMPORTANT: Avoid giving the returning person multiple normal duties in a long range.
                         // If the returning person already had a "natural" assignment later in the schedule,
                         // stop the shift chain as soon as we reach that original slot (we effectively replace it).
-                        if (dk !== startKey && cur && cur === insertedPerson) {
+                        if (dk !== startKey && cur && normName(cur) === normName(insertedPerson)) {
                             break;
                         }
                     }
@@ -10015,7 +10016,7 @@
 
                         let desired = carry;
                         if (desired && isPersonMissingOnDate(desired, groupNum, dateObj, 'normal')) {
-                            const startIdx = Array.isArray(groupPeople) ? groupPeople.indexOf(desired) : -1;
+                            const startIdx = indexOfPersonInList(groupPeople, desired);
                             const replacement = startIdx >= 0 ? pickNextEligibleIgnoringConflicts(groupPeople, startIdx, groupNum, dateObj) : null;
                             desired = replacement || null;
                         }
@@ -10027,7 +10028,7 @@
 
                         // Stop the chain when we reach the returning person's next natural slot,
                         // so they don't end up assigned twice within the calculated range.
-                        if (dk !== startKey && cur && cur === insertedPerson) {
+                        if (dk !== startKey && cur && normName(cur) === normName(insertedPerson)) {
                             break;
                         }
                     }
@@ -10314,10 +10315,11 @@
                                         for (const dk of sortedNormal) {
                                             if (dk < returnKey) continue;
                                             if (dk >= targetKey) break;
-                                            if (updatedAssignments?.[dk]?.[groupNum] !== personName) continue;
+                                            const curAssigned = updatedAssignments?.[dk]?.[groupNum] || null;
+                                            if (!curAssigned || normName(curAssigned) !== normName(personName)) continue;
 
                                             const dateObj = dateKeyToDate(dk);
-                                            const idxP = Array.isArray(groupPeopleFinal) ? groupPeopleFinal.indexOf(personName) : -1;
+                                            const idxP = indexOfPersonInList(groupPeopleFinal, personName);
                                             const replacement = idxP >= 0 ? pickNextEligibleIgnoringConflicts(groupPeopleFinal, idxP, groupNum, dateObj) : null;
                                             if (!replacement) continue;
 
