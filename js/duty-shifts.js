@@ -6026,9 +6026,12 @@
                         headerRow.height = 22;
                         
                         // Set column widths
-                        worksheet.getColumn(1).width = 12;
+                        worksheet.getColumn(1).width = 13;
                         worksheet.getColumn(2).width = 15;
-                        worksheet.getColumn(3).width = 30;
+                        worksheet.getColumn(3).width = 50;
+                        worksheet.getColumn(4).width = 3;   // spacer column (D)
+                        worksheet.getColumn(5).width = 45;  // right table main width (E)
+                        worksheet.getColumn(6).width = 2;   // small tail (F) for merged width without stretching too far
                         
                         // Data rows
                         for (let day = 1; day <= daysInMonth; day++) {
@@ -6088,7 +6091,7 @@
                             row.height = 22;
                         }
 
-                        // Add "next on rotation" table (2 next persons per category) under the duty table
+                        // Add "next on rotation" table on the RIGHT of the main duty list (as in the screenshot)
                         const rotationInfo = getNextTwoRotationPeopleForCurrentMonth({
                             year,
                             month,
@@ -6097,86 +6100,71 @@
                             groupData,
                             dutyAssignments
                         });
-                        const rotationStartRow = daysInMonth + 5; // blank row at +4, header row at +5
-                        worksheet.getRow(daysInMonth + 4).height = 5;
+                        const rightColStart = 5; // E
+                        const rightColEnd = 6;   // F
 
-                        // Make the 4 "columns" wider by merging cells (without changing duty-table column widths A–C).
-                        // Each rotation column is a merged block of 3 Excel columns:
-                        // 1) ΚΑΘΗΜΕΡΙΝΕΣ: A–C
-                        // 2) ΗΜΙΑΡΓΙΕΣ: D–F
-                        // 3) ΑΡΓΙΕΣ: G–I
-                        // 4) ΕΙΔΙΚΕΣ: J–L
-                        const rotationHeaderTitles = ['ΚΑΘΗΜΕΡΙΝΕΣ', 'ΗΜΙΑΡΓΙΕΣ', 'ΑΡΓΙΕΣ', 'ΕΙΔΙΚΕΣ'];
-                        const blockCols = 3;
-                        const rotationTotalCols = rotationHeaderTitles.length * blockCols; // 12
+                        const mergeEF = (r) => worksheet.mergeCells(r, rightColStart, r, rightColEnd);
 
-                        // Set widths for the extra columns only (D–L). Leave A–C as duty-table widths.
-                        for (let col = 4; col <= rotationTotalCols; col++) {
-                            worksheet.getColumn(col).width = 14;
-                        }
-
-                        const mergeBlock = (rowNumber, blockIndex) => {
-                            const startCol = 1 + blockIndex * blockCols;
-                            const endCol = startCol + blockCols - 1;
-                            worksheet.mergeCells(rowNumber, startCol, rowNumber, endCol);
-                            return { startCol, endCol };
-                        };
-
-                        const styleRotationHeaderCell = (cell) => {
-                            cell.font = { name: 'Arial', bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
-                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF428BCA' } };
-                            cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                        };
-
-                        const styleRotationValueCell = (cell) => {
-                            cell.font = { name: 'Arial', size: 12 };
-                            cell.alignment = { horizontal: 'left', vertical: 'middle' };
-                        };
-
-                        // Header row (merged blocks)
-                        const rotationHeaderRow = worksheet.getRow(rotationStartRow);
-                        rotationHeaderTitles.forEach((title, idx) => {
-                            const { startCol } = mergeBlock(rotationStartRow, idx);
-                            const cell = rotationHeaderRow.getCell(startCol);
-                            cell.value = title;
-                            styleRotationHeaderCell(cell);
-                        });
-                        rotationHeaderRow.height = 22;
-
-                        const rotationRows = [
-                            [rotationInfo.next.normal[0], rotationInfo.next.semi[0], rotationInfo.next.weekend[0], rotationInfo.next.special[0]],
-                            [rotationInfo.next.normal[1], rotationInfo.next.semi[1], rotationInfo.next.weekend[1], rotationInfo.next.special[1]]
-                        ];
-
-                        rotationRows.forEach((values, offset) => {
-                            const rowNumber = rotationStartRow + 1 + offset;
-                            const row = worksheet.getRow(rowNumber);
-                            values.forEach((val, idx) => {
-                                const { startCol } = mergeBlock(rowNumber, idx);
-                                const cell = row.getCell(startCol);
-                                cell.value = val || '';
-                                styleRotationValueCell(cell);
-                            });
-                            row.height = 22;
-                        });
-
-                        // Borders around the full merged table (12 cols x 3 rows)
-                        const rotationEndRow = rotationStartRow + 2;
-                        for (let r = rotationStartRow; r <= rotationEndRow; r++) {
-                            for (let c = 1; c <= rotationTotalCols; c++) {
+                        const setBlockBorder = (r, isTop, isBottom) => {
+                            // Apply borders to BOTH columns (E and F), so the merged cell shows a full box.
+                            for (let c = rightColStart; c <= rightColEnd; c++) {
                                 const cell = worksheet.getRow(r).getCell(c);
-                                const isTop = r === rotationStartRow;
-                                const isBottom = r === rotationEndRow;
-                                const isLeft = c === 1;
-                                const isRight = c === rotationTotalCols;
                                 cell.border = {
                                     top: isTop ? { style: 'thick' } : { style: 'thin' },
                                     bottom: isBottom ? { style: 'thick' } : { style: 'thin' },
-                                    left: isLeft ? { style: 'thick' } : { style: 'thin' },
-                                    right: isRight ? { style: 'thick' } : { style: 'thin' }
+                                    left: c === rightColStart ? { style: 'thick' } : { style: 'thin' },
+                                    right: c === rightColEnd ? { style: 'thick' } : { style: 'thin' }
                                 };
                             }
-                        }
+                        };
+
+                        const fillHex = (rgbArr) => {
+                            const hex = rgbArr.map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase();
+                            return 'FF' + hex;
+                        };
+
+                        const normalFill = fillHex(getDayTypeColor('normal-day'));
+                        const semiFill = fillHex(getDayTypeColor('semi-normal-day'));
+                        const weekendFill = fillHex(getDayTypeColor('weekend-holiday'));
+                        // Use a vivid magenta for "ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ" as shown in your screenshot
+                        const specialFill = 'FFFF00FF';
+
+                        const writeRightRow = (rowNum, text, { bold = false, center = false, fill = null } = {}) => {
+                            mergeEF(rowNum);
+                            const cell = worksheet.getRow(rowNum).getCell(rightColStart);
+                            cell.value = text || '';
+                            cell.font = { name: 'Arial', size: 12, bold: !!bold, color: { argb: 'FF000000' } };
+                            cell.alignment = { horizontal: center ? 'center' : 'left', vertical: 'middle' };
+                            if (fill) {
+                                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+                            }
+                            worksheet.getRow(rowNum).height = 22;
+                        };
+
+                        // Layout (matching screenshot): start around row 5, stacked blocks with blank separators.
+                        let rr = 5;
+                        writeRightRow(rr, 'ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ', { bold: true, center: true });
+                        setBlockBorder(rr, true, true);
+                        rr += 2; // blank row between title and first block
+
+                        const writeCategoryBlock = (title, fill, names) => {
+                            writeRightRow(rr, title, { bold: true, center: true, fill });
+                            setBlockBorder(rr, true, false);
+                            rr++;
+
+                            writeRightRow(rr, names?.[0] || '', { fill });
+                            setBlockBorder(rr, false, false);
+                            rr++;
+
+                            writeRightRow(rr, names?.[1] || '', { fill });
+                            setBlockBorder(rr, false, true);
+                            rr += 2; // blank row between blocks
+                        };
+
+                        writeCategoryBlock('ΚΑΘΗΜΕΡΙΝΕΣ', normalFill, rotationInfo.next.normal);
+                        writeCategoryBlock('ΗΜΙΑΡΓΙΕΣ', semiFill, rotationInfo.next.semi);
+                        writeCategoryBlock('ΑΡΓΙΕΣ', weekendFill, rotationInfo.next.weekend);
+                        writeCategoryBlock('ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', specialFill, rotationInfo.next.special);
                         
                         // Generate file name (keep Greek)
                         const fileName = buildExcelFilename(groupName, monthName, year);
@@ -6211,11 +6199,12 @@
                             const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
                             
                             const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
-                            data.push([dateStr, dayName, personName]);
+                            // Add extra columns so we can place the right-side table in E–F
+                            data.push([dateStr, dayName, personName, '', '', '']);
                             rowDayTypes.push(dayType);
                         }
 
-                        // Add "next on rotation" table under the duty table
+                        // Add "next on rotation" table on the RIGHT of the main duty list (E–F)
                         const rotationInfo = getNextTwoRotationPeopleForCurrentMonth({
                             year,
                             month,
@@ -6224,55 +6213,40 @@
                             groupData,
                             dutyAssignments
                         });
-                        data.push([]);
-                        rowDayTypes.push(null);
-                        const rotationHeaderRowIndex = data.length; // 0-indexed row position of the header to style
-                        // Rotation table as 4 "wide" columns (each is 3 merged Excel columns, total 12).
-                        // This lets long names fit without changing duty-table column widths A–C.
-                        data.push([
-                            'ΚΑΘΗΜΕΡΙΝΕΣ', '', '',
-                            'ΗΜΙΑΡΓΙΕΣ', '', '',
-                            'ΑΡΓΙΕΣ', '', '',
-                            'ΕΙΔΙΚΕΣ', '', ''
-                        ]);
-                        rowDayTypes.push(null);
-                        data.push([
-                            rotationInfo.next.normal[0], '', '',
-                            rotationInfo.next.semi[0], '', '',
-                            rotationInfo.next.weekend[0], '', '',
-                            rotationInfo.next.special[0], '', ''
-                        ]);
-                        rowDayTypes.push(null);
-                        data.push([
-                            rotationInfo.next.normal[1], '', '',
-                            rotationInfo.next.semi[1], '', '',
-                            rotationInfo.next.weekend[1], '', '',
-                            rotationInfo.next.special[1], '', ''
-                        ]);
-                        rowDayTypes.push(null);
+                        // We will write values into column E and merge E:F for each row.
+                        const rightRows = [
+                            { row: 4, text: 'ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ', kind: 'title' },
+                            { row: 6, text: 'ΚΑΘΗΜΕΡΙΝΕΣ', kind: 'normalHeader' },
+                            { row: 7, text: rotationInfo.next.normal[0] || '', kind: 'normal' },
+                            { row: 8, text: rotationInfo.next.normal[1] || '', kind: 'normal' },
+                            { row: 10, text: 'ΗΜΙΑΡΓΙΕΣ', kind: 'semiHeader' },
+                            { row: 11, text: rotationInfo.next.semi[0] || '', kind: 'semi' },
+                            { row: 12, text: rotationInfo.next.semi[1] || '', kind: 'semi' },
+                            { row: 14, text: 'ΑΡΓΙΕΣ', kind: 'weekendHeader' },
+                            { row: 15, text: rotationInfo.next.weekend[0] || '', kind: 'weekend' },
+                            { row: 16, text: rotationInfo.next.weekend[1] || '', kind: 'weekend' },
+                            { row: 18, text: 'ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', kind: 'specialHeader' },
+                            { row: 19, text: rotationInfo.next.special[0] || '', kind: 'special' },
+                            { row: 20, text: rotationInfo.next.special[1] || '', kind: 'special' }
+                        ];
                         
                         const ws = XLSX.utils.aoa_to_sheet(data);
-                        // A–C are duty-table columns. D–L are used only for the merged rotation table.
+                        // Column widths: A13, B15, C50, E45 (D spacer, F small tail)
                         ws['!cols'] = [
-                            { wch: 12 }, { wch: 15 }, { wch: 30 },
-                            { wch: 14 }, { wch: 14 }, { wch: 14 },
-                            { wch: 14 }, { wch: 14 }, { wch: 14 },
-                            { wch: 14 }, { wch: 14 }, { wch: 14 }
+                            { wch: 13 }, // A
+                            { wch: 15 }, // B
+                            { wch: 50 }, // C
+                            { wch: 3 },  // D spacer
+                            { wch: 45 }, // E right table
+                            { wch: 2 }   // F tail for merged width
                         ];
                         if (!ws['!merges']) ws['!merges'] = [];
-                        // Keep title merge on A1:C1 (duty table width)
+                        // Title merge A1:C1
                         ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } });
-
-                        // Merge rotation table blocks (3 columns per logical column) for header + 2 rows
-                        const addRotationMerges = (rowIdx0Based) => {
-                            ws['!merges'].push({ s: { r: rowIdx0Based, c: 0 }, e: { r: rowIdx0Based, c: 2 } });  // A–C
-                            ws['!merges'].push({ s: { r: rowIdx0Based, c: 3 }, e: { r: rowIdx0Based, c: 5 } });  // D–F
-                            ws['!merges'].push({ s: { r: rowIdx0Based, c: 6 }, e: { r: rowIdx0Based, c: 8 } });  // G–I
-                            ws['!merges'].push({ s: { r: rowIdx0Based, c: 9 }, e: { r: rowIdx0Based, c: 11 } }); // J–L
-                        };
-                        addRotationMerges(rotationHeaderRowIndex);
-                        addRotationMerges(rotationHeaderRowIndex + 1);
-                        addRotationMerges(rotationHeaderRowIndex + 2);
+                        // Merge E:F for each right-table row we touch
+                        rightRows.forEach(rr => {
+                            ws['!merges'].push({ s: { r: rr.row, c: 4 }, e: { r: rr.row, c: 5 } }); // E–F
+                        });
                         
                         // Style title row (row 1)
                         const titleCell = 'A1';
@@ -6293,14 +6267,42 @@
                             ws[cellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
                         });
 
-                        // Style "next on rotation" header row (only the start cells of each merged block)
-                        ['A', 'D', 'G', 'J'].forEach((col, idx) => {
-                            const cellRef = col + (rotationHeaderRowIndex + 1);
-                            if (!ws[cellRef]) ws[cellRef] = { t: 's', v: (data[rotationHeaderRowIndex]?.[idx * 3] || '') };
-                            if (!ws[cellRef].s) ws[cellRef].s = {};
-                            ws[cellRef].s.font = { name: 'Arial', bold: true, sz: 12, color: { rgb: 'FFFFFF' } };
-                            ws[cellRef].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
-                            ws[cellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
+                        // Write and style the right-side table (SheetJS styling is best-effort)
+                        const dayTypeToRgb = (dayType) => {
+                            const c = getDayTypeColor(dayType);
+                            return c.map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+                        };
+                        const normalRgb = dayTypeToRgb('normal-day');
+                        const semiRgb = dayTypeToRgb('semi-normal-day');
+                        const weekendRgb = dayTypeToRgb('weekend-holiday');
+                        const specialRgb = 'FF00FF'; // vivid magenta like screenshot
+
+                        const styleCell = (addr, { bold = false, center = false, fillRgb = null } = {}) => {
+                            if (!ws[addr]) ws[addr] = { t: 's', v: '' };
+                            if (!ws[addr].s) ws[addr].s = {};
+                            ws[addr].s.font = { name: 'Arial', bold: !!bold, sz: 12, color: { rgb: '000000' } };
+                            ws[addr].s.alignment = { horizontal: center ? 'center' : 'left', vertical: 'center' };
+                            if (fillRgb) ws[addr].s.fill = { fgColor: { rgb: fillRgb }, patternType: 'solid' };
+                        };
+
+                        rightRows.forEach(rr => {
+                            const excelRow = rr.row + 1; // 1-based
+                            const eAddr = 'E' + excelRow;
+                            if (!ws[eAddr]) ws[eAddr] = { t: 's', v: rr.text || '' };
+                            else ws[eAddr].v = rr.text || '';
+
+                            const kind = rr.kind || '';
+                            if (kind === 'title') {
+                                styleCell(eAddr, { bold: true, center: true });
+                            } else if (kind.startsWith('normal')) {
+                                styleCell(eAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: normalRgb });
+                            } else if (kind.startsWith('semi')) {
+                                styleCell(eAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: semiRgb });
+                            } else if (kind.startsWith('weekend')) {
+                                styleCell(eAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: weekendRgb });
+                            } else if (kind.startsWith('special')) {
+                                styleCell(eAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: specialRgb });
+                            }
                         });
                         
                         // Apply colors and fonts to data rows
@@ -9958,6 +9960,7 @@
                     let carry = insertedPerson;
                     for (let i = idx; i < sortedNormalKeys.length; i++) {
                         const dk = sortedNormalKeys[i];
+                        const cur = assignmentsByDate?.[dk]?.[groupNum] || null; // original occupant before shift
                         let desired = carry;
                         const dateObj = dateKeyToDate(dk);
 
@@ -9987,7 +9990,15 @@
                         // Record the proposed assignment for dk before moving carry forward.
                         proposed[dk] = { ...(assignmentsByDate?.[dk] || {}) };
                         proposed[dk][groupNum] = desired;
-                        carry = assignmentsByDate?.[dk]?.[groupNum] || null;
+                        // Move carry forward using ORIGINAL occupant (not proposed).
+                        carry = cur;
+
+                        // IMPORTANT: Avoid giving the returning person multiple normal duties in a long range.
+                        // If the returning person already had a "natural" assignment later in the schedule,
+                        // stop the shift chain as soon as we reach that original slot (we effectively replace it).
+                        if (dk !== startKey && cur && cur === insertedPerson) {
+                            break;
+                        }
                     }
                     return { ok: true };
                 };
@@ -10013,6 +10024,12 @@
                         assignmentsByDate[dk][groupNum] = desired;
                         changes.push({ dateKey: dk, prevPerson: cur, newPerson: desired });
                         carry = cur;
+
+                        // Stop the chain when we reach the returning person's next natural slot,
+                        // so they don't end up assigned twice within the calculated range.
+                        if (dk !== startKey && cur && cur === insertedPerson) {
+                            break;
+                        }
                     }
                     return { ok: true, originalAtTarget, changes };
                 };
