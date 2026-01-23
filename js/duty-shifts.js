@@ -9934,7 +9934,20 @@
                     };
                     return !hasConsecutiveDuty(dateKey, personName, groupNum, simulatedAssignments);
                 };
-                const canShiftInsertFromDate = (sortedNormalKeys, startKey, groupNum, insertedPerson, assignmentsByDate, globalRotationPositions, simulatedSpecial, simulatedWeekend, simulatedSemi) => {
+                const pickNextEligibleIgnoringConflicts = (groupPeople, startIdx, groupNum, dateObj) => {
+                    if (!Array.isArray(groupPeople) || groupPeople.length === 0) return null;
+                    const rotationDays = groupPeople.length;
+                    for (let off = 1; off <= rotationDays; off++) {
+                        const idx = (startIdx + off) % rotationDays;
+                        const cand = groupPeople[idx];
+                        if (!cand) continue;
+                        if (isPersonMissingOnDate(cand, groupNum, dateObj, 'normal')) continue;
+                        return cand;
+                    }
+                    return null;
+                };
+
+                const canShiftInsertFromDate = (sortedNormalKeys, startKey, groupNum, insertedPerson, groupPeople, assignmentsByDate, globalRotationPositions, simulatedSpecial, simulatedWeekend, simulatedSemi) => {
                     const idx = sortedNormalKeys.indexOf(startKey);
                     if (idx < 0) return { ok: false, reason: 'start-not-in-range' };
                     // Track proposed shifts so conflict checks see the new "normal" schedule (for already-shifted days).
@@ -9945,10 +9958,22 @@
                     let carry = insertedPerson;
                     for (let i = idx; i < sortedNormalKeys.length; i++) {
                         const dk = sortedNormalKeys[i];
-                        if (carry) {
+                        let desired = carry;
+                        const dateObj = dateKeyToDate(dk);
+
+                        if (desired) {
+                            // If the carried person is missing/disabled on this date, skip their turn and use the next eligible in rotation.
+                            if (isPersonMissingOnDate(desired, groupNum, dateObj, 'normal')) {
+                                const startIdx = Array.isArray(groupPeople) ? groupPeople.indexOf(desired) : -1;
+                                const replacement = startIdx >= 0 ? pickNextEligibleIgnoringConflicts(groupPeople, startIdx, groupNum, dateObj) : null;
+                                desired = replacement || null;
+                            }
+
+                            if (!desired) return { ok: false, reason: 'no-eligible', dateKey: dk };
+
                             const ok = canAssignPersonToNormalDay(
                                 dk,
-                                carry,
+                                desired,
                                 groupNum,
                                 mergedAssignments,
                                 globalRotationPositions,
@@ -9957,16 +9982,16 @@
                                 simulatedSemi,
                                 { allowConsecutiveConflicts: true }
                             );
-                            if (!ok) return { ok: false, reason: 'unavailable-or-conflict', dateKey: dk, person: carry };
+                            if (!ok) return { ok: false, reason: 'unavailable', dateKey: dk, person: desired };
                         }
                         // Record the proposed assignment for dk before moving carry forward.
                         proposed[dk] = { ...(assignmentsByDate?.[dk] || {}) };
-                        proposed[dk][groupNum] = carry;
+                        proposed[dk][groupNum] = desired;
                         carry = assignmentsByDate?.[dk]?.[groupNum] || null;
                     }
                     return { ok: true };
                 };
-                const applyShiftInsertFromDate = (sortedNormalKeys, startKey, groupNum, insertedPerson, assignmentsByDate) => {
+                const applyShiftInsertFromDate = (sortedNormalKeys, startKey, groupNum, insertedPerson, groupPeople, assignmentsByDate) => {
                     const idx = sortedNormalKeys.indexOf(startKey);
                     if (idx < 0) return { ok: false, originalAtTarget: null };
                     const originalAtTarget = assignmentsByDate?.[startKey]?.[groupNum] || null;
@@ -9975,9 +10000,18 @@
                     for (let i = idx; i < sortedNormalKeys.length; i++) {
                         const dk = sortedNormalKeys[i];
                         const cur = assignmentsByDate?.[dk]?.[groupNum] || null;
+                        const dateObj = dateKeyToDate(dk);
+
+                        let desired = carry;
+                        if (desired && isPersonMissingOnDate(desired, groupNum, dateObj, 'normal')) {
+                            const startIdx = Array.isArray(groupPeople) ? groupPeople.indexOf(desired) : -1;
+                            const replacement = startIdx >= 0 ? pickNextEligibleIgnoringConflicts(groupPeople, startIdx, groupNum, dateObj) : null;
+                            desired = replacement || null;
+                        }
+
                         if (!assignmentsByDate[dk]) assignmentsByDate[dk] = {};
-                        assignmentsByDate[dk][groupNum] = carry;
-                        changes.push({ dateKey: dk, prevPerson: cur, newPerson: carry });
+                        assignmentsByDate[dk][groupNum] = desired;
+                        changes.push({ dateKey: dk, prevPerson: cur, newPerson: desired });
                         carry = cur;
                     }
                     return { ok: true, originalAtTarget, changes };
@@ -10229,11 +10263,13 @@
                                             { allowConsecutiveConflicts: true }
                                         );
                                         if (okReturning) {
+                                            const groupPeople = (groups?.[groupNum]?.normal || []);
                                             const chainOk = canShiftInsertFromDate(
                                                 sortedNormal,
                                                 targetKey,
                                                 groupNum,
                                                 personName,
+                                                groupPeople,
                                                 updatedAssignments,
                                                 globalNormalRotationPosition,
                                                 simulatedSpecialAssignments,
@@ -10248,7 +10284,8 @@
                                     if (!targetKey) continue;
 
                                     // Apply shift insertion (follow rotation): everyone moves to the next normal day.
-                                    const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, updatedAssignments);
+                                    const groupPeopleFinal = (groups?.[groupNum]?.normal || []);
+                                    const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
                                     if (!ins.ok) continue;
 
                                     storeAssignmentReason(
