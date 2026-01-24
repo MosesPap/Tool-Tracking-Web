@@ -8224,8 +8224,8 @@
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
-                                    // Advance rotation based on the person ACTUALLY assigned (skip disabled/missing without consuming their turn)
-                                    rotationPosition = res.index;
+                                    // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
+                                    // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
                                     // Persist a skip reason so history (underline + violations) doesn't change if the person is re-enabled later.
                                     storeAssignmentReason(
                                         dateKey,
@@ -12100,8 +12100,8 @@
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
-                                    // Advance rotation based on the person ACTUALLY assigned (skip disabled/missing without consuming their turn)
-                                    rotationPosition = res.index;
+                                    // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
+                                    // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
                                         // Persist a skip reason so history (underline + violations) doesn't change if the person is re-enabled later.
                                         storeAssignmentReason(
                                             dateKey,
@@ -12562,8 +12562,8 @@
                                     });
                                     if (res) {
                                         assignedPerson = res.person;
-                                        // Advance rotation based on the person ACTUALLY assigned (skip disabled/missing without consuming their turn)
-                                        rotationPosition = res.index;
+                                        // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
+                                        // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
                                         // Persist a skip reason so history (underline + violations) doesn't change if the person is re-enabled later.
                                         storeAssignmentReason(
                                             dateKey,
@@ -12997,8 +12997,8 @@
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
-                                    // Advance rotation based on the person ACTUALLY assigned (skip disabled/missing without consuming their turn)
-                                    rotationPosition = res.index;
+                                    // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
+                                    // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
                                 }
                             }
                             
@@ -13309,8 +13309,8 @@
                                     });
                                     if (res) {
                                         assignedPerson = res.person;
-                                        // Advance rotation based on the person ACTUALLY assigned (skip disabled/missing without consuming their turn)
-                                        rotationPosition = res.index;
+                                        // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
+                                        // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
                                         // Persist a skip reason so history (underline + violations) doesn't change if the person is re-enabled later.
                                         storeAssignmentReason(
                                             dateKey,
