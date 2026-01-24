@@ -8214,7 +8214,7 @@
                             // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special')) {
                                 const simulatedAssignments = { special: simulatedSpecialAssignmentsForConflict };
-                                const res = findNextEligiblePersonAfterMissing({
+                                let res = findNextEligiblePersonAfterMissing({
                                     dateKey,
                                     date,
                                     groupNum,
@@ -8224,6 +8224,21 @@
                                     simulatedAssignments,
                                     exhaustive: true
                                 });
+                                
+                                // If no eligible person found (all have conflicts), find ANY person who is not disabled/missing
+                                // Conflicts will be handled by swap logic later, but we must NEVER assign a disabled person
+                                if (!res) {
+                                    for (let offset = 1; offset <= rotationDays; offset++) {
+                                        const idx = (rotationPosition + offset) % rotationDays;
+                                        const candidate = groupPeople[idx];
+                                        if (!candidate) continue;
+                                        if (!isPersonMissingOnDate(candidate, groupNum, date, 'special')) {
+                                            res = { person: candidate, index: idx };
+                                            break;
+                                        }
+                                    }
+                                }
+                                
                                 if (res) {
                                     assignedPerson = res.person;
                                     // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
@@ -8244,9 +8259,10 @@
                                         rotationPerson,
                                         null
                                     );
+                                } else {
+                                    // Everyone in rotation is disabled/missing - leave unassigned
+                                    assignedPerson = null;
                                 }
-                                // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
-                                // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                             }
 
                             // Step 1 is special-holidays only: preview reflects missing replacement only (no weekend skip logic here).
@@ -11652,7 +11668,7 @@
                                 
                                 // Check if assigned person is missing/disabled for special, if so find next in rotation
                                 if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, dateIterator, 'special')) {
-                                    const res = findNextEligiblePersonAfterMissing({
+                                    let res = findNextEligiblePersonAfterMissing({
                                         dateKey,
                                         date: dateIterator,
                                         groupNum,
@@ -11662,6 +11678,20 @@
                                         simulatedAssignments: null, // conversion path: keep missing-only (no full simulated sets here)
                                         exhaustive: true
                                     });
+                                    
+                                    // If no eligible person found (all have conflicts), find ANY person who is not disabled/missing
+                                    if (!res) {
+                                        for (let offset = 1; offset <= rotationDays; offset++) {
+                                            const idx = (rotationPosition + offset) % rotationDays;
+                                            const candidate = groupPeople[idx];
+                                            if (!candidate) continue;
+                                            if (!isPersonMissingOnDate(candidate, groupNum, dateIterator, 'special')) {
+                                                res = { person: candidate, index: idx };
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    
                                     if (res) {
                                         assignedPerson = res.person;
                                         // Persist skip reason (history) for disabled/missing special-holiday replacements too.
@@ -11680,9 +11710,10 @@
                                             rotationPerson,
                                             null
                                         );
+                                    } else {
+                                        // Everyone in rotation is disabled/missing - leave unassigned
+                                        assignedPerson = null;
                                     }
-                                    // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
-                                    // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                                 }
                                 
                                 // Only assign if person is in temp assignments (was calculated in preview)
@@ -12097,7 +12128,7 @@
                                     special: simulatedSpecialAssignments,
                                     weekend: simulatedWeekendAssignments
                                 };
-                                const res = findNextEligiblePersonAfterMissing({
+                                let res = findNextEligiblePersonAfterMissing({
                                     dateKey,
                                     date,
                                     groupNum,
@@ -12107,6 +12138,20 @@
                                     simulatedAssignments,
                                     exhaustive: true
                                 });
+                                
+                                // If no eligible person found (all have conflicts), find ANY person who is not disabled/missing
+                                if (!res) {
+                                    for (let offset = 1; offset <= rotationDays; offset++) {
+                                        const idx = (rotationPosition + offset) % rotationDays;
+                                        const candidate = groupPeople[idx];
+                                        if (!candidate) continue;
+                                        if (!isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) {
+                                            res = { person: candidate, index: idx };
+                                            break;
+                                        }
+                                    }
+                                }
+                                
                                 if (res) {
                                     assignedPerson = res.person;
                                     // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
@@ -12127,9 +12172,10 @@
                                             rotationPerson,
                                             null
                                         );
+                                } else {
+                                    // Everyone in rotation is disabled/missing - leave unassigned
+                                    assignedPerson = null;
                                 }
-                                // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
-                                // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                             }
 
                             // PREVIEW DISPLAY: show the weekend skip changes (special holiday duty in same month),
@@ -12536,7 +12582,7 @@
                                     weekend: simulatedWeekendAssignments,
                                     semi: semiAssignments
                                 };
-                                const res = findNextEligiblePersonAfterMissing({
+                                let res = findNextEligiblePersonAfterMissing({
                                     dateKey,
                                     date,
                                     groupNum,
@@ -12546,6 +12592,20 @@
                                     simulatedAssignments,
                                     exhaustive: true
                                 });
+                                
+                                // If no eligible person found (all have conflicts), find ANY person who is not disabled/missing
+                                if (!res) {
+                                    for (let offset = 1; offset <= rotationDays; offset++) {
+                                        const idx = (rotationPosition + offset) % rotationDays;
+                                        const candidate = groupPeople[idx];
+                                        if (!candidate) continue;
+                                        if (!isPersonMissingOnDate(candidate, groupNum, date, 'semi')) {
+                                            res = { person: candidate, index: idx };
+                                            break;
+                                        }
+                                    }
+                                }
+                                
                                 if (res) {
                                     assignedPerson = res.person;
                                     // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
@@ -12566,9 +12626,10 @@
                                         rotationPerson,
                                         null
                                     );
+                                } else {
+                                    // Everyone in rotation is disabled/missing - leave unassigned
+                                    assignedPerson = null;
                                 }
-                                // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
-                                // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                             }
                             
                             // Check if this day is a cross-month swap assignment (person swapped from previous month)
@@ -12624,7 +12685,7 @@
                                         weekend: simulatedWeekendAssignments,
                                         semi: semiAssignments
                                     };
-                                    const res = findNextEligiblePersonAfterMissing({
+                                    let res = findNextEligiblePersonAfterMissing({
                                         dateKey,
                                         date,
                                         groupNum,
@@ -12634,6 +12695,20 @@
                                         simulatedAssignments,
                                         exhaustive: true
                                     });
+                                    
+                                    // If no eligible person found, find ANY person who is not disabled/missing
+                                    if (!res) {
+                                        for (let offset = 1; offset <= rotationDays; offset++) {
+                                            const idx = (rotationPosition + offset) % rotationDays;
+                                            const candidate = groupPeople[idx];
+                                            if (!candidate) continue;
+                                            if (!isPersonMissingOnDate(candidate, groupNum, date, 'semi')) {
+                                                res = { person: candidate, index: idx };
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    
                                     if (res) {
                                         assignedPerson = res.person;
                                         storeAssignmentReason(
@@ -12651,9 +12726,10 @@
                                             rotationPerson,
                                             null
                                         );
+                                    } else {
+                                        // Everyone in rotation is disabled/missing - leave unassigned
+                                        assignedPerson = null;
                                     }
-                                    // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
-                                    // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                                     }
                                     
                                 // Advance rotation position
@@ -13060,7 +13136,7 @@
                                     special: simulatedSpecialAssignments,
                                     weekend: simulatedWeekendAssignments
                                 };
-                                const res = findNextEligiblePersonAfterMissing({
+                                let res = findNextEligiblePersonAfterMissing({
                                     dateKey,
                                     date,
                                     groupNum,
@@ -13070,13 +13146,28 @@
                                     simulatedAssignments,
                                     exhaustive: true
                                 });
+                                
+                                // If no eligible person found (all have conflicts), find ANY person who is not disabled/missing
+                                if (!res) {
+                                    for (let offset = 1; offset <= rotationDays; offset++) {
+                                        const idx = (rotationPosition + offset) % rotationDays;
+                                        const candidate = groupPeople[idx];
+                                        if (!candidate) continue;
+                                        if (!isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) {
+                                            res = { person: candidate, index: idx };
+                                            break;
+                                        }
+                                    }
+                                }
+                                
                                 if (res) {
                                     assignedPerson = res.person;
                                     // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
                                     // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
+                                } else {
+                                    // Everyone in rotation is disabled/missing - leave unassigned
+                                    assignedPerson = null;
                                 }
-                                // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
-                                // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                             }
                             
                             // Advance rotation position
@@ -13336,7 +13427,7 @@
                                     normal: normalAssignments,
                                     normalRotationPositions: globalNormalRotationPosition
                                 };
-                                const res = findNextEligiblePersonAfterMissing({
+                                let res = findNextEligiblePersonAfterMissing({
                                     dateKey,
                                     date,
                                     groupNum,
@@ -13347,6 +13438,21 @@
                                     alreadyAssignedSet: assignedPeoplePreview?.[monthKey]?.[groupNum] || null,
                                     exhaustive: true
                                 });
+                                
+                                // If no eligible person found (all have conflicts or already assigned), find ANY person who is not disabled/missing
+                                // (ignore alreadyAssignedSet in fallback - conflicts will be handled by swap logic)
+                                if (!res) {
+                                    for (let offset = 1; offset <= rotationDays; offset++) {
+                                        const idx = (rotationPosition + offset) % rotationDays;
+                                        const candidate = groupPeople[idx];
+                                        if (!candidate) continue;
+                                        if (!isPersonMissingOnDate(candidate, groupNum, date, 'normal')) {
+                                            res = { person: candidate, index: idx };
+                                            break;
+                                        }
+                                    }
+                                }
+                                
                                 if (res) {
                                     assignedPerson = res.person;
                                     // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
@@ -13367,9 +13473,10 @@
                                         rotationPerson,
                                         null
                                     );
+                                } else {
+                                    // Everyone in rotation is disabled/missing - leave unassigned
+                                    assignedPerson = null;
                                 }
-                                // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
-                                // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                             }
                             
                             // If assigned person was already assigned this month (due to swap), skip to next person
@@ -13421,7 +13528,7 @@
                                         normal: normalAssignments,
                                         normalRotationPositions: globalNormalRotationPosition
                                     };
-                                    const res = findNextEligiblePersonAfterMissing({
+                                    let res = findNextEligiblePersonAfterMissing({
                                         dateKey,
                                         date,
                                         groupNum,
@@ -13432,6 +13539,20 @@
                                         alreadyAssignedSet: assignedPeoplePreview?.[monthKey]?.[groupNum] || null,
                                         exhaustive: true
                                     });
+                                    
+                                    // If no eligible person found, find ANY person who is not disabled/missing
+                                    if (!res) {
+                                        for (let offset = 1; offset <= rotationDays; offset++) {
+                                            const idx = (rotationPosition + offset) % rotationDays;
+                                            const candidate = groupPeople[idx];
+                                            if (!candidate) continue;
+                                            if (!isPersonMissingOnDate(candidate, groupNum, date, 'normal')) {
+                                                res = { person: candidate, index: idx };
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    
                                     if (res) {
                                         assignedPerson = res.person;
                                         storeAssignmentReason(
@@ -13449,9 +13570,10 @@
                                             rotationPerson,
                                             null
                                         );
+                                    } else {
+                                        // Everyone in rotation is disabled/missing - leave unassigned
+                                        assignedPerson = null;
                                     }
-                                    // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
-                                    // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                                 }
                                     
                                     // Check if assigned person has a conflict (will be swapped later)
