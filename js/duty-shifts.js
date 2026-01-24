@@ -8214,9 +8214,9 @@
                             // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special')) {
                                 // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
-                                // Keep going through rotation until we find someone eligible
+                                // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
                                 let foundReplacement = false;
-                                for (let offset = 1; offset <= rotationDays; offset++) {
+                                for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
@@ -8243,7 +8243,7 @@
                                         break;
                                     }
                                 }
-                                // If no replacement found (everyone disabled), leave unassigned
+                                // If no replacement found after checking everyone twice (everyone disabled), leave unassigned
                                 if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
@@ -11653,8 +11653,9 @@
                                 // Check if assigned person is missing/disabled for special, if so find next in rotation
                                 if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, dateIterator, 'special')) {
                                     // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
+                                    // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
                                     let foundReplacement = false;
-                                    for (let offset = 1; offset <= rotationDays; offset++) {
+                                    for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                         const idx = (rotationPosition + offset) % rotationDays;
                                         const candidate = groupPeople[idx];
                                         if (!candidate) continue;
@@ -11680,7 +11681,7 @@
                                             break;
                                         }
                                     }
-                                    // If no replacement found (everyone disabled), leave unassigned
+                                    // If no replacement found after checking everyone twice (everyone disabled), leave unassigned
                                     if (!foundReplacement) {
                                         assignedPerson = null;
                                     }
@@ -12095,8 +12096,9 @@
                             // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
                                 // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
+                                // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
                                 let foundReplacement = false;
-                                for (let offset = 1; offset <= rotationDays; offset++) {
+                                for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
@@ -12123,7 +12125,7 @@
                                         break;
                                     }
                                 }
-                                // If no replacement found (everyone disabled), leave unassigned
+                                // If no replacement found after checking everyone twice (everyone disabled), leave unassigned
                                 if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
@@ -12529,8 +12531,9 @@
                             // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
                                 // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
+                                // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
                                 let foundReplacement = false;
-                                for (let offset = 1; offset <= rotationDays; offset++) {
+                                for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
@@ -12557,7 +12560,7 @@
                                         break;
                                     }
                                 }
-                                // If no replacement found (everyone disabled), leave unassigned
+                                // If no replacement found after checking everyone twice (everyone disabled), leave unassigned
                                 if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
@@ -13313,8 +13316,9 @@
                             // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
                                 // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
+                                // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
                                 let foundReplacement = false;
-                                for (let offset = 1; offset <= rotationDays; offset++) {
+                                for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
@@ -13341,7 +13345,7 @@
                                         break;
                                     }
                                 }
-                                // If no replacement found (everyone disabled), leave unassigned
+                                // If no replacement found after checking everyone twice (everyone disabled), leave unassigned
                                 if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
@@ -13350,27 +13354,23 @@
                             // If assigned person was already assigned this month (due to swap), skip to next person
                             if (assignedPerson && assignedPeoplePreview[monthKey][groupNum].has(assignedPerson)) {
                                 // This person was already assigned (swapped), find next available person in rotation
+                                // Keep searching through entire rotation until we find someone not disabled and not already assigned
                                 let foundReplacement = false;
-                                for (let offset = 1; offset < rotationDays && !foundReplacement; offset++) {
+                                for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                     const nextIndex = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[nextIndex];
                                     
-                                    if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'normal')) {
-                                        continue;
-                                    }
-                                    
-                                    // Check if candidate was already assigned this month
-                                    if (assignedPeoplePreview[monthKey][groupNum].has(candidate)) {
-                                        continue;
-                                    }
+                                    if (!candidate) continue;
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
+                                    if (assignedPeoplePreview[monthKey][groupNum].has(candidate)) continue;
                                     
                                     // Found available person
                                     assignedPerson = candidate;
-                                    rotationPosition = nextIndex;
                                     foundReplacement = true;
                                 }
                                 
-                                // If no replacement found, skip this day
+                                // If still no replacement found after checking everyone twice, leave unassigned
+                                // (This should be extremely rare - only if everyone is disabled or already assigned)
                                 if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
