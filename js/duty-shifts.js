@@ -6669,10 +6669,12 @@
                                         const c = swapColors[(isNaN(pid) ? 0 : pid) % swapColors.length];
                                         swapStyle = `border: 2px solid ${c.border}; background-color: ${c.bg};`;
                                     }
+                                    // Skip reasons (disabled/missing replacements) should NOT cause underlining
+                                    // The replacement person is assigned normally, not as a swap
+                                    // Only show underline for actual swaps, not for skip replacements
                                     if (r && r.type === 'skip') {
-                                        // IMPORTANT: Underline is historical and must not depend on current missing/disabled state.
-                                        // If we have a saved skip reason, always underline.
-                                        underline = true;
+                                        // Don't underline - this is a normal assignment replacing a disabled/missing person
+                                        underline = false;
                                     } else if (!r) {
                                         // Fallback for older data: if baseline rotation differs from final assignment, underline.
                                         const dayTypeCategory = (dayType === 'special-holiday')
@@ -11333,20 +11335,19 @@
                     if (base === comp) continue;
 
                     const reasonObj = assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null;
+                    
+                    // Skip reasons (disabled/missing replacements) should NOT appear in swap results
+                    // These are normal assignments, not swaps
+                    if (reasonObj && reasonObj.type === 'skip') {
+                        continue; // Don't show skip replacements in swap results
+                    }
+                    
                     const reasonText = reasonObj?.reason
                         ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
                         : '';
                     const briefReason = reasonText
                         ? reasonText.split('.').filter(Boolean)[0]
-                        : ((isPersonDisabledForDuty(base, groupNum, 'normal') || isPersonMissingOnDate(base, groupNum, dateObj, 'normal'))
-                            ? (buildUnavailableReplacementReason({
-                                skippedPersonName: base,
-                                replacementPersonName: comp,
-                                dateObj,
-                                groupNum,
-                                dutyCategory: 'normal'
-                            }).split('.').filter(Boolean)[0] || '')
-                            : 'Αλλαγή');
+                        : 'Αλλαγή';
 
                     const otherKey = reasonObj?.type === 'swap'
                         ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
@@ -14567,13 +14568,14 @@
                 }
                 let reasonBadge = '';
                 if (reason) {
-                    if (reason.type === 'skip') {
-                        const displayReason = normalizeSkipReasonText(reason.reason);
-                        reasonBadge = `<span class="badge bg-warning ms-2" title="${displayReason}"><i class="fas fa-arrow-right me-1"></i>Παραλείφθηκε</span>`;
-                    } else if (reason.type === 'swap') {
+                    // Skip reasons (disabled/missing replacements) should NOT show badges
+                    // The replacement person is assigned normally, not as a swap or skip
+                    // Only show badges for actual swaps
+                    if (reason.type === 'swap') {
                         const displayReason = normalizeSwapReasonText(reason.reason);
                         reasonBadge = `<span class="badge bg-info ms-2" title="${displayReason}"><i class="fas fa-exchange-alt me-1"></i>Αλλαγή${reason.swappedWith ? ` με ${reason.swappedWith}` : ''}</span>`;
                     }
+                    // Skip type is intentionally not shown - replacement person is assigned normally
                 }
                 
                 const groupName = person.group ? getGroupName(person.group) : 'Άγνωστη Ομάδα';
@@ -15412,25 +15414,20 @@
                     // Skip if no one is assigned (shouldn't happen, but handle it)
                     if (!assignedPerson) continue;
                     
-                    // If we had to skip the base expected person due to missing, show it explicitly (even if assignments follow the adjusted rotation)
+                    // Skip reasons (disabled/missing replacements) should NOT appear in violations window
+                    // These are normal assignments, not violations
+                    // Check if this is a skip replacement - if so, don't show it as a violation
+                    const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
+                    if (assignmentReason && assignmentReason.type === 'skip') {
+                        // This is a skip replacement (disabled/missing person replaced) - don't show as violation
+                        continue;
+                    }
+                    
+                    // If we had to skip the base expected person due to missing, but it's NOT a saved skip reason,
+                    // it might be a new issue - but we still skip it since user doesn't want skip replacements shown
                     if (baseExpectedPerson && baseExpectedPerson !== expectedPerson && isPersonMissingOnDate(baseExpectedPerson, groupNum, date, dayTypeCategory)) {
-                        const missingReason = getUnavailableReasonShort(baseExpectedPerson, groupNum, date, dayTypeCategory);
-                        const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
-                        const swapOrSkipReasonText = assignmentReason?.reason || '';
-
-                        violations.push({
-                            date: dayKey,
-                            dateFormatted: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-                            group: groupNum,
-                            groupName: getGroupName(groupNum),
-                            assignedPerson: assignedPerson,
-                            expectedPerson: baseExpectedPerson,
-                            // Show the short reason in "Σύγκρουση" instead of a dash
-                            conflicts: missingReason,
-                            swapReason: swapOrSkipReasonText || `Παράλειψη λόγω ${missingReason}`,
-                            skippedReason: missingReason,
-                            dayType: getDayTypeLabel(dayType)
-                        });
+                        // Don't show skip replacements in violations - they're normal assignments
+                        continue;
                     }
                     
                     let violationReason = '';
@@ -15438,7 +15435,6 @@
                     // Compare assigned vs expected
                     if (expectedPerson && assignedPerson !== expectedPerson) {
                         // Pull swap/skip reason from assignmentReasons (same text shown in day-details popup)
-                        // We need this early because it may indicate a legitimate "skip" even when we can't re-derive the rule.
                         const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
                         const swapOrSkipReasonText = assignmentReason?.type === 'skip'
                             ? normalizeSkipReasonText(assignmentReason?.reason || '')
@@ -15447,6 +15443,12 @@
                                 : (assignmentReason?.reason || ''));
                         const swapOrSkipType = assignmentReason?.type || '';
                         const swapPairId = assignmentReason?.swapPairId;
+                        
+                        // Skip reasons (disabled/missing replacements) should NOT appear in violations window
+                        if (swapOrSkipType === 'skip') {
+                            continue; // Don't show skip replacements as violations
+                        }
+                        
                         if (swapOrSkipType === 'swap' && swapPairId !== null && swapPairId !== undefined) {
                             const k = `${dayTypeCategory}|${groupNum}|${swapPairId}`;
                             if (seenSwapPairs.has(k)) continue; // only show one row per swap pair
@@ -15473,14 +15475,6 @@
                             // Get detailed information about conflicts based on day type
                             conflictDetails = [];
                             hasLegitimateConflict = false;
-
-                            // IMPORTANT: If we have a saved SKIP reason for the assigned person, treat it as legitimate
-                            // regardless of the person's CURRENT disabled/missing status (history must not change).
-                            if (swapOrSkipType === 'skip' && swapOrSkipReasonText) {
-                                hasLegitimateConflict = true;
-                                // For "Σύγκρουση" show only the short reason (Απενεργοποιημένος / Αναρρωτική Άδεια / ...)
-                                conflictDetails.push(extractShortReasonFromSavedText(swapOrSkipReasonText));
-                            }
                             
                             // Check if person is disabled (distinct from missing periods)
                             if (isDisabled) {
