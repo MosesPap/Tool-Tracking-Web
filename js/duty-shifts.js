@@ -3384,10 +3384,34 @@
             };
 
             const any = st.all || st.special || st.weekend || st.semi || st.normal;
+            const keyName = (typeof normalizePersonKey === 'function') ? normalizePersonKey(personName) : String(personName || '').trim();
             if (!any) {
+                // Remove any stored disabled entry for this person (defensive: raw + normalized + legacy variants).
                 delete g.disabledPersons[personName];
+                if (keyName) delete g.disabledPersons[keyName];
+                if (keyName) {
+                    for (const k of Object.keys(g.disabledPersons || {})) {
+                        try {
+                            if ((typeof normalizePersonKey === 'function' ? normalizePersonKey(k) : String(k || '').trim()) === keyName) {
+                                delete g.disabledPersons[k];
+                            }
+                        } catch (_) {}
+                    }
+                }
             } else {
-                g.disabledPersons[personName] = st;
+                // Store under a normalized key so availability checks never miss it due to spacing/commas differences.
+                if (keyName) {
+                    // Remove any other key variants for the same normalized name
+                    for (const k of Object.keys(g.disabledPersons || {})) {
+                        try {
+                            const nk = (typeof normalizePersonKey === 'function') ? normalizePersonKey(k) : String(k || '').trim();
+                            if (nk === keyName && k !== keyName) delete g.disabledPersons[k];
+                        } catch (_) {}
+                    }
+                    g.disabledPersons[keyName] = st;
+                } else {
+                    g.disabledPersons[personName] = st;
+                }
             }
 
             saveData();
@@ -3401,7 +3425,23 @@
 
         function getDisabledState(groupNum, personName) {
             const g = groups?.[groupNum];
-            const raw = g?.disabledPersons?.[personName];
+            const dp = g?.disabledPersons || {};
+            const keyName = (typeof normalizePersonKey === 'function') ? normalizePersonKey(personName) : String(personName || '').trim();
+            // Try exact key first, then normalized key.
+            let raw = dp?.[personName];
+            if (!raw && keyName) raw = dp?.[keyName];
+            // If still not found, search by normalized key (handles legacy entries and weird whitespace/commas).
+            if (!raw && keyName) {
+                for (const k of Object.keys(dp || {})) {
+                    try {
+                        const nk = (typeof normalizePersonKey === 'function') ? normalizePersonKey(k) : String(k || '').trim();
+                        if (nk === keyName) {
+                            raw = dp[k];
+                            break;
+                        }
+                    } catch (_) {}
+                }
+            }
             if (raw === true) return { all: true, special: false, weekend: false, semi: false, normal: false };
             if (!raw || typeof raw !== 'object') return { all: false, special: false, weekend: false, semi: false, normal: false };
             return {
