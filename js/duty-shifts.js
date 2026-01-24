@@ -8213,54 +8213,38 @@
                             // CRITICAL: Check if the rotation person is disabled/missing BEFORE any other logic.
                             // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special')) {
-                                const simulatedAssignments = { special: simulatedSpecialAssignmentsForConflict };
-                                let res = findNextEligiblePersonAfterMissing({
-                                    dateKey,
-                                    date,
-                                    groupNum,
-                                    groupPeople,
-                                    startRotationPosition: rotationPosition,
-                                    dutyCategory: 'special',
-                                    simulatedAssignments,
-                                    exhaustive: true
-                                });
-                                
-                                // If no eligible person found (all have conflicts), find ANY person who is not disabled/missing
-                                // Conflicts will be handled by swap logic later, but we must NEVER assign a disabled person
-                                if (!res) {
-                                    for (let offset = 1; offset <= rotationDays; offset++) {
-                                        const idx = (rotationPosition + offset) % rotationDays;
-                                        const candidate = groupPeople[idx];
-                                        if (!candidate) continue;
-                                        if (!isPersonMissingOnDate(candidate, groupNum, date, 'special')) {
-                                            res = { person: candidate, index: idx };
-                                            break;
-                                        }
+                                // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
+                                // Keep going through rotation until we find someone eligible
+                                let foundReplacement = false;
+                                for (let offset = 1; offset <= rotationDays; offset++) {
+                                    const idx = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[idx];
+                                    if (!candidate) continue;
+                                    if (!isPersonMissingOnDate(candidate, groupNum, date, 'special')) {
+                                        assignedPerson = candidate;
+                                        foundReplacement = true;
+                                        // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
+                                        // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
+                                        storeAssignmentReason(
+                                            dateKey,
+                                            groupNum,
+                                            assignedPerson,
+                                            'skip',
+                                            buildUnavailableReplacementReason({
+                                                skippedPersonName: rotationPerson,
+                                                replacementPersonName: assignedPerson,
+                                                dateObj: date,
+                                                groupNum,
+                                                dutyCategory: 'special'
+                                            }),
+                                            rotationPerson,
+                                            null
+                                        );
+                                        break;
                                     }
                                 }
-                                
-                                if (res) {
-                                    assignedPerson = res.person;
-                                    // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
-                                    // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
-                                    // Persist a skip reason so history (underline + violations) doesn't change if the person is re-enabled later.
-                                    storeAssignmentReason(
-                                        dateKey,
-                                        groupNum,
-                                        assignedPerson,
-                                        'skip',
-                                        buildUnavailableReplacementReason({
-                                            skippedPersonName: rotationPerson,
-                                            replacementPersonName: assignedPerson,
-                                            dateObj: date,
-                                            groupNum,
-                                            dutyCategory: 'special'
-                                        }),
-                                        rotationPerson,
-                                        null
-                                    );
-                                } else {
-                                    // Everyone in rotation is disabled/missing - leave unassigned
+                                // If no replacement found (everyone disabled), leave unassigned
+                                if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
                             }
@@ -11668,50 +11652,36 @@
                                 
                                 // Check if assigned person is missing/disabled for special, if so find next in rotation
                                 if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, dateIterator, 'special')) {
-                                    let res = findNextEligiblePersonAfterMissing({
-                                        dateKey,
-                                        date: dateIterator,
-                                        groupNum,
-                                        groupPeople,
-                                        startRotationPosition: rotationPosition,
-                                        dutyCategory: 'special',
-                                        simulatedAssignments: null, // conversion path: keep missing-only (no full simulated sets here)
-                                        exhaustive: true
-                                    });
-                                    
-                                    // If no eligible person found (all have conflicts), find ANY person who is not disabled/missing
-                                    if (!res) {
-                                        for (let offset = 1; offset <= rotationDays; offset++) {
-                                            const idx = (rotationPosition + offset) % rotationDays;
-                                            const candidate = groupPeople[idx];
-                                            if (!candidate) continue;
-                                            if (!isPersonMissingOnDate(candidate, groupNum, dateIterator, 'special')) {
-                                                res = { person: candidate, index: idx };
-                                                break;
-                                            }
+                                    // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
+                                    let foundReplacement = false;
+                                    for (let offset = 1; offset <= rotationDays; offset++) {
+                                        const idx = (rotationPosition + offset) % rotationDays;
+                                        const candidate = groupPeople[idx];
+                                        if (!candidate) continue;
+                                        if (!isPersonMissingOnDate(candidate, groupNum, dateIterator, 'special')) {
+                                            assignedPerson = candidate;
+                                            foundReplacement = true;
+                                            // Persist skip reason (history) for disabled/missing special-holiday replacements too.
+                                            storeAssignmentReason(
+                                                dateKey,
+                                                groupNum,
+                                                assignedPerson,
+                                                'skip',
+                                                buildUnavailableReplacementReason({
+                                                    skippedPersonName: rotationPerson,
+                                                    replacementPersonName: assignedPerson,
+                                                    dateObj: new Date(dateIterator),
+                                                    groupNum,
+                                                    dutyCategory: 'special'
+                                                }),
+                                                rotationPerson,
+                                                null
+                                            );
+                                            break;
                                         }
                                     }
-                                    
-                                    if (res) {
-                                        assignedPerson = res.person;
-                                        // Persist skip reason (history) for disabled/missing special-holiday replacements too.
-                                        storeAssignmentReason(
-                                            dateKey,
-                                            groupNum,
-                                            assignedPerson,
-                                            'skip',
-                                            buildUnavailableReplacementReason({
-                                                skippedPersonName: rotationPerson,
-                                                replacementPersonName: assignedPerson,
-                                                dateObj: new Date(dateIterator),
-                                                groupNum,
-                                                dutyCategory: 'special'
-                                            }),
-                                            rotationPerson,
-                                            null
-                                        );
-                                    } else {
-                                        // Everyone in rotation is disabled/missing - leave unassigned
+                                    // If no replacement found (everyone disabled), leave unassigned
+                                    if (!foundReplacement) {
                                         assignedPerson = null;
                                     }
                                 }
@@ -12124,39 +12094,17 @@
                             // CRITICAL: Check if the rotation person is disabled/missing BEFORE any other logic.
                             // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
-                                const simulatedAssignments = {
-                                    special: simulatedSpecialAssignments,
-                                    weekend: simulatedWeekendAssignments
-                                };
-                                let res = findNextEligiblePersonAfterMissing({
-                                    dateKey,
-                                    date,
-                                    groupNum,
-                                    groupPeople,
-                                    startRotationPosition: rotationPosition,
-                                    dutyCategory: 'weekend',
-                                    simulatedAssignments,
-                                    exhaustive: true
-                                });
-                                
-                                // If no eligible person found (all have conflicts), find ANY person who is not disabled/missing
-                                if (!res) {
-                                    for (let offset = 1; offset <= rotationDays; offset++) {
-                                        const idx = (rotationPosition + offset) % rotationDays;
-                                        const candidate = groupPeople[idx];
-                                        if (!candidate) continue;
-                                        if (!isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) {
-                                            res = { person: candidate, index: idx };
-                                            break;
-                                        }
-                                    }
-                                }
-                                
-                                if (res) {
-                                    assignedPerson = res.person;
-                                    // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
-                                    // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
-                                        // Persist a skip reason so history (underline + violations) doesn't change if the person is re-enabled later.
+                                // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
+                                let foundReplacement = false;
+                                for (let offset = 1; offset <= rotationDays; offset++) {
+                                    const idx = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[idx];
+                                    if (!candidate) continue;
+                                    if (!isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) {
+                                        assignedPerson = candidate;
+                                        foundReplacement = true;
+                                        // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
+                                        // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
                                         storeAssignmentReason(
                                             dateKey,
                                             groupNum,
@@ -12172,8 +12120,11 @@
                                             rotationPerson,
                                             null
                                         );
-                                } else {
-                                    // Everyone in rotation is disabled/missing - leave unassigned
+                                        break;
+                                    }
+                                }
+                                // If no replacement found (everyone disabled), leave unassigned
+                                if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
                             }
@@ -12577,57 +12528,37 @@
                             // CRITICAL: Check if the rotation person is disabled/missing BEFORE cross-month/pending swap logic.
                             // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
-                                const simulatedAssignments = {
-                                    special: simulatedSpecialAssignments,
-                                    weekend: simulatedWeekendAssignments,
-                                    semi: semiAssignments
-                                };
-                                let res = findNextEligiblePersonAfterMissing({
-                                    dateKey,
-                                    date,
-                                    groupNum,
-                                    groupPeople,
-                                    startRotationPosition: rotationPosition,
-                                    dutyCategory: 'semi',
-                                    simulatedAssignments,
-                                    exhaustive: true
-                                });
-                                
-                                // If no eligible person found (all have conflicts), find ANY person who is not disabled/missing
-                                if (!res) {
-                                    for (let offset = 1; offset <= rotationDays; offset++) {
-                                        const idx = (rotationPosition + offset) % rotationDays;
-                                        const candidate = groupPeople[idx];
-                                        if (!candidate) continue;
-                                        if (!isPersonMissingOnDate(candidate, groupNum, date, 'semi')) {
-                                            res = { person: candidate, index: idx };
-                                            break;
-                                        }
+                                // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
+                                let foundReplacement = false;
+                                for (let offset = 1; offset <= rotationDays; offset++) {
+                                    const idx = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[idx];
+                                    if (!candidate) continue;
+                                    if (!isPersonMissingOnDate(candidate, groupNum, date, 'semi')) {
+                                        assignedPerson = candidate;
+                                        foundReplacement = true;
+                                        // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
+                                        // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
+                                        storeAssignmentReason(
+                                            dateKey,
+                                            groupNum,
+                                            assignedPerson,
+                                            'skip',
+                                            buildUnavailableReplacementReason({
+                                                skippedPersonName: rotationPerson,
+                                                replacementPersonName: assignedPerson,
+                                                dateObj: date,
+                                                groupNum,
+                                                dutyCategory: 'semi'
+                                            }),
+                                            rotationPerson,
+                                            null
+                                        );
+                                        break;
                                     }
                                 }
-                                
-                                if (res) {
-                                    assignedPerson = res.person;
-                                    // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
-                                    // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
-                                    // Persist a skip reason so history (underline + violations) doesn't change if the person is re-enabled later.
-                                    storeAssignmentReason(
-                                        dateKey,
-                                        groupNum,
-                                        assignedPerson,
-                                        'skip',
-                                        buildUnavailableReplacementReason({
-                                            skippedPersonName: rotationPerson,
-                                            replacementPersonName: assignedPerson,
-                                            dateObj: date,
-                                            groupNum,
-                                            dutyCategory: 'semi'
-                                        }),
-                                        rotationPerson,
-                                        null
-                                    );
-                                } else {
-                                    // Everyone in rotation is disabled/missing - leave unassigned
+                                // If no replacement found (everyone disabled), leave unassigned
+                                if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
                             }
@@ -12680,54 +12611,35 @@
                                 // NOTE: Disabled/missing check already happened above, so this is just a safety check
                                 if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
                                     // This should rarely happen (already checked above), but handle it defensively
-                                    const simulatedAssignments = {
-                                        special: simulatedSpecialAssignments,
-                                        weekend: simulatedWeekendAssignments,
-                                        semi: semiAssignments
-                                    };
-                                    let res = findNextEligiblePersonAfterMissing({
-                                        dateKey,
-                                        date,
-                                        groupNum,
-                                        groupPeople,
-                                        startRotationPosition: rotationPosition,
-                                        dutyCategory: 'semi',
-                                        simulatedAssignments,
-                                        exhaustive: true
-                                    });
-                                    
-                                    // If no eligible person found, find ANY person who is not disabled/missing
-                                    if (!res) {
-                                        for (let offset = 1; offset <= rotationDays; offset++) {
-                                            const idx = (rotationPosition + offset) % rotationDays;
-                                            const candidate = groupPeople[idx];
-                                            if (!candidate) continue;
-                                            if (!isPersonMissingOnDate(candidate, groupNum, date, 'semi')) {
-                                                res = { person: candidate, index: idx };
-                                                break;
-                                            }
+                                    // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
+                                    let foundReplacement = false;
+                                    for (let offset = 1; offset <= rotationDays; offset++) {
+                                        const idx = (rotationPosition + offset) % rotationDays;
+                                        const candidate = groupPeople[idx];
+                                        if (!candidate) continue;
+                                        if (!isPersonMissingOnDate(candidate, groupNum, date, 'semi')) {
+                                            assignedPerson = candidate;
+                                            foundReplacement = true;
+                                            storeAssignmentReason(
+                                                dateKey,
+                                                groupNum,
+                                                assignedPerson,
+                                                'skip',
+                                                buildUnavailableReplacementReason({
+                                                    skippedPersonName: rotationPerson,
+                                                    replacementPersonName: assignedPerson,
+                                                    dateObj: date,
+                                                    groupNum,
+                                                    dutyCategory: 'semi'
+                                                }),
+                                                rotationPerson,
+                                                null
+                                            );
+                                            break;
                                         }
                                     }
-                                    
-                                    if (res) {
-                                        assignedPerson = res.person;
-                                        storeAssignmentReason(
-                                            dateKey,
-                                            groupNum,
-                                            assignedPerson,
-                                            'skip',
-                                            buildUnavailableReplacementReason({
-                                                skippedPersonName: rotationPerson,
-                                                replacementPersonName: assignedPerson,
-                                                dateObj: date,
-                                                groupNum,
-                                                dutyCategory: 'semi'
-                                            }),
-                                            rotationPerson,
-                                            null
-                                        );
-                                    } else {
-                                        // Everyone in rotation is disabled/missing - leave unassigned
+                                    // If no replacement found (everyone disabled), leave unassigned
+                                    if (!foundReplacement) {
                                         assignedPerson = null;
                                     }
                                     }
@@ -13130,42 +13042,22 @@
                             // CRITICAL: Check if the rotation person is disabled/missing BEFORE any other logic.
                             // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
-                                // In preview fallback, use improved missing replacement that also validates conflicts
-                                // against already-known assignments (special + weekend).
-                                const simulatedAssignments = {
-                                    special: simulatedSpecialAssignments,
-                                    weekend: simulatedWeekendAssignments
-                                };
-                                let res = findNextEligiblePersonAfterMissing({
-                                    dateKey,
-                                    date,
-                                    groupNum,
-                                    groupPeople,
-                                    startRotationPosition: rotationPosition,
-                                    dutyCategory: 'weekend',
-                                    simulatedAssignments,
-                                    exhaustive: true
-                                });
-                                
-                                // If no eligible person found (all have conflicts), find ANY person who is not disabled/missing
-                                if (!res) {
-                                    for (let offset = 1; offset <= rotationDays; offset++) {
-                                        const idx = (rotationPosition + offset) % rotationDays;
-                                        const candidate = groupPeople[idx];
-                                        if (!candidate) continue;
-                                        if (!isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) {
-                                            res = { person: candidate, index: idx };
-                                            break;
-                                        }
+                                // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
+                                let foundReplacement = false;
+                                for (let offset = 1; offset <= rotationDays; offset++) {
+                                    const idx = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[idx];
+                                    if (!candidate) continue;
+                                    if (!isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) {
+                                        assignedPerson = candidate;
+                                        foundReplacement = true;
+                                        // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
+                                        // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
+                                        break;
                                     }
                                 }
-                                
-                                if (res) {
-                                    assignedPerson = res.person;
-                                    // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
-                                    // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
-                                } else {
-                                    // Everyone in rotation is disabled/missing - leave unassigned
+                                // If no replacement found (everyone disabled), leave unassigned
+                                if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
                             }
@@ -13420,61 +13312,37 @@
                             // CRITICAL: Check if the rotation person is disabled/missing BEFORE any other logic.
                             // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
-                                const simulatedAssignments = {
-                                    special: simulatedSpecialAssignments,
-                                    weekend: simulatedWeekendAssignments,
-                                    semi: simulatedSemiAssignments,
-                                    normal: normalAssignments,
-                                    normalRotationPositions: globalNormalRotationPosition
-                                };
-                                let res = findNextEligiblePersonAfterMissing({
-                                    dateKey,
-                                    date,
-                                    groupNum,
-                                    groupPeople,
-                                    startRotationPosition: rotationPosition,
-                                    dutyCategory: 'normal',
-                                    simulatedAssignments,
-                                    alreadyAssignedSet: assignedPeoplePreview?.[monthKey]?.[groupNum] || null,
-                                    exhaustive: true
-                                });
-                                
-                                // If no eligible person found (all have conflicts or already assigned), find ANY person who is not disabled/missing
-                                // (ignore alreadyAssignedSet in fallback - conflicts will be handled by swap logic)
-                                if (!res) {
-                                    for (let offset = 1; offset <= rotationDays; offset++) {
-                                        const idx = (rotationPosition + offset) % rotationDays;
-                                        const candidate = groupPeople[idx];
-                                        if (!candidate) continue;
-                                        if (!isPersonMissingOnDate(candidate, groupNum, date, 'normal')) {
-                                            res = { person: candidate, index: idx };
-                                            break;
-                                        }
+                                // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
+                                let foundReplacement = false;
+                                for (let offset = 1; offset <= rotationDays; offset++) {
+                                    const idx = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[idx];
+                                    if (!candidate) continue;
+                                    if (!isPersonMissingOnDate(candidate, groupNum, date, 'normal')) {
+                                        assignedPerson = candidate;
+                                        foundReplacement = true;
+                                        // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
+                                        // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
+                                        storeAssignmentReason(
+                                            dateKey,
+                                            groupNum,
+                                            assignedPerson,
+                                            'skip',
+                                            buildUnavailableReplacementReason({
+                                                skippedPersonName: rotationPerson,
+                                                replacementPersonName: assignedPerson,
+                                                dateObj: date,
+                                                groupNum,
+                                                dutyCategory: 'normal'
+                                            }),
+                                            rotationPerson,
+                                            null
+                                        );
+                                        break;
                                     }
                                 }
-                                
-                                if (res) {
-                                    assignedPerson = res.person;
-                                    // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
-                                    // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
-                                    // Persist a skip reason so history (underline + violations) doesn't change if the person is re-enabled later.
-                                    storeAssignmentReason(
-                                        dateKey,
-                                        groupNum,
-                                        assignedPerson,
-                                        'skip',
-                                        buildUnavailableReplacementReason({
-                                            skippedPersonName: rotationPerson,
-                                            replacementPersonName: assignedPerson,
-                                            dateObj: date,
-                                            groupNum,
-                                            dutyCategory: 'normal'
-                                        }),
-                                        rotationPerson,
-                                        null
-                                    );
-                                } else {
-                                    // Everyone in rotation is disabled/missing - leave unassigned
+                                // If no replacement found (everyone disabled), leave unassigned
+                                if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
                             }
@@ -13521,57 +13389,35 @@
                                 // NOTE: Disabled/missing check already happened above, so this is just a safety check
                                 if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
                                     // This should rarely happen (already checked above), but handle it defensively
-                                    const simulatedAssignments = {
-                                        special: simulatedSpecialAssignments,
-                                        weekend: simulatedWeekendAssignments,
-                                        semi: simulatedSemiAssignments,
-                                        normal: normalAssignments,
-                                        normalRotationPositions: globalNormalRotationPosition
-                                    };
-                                    let res = findNextEligiblePersonAfterMissing({
-                                        dateKey,
-                                        date,
-                                        groupNum,
-                                        groupPeople,
-                                        startRotationPosition: rotationPosition,
-                                        dutyCategory: 'normal',
-                                        simulatedAssignments,
-                                        alreadyAssignedSet: assignedPeoplePreview?.[monthKey]?.[groupNum] || null,
-                                        exhaustive: true
-                                    });
-                                    
-                                    // If no eligible person found, find ANY person who is not disabled/missing
-                                    if (!res) {
-                                        for (let offset = 1; offset <= rotationDays; offset++) {
-                                            const idx = (rotationPosition + offset) % rotationDays;
-                                            const candidate = groupPeople[idx];
-                                            if (!candidate) continue;
-                                            if (!isPersonMissingOnDate(candidate, groupNum, date, 'normal')) {
-                                                res = { person: candidate, index: idx };
-                                                break;
-                                            }
+                                    // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
+                                    let foundReplacement = false;
+                                    for (let offset = 1; offset <= rotationDays; offset++) {
+                                        const idx = (rotationPosition + offset) % rotationDays;
+                                        const candidate = groupPeople[idx];
+                                        if (!candidate) continue;
+                                        if (!isPersonMissingOnDate(candidate, groupNum, date, 'normal')) {
+                                            assignedPerson = candidate;
+                                            foundReplacement = true;
+                                            storeAssignmentReason(
+                                                dateKey,
+                                                groupNum,
+                                                assignedPerson,
+                                                'skip',
+                                                buildUnavailableReplacementReason({
+                                                    skippedPersonName: rotationPerson,
+                                                    replacementPersonName: assignedPerson,
+                                                    dateObj: date,
+                                                    groupNum,
+                                                    dutyCategory: 'normal'
+                                                }),
+                                                rotationPerson,
+                                                null
+                                            );
+                                            break;
                                         }
                                     }
-                                    
-                                    if (res) {
-                                        assignedPerson = res.person;
-                                        storeAssignmentReason(
-                                            dateKey,
-                                            groupNum,
-                                            assignedPerson,
-                                            'skip',
-                                            buildUnavailableReplacementReason({
-                                                skippedPersonName: rotationPerson,
-                                                replacementPersonName: assignedPerson,
-                                                dateObj: date,
-                                                groupNum,
-                                                dutyCategory: 'normal'
-                                            }),
-                                            rotationPerson,
-                                            null
-                                        );
-                                    } else {
-                                        // Everyone in rotation is disabled/missing - leave unassigned
+                                    // If no replacement found (everyone disabled), leave unassigned
+                                    if (!foundReplacement) {
                                         assignedPerson = null;
                                     }
                                 }
