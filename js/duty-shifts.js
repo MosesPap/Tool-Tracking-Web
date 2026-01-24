@@ -8221,7 +8221,8 @@
                                     groupPeople,
                                     startRotationPosition: rotationPosition,
                                     dutyCategory: 'special',
-                                    simulatedAssignments
+                                    simulatedAssignments,
+                                    exhaustive: true
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
@@ -8243,10 +8244,9 @@
                                         rotationPerson,
                                         null
                                     );
-                                } else {
-                                    // No eligible replacement found - skip this day entirely (don't assign disabled person)
-                                    assignedPerson = null;
                                 }
+                                // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
+                                // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                             }
 
                             // Step 1 is special-holidays only: preview reflects missing replacement only (no weekend skip logic here).
@@ -11659,7 +11659,8 @@
                                         groupPeople,
                                         startRotationPosition: rotationPosition,
                                         dutyCategory: 'special',
-                                        simulatedAssignments: null // conversion path: keep missing-only (no full simulated sets here)
+                                        simulatedAssignments: null, // conversion path: keep missing-only (no full simulated sets here)
+                                        exhaustive: true
                                     });
                                     if (res) {
                                         assignedPerson = res.person;
@@ -11680,6 +11681,8 @@
                                             null
                                         );
                                     }
+                                    // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
+                                    // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                                 }
                                 
                                 // Only assign if person is in temp assignments (was calculated in preview)
@@ -12101,7 +12104,8 @@
                                     groupPeople,
                                     startRotationPosition: rotationPosition,
                                     dutyCategory: 'weekend',
-                                    simulatedAssignments
+                                    simulatedAssignments,
+                                    exhaustive: true
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
@@ -12123,10 +12127,9 @@
                                             rotationPerson,
                                             null
                                         );
-                                } else {
-                                    // No eligible replacement found - skip this day entirely (don't assign disabled person)
-                                    assignedPerson = null;
                                 }
+                                // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
+                                // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                             }
 
                             // PREVIEW DISPLAY: show the weekend skip changes (special holiday duty in same month),
@@ -12540,7 +12543,8 @@
                                     groupPeople,
                                     startRotationPosition: rotationPosition,
                                     dutyCategory: 'semi',
-                                    simulatedAssignments
+                                    simulatedAssignments,
+                                    exhaustive: true
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
@@ -12562,10 +12566,9 @@
                                         rotationPerson,
                                         null
                                     );
-                                } else {
-                                    // No eligible replacement found - skip this day entirely (don't assign disabled person)
-                                    assignedPerson = null;
                                 }
+                                // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
+                                // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                             }
                             
                             // Check if this day is a cross-month swap assignment (person swapped from previous month)
@@ -12628,7 +12631,8 @@
                                         groupPeople,
                                         startRotationPosition: rotationPosition,
                                         dutyCategory: 'semi',
-                                        simulatedAssignments
+                                        simulatedAssignments,
+                                        exhaustive: true
                                     });
                                     if (res) {
                                         assignedPerson = res.person;
@@ -12647,9 +12651,9 @@
                                             rotationPerson,
                                             null
                                         );
-                                    } else {
-                                        assignedPerson = null;
                                     }
+                                    // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
+                                    // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                                     }
                                     
                                 // Advance rotation position
@@ -13063,16 +13067,16 @@
                                     groupPeople,
                                     startRotationPosition: rotationPosition,
                                     dutyCategory: 'weekend',
-                                    simulatedAssignments
+                                    simulatedAssignments,
+                                    exhaustive: true
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
                                     // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
                                     // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
-                                } else {
-                                    // No eligible replacement found - skip this day entirely (don't assign disabled person)
-                                    assignedPerson = null;
                                 }
+                                // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
+                                // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                             }
                             
                             // Advance rotation position
@@ -13340,7 +13344,8 @@
                                     startRotationPosition: rotationPosition,
                                     dutyCategory: 'normal',
                                     simulatedAssignments,
-                                    alreadyAssignedSet: assignedPeoplePreview?.[monthKey]?.[groupNum] || null
+                                    alreadyAssignedSet: assignedPeoplePreview?.[monthKey]?.[groupNum] || null,
+                                    exhaustive: true
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
@@ -13362,10 +13367,9 @@
                                         rotationPerson,
                                         null
                                     );
-                                } else {
-                                    // No eligible replacement found - skip this day entirely
-                                    assignedPerson = null;
                                 }
+                                // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
+                                // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                             }
                             
                             // If assigned person was already assigned this month (due to swap), skip to next person
@@ -13425,7 +13429,8 @@
                                         startRotationPosition: rotationPosition,
                                         dutyCategory: 'normal',
                                         simulatedAssignments,
-                                        alreadyAssignedSet: assignedPeoplePreview?.[monthKey]?.[groupNum] || null
+                                        alreadyAssignedSet: assignedPeoplePreview?.[monthKey]?.[groupNum] || null,
+                                        exhaustive: true
                                     });
                                     if (res) {
                                         assignedPerson = res.person;
@@ -13444,9 +13449,9 @@
                                             rotationPerson,
                                             null
                                         );
-                                    } else {
-                                        assignedPerson = null;
                                     }
+                                    // If res is null, it means everyone in rotation is disabled/missing (extremely rare)
+                                    // In that case, assignedPerson remains as the disabled person, which will be handled by later logic
                                 }
                                     
                                     // Check if assigned person has a conflict (will be swapped later)
@@ -14887,6 +14892,7 @@
         // BUT also validate consecutive-duty conflicts (before/after) and cross-month (via hasConsecutiveDuty).
         // - startRotationPosition: the index of the rotation-selected person
         // - alreadyAssignedSet: optional Set to prevent duplicates (used in preview normal logic)
+        // - exhaustive: if true, search through the entire rotation multiple times until finding someone eligible
         function findNextEligiblePersonAfterMissing({
             dateKey,
             date,
@@ -14895,20 +14901,39 @@
             startRotationPosition,
             dutyCategory = null,
             simulatedAssignments = null,
-            alreadyAssignedSet = null
+            alreadyAssignedSet = null,
+            exhaustive = false
         }) {
             if (!Array.isArray(groupPeople) || groupPeople.length === 0) return null;
             const rotationDays = groupPeople.length;
-            for (let offset = 1; offset < rotationDays; offset++) {
-                const idx = (startRotationPosition + offset) % rotationDays;
-                const candidate = groupPeople[idx];
-                if (!candidate) continue;
-                if (alreadyAssignedSet && alreadyAssignedSet.has(candidate)) continue;
-                if (isPersonMissingOnDate(candidate, groupNum, date, dutyCategory)) continue;
-                if (simulatedAssignments && hasConsecutiveDuty(dateKey, candidate, groupNum, simulatedAssignments)) continue;
-                return { person: candidate, index: idx };
+            
+            if (exhaustive) {
+                // Search through the entire rotation (potentially multiple times) until we find someone eligible
+                // This ensures rotation continues assigning people even if many are disabled
+                for (let totalOffset = 1; totalOffset <= rotationDays * 2; totalOffset++) {
+                    const idx = (startRotationPosition + totalOffset) % rotationDays;
+                    const candidate = groupPeople[idx];
+                    if (!candidate) continue;
+                    if (alreadyAssignedSet && alreadyAssignedSet.has(candidate)) continue;
+                    if (isPersonMissingOnDate(candidate, groupNum, date, dutyCategory)) continue;
+                    if (simulatedAssignments && hasConsecutiveDuty(dateKey, candidate, groupNum, simulatedAssignments)) continue;
+                    return { person: candidate, index: idx };
+                }
+                // If we've checked everyone twice and still no one is eligible, return null
+                return null;
+            } else {
+                // Original behavior: search once through the rotation
+                for (let offset = 1; offset < rotationDays; offset++) {
+                    const idx = (startRotationPosition + offset) % rotationDays;
+                    const candidate = groupPeople[idx];
+                    if (!candidate) continue;
+                    if (alreadyAssignedSet && alreadyAssignedSet.has(candidate)) continue;
+                    if (isPersonMissingOnDate(candidate, groupNum, date, dutyCategory)) continue;
+                    if (simulatedAssignments && hasConsecutiveDuty(dateKey, candidate, groupNum, simulatedAssignments)) continue;
+                    return { person: candidate, index: idx };
+                }
+                return null;
             }
-            return null;
         }
 
         // Open missing period modal
