@@ -13314,9 +13314,11 @@
                             
                             // CRITICAL: Check if the rotation person is disabled/missing BEFORE any other logic.
                             // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
+                            let wasDisabledPersonSkipped = false;
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
                                 // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
                                 // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
+                                // IMPORTANT: We don't check if replacement is already assigned - swap logic will handle that
                                 let foundReplacement = false;
                                 for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
@@ -13325,6 +13327,7 @@
                                     if (!isPersonMissingOnDate(candidate, groupNum, date, 'normal')) {
                                         assignedPerson = candidate;
                                         foundReplacement = true;
+                                        wasDisabledPersonSkipped = true;
                                         // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
                                         // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
                                         storeAssignmentReason(
@@ -13352,7 +13355,8 @@
                             }
                             
                             // If assigned person was already assigned this month (due to swap), skip to next person
-                            if (assignedPerson && assignedPeoplePreview[monthKey][groupNum].has(assignedPerson)) {
+                            // BUT: Skip this check if we just replaced a disabled person - swap logic will handle duplicates
+                            if (!wasDisabledPersonSkipped && assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal') && assignedPeoplePreview[monthKey][groupNum].has(assignedPerson)) {
                                 // This person was already assigned (swapped), find next available person in rotation
                                 // Keep searching through entire rotation until we find someone not disabled and not already assigned
                                 let foundReplacement = false;
@@ -13390,8 +13394,9 @@
                                 if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
                                     // This should rarely happen (already checked above), but handle it defensively
                                     // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
+                                    // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
                                     let foundReplacement = false;
-                                    for (let offset = 1; offset <= rotationDays; offset++) {
+                                    for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                         const idx = (rotationPosition + offset) % rotationDays;
                                         const candidate = groupPeople[idx];
                                         if (!candidate) continue;
@@ -13416,7 +13421,7 @@
                                             break;
                                         }
                                     }
-                                    // If no replacement found (everyone disabled), leave unassigned
+                                    // If no replacement found after checking everyone twice (everyone disabled), leave unassigned
                                     if (!foundReplacement) {
                                         assignedPerson = null;
                                     }
@@ -13425,6 +13430,8 @@
                                     // Check if assigned person has a conflict (will be swapped later)
                                     // If so, DO NOT assign anyone to this day - leave it for swap logic to handle
                                     // Also DO NOT assign the next person in rotation to this day
+                                    // IMPORTANT: Always advance rotation position from the ORIGINAL rotationPosition
+                                    // (not from replacement's position) to maintain rotation sequence
                                     if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
                                         // Build simulated assignments for conflict checking
                                     const simulatedAssignments = {
@@ -13443,14 +13450,14 @@
                                             // The preview should show the exact rotation order (who would be assigned)
                                             // even if they have a conflict. Swap logic will handle swapping them.
                                             // DO NOT set to null - we need to know who has the conflict to swap them
-                                            // Still advance rotation position so next person gets their correct turn
+                                            // Still advance rotation position from ORIGINAL position so next person gets their correct turn
                                             globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                         } else {
-                                            // No conflict - assign person and advance rotation
+                                            // No conflict - assign person and advance rotation from ORIGINAL position
                                             globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                         }
                                     } else {
-                                        // Person is missing or no person assigned - advance rotation position
+                                        // Person is missing or no person assigned - advance rotation position from ORIGINAL position
                                         globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                     }
                             }
