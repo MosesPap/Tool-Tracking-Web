@@ -12065,6 +12065,9 @@
                 // This is separate from assigned persons (who may have been swapped/skipped)
                 const weekendRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
                 
+                // Track which people have been assigned to which days (to prevent duplicate assignments after replacements)
+                const assignedPeoplePreviewWeekend = {}; // monthKey -> { groupNum -> Set of person names }
+                
                 sortedWeekends.forEach((dateKey, weekendIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -12072,6 +12075,10 @@
                     const month = date.getMonth();
                     const year = date.getFullYear();
                     const monthKey = `${year}-${month}`;
+                    
+                    if (!assignedPeoplePreviewWeekend[monthKey]) {
+                        assignedPeoplePreviewWeekend[monthKey] = {};
+                    }
                     
                     // Initialize skipped set for this month if needed
                     if (!skippedInMonth[monthKey]) {
@@ -12158,35 +12165,42 @@
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
                                 // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
                                 // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
+                                // IMPORTANT: Also check if replacement was already assigned this month to prevent duplicate assignments
+                                if (!assignedPeoplePreviewWeekend[monthKey][groupNum]) {
+                                    assignedPeoplePreviewWeekend[monthKey][groupNum] = new Set();
+                                }
                                 let foundReplacement = false;
                                 for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
-                                    if (!isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) {
-                                        assignedPerson = candidate;
-                                        foundReplacement = true;
-                                        // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
-                                        // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
-                                        storeAssignmentReason(
-                                            dateKey,
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                                    // Check if candidate was already assigned this month (to prevent duplicate assignments)
+                                    if (assignedPeoplePreviewWeekend[monthKey][groupNum] && assignedPeoplePreviewWeekend[monthKey][groupNum].has(candidate)) continue;
+                                    
+                                    // Found eligible replacement
+                                    assignedPerson = candidate;
+                                    foundReplacement = true;
+                                    // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
+                                    // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
+                                    storeAssignmentReason(
+                                        dateKey,
+                                        groupNum,
+                                        assignedPerson,
+                                        'skip',
+                                        buildUnavailableReplacementReason({
+                                            skippedPersonName: rotationPerson,
+                                            replacementPersonName: assignedPerson,
+                                            dateObj: date,
                                             groupNum,
-                                            assignedPerson,
-                                            'skip',
-                                            buildUnavailableReplacementReason({
-                                                skippedPersonName: rotationPerson,
-                                                replacementPersonName: assignedPerson,
-                                                dateObj: date,
-                                                groupNum,
-                                                dutyCategory: 'weekend'
-                                            }),
-                                            rotationPerson,
-                                            null
-                                        );
-                                        break;
-                                    }
+                                            dutyCategory: 'weekend'
+                                        }),
+                                        rotationPerson,
+                                        null
+                                    );
+                                    break;
                                 }
-                                // If no replacement found after checking everyone twice (everyone disabled), leave unassigned
+                                // If no replacement found after checking everyone twice (everyone disabled or already assigned), leave unassigned
                                 if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
@@ -12223,6 +12237,11 @@
                                     simulatedWeekendAssignments[dateKey] = {};
                                 }
                                 simulatedWeekendAssignments[dateKey][groupNum] = assignedPerson;
+                                
+                                // Track that this person has been assigned (to prevent duplicate assignment later)
+                                if (assignedPeoplePreviewWeekend[monthKey] && assignedPeoplePreviewWeekend[monthKey][groupNum]) {
+                                    assignedPeoplePreviewWeekend[monthKey][groupNum].add(assignedPerson);
+                                }
                                 
                                 // Track last rotation position for this group
                                 // Advance position by 1 for next time (or wrap around)
@@ -12379,6 +12398,8 @@
             // IMPORTANT: Track weekend rotation persons (who SHOULD be assigned according to rotation)
             // This is separate from assigned persons (who may have been swapped/skipped)
             const weekendRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
+            // Track which people have been assigned to which days (to prevent duplicate assignments after replacements)
+            const assignedPeoplePreviewWeekend = {}; // monthKey -> { groupNum -> Set of person names }
             const sortedWeekends = [...weekendHolidays].sort();
             
             if (!hasSavedWeekendAssignments) sortedWeekends.forEach((dateKey, weekendIndex) => {
@@ -12389,6 +12410,9 @@
                 
                 if (!skippedInMonth[monthKey]) {
                     skippedInMonth[monthKey] = {};
+                }
+                if (!assignedPeoplePreviewWeekend[monthKey]) {
+                    assignedPeoplePreviewWeekend[monthKey] = {};
                 }
                 
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -12451,6 +12475,10 @@
                                     special: simulatedSpecialAssignments,
                                     weekend: simulatedWeekendAssignments
                                 };
+                                // Pass already assigned set to prevent duplicate assignments
+                                const alreadyAssignedSet = assignedPeoplePreviewWeekend[monthKey] && assignedPeoplePreviewWeekend[monthKey][groupNum] 
+                                    ? assignedPeoplePreviewWeekend[monthKey][groupNum] 
+                                    : null;
                                 const res = findNextEligiblePersonAfterMissing({
                                     dateKey,
                                     date,
@@ -12458,7 +12486,9 @@
                                     groupPeople,
                                     startRotationPosition: rotationPosition,
                                         dutyCategory: 'weekend',
-                                    simulatedAssignments
+                                    simulatedAssignments,
+                                    alreadyAssignedSet: alreadyAssignedSet,
+                                    exhaustive: true
                                 });
                                 if (res) {
                                     assignedPerson = res.person;
@@ -12474,6 +12504,11 @@
                                 simulatedWeekendAssignments[dateKey] = {};
                             }
                             simulatedWeekendAssignments[dateKey][groupNum] = assignedPerson;
+                            
+                            // Track that this person has been assigned (to prevent duplicate assignment later)
+                            if (assignedPeoplePreviewWeekend[monthKey] && assignedPeoplePreviewWeekend[monthKey][groupNum]) {
+                                assignedPeoplePreviewWeekend[monthKey][groupNum].add(assignedPerson);
+                            }
                         }
                     }
                 }
@@ -12519,6 +12554,8 @@
                 const semiRotationPersons = semiRotationPersonsForPreview; // dateKey -> { groupNum -> rotationPerson }
                 // Track pending swaps: when Person A is swapped, Person B should be assigned to Person A's next day
                 const pendingSwaps = {}; // monthKey -> { groupNum -> { skippedPerson, swapToPosition } }
+                // Track which people have been assigned to which days (to prevent duplicate assignments after replacements)
+                const assignedPeoplePreviewSemi = {}; // monthKey -> { groupNum -> Set of person names }
                 
                 sortedSemi.forEach((dateKey, semiIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
@@ -12527,6 +12564,10 @@
                     const month = date.getMonth();
                     const year = date.getFullYear();
                     const monthKey = `${year}-${month}`;
+                    
+                    if (!assignedPeoplePreviewSemi[monthKey]) {
+                        assignedPeoplePreviewSemi[monthKey] = {};
+                    }
                     
                     if (!pendingSwaps[monthKey]) {
                         pendingSwaps[monthKey] = {};
@@ -12593,35 +12634,42 @@
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
                                 // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
                                 // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
+                                // IMPORTANT: Also check if replacement was already assigned this month to prevent duplicate assignments
+                                if (!assignedPeoplePreviewSemi[monthKey][groupNum]) {
+                                    assignedPeoplePreviewSemi[monthKey][groupNum] = new Set();
+                                }
                                 let foundReplacement = false;
                                 for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
-                                    if (!isPersonMissingOnDate(candidate, groupNum, date, 'semi')) {
-                                        assignedPerson = candidate;
-                                        foundReplacement = true;
-                                        // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
-                                        // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
-                                        storeAssignmentReason(
-                                            dateKey,
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
+                                    // Check if candidate was already assigned this month (to prevent duplicate assignments)
+                                    if (assignedPeoplePreviewSemi[monthKey][groupNum] && assignedPeoplePreviewSemi[monthKey][groupNum].has(candidate)) continue;
+                                    
+                                    // Found eligible replacement
+                                    assignedPerson = candidate;
+                                    foundReplacement = true;
+                                    // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
+                                    // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
+                                    storeAssignmentReason(
+                                        dateKey,
+                                        groupNum,
+                                        assignedPerson,
+                                        'skip',
+                                        buildUnavailableReplacementReason({
+                                            skippedPersonName: rotationPerson,
+                                            replacementPersonName: assignedPerson,
+                                            dateObj: date,
                                             groupNum,
-                                            assignedPerson,
-                                            'skip',
-                                            buildUnavailableReplacementReason({
-                                                skippedPersonName: rotationPerson,
-                                                replacementPersonName: assignedPerson,
-                                                dateObj: date,
-                                                groupNum,
-                                                dutyCategory: 'semi'
-                                            }),
-                                            rotationPerson,
-                                            null
-                                        );
-                                        break;
-                                    }
+                                            dutyCategory: 'semi'
+                                        }),
+                                        rotationPerson,
+                                        null
+                                    );
+                                    break;
                                 }
-                                // If no replacement found after checking everyone twice (everyone disabled), leave unassigned
+                                // If no replacement found after checking everyone twice (everyone disabled or already assigned), leave unassigned
                                 if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
@@ -12676,33 +12724,40 @@
                                 if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
                                     // This should rarely happen (already checked above), but handle it defensively
                                     // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
+                                    // IMPORTANT: Also check if replacement was already assigned this month to prevent duplicate assignments
+                                    if (!assignedPeoplePreviewSemi[monthKey][groupNum]) {
+                                        assignedPeoplePreviewSemi[monthKey][groupNum] = new Set();
+                                    }
                                     let foundReplacement = false;
-                                    for (let offset = 1; offset <= rotationDays; offset++) {
+                                    for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                         const idx = (rotationPosition + offset) % rotationDays;
                                         const candidate = groupPeople[idx];
                                         if (!candidate) continue;
-                                        if (!isPersonMissingOnDate(candidate, groupNum, date, 'semi')) {
-                                            assignedPerson = candidate;
-                                            foundReplacement = true;
-                                            storeAssignmentReason(
-                                                dateKey,
+                                        if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
+                                        // Check if candidate was already assigned this month (to prevent duplicate assignments)
+                                        if (assignedPeoplePreviewSemi[monthKey][groupNum] && assignedPeoplePreviewSemi[monthKey][groupNum].has(candidate)) continue;
+                                        
+                                        // Found eligible replacement
+                                        assignedPerson = candidate;
+                                        foundReplacement = true;
+                                        storeAssignmentReason(
+                                            dateKey,
+                                            groupNum,
+                                            assignedPerson,
+                                            'skip',
+                                            buildUnavailableReplacementReason({
+                                                skippedPersonName: rotationPerson,
+                                                replacementPersonName: assignedPerson,
+                                                dateObj: date,
                                                 groupNum,
-                                                assignedPerson,
-                                                'skip',
-                                                buildUnavailableReplacementReason({
-                                                    skippedPersonName: rotationPerson,
-                                                    replacementPersonName: assignedPerson,
-                                                    dateObj: date,
-                                                    groupNum,
-                                                    dutyCategory: 'semi'
-                                                }),
-                                                rotationPerson,
-                                                null
-                                            );
-                                            break;
-                                        }
+                                                dutyCategory: 'semi'
+                                            }),
+                                            rotationPerson,
+                                            null
+                                        );
+                                        break;
                                     }
-                                    // If no replacement found (everyone disabled), leave unassigned
+                                    // If no replacement found (everyone disabled or already assigned), leave unassigned
                                     if (!foundReplacement) {
                                         assignedPerson = null;
                                     }
@@ -12725,6 +12780,11 @@
                                 semiAssignments[dateKey] = {};
                             }
                             semiAssignments[dateKey][groupNum] = assignedPerson;
+                            
+                            // Track that this person has been assigned (to prevent duplicate assignment later)
+                            if (assignedPerson && assignedPeoplePreviewSemi[monthKey] && assignedPeoplePreviewSemi[monthKey][groupNum]) {
+                                assignedPeoplePreviewSemi[monthKey][groupNum].add(assignedPerson);
+                            }
                             
                             // Get last duty date and days since for display
                             let lastDutyInfo = '';
