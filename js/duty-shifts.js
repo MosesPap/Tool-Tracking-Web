@@ -13396,37 +13396,40 @@
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
                                 // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
                                 // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
-                                // IMPORTANT: We don't check if replacement is already assigned - swap logic will handle that
+                                // IMPORTANT: Also check if replacement was already assigned this month to prevent duplicate assignments
                                 let foundReplacement = false;
                                 for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
-                                    if (!isPersonMissingOnDate(candidate, groupNum, date, 'normal')) {
-                                        assignedPerson = candidate;
-                                        foundReplacement = true;
-                                        wasDisabledPersonSkipped = true;
-                                        // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
-                                        // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
-                                        storeAssignmentReason(
-                                            dateKey,
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
+                                    // Check if candidate was already assigned this month (to prevent duplicate assignments)
+                                    if (assignedPeoplePreview[monthKey][groupNum] && assignedPeoplePreview[monthKey][groupNum].has(candidate)) continue;
+                                    
+                                    // Found eligible replacement
+                                    assignedPerson = candidate;
+                                    foundReplacement = true;
+                                    wasDisabledPersonSkipped = true;
+                                    // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
+                                    // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
+                                    storeAssignmentReason(
+                                        dateKey,
+                                        groupNum,
+                                        assignedPerson,
+                                        'skip',
+                                        buildUnavailableReplacementReason({
+                                            skippedPersonName: rotationPerson,
+                                            replacementPersonName: assignedPerson,
+                                            dateObj: date,
                                             groupNum,
-                                            assignedPerson,
-                                            'skip',
-                                            buildUnavailableReplacementReason({
-                                                skippedPersonName: rotationPerson,
-                                                replacementPersonName: assignedPerson,
-                                                dateObj: date,
-                                                groupNum,
-                                                dutyCategory: 'normal'
-                                            }),
-                                            rotationPerson,
-                                            null
-                                        );
-                                        break;
-                                    }
+                                            dutyCategory: 'normal'
+                                        }),
+                                        rotationPerson,
+                                        null
+                                    );
+                                    break;
                                 }
-                                // If no replacement found after checking everyone twice (everyone disabled), leave unassigned
+                                // If no replacement found after checking everyone twice (everyone disabled or already assigned), leave unassigned
                                 if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
@@ -13474,33 +13477,37 @@
                                     // This should rarely happen (already checked above), but handle it defensively
                                     // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
                                     // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
+                                    // IMPORTANT: Also check if replacement was already assigned this month to prevent duplicate assignments
                                     let foundReplacement = false;
                                     for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                         const idx = (rotationPosition + offset) % rotationDays;
                                         const candidate = groupPeople[idx];
                                         if (!candidate) continue;
-                                        if (!isPersonMissingOnDate(candidate, groupNum, date, 'normal')) {
-                                            assignedPerson = candidate;
-                                            foundReplacement = true;
-                                            storeAssignmentReason(
-                                                dateKey,
+                                        if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
+                                        // Check if candidate was already assigned this month (to prevent duplicate assignments)
+                                        if (assignedPeoplePreview[monthKey][groupNum] && assignedPeoplePreview[monthKey][groupNum].has(candidate)) continue;
+                                        
+                                        // Found eligible replacement
+                                        assignedPerson = candidate;
+                                        foundReplacement = true;
+                                        storeAssignmentReason(
+                                            dateKey,
+                                            groupNum,
+                                            assignedPerson,
+                                            'skip',
+                                            buildUnavailableReplacementReason({
+                                                skippedPersonName: rotationPerson,
+                                                replacementPersonName: assignedPerson,
+                                                dateObj: date,
                                                 groupNum,
-                                                assignedPerson,
-                                                'skip',
-                                                buildUnavailableReplacementReason({
-                                                    skippedPersonName: rotationPerson,
-                                                    replacementPersonName: assignedPerson,
-                                                    dateObj: date,
-                                                    groupNum,
-                                                    dutyCategory: 'normal'
-                                                }),
-                                                rotationPerson,
-                                                null
-                                            );
-                                            break;
-                                        }
+                                                dutyCategory: 'normal'
+                                            }),
+                                            rotationPerson,
+                                            null
+                                        );
+                                        break;
                                     }
-                                    // If no replacement found after checking everyone twice (everyone disabled), leave unassigned
+                                    // If no replacement found after checking everyone twice (everyone disabled or already assigned), leave unassigned
                                     if (!foundReplacement) {
                                         assignedPerson = null;
                                     }
