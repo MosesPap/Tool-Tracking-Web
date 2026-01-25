@@ -12973,6 +12973,9 @@
             // Declare at function level to avoid scope issues
             const globalNormalRotationPosition = {}; // groupNum -> global position (continues across months)
             
+            // Track baseline assignments for this preview to detect cascading shifts
+            const baselineNormalByDate = {}; // dateKey -> { groupNum -> personName }
+            
             // Check for normal days
             const normalDays = dayTypeLists.normal || [];
             const semiNormalDays = dayTypeLists.semi || [];
@@ -13523,6 +13526,12 @@
                                     }
                             }
                             
+                            // Store baseline assignment for comparison
+                            if (!baselineNormalByDate[dateKey]) {
+                                baselineNormalByDate[dateKey] = {};
+                            }
+                            baselineNormalByDate[dateKey][groupNum] = rotationPerson;
+                            
                             // Store assignment (before swap logic)
                             if (!normalAssignments[dateKey]) {
                                 normalAssignments[dateKey] = {};
@@ -13532,6 +13541,55 @@
                             // Track that this person has been assigned (to prevent duplicate assignment later)
                             if (assignedPerson && assignedPeoplePreview[monthKey] && assignedPeoplePreview[monthKey][groupNum]) {
                                 assignedPeoplePreview[monthKey][groupNum].add(assignedPerson);
+                            }
+                            
+                            // CRITICAL: If assigned person differs from baseline (rotationPerson), check if this is a cascading shift
+                            // Store a 'shift' reason to prevent this from showing as a swap in results/calendar
+                            if (assignedPerson && assignedPerson !== rotationPerson) {
+                                const currentReason = getAssignmentReason(dateKey, groupNum, assignedPerson);
+                                // Only store shift reason if there's no existing reason (skip/swap already handled)
+                                if (!currentReason) {
+                                    // Check if rotationPerson is currently disabled/missing (direct replacement case - already has 'skip' reason)
+                                    const isRotationPersonDisabledOrMissing = isPersonDisabledForDuty(rotationPerson, groupNum, 'normal') || 
+                                                                              isPersonMissingOnDate(rotationPerson, groupNum, date, 'normal');
+                                    
+                                    // If rotationPerson is not disabled/missing, check if previous day had a replacement (cascading shift)
+                                    if (!isRotationPersonDisabledOrMissing) {
+                                        // Check if any previous date in this month had a replacement for this group
+                                        // This indicates a cascading shift where people moved forward
+                                        let previousDayHadReplacement = false;
+                                        for (const prevDateKey of sortedNormal) {
+                                            if (prevDateKey >= dateKey) break; // Only check previous dates
+                                            const prevDate = new Date(prevDateKey + 'T00:00:00');
+                                            const prevMonthKeyCheck = `${prevDate.getFullYear()}-${prevDate.getMonth()}`;
+                                            if (prevMonthKeyCheck !== monthKey) continue; // Only same month
+                                            
+                                            // Check if previous day had a 'skip' reason (someone was replaced)
+                                            for (const personName in (assignmentReasons[prevDateKey]?.[groupNum] || {})) {
+                                                const prevReason = assignmentReasons[prevDateKey][groupNum][personName];
+                                                if (prevReason && prevReason.type === 'skip') {
+                                                    previousDayHadReplacement = true;
+                                                    break;
+                                                }
+                                            }
+                                            if (previousDayHadReplacement) break;
+                                        }
+                                        
+                                        if (previousDayHadReplacement) {
+                                            // This is a cascading shift - store 'shift' reason to prevent showing as swap/underline
+                                            storeAssignmentReason(
+                                                dateKey,
+                                                groupNum,
+                                                assignedPerson,
+                                                'shift',
+                                                '',
+                                                rotationPerson,
+                                                null,
+                                                { cascadingShift: true, originalBaseline: rotationPerson }
+                                            );
+                                        }
+                                    }
+                                }
                             }
                             
                             // Get last duty date and days since for display
@@ -14088,6 +14146,8 @@
             
             // Store normal assignments and rotation positions for saving when Next is pressed
             calculationSteps.tempNormalAssignments = normalAssignments;
+            // Store baseline assignments for comparison in results window
+            // Use normalRotationPersons (rotation person before any skips) as baseline
             calculationSteps.tempNormalBaselineAssignments = normalRotationPersons;
             calculationSteps.lastNormalRotationPositions = {};
             // IMPORTANT: Find the last ROTATION person (who should be assigned according to rotation)
