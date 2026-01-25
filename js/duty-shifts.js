@@ -6679,7 +6679,7 @@
                                         underline = false;
                                     } else if (!r) {
                                         // Fallback for older data: if baseline rotation differs from final assignment, underline.
-                                        // BUT: Only if this person doesn't have a 'shift' reason (check again to be safe)
+                                        // BUT: Don't underline if this is a cascading shift (baseline person was disabled/missing)
                                         const dayTypeCategory = (dayType === 'special-holiday')
                                             ? 'special'
                                             : (dayType === 'weekend-holiday')
@@ -6692,8 +6692,21 @@
                                         if (baselinePerson && baselinePerson !== personName) {
                                             // Double-check: if this person has a shift reason, don't underline
                                             const shiftCheck = getAssignmentReason(key, g, personName);
-                                            if (!shiftCheck || shiftCheck.type !== 'shift') {
-                                                underline = true;
+                                            if (shiftCheck && shiftCheck.type === 'shift') {
+                                                underline = false;
+                                            } else {
+                                                // Check if baseline person was disabled/missing - if so, this is a cascading shift
+                                                const dateObj = new Date(key + 'T00:00:00');
+                                                const isBaselineDisabledOrMissing = dayTypeCategory === 'normal' && 
+                                                    (isPersonDisabledForDuty(baselinePerson, g, dayTypeCategory) || 
+                                                     isPersonMissingOnDate(baselinePerson, g, dateObj, dayTypeCategory));
+                                                if (isBaselineDisabledOrMissing) {
+                                                    // This is a cascading shift - don't underline
+                                                    underline = false;
+                                                } else {
+                                                    // This is a real change - underline
+                                                    underline = true;
+                                                }
                                             }
                                         }
                                     }
@@ -11355,18 +11368,28 @@
                     const isBaseDisabledOrMissing = isPersonDisabledForDuty(base, groupNum, 'normal') || isPersonMissingOnDate(base, groupNum, dateObj, 'normal');
                     if (!reasonObj && isBaseDisabledOrMissing) {
                         // This is a cascading shift - the baseline person was skipped, and this person moved forward
-                        // Check if there's a 'skip' reason for someone else on this date (the direct replacement)
-                        // If not, this is likely a shift, so skip it
-                        let hasDirectReplacement = false;
-                        for (const personName in (assignmentReasons?.[dateKey]?.[groupNum] || {})) {
-                            const r = assignmentReasons[dateKey][groupNum][personName];
-                            if (r && r.type === 'skip') {
-                                hasDirectReplacement = true;
+                        // Skip this entry - only show the direct replacement (who has a 'skip' reason)
+                        continue;
+                    }
+                    
+                    // Also skip if baseline person has a 'skip' reason on a previous date (they were replaced, causing cascading shifts)
+                    // Check if baseline person was replaced on any previous date in this month
+                    if (!reasonObj && !isBaseDisabledOrMissing) {
+                        const monthKey = `${dateObj.getFullYear()}-${dateObj.getMonth()}`;
+                        let baselineWasReplaced = false;
+                        for (const dk in assignmentReasons) {
+                            if (dk >= dateKey) break; // Only check previous dates
+                            const dkDate = new Date(dk + 'T00:00:00');
+                            const dkMonthKey = `${dkDate.getFullYear()}-${dkDate.getMonth()}`;
+                            if (dkMonthKey !== monthKey) continue; // Only same month
+                            const dkReason = assignmentReasons[dk]?.[groupNum]?.[base];
+                            if (dkReason && dkReason.type === 'skip') {
+                                baselineWasReplaced = true;
                                 break;
                             }
                         }
-                        // If there's no direct replacement reason on this date, this is a shift, so skip it
-                        if (!hasDirectReplacement) {
+                        if (baselineWasReplaced) {
+                            // Baseline person was replaced earlier, causing this shift - skip it
                             continue;
                         }
                     }
