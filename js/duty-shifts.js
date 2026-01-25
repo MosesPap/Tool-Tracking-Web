@@ -13285,11 +13285,16 @@
                                         globalNormalRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
                                         console.log(`[NORMAL ROTATION] Continuing from last person ${lastPersonName} (index ${lastPersonIndex}) for group ${groupNum}, starting at position ${globalNormalRotationPosition[groupNum]}`);
                                 } else {
-                                        // Last person not found in list - use rotation calculation
-                                        const daysSinceStart = getRotationPosition(date, 'normal', groupNum);
-                                        globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
-                                        if (lastPersonName) {
-                                            console.log(`[NORMAL ROTATION] Last person ${lastPersonName} not found in group ${groupNum} list, using rotation calculation: position ${globalNormalRotationPosition[groupNum]}`);
+                                        // Last person not found in list - use rotation calculation from first date
+                                        if (sortedNormal.length > 0) {
+                                            const firstDate = new Date(sortedNormal[0] + 'T00:00:00');
+                                            const daysSinceStart = getRotationPosition(firstDate, 'normal', groupNum);
+                                            globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                            if (lastPersonName) {
+                                                console.log(`[NORMAL ROTATION] Last person ${lastPersonName} not found in group ${groupNum} list, using rotation calculation: position ${globalNormalRotationPosition[groupNum]}`);
+                                            }
+                                        } else {
+                                            globalNormalRotationPosition[groupNum] = 0;
                                         }
                                     }
                                 }
@@ -13315,8 +13320,14 @@
                                     if (lastPersonName && lastPersonIndex >= 0) {
                                         globalNormalRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
                                 } else {
-                                    const daysSinceStart = getRotationPosition(date, 'normal', groupNum);
-                                    globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                    // Last person not found in list - use rotation calculation from first date
+                                    if (sortedNormal.length > 0) {
+                                        const firstDate = new Date(sortedNormal[0] + 'T00:00:00');
+                                        const daysSinceStart = getRotationPosition(firstDate, 'normal', groupNum);
+                                        globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                    } else {
+                                        globalNormalRotationPosition[groupNum] = 0;
+                                    }
                                     }
                                 }
                             }
