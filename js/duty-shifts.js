@@ -11342,12 +11342,41 @@
                     if (base === comp) continue;
 
                     const reasonObj = assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null;
+                    
+                    // IMPORTANT: Skip entries where the replacement has a 'shift' reason
+                    // These are people who were shifted forward due to reinsertion, not direct replacements
+                    // Only show direct replacements ('skip') and actual swaps ('swap')
+                    if (reasonObj && reasonObj.type === 'shift') {
+                        continue; // Skip this entry - person was shifted forward, not a direct replacement
+                    }
+                    
+                    // Also skip if this is a cascading shift: if the replacement doesn't have a 'skip' or 'swap' reason,
+                    // and the baseline person was disabled/missing, then this person was shifted forward, not a direct replacement
+                    const isBaseDisabledOrMissing = isPersonDisabledForDuty(base, groupNum, 'normal') || isPersonMissingOnDate(base, groupNum, dateObj, 'normal');
+                    if (!reasonObj && isBaseDisabledOrMissing) {
+                        // This is a cascading shift - the baseline person was skipped, and this person moved forward
+                        // Check if there's a 'skip' reason for someone else on this date (the direct replacement)
+                        // If not, this is likely a shift, so skip it
+                        let hasDirectReplacement = false;
+                        for (const personName in (assignmentReasons?.[dateKey]?.[groupNum] || {})) {
+                            const r = assignmentReasons[dateKey][groupNum][personName];
+                            if (r && r.type === 'skip') {
+                                hasDirectReplacement = true;
+                                break;
+                            }
+                        }
+                        // If there's no direct replacement reason on this date, this is a shift, so skip it
+                        if (!hasDirectReplacement) {
+                            continue;
+                        }
+                    }
+                    
                     const reasonText = reasonObj?.reason
                         ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
                         : '';
                     const briefReason = reasonText
                         ? reasonText.split('.').filter(Boolean)[0]
-                        : ((isPersonDisabledForDuty(base, groupNum, 'normal') || isPersonMissingOnDate(base, groupNum, dateObj, 'normal'))
+                        : (isBaseDisabledOrMissing
                             ? (buildUnavailableReplacementReason({
                                 skippedPersonName: base,
                                 replacementPersonName: comp,
