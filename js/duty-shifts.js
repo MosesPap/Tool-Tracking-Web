@@ -13304,6 +13304,7 @@
                             // If a person was swapped from previous month, assign them and skip the normal rotation person
                             let isCrossMonthSwapDay = false;
                             let assignedPerson = null;
+                            let rotationAlreadyAdvanced = false; // Track if rotation was already advanced (e.g., by pending swap)
                             
                             // Ensure globalNormalRotationPosition is initialized
                             if (globalNormalRotationPosition[groupNum] === undefined) {
@@ -13357,6 +13358,8 @@
                                     // The cross-month person IS the normal rotation person - just advance rotation
                                     // No need to skip anyone, just continue normally
                                     console.log(`[PREVIEW CROSS-MONTH] Cross-month person ${crossMonthPerson} matches normal rotation - no skip needed`);
+                                    // IMPORTANT: Advance rotation position so next person gets their turn
+                                    globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                 } else {
                                     // The cross-month person is different from normal rotation person
                                     // Skip the person who would normally be assigned (they were swapped to previous month)
@@ -13460,7 +13463,8 @@
                                 // This is the position where the skipped person should be assigned
                                 assignedPerson = pendingNormalSwaps[monthKey][groupNum].skippedPerson;
                                 delete pendingNormalSwaps[monthKey][groupNum];
-                                globalNormalRotationPosition[groupNum] = rotationPosition + 1;
+                                globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                rotationAlreadyAdvanced = true; // Mark that rotation was already advanced
                                 }
                                 
                                 // PREVIEW MODE: Just show basic rotation WITHOUT swap logic
@@ -13507,33 +13511,36 @@
                                     // Also DO NOT assign the next person in rotation to this day
                                     // IMPORTANT: Always advance rotation position from the ORIGINAL rotationPosition
                                     // (not from replacement's position) to maintain rotation sequence
-                                    if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
-                                        // Build simulated assignments for conflict checking
-                                    const simulatedAssignments = {
-                                        special: simulatedSpecialAssignments,
-                                        weekend: simulatedWeekendAssignments,
-                                        semi: simulatedSemiAssignments,
-                                            normal: normalAssignments,
-                                            normalRotationPositions: globalNormalRotationPosition // Pass current rotation positions for conflict checking
-                                        };
-                                        
-                                        // Check for consecutive conflict
-                                        const hasConflict = hasConsecutiveDuty(dateKey, assignedPerson, groupNum, simulatedAssignments);
-                                        
-                                        if (hasConflict) {
-                                            // Person has conflict - STORE THEM so swap logic can process them
-                                            // The preview should show the exact rotation order (who would be assigned)
-                                            // even if they have a conflict. Swap logic will handle swapping them.
-                                            // DO NOT set to null - we need to know who has the conflict to swap them
-                                            // Still advance rotation position from ORIGINAL position so next person gets their correct turn
-                                            globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                    // BUT: Skip if rotation was already advanced (e.g., by pending swap)
+                                    if (!rotationAlreadyAdvanced) {
+                                        if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
+                                            // Build simulated assignments for conflict checking
+                                        const simulatedAssignments = {
+                                            special: simulatedSpecialAssignments,
+                                            weekend: simulatedWeekendAssignments,
+                                            semi: simulatedSemiAssignments,
+                                                normal: normalAssignments,
+                                                normalRotationPositions: globalNormalRotationPosition // Pass current rotation positions for conflict checking
+                                            };
+                                            
+                                            // Check for consecutive conflict
+                                            const hasConflict = hasConsecutiveDuty(dateKey, assignedPerson, groupNum, simulatedAssignments);
+                                            
+                                            if (hasConflict) {
+                                                // Person has conflict - STORE THEM so swap logic can process them
+                                                // The preview should show the exact rotation order (who would be assigned)
+                                                // even if they have a conflict. Swap logic will handle swapping them.
+                                                // DO NOT set to null - we need to know who has the conflict to swap them
+                                                // Still advance rotation position from ORIGINAL position so next person gets their correct turn
+                                                globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                            } else {
+                                                // No conflict - assign person and advance rotation from ORIGINAL position
+                                                globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                            }
                                         } else {
-                                            // No conflict - assign person and advance rotation from ORIGINAL position
+                                            // Person is missing or no person assigned - advance rotation position from ORIGINAL position
                                             globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                         }
-                                    } else {
-                                        // Person is missing or no person assigned - advance rotation position from ORIGINAL position
-                                        globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                     }
                             }
                             
