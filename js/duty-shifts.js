@@ -14821,25 +14821,6 @@
         let currentEditingDayKey = null;
         let currentEditingDayDate = null;
 
-        // Helper function to find the other date in a swap pair
-        function findSwapOtherDateKey(swapPairIdRaw, groupNum, currentDateKey) {
-            if (swapPairIdRaw === null || swapPairIdRaw === undefined) return null;
-            const swapPairId = typeof swapPairIdRaw === 'number' ? swapPairIdRaw : parseInt(swapPairIdRaw);
-            if (isNaN(swapPairId)) return null;
-            for (const dk in assignmentReasons) {
-                if (dk === currentDateKey) continue;
-                const gmap = assignmentReasons?.[dk]?.[groupNum];
-                if (!gmap) continue;
-                for (const pn in gmap) {
-                    const r = gmap[pn];
-                    const rid = r?.swapPairId;
-                    const nid = typeof rid === 'number' ? rid : parseInt(rid);
-                    if (!isNaN(nid) && nid === swapPairId) return dk;
-                }
-            }
-            return null;
-        }
-
         // Show day details
         function showDayDetails(date) {
             try {
@@ -15070,81 +15051,11 @@
                         }
                     }
                 }
-                
-                // For swap reasons, validate and correct the reason text to ensure it shows correct information
-                let reasonDisplayText = '';
-                if (reason && reason.type === 'swap') {
-                    const storedReason = normalizeSwapReasonText(reason.reason);
-                    const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                    
-                    // Extract date from reason text (format: "Αντικατέστησε τον/την X επειδή ... την DD/MM/YYYY")
-                    const dateMatch = storedReason.match(/(\d{2}\/\d{2}\/\d{4})/);
-                    const reasonDateStr = dateMatch ? dateMatch[1] : null;
-                    
-                    // Extract the skipped person name from reason text
-                    const skippedMatch = storedReason.match(/Αντικατέστησε\s+τον\/την\s+([^ε]+?)\s+επειδή/i);
-                    const skippedPersonInText = skippedMatch ? skippedMatch[1].trim() : null;
-                    
-                    // Find who actually should have been assigned on this date
-                    const expectedPerson = getExpectedPersonForDay(person.group);
-                    
-                    // If reason text mentions a date that doesn't match current date, validate it
-                    if (reasonDateStr && reasonDateStr !== currentDateStr) {
-                        // The reason text mentions a different date - check if the skipped person was actually replaced on that date
-                        // If the skipped person in the reason text is not the expected person for current date, the reason might be incorrect
-                        if (skippedPersonInText && expectedPerson && skippedPersonInText !== expectedPerson) {
-                            // Check if expected person is missing on current date - if so, current person replaced expected person
-                            if (isPersonMissingOnDate(expectedPerson, person.group, date, dayTypeCategory)) {
-                                const missingReason = getUnavailableReasonShort(expectedPerson, person.group, date, dayTypeCategory);
-                                reasonDisplayText = `Αντικατέστησε τον/την ${expectedPerson} επειδή ${missingReason} την ${currentDateStr}. Ανατέθηκε ο/η ${person.name}.`;
-                            } else {
-                                // Use stored reason but it might be for a different swap - try to find correct swap info
-                                const swapOtherDateKey = reason.swapPairId !== null && reason.swapPairId !== undefined
-                                    ? findSwapOtherDateKey(reason.swapPairId, person.group, key)
-                                    : null;
-                                
-                                if (swapOtherDateKey) {
-                                    // This is part of a swap pair - the reason text might be describing the other side of the swap
-                                    // For the current date, show who was actually replaced here
-                                    if (expectedPerson && expectedPerson !== person.name && isPersonMissingOnDate(expectedPerson, person.group, date, dayTypeCategory)) {
-                                        const missingReason = getUnavailableReasonShort(expectedPerson, person.group, date, dayTypeCategory);
-                                        reasonDisplayText = `Αντικατέστησε τον/την ${expectedPerson} επειδή ${missingReason} την ${currentDateStr}. Ανατέθηκε ο/η ${person.name}.`;
-                                    } else {
-                                        // Fallback to stored reason
-                                        reasonDisplayText = storedReason;
-                                    }
-                                } else {
-                                    // No swap pair found - use stored reason
-                                    reasonDisplayText = storedReason;
-                                }
-                            }
-                        } else {
-                            // Skipped person matches expected person or no expected person - use stored reason
-                            reasonDisplayText = storedReason;
-                        }
-                    } else {
-                        // Reason text date matches current date or no date mentioned - validate the skipped person
-                        if (skippedPersonInText && expectedPerson && skippedPersonInText !== expectedPerson) {
-                            // Reason text mentions different person than expected - check if expected person is actually missing
-                            if (isPersonMissingOnDate(expectedPerson, person.group, date, dayTypeCategory)) {
-                                const missingReason = getUnavailableReasonShort(expectedPerson, person.group, date, dayTypeCategory);
-                                reasonDisplayText = `Αντικατέστησε τον/την ${expectedPerson} επειδή ${missingReason} την ${currentDateStr}. Ανατέθηκε ο/η ${person.name}.`;
-                            } else {
-                                // Use stored reason
-                                reasonDisplayText = storedReason;
-                            }
-                        } else {
-                            // Use stored reason
-                            reasonDisplayText = storedReason;
-                        }
-                    }
-                } else if (reason) {
-                    reasonDisplayText = reason.type === 'skip'
+                const reasonDisplayText = reason
+                    ? (reason.type === 'skip'
                         ? normalizeSkipReasonText(reason.reason)
-                        : reason.reason;
-                } else {
-                    reasonDisplayText = derivedReasonText;
-                }
+                        : (reason.type === 'swap' ? normalizeSwapReasonText(reason.reason) : reason.reason))
+                    : derivedReasonText;
                 const reasonDisplay = (reason || derivedReasonText)
                     ? `<div class="mt-2 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${reasonDisplayText}</div>`
                     : '';
@@ -15921,18 +15832,45 @@
                         ? ((expectedIndex + 1) % rotationDays)
                         : ((rotationPosition + 1) % rotationDays);
                     
-                    // Get who is actually assigned (from correct day-type document)
-                    const assignment = getAssignmentForDate(dayKey) || '';
+                    // PRIORITY: First check assignmentReasons to get the actual assigned person and who they replaced
+                    // This ensures we use the stored assignment reasons as the source of truth
                     let assignedPerson = null;
-                    if (assignment) {
-                        // Ensure assignment is a string (getAssignmentForDate should return string, but double-check)
-                        const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
-                        const parts = assignmentStr.split(',').map(p => p.trim()).filter(p => p);
-                        for (const part of parts) {
-                            const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
-                            if (match && parseInt(match[2]) === groupNum) {
-                                assignedPerson = match[1].trim();
-                                break;
+                    let assignedPersonFromReason = null;
+                    let skippedPersonFromReason = null;
+                    let assignmentReasonData = null;
+                    
+                    // Check assignmentReasons first to find who was actually assigned
+                    const dateReasons = assignmentReasons[dayKey];
+                    if (dateReasons && dateReasons[groupNum]) {
+                        const groupReasons = dateReasons[groupNum];
+                        // Find the person who has an assignment reason (skip/swap) for this date
+                        for (const personName in groupReasons) {
+                            const reason = groupReasons[personName];
+                            if (reason && (reason.type === 'skip' || reason.type === 'swap')) {
+                                assignedPersonFromReason = personName;
+                                skippedPersonFromReason = reason.swappedWith || null;
+                                assignmentReasonData = reason;
+                                break; // Use the first assignment reason found
+                            }
+                        }
+                    }
+                    
+                    // If we found an assignment reason, use that person as the assigned person
+                    if (assignedPersonFromReason) {
+                        assignedPerson = assignedPersonFromReason;
+                    } else {
+                        // Fallback: Get who is actually assigned (from correct day-type document)
+                        const assignment = getAssignmentForDate(dayKey) || '';
+                        if (assignment) {
+                            // Ensure assignment is a string (getAssignmentForDate should return string, but double-check)
+                            const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
+                            const parts = assignmentStr.split(',').map(p => p.trim()).filter(p => p);
+                            for (const part of parts) {
+                                const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                                if (match && parseInt(match[2]) === groupNum) {
+                                    assignedPerson = match[1].trim();
+                                    break;
+                                }
                             }
                         }
                     }
@@ -15940,10 +15878,21 @@
                     // Skip if no one is assigned (shouldn't happen, but handle it)
                     if (!assignedPerson) continue;
                     
+                    // If we have assignment reason data with a skipped person, use that as the expected person
+                    let actualExpectedPerson = expectedPerson;
+                    if (skippedPersonFromReason && assignmentReasonData) {
+                        // Use the skipped person from assignment reasons as the expected person
+                        actualExpectedPerson = skippedPersonFromReason;
+                        // Also update baseExpectedPerson if it matches the rotation calculation
+                        if (baseExpectedPerson === skippedPersonFromReason || !baseExpectedPerson) {
+                            // This is correct - the skipped person matches what rotation would expect
+                        }
+                    }
+                    
                     // If we had to skip the base expected person due to missing, show it explicitly (even if assignments follow the adjusted rotation)
                     if (baseExpectedPerson && baseExpectedPerson !== expectedPerson && isPersonMissingOnDate(baseExpectedPerson, groupNum, date, dayTypeCategory)) {
                         const missingReason = getUnavailableReasonShort(baseExpectedPerson, groupNum, date, dayTypeCategory);
-                        const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
+                        const assignmentReason = assignmentReasonData || getAssignmentReason(dayKey, groupNum, assignedPerson);
                         const swapOrSkipReasonText = assignmentReason?.reason || '';
 
                         violations.push({
@@ -15963,18 +15912,29 @@
                     
                     let violationReason = '';
                     
+                    // Use assignment reason data if available, otherwise fetch it
+                    const assignmentReason = assignmentReasonData || getAssignmentReason(dayKey, groupNum, assignedPerson);
+                    const swapOrSkipReasonText = assignmentReason?.type === 'skip'
+                        ? normalizeSkipReasonText(assignmentReason?.reason || '')
+                        : (assignmentReason?.type === 'swap'
+                            ? normalizeSwapReasonText(assignmentReason?.reason || '')
+                            : (assignmentReason?.reason || ''));
+                    const swapOrSkipType = assignmentReason?.type || '';
+                    const swapPairId = assignmentReason?.swapPairId;
+                    
+                    // If we have assignment reason with skipped person, use that as expected person
+                    // This ensures we use assignment reasons as the source of truth
+                    if (assignmentReason && assignmentReason.swappedWith && (swapOrSkipType === 'skip' || swapOrSkipType === 'swap')) {
+                        actualExpectedPerson = assignmentReason.swappedWith;
+                    }
+                    
+                    // If we have an assignment reason (skip/swap), always show it as a violation
+                    // even if rotation calculation says assigned person matches expected person
+                    // This ensures assignment reasons are always displayed correctly
+                    const hasAssignmentReason = assignmentReason && (swapOrSkipType === 'skip' || swapOrSkipType === 'swap');
+                    
                     // Compare assigned vs expected
-                    if (expectedPerson && assignedPerson !== expectedPerson) {
-                        // Pull swap/skip reason from assignmentReasons (same text shown in day-details popup)
-                        // We need this early because it may indicate a legitimate "skip" even when we can't re-derive the rule.
-                        const assignmentReason = getAssignmentReason(dayKey, groupNum, assignedPerson);
-                        const swapOrSkipReasonText = assignmentReason?.type === 'skip'
-                            ? normalizeSkipReasonText(assignmentReason?.reason || '')
-                            : (assignmentReason?.type === 'swap'
-                                ? normalizeSwapReasonText(assignmentReason?.reason || '')
-                                : (assignmentReason?.reason || ''));
-                        const swapOrSkipType = assignmentReason?.type || '';
-                        const swapPairId = assignmentReason?.swapPairId;
+                    if (hasAssignmentReason || (actualExpectedPerson && assignedPerson !== actualExpectedPerson)) {
                         if (swapOrSkipType === 'swap' && swapPairId !== null && swapPairId !== undefined) {
                             const k = `${dayTypeCategory}|${groupNum}|${swapPairId}`;
                             if (seenSwapPairs.has(k)) continue; // only show one row per swap pair
@@ -15982,13 +15942,13 @@
                         }
 
                         // Always define isDisabled/isMissingPeriod for this mismatch (used later in multiple branches)
-                        const isDisabled = isPersonDisabledForDuty(expectedPerson, groupNum, dayTypeCategory);
-                        const isMissingPeriod = !isDisabled && isPersonMissingOnDate(expectedPerson, groupNum, date, dayTypeCategory);
+                        const isDisabled = isPersonDisabledForDuty(actualExpectedPerson, groupNum, dayTypeCategory);
+                        const isMissingPeriod = !isDisabled && isPersonMissingOnDate(actualExpectedPerson, groupNum, date, dayTypeCategory);
                         // Always define conflictDetails in this mismatch scope (used later for table output)
                         let conflictDetails = [];
                         let hasLegitimateConflict = false;
                         // Check if expected person is in the list
-                        const expectedIndex = groupPeople.indexOf(expectedPerson);
+                        const expectedIndex = groupPeople.indexOf(actualExpectedPerson);
                         const assignedIndex = groupPeople.indexOf(assignedPerson);
                         
                         if (assignedIndex === -1) {
@@ -16002,12 +15962,21 @@
                             conflictDetails = [];
                             hasLegitimateConflict = false;
 
-                            // IMPORTANT: If we have a saved SKIP reason for the assigned person, treat it as legitimate
+                            // IMPORTANT: If we have a saved SKIP or SWAP reason for the assigned person, treat it as legitimate
                             // regardless of the person's CURRENT disabled/missing status (history must not change).
-                            if (swapOrSkipType === 'skip' && swapOrSkipReasonText) {
+                            // Assignment reasons are the source of truth for violations.
+                            if ((swapOrSkipType === 'skip' || swapOrSkipType === 'swap') && swapOrSkipReasonText) {
                                 hasLegitimateConflict = true;
                                 // For "Σύγκρουση" show only the short reason (Απενεργοποιημένος / Αναρρωτική Άδεια / ...)
-                                conflictDetails.push(extractShortReasonFromSavedText(swapOrSkipReasonText));
+                                if (swapOrSkipType === 'skip') {
+                                    conflictDetails.push(extractShortReasonFromSavedText(swapOrSkipReasonText));
+                                } else {
+                                    // For swaps, extract conflict info from reason text if available
+                                    const shortReason = extractShortReasonFromSavedText(swapOrSkipReasonText);
+                                    if (shortReason) {
+                                        conflictDetails.push(shortReason);
+                                    }
+                                }
                             }
                             
                             // Check if person is disabled (distinct from missing periods)
@@ -16027,7 +15996,7 @@
                             // Check conflicts based on day type (matching calculation logic)
                             if (dayTypeCategory === 'weekend') {
                                 // For weekends: check if person has special holiday in the same month
-                                if (hasSpecialHolidayDutyInMonth(expectedPerson, groupNum, month, year)) {
+                                if (hasSpecialHolidayDutyInMonth(actualExpectedPerson, groupNum, month, year)) {
                                     hasLegitimateConflict = true;
                                     // Find which special holiday in this month
                                     const firstDay = new Date(year, month, 1);
@@ -16064,7 +16033,7 @@
                                 
                                 // Check day before
                                 if (beforeType === 'weekend-holiday' || beforeType === 'special-holiday') {
-                                    if (hasDutyOnDay(dayBeforeKey, expectedPerson, groupNum)) {
+                                    if (hasDutyOnDay(dayBeforeKey, actualExpectedPerson, groupNum)) {
                                         hasLegitimateConflict = true;
                                         const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                         const beforeDateStr = dayBefore.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -16075,7 +16044,7 @@
                                 
                                 // Check day after
                                 if (afterType === 'weekend-holiday' || afterType === 'special-holiday') {
-                                    if (hasDutyOnDay(dayAfterKey, expectedPerson, groupNum)) {
+                                    if (hasDutyOnDay(dayAfterKey, actualExpectedPerson, groupNum)) {
                                         hasLegitimateConflict = true;
                                         const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                         const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -16115,7 +16084,7 @@
                                 
                                 // Check day after (normal day before semi-normal)
                                 if (afterType === 'semi-normal-day') {
-                                    if (hasDutyOnDay(dayAfterKey, expectedPerson, groupNum)) {
+                                    if (hasDutyOnDay(dayAfterKey, actualExpectedPerson, groupNum)) {
                                         hasLegitimateConflict = true;
                                         const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                         const afterDateStr = dayAfter.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -16213,11 +16182,11 @@
                         if (isDisabled) {
                             skippedReason = 'Απενεργοποιημένος';
                         } else if (isMissingPeriod) {
-                            skippedReason = getUnavailableReasonShort(expectedPerson, groupNum, date, dayTypeCategory);
+                            skippedReason = getUnavailableReasonShort(actualExpectedPerson, groupNum, date, dayTypeCategory);
                         } else if (swapOrSkipType === 'skip' && swapOrSkipReasonText) {
                             skippedReason = extractShortReasonFromSavedText(swapOrSkipReasonText);
                         } else if (dayTypeCategory === 'weekend') {
-                            const specialKey = getSpecialHolidayDutyDateInMonth(expectedPerson, groupNum, year, month);
+                            const specialKey = getSpecialHolidayDutyDateInMonth(actualExpectedPerson, groupNum, year, month);
                             if (specialKey) {
                                 const dd = new Date(specialKey + 'T00:00:00');
                                 skippedReason = `Ειδική αργία στον ίδιο μήνα (${getGreekDayName(dd)} ${dd.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })})`;
@@ -16240,10 +16209,10 @@
                         let derivedSwapReason = '';
                         if (!swapOrSkipReasonText && hasLegitimateConflict) {
                             if (isDisabled) {
-                                derivedSwapReason = `Αντικατέστησε τον/την ${expectedPerson} επειδή ήταν Απενεργοποιημένος. Ανατέθηκε ο/η ${assignedPerson}.`;
+                                derivedSwapReason = `Αντικατέστησε τον/την ${actualExpectedPerson} επειδή ήταν Απενεργοποιημένος. Ανατέθηκε ο/η ${assignedPerson}.`;
                             } else if (isMissingPeriod) {
-                                const missingReason = getUnavailableReasonShort(expectedPerson, groupNum, date, dayTypeCategory);
-                                derivedSwapReason = `Αντικατέστησε τον/την ${expectedPerson} επειδή είχε ${missingReason}. Ανατέθηκε ο/η ${assignedPerson}.`;
+                                const missingReason = getUnavailableReasonShort(actualExpectedPerson, groupNum, date, dayTypeCategory);
+                                derivedSwapReason = `Αντικατέστησε τον/την ${actualExpectedPerson} επειδή είχε ${missingReason}. Ανατέθηκε ο/η ${assignedPerson}.`;
                             } else if (dayTypeCategory === 'normal') {
                                 // Normal-day conflict is typically with a semi-normal day on the next day
                                 const dayAfter = new Date(date);
@@ -16252,7 +16221,7 @@
                                 const afterType = getDayType(dayAfter);
                                 if (afterType === 'semi-normal-day') {
                                     const dd = formatGreekDayDate(afterKey);
-                                    derivedSwapReason = `Αντικατέστησε τον/την ${expectedPerson} επειδή είχε σύγκρουση με Ημιαργία την ${dd.dayName} ${dd.dateStr}. Ανατέθηκε ο/η ${assignedPerson}.`;
+                                    derivedSwapReason = `Αντικατέστησε τον/την ${actualExpectedPerson} επειδή είχε σύγκρουση με Ημιαργία την ${dd.dayName} ${dd.dateStr}. Ανατέθηκε ο/η ${assignedPerson}.`;
                                 } else {
                                     derivedSwapReason = violationReason;
                                 }
@@ -16267,7 +16236,7 @@
                             group: groupNum,
                             groupName: getGroupName(groupNum),
                             assignedPerson: assignedPerson,
-                            expectedPerson: expectedPerson,
+                            expectedPerson: actualExpectedPerson,
                             conflicts: conflictSummary,
                             swapReason: swapOrSkipReasonText || derivedSwapReason || violationReason,
                             skippedReason: skippedReason,
