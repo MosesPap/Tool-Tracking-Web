@@ -14821,6 +14821,25 @@
         let currentEditingDayKey = null;
         let currentEditingDayDate = null;
 
+        // Helper function to find the other date in a swap pair
+        function findSwapOtherDateKey(swapPairIdRaw, groupNum, currentDateKey) {
+            if (swapPairIdRaw === null || swapPairIdRaw === undefined) return null;
+            const swapPairId = typeof swapPairIdRaw === 'number' ? swapPairIdRaw : parseInt(swapPairIdRaw);
+            if (isNaN(swapPairId)) return null;
+            for (const dk in assignmentReasons) {
+                if (dk === currentDateKey) continue;
+                const gmap = assignmentReasons?.[dk]?.[groupNum];
+                if (!gmap) continue;
+                for (const pn in gmap) {
+                    const r = gmap[pn];
+                    const rid = r?.swapPairId;
+                    const nid = typeof rid === 'number' ? rid : parseInt(rid);
+                    if (!isNaN(nid) && nid === swapPairId) return dk;
+                }
+            }
+            return null;
+        }
+
         // Show day details
         function showDayDetails(date) {
             try {
@@ -15051,11 +15070,81 @@
                         }
                     }
                 }
-                const reasonDisplayText = reason
-                    ? (reason.type === 'skip'
+                
+                // For swap reasons, validate and correct the reason text to ensure it shows correct information
+                let reasonDisplayText = '';
+                if (reason && reason.type === 'swap') {
+                    const storedReason = normalizeSwapReasonText(reason.reason);
+                    const currentDateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    
+                    // Extract date from reason text (format: "Αντικατέστησε τον/την X επειδή ... την DD/MM/YYYY")
+                    const dateMatch = storedReason.match(/(\d{2}\/\d{2}\/\d{4})/);
+                    const reasonDateStr = dateMatch ? dateMatch[1] : null;
+                    
+                    // Extract the skipped person name from reason text
+                    const skippedMatch = storedReason.match(/Αντικατέστησε\s+τον\/την\s+([^ε]+?)\s+επειδή/i);
+                    const skippedPersonInText = skippedMatch ? skippedMatch[1].trim() : null;
+                    
+                    // Find who actually should have been assigned on this date
+                    const expectedPerson = getExpectedPersonForDay(person.group);
+                    
+                    // If reason text mentions a date that doesn't match current date, validate it
+                    if (reasonDateStr && reasonDateStr !== currentDateStr) {
+                        // The reason text mentions a different date - check if the skipped person was actually replaced on that date
+                        // If the skipped person in the reason text is not the expected person for current date, the reason might be incorrect
+                        if (skippedPersonInText && expectedPerson && skippedPersonInText !== expectedPerson) {
+                            // Check if expected person is missing on current date - if so, current person replaced expected person
+                            if (isPersonMissingOnDate(expectedPerson, person.group, date, dayTypeCategory)) {
+                                const missingReason = getUnavailableReasonShort(expectedPerson, person.group, date, dayTypeCategory);
+                                reasonDisplayText = `Αντικατέστησε τον/την ${expectedPerson} επειδή ${missingReason} την ${currentDateStr}. Ανατέθηκε ο/η ${person.name}.`;
+                            } else {
+                                // Use stored reason but it might be for a different swap - try to find correct swap info
+                                const swapOtherDateKey = reason.swapPairId !== null && reason.swapPairId !== undefined
+                                    ? findSwapOtherDateKey(reason.swapPairId, person.group, key)
+                                    : null;
+                                
+                                if (swapOtherDateKey) {
+                                    // This is part of a swap pair - the reason text might be describing the other side of the swap
+                                    // For the current date, show who was actually replaced here
+                                    if (expectedPerson && expectedPerson !== person.name && isPersonMissingOnDate(expectedPerson, person.group, date, dayTypeCategory)) {
+                                        const missingReason = getUnavailableReasonShort(expectedPerson, person.group, date, dayTypeCategory);
+                                        reasonDisplayText = `Αντικατέστησε τον/την ${expectedPerson} επειδή ${missingReason} την ${currentDateStr}. Ανατέθηκε ο/η ${person.name}.`;
+                                    } else {
+                                        // Fallback to stored reason
+                                        reasonDisplayText = storedReason;
+                                    }
+                                } else {
+                                    // No swap pair found - use stored reason
+                                    reasonDisplayText = storedReason;
+                                }
+                            }
+                        } else {
+                            // Skipped person matches expected person or no expected person - use stored reason
+                            reasonDisplayText = storedReason;
+                        }
+                    } else {
+                        // Reason text date matches current date or no date mentioned - validate the skipped person
+                        if (skippedPersonInText && expectedPerson && skippedPersonInText !== expectedPerson) {
+                            // Reason text mentions different person than expected - check if expected person is actually missing
+                            if (isPersonMissingOnDate(expectedPerson, person.group, date, dayTypeCategory)) {
+                                const missingReason = getUnavailableReasonShort(expectedPerson, person.group, date, dayTypeCategory);
+                                reasonDisplayText = `Αντικατέστησε τον/την ${expectedPerson} επειδή ${missingReason} την ${currentDateStr}. Ανατέθηκε ο/η ${person.name}.`;
+                            } else {
+                                // Use stored reason
+                                reasonDisplayText = storedReason;
+                            }
+                        } else {
+                            // Use stored reason
+                            reasonDisplayText = storedReason;
+                        }
+                    }
+                } else if (reason) {
+                    reasonDisplayText = reason.type === 'skip'
                         ? normalizeSkipReasonText(reason.reason)
-                        : (reason.type === 'swap' ? normalizeSwapReasonText(reason.reason) : reason.reason))
-                    : derivedReasonText;
+                        : reason.reason;
+                } else {
+                    reasonDisplayText = derivedReasonText;
+                }
                 const reasonDisplay = (reason || derivedReasonText)
                     ? `<div class="mt-2 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${reasonDisplayText}</div>`
                     : '';
