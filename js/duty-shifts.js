@@ -13298,6 +13298,217 @@
                 const swappedPeoplePreview = new Set(); // Set of person names who have already been swapped
                 // NOTE: normalRotationPersons is already declared at function level (above), don't redeclare it here
                 
+                // NEW LOGIC: Pre-process missing/disabled persons and replace their baseline normal duties
+                // Check rotationBaseline to see if missing/disabled persons have normal duties scheduled during their period
+                // Replace them with the next available person and continue rotation from where it left off
+                try {
+                    if (startDate && endDate && Array.isArray(sortedNormal) && sortedNormal.length > 0) {
+                        const calcStartKey = formatDateKey(startDate);
+                        const calcEndKey = formatDateKey(endDate);
+                        const processedMissingReplacements = new Set(); // "g|person|periodEnd" to avoid duplicate processing
+                        
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            const g = groups?.[groupNum];
+                            const missingMap = g?.missingPeriods || {};
+                            const disabledMap = g?.disabledPersons || {};
+                            const groupPeople = g?.normal || [];
+                            
+                            if (groupPeople.length === 0) continue;
+                            
+                            // Process missing periods
+                            for (const personName of Object.keys(missingMap)) {
+                                const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
+                                for (const period of periods) {
+                                    const pStartKey = inputValueToDateKey(period?.start);
+                                    const pEndKey = inputValueToDateKey(period?.end);
+                                    if (!pStartKey || !pEndKey) continue;
+                                    
+                                    // Check if missing period overlaps with calculation period
+                                    if (pEndKey < calcStartKey || pStartKey > calcEndKey) continue;
+                                    
+                                    const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
+                                    if (processedMissingReplacements.has(dedupeKey)) continue;
+                                    processedMissingReplacements.add(dedupeKey);
+                                    
+                                    // Determine the actual period to check (within calculation range)
+                                    const checkStartKey = maxDateKey(pStartKey, calcStartKey);
+                                    const checkEndKey = minDateKey(pEndKey, calcEndKey);
+                                    if (!checkStartKey || !checkEndKey || checkStartKey > checkEndKey) continue;
+                                    
+                                    // Check rotationBaselineNormalAssignments for this person's normal duties during missing period
+                                    const baselineDutiesToReplace = [];
+                                    for (const dk of sortedNormal) {
+                                        if (dk < checkStartKey) continue;
+                                        if (dk > checkEndKey) break;
+                                        
+                                        // Check rotationBaseline to see if this person was scheduled for this date
+                                        const baselinePerson = 
+                                            baselineNormalByDate?.[dk]?.[groupNum] ||
+                                            parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
+                                            null;
+                                        
+                                        if (baselinePerson === personName) {
+                                            baselineDutiesToReplace.push(dk);
+                                        }
+                                    }
+                                    
+                                    // If person has baseline duties during missing period, replace them
+                                    if (baselineDutiesToReplace.length > 0) {
+                                        // Find the person's position in rotation
+                                        const personIndex = groupPeople.indexOf(personName);
+                                        if (personIndex < 0) continue; // Person not in rotation list
+                                        
+                                        // For each baseline duty date, find the next available person in rotation
+                                        for (const dk of baselineDutiesToReplace) {
+                                            const dateObj = dateKeyToDate(dk);
+                                            if (isNaN(dateObj.getTime())) continue;
+                                            
+                                            // Find next available person in rotation (starting from person after missing person)
+                                            let replacementPerson = null;
+                                            for (let offset = 1; offset <= groupPeople.length * 2; offset++) {
+                                                const idx = (personIndex + offset) % groupPeople.length;
+                                                const candidate = groupPeople[idx];
+                                                if (!candidate) continue;
+                                                
+                                                // Check if candidate is also missing/disabled on this date
+                                                if (isPersonMissingOnDate(candidate, groupNum, dateObj, 'normal')) continue;
+                                                
+                                                // Check if candidate is disabled for normal duties
+                                                if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) continue;
+                                                
+                                                // Found eligible replacement
+                                                replacementPerson = candidate;
+                                                break;
+                                            }
+                                            
+                                            if (replacementPerson) {
+                                                // Store the replacement in baselineNormalByDate so it's used during calculation
+                                                if (!baselineNormalByDate[dk]) {
+                                                    baselineNormalByDate[dk] = {};
+                                                }
+                                                baselineNormalByDate[dk][groupNum] = replacementPerson;
+                                                
+                                                // Store assignment reason
+                                                storeAssignmentReason(
+                                                    dk,
+                                                    groupNum,
+                                                    replacementPerson,
+                                                    'skip',
+                                                    buildUnavailableReplacementReason({
+                                                        skippedPersonName: personName,
+                                                        replacementPersonName: replacementPerson,
+                                                        dateObj: dateObj,
+                                                        groupNum,
+                                                        dutyCategory: 'normal'
+                                                    }),
+                                                    personName,
+                                                    null
+                                                );
+                                                
+                                                console.log(`[MISSING REPLACEMENT] Replaced ${personName} with ${replacementPerson} on ${dk} (Group ${groupNum}) - missing period`);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Process disabled persons (check all disabled persons, not just periods)
+                            for (const personName of Object.keys(disabledMap)) {
+                                const disabledInfo = disabledMap[personName];
+                                if (!disabledInfo) continue;
+                                
+                                // Check if person is disabled for normal duties
+                                const isDisabledForNormal = disabledInfo === true || 
+                                                           (typeof disabledInfo === 'object' && disabledInfo.normal === true);
+                                
+                                if (!isDisabledForNormal) continue;
+                                
+                                // Check if person has baseline normal duties during calculation period
+                                const baselineDutiesToReplace = [];
+                                for (const dk of sortedNormal) {
+                                    if (dk < calcStartKey) continue;
+                                    if (dk > calcEndKey) break;
+                                    
+                                    // Check rotationBaseline to see if this person was scheduled for this date
+                                    const baselinePerson = 
+                                        baselineNormalByDate?.[dk]?.[groupNum] ||
+                                        parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
+                                        null;
+                                    
+                                    if (baselinePerson === personName) {
+                                        // Check if person is still disabled on this date
+                                        const dateObj = dateKeyToDate(dk);
+                                        if (isNaN(dateObj.getTime())) continue;
+                                        if (isPersonMissingOnDate(personName, groupNum, dateObj, 'normal')) {
+                                            baselineDutiesToReplace.push(dk);
+                                        }
+                                    }
+                                }
+                                
+                                // If person has baseline duties while disabled, replace them
+                                if (baselineDutiesToReplace.length > 0) {
+                                    // Find the person's position in rotation
+                                    const personIndex = groupPeople.indexOf(personName);
+                                    if (personIndex < 0) continue; // Person not in rotation list
+                                    
+                                    // For each baseline duty date, find the next available person in rotation
+                                    for (const dk of baselineDutiesToReplace) {
+                                        const dateObj = dateKeyToDate(dk);
+                                        if (isNaN(dateObj.getTime())) continue;
+                                        
+                                        // Find next available person in rotation (starting from person after disabled person)
+                                        let replacementPerson = null;
+                                        for (let offset = 1; offset <= groupPeople.length * 2; offset++) {
+                                            const idx = (personIndex + offset) % groupPeople.length;
+                                            const candidate = groupPeople[idx];
+                                            if (!candidate) continue;
+                                            
+                                            // Check if candidate is also missing/disabled on this date
+                                            if (isPersonMissingOnDate(candidate, groupNum, dateObj, 'normal')) continue;
+                                            
+                                            // Check if candidate is disabled for normal duties
+                                            if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) continue;
+                                            
+                                            // Found eligible replacement
+                                            replacementPerson = candidate;
+                                            break;
+                                        }
+                                        
+                                        if (replacementPerson) {
+                                            // Store the replacement in baselineNormalByDate so it's used during calculation
+                                            if (!baselineNormalByDate[dk]) {
+                                                baselineNormalByDate[dk] = {};
+                                            }
+                                            baselineNormalByDate[dk][groupNum] = replacementPerson;
+                                            
+                                            // Store assignment reason
+                                            storeAssignmentReason(
+                                                dk,
+                                                groupNum,
+                                                replacementPerson,
+                                                'skip',
+                                                buildUnavailableReplacementReason({
+                                                    skippedPersonName: personName,
+                                                    replacementPersonName: replacementPerson,
+                                                    dateObj: dateObj,
+                                                    groupNum,
+                                                    dutyCategory: 'normal'
+                                                }),
+                                                personName,
+                                                null
+                                            );
+                                            
+                                            console.log(`[DISABLED REPLACEMENT] Replaced ${personName} with ${replacementPerson} on ${dk} (Group ${groupNum}) - disabled`);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[STEP 4] Pre-processing missing/disabled persons baseline replacement failed:', e);
+                }
+                
                 sortedNormal.forEach((dateKey, normalIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -13397,13 +13608,32 @@
                             
                             // IMPORTANT: Track the rotation person (who SHOULD be assigned according to rotation)
                             // This is the person BEFORE any swap/cross-month/missing logic
-                            const rotationPerson = groupPeople[rotationPosition];
+                            const originalRotationPerson = groupPeople[rotationPosition];
                             
-                            // Store rotation person for this date/group (before any swap/cross-month logic)
+                            // Check if this person was already replaced in baselineNormalByDate (due to missing/disabled pre-processing)
+                            let rotationPerson = originalRotationPerson;
+                            let wasReplacedFromBaseline = false;
+                            if (baselineNormalByDate[dateKey] && baselineNormalByDate[dateKey][groupNum]) {
+                                const replacedPerson = baselineNormalByDate[dateKey][groupNum];
+                                // Only use replacement if it's different from the original rotation person
+                                // (meaning the original person was missing/disabled and got replaced)
+                                if (replacedPerson !== originalRotationPerson) {
+                                    rotationPerson = replacedPerson;
+                                    wasReplacedFromBaseline = true;
+                                    // IMPORTANT: Rotation continues from where it left off - after the original rotation person
+                                    // Example: If Person A (position 0) was replaced by Person D (position 3),
+                                    // rotation should continue: D (replacement), then B (position 1), C (position 2), E (position 4), etc.
+                                    // So we advance rotation position by 1 from the original position (not the replacement's position)
+                                    // This is already handled below when we advance rotationPosition, so no need to change it here
+                                }
+                            }
+                            
+                            // Store ORIGINAL rotation person for baseline comparison (who SHOULD have been assigned according to pure rotation)
+                            // This is used for displaying baseline vs computed in the UI
                             if (!normalRotationPersons[dateKey]) {
                                 normalRotationPersons[dateKey] = {};
                             }
-                            normalRotationPersons[dateKey][groupNum] = rotationPerson;
+                            normalRotationPersons[dateKey][groupNum] = originalRotationPerson;
                             
                             if (crossMonthSwaps[dateKey] && crossMonthSwaps[dateKey][groupNum]) {
                                 // This person was swapped from previous month and must be assigned to this day
@@ -13443,7 +13673,8 @@
                                 }
                             } else {
                                 // No cross-month swap - use normal rotation
-                                assignedPerson = groupPeople[rotationPosition];
+                                // Use rotationPerson (which may be a replacement from baselineNormalByDate if original was missing/disabled)
+                                assignedPerson = rotationPerson;
                                 
                             // Initialize assigned people set for this group if needed
                             if (!assignedPeoplePreview[monthKey][groupNum]) {
@@ -13611,11 +13842,11 @@
                                     }
                             }
                             
-                            // Store baseline assignment for comparison
-                            if (!baselineNormalByDate[dateKey]) {
-                                baselineNormalByDate[dateKey] = {};
-                            }
-                            baselineNormalByDate[dateKey][groupNum] = rotationPerson;
+                            // Store baseline assignment for comparison (original rotation person, not replacement)
+                            // Note: baselineNormalByDate may already have a replacement from pre-processing,
+                            // but we want to show the original rotation person as baseline for display purposes
+                            // So we store it separately in normalRotationPersons (which is already done above)
+                            // and use originalRotationPerson for baseline display
                             
                             // Store assignment (before swap logic)
                             if (!normalAssignments[dateKey]) {
@@ -13692,7 +13923,9 @@
                                 }
                             }
                             
-                            html += `<td>${buildBaselineComputedCellHtml(rotationPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                            // Use original rotation person for baseline display (from normalRotationPersons)
+                            const baselinePersonForDisplay = normalRotationPersons[dateKey]?.[groupNum] || originalRotationPerson;
+                            html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplay, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
                     
