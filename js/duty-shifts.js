@@ -9811,6 +9811,55 @@
                     } catch (error) {
                         console.error('Error saving assignmentReasons after semi-normal swaps:', error);
                     }
+                    
+                    // IMPORTANT: Update rotation positions based on FINAL assignments (after swaps)
+                    // This ensures that when Person A is replaced by Person B, next calculation starts from Person B's position
+                    // Group assignments by month and find the last assigned person for each month/group (chronologically)
+                    const finalSemiRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
+                    const sortedDateKeys = Object.keys(updatedAssignments).sort();
+                    for (const dateKey of sortedDateKeys) {
+                        const d = new Date(dateKey + 'T00:00:00');
+                        if (isNaN(d.getTime())) continue;
+                        const monthKey = getMonthKeyFromDate(d);
+                        const groups = updatedAssignments[dateKey];
+                        if (!groups) continue;
+                        
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            const assignedPerson = groups[groupNum];
+                            if (assignedPerson) {
+                                if (!finalSemiRotationPositionsByMonth[monthKey]) {
+                                    finalSemiRotationPositionsByMonth[monthKey] = {};
+                                }
+                                // Store the last assigned person for this month/group (will be overwritten by later dates)
+                                finalSemiRotationPositionsByMonth[monthKey][groupNum] = assignedPerson;
+                            }
+                        }
+                    }
+                    
+                    // Update lastRotationPositions with final assigned persons (after swaps)
+                    if (Object.keys(finalSemiRotationPositionsByMonth).length > 0) {
+                        for (const monthKey in finalSemiRotationPositionsByMonth) {
+                            const groupsForMonth = finalSemiRotationPositionsByMonth[monthKey] || {};
+                            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                                if (groupsForMonth[groupNum] !== undefined) {
+                                    setLastRotationPersonForMonth('semi', monthKey, groupNum, groupsForMonth[groupNum]);
+                                }
+                            }
+                        }
+                        
+                        // Save updated rotation positions to Firestore
+                        try {
+                            const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                            await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                                ...sanitizedPositions,
+                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                updatedBy: user.uid
+                            });
+                            console.log('Updated last rotation positions for semi-normal (after swaps) to Firestore:', finalSemiRotationPositionsByMonth);
+                        } catch (error) {
+                            console.error('Error saving updated last rotation positions after semi-normal swaps:', error);
+                        }
+                    }
                 }
             } catch (error) {
                 console.error('Error saving final semi-normal assignments:', error);
@@ -12631,6 +12680,8 @@
                             
                             // CRITICAL: Check if the rotation person is disabled/missing BEFORE cross-month/pending swap logic.
                             // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
+                            let wasReplaced = false;
+                            let replacementIndex = null;
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
                                 // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
                                 // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
@@ -12649,9 +12700,9 @@
                                     
                                     // Found eligible replacement
                                     assignedPerson = candidate;
+                                    replacementIndex = idx;
+                                    wasReplaced = true;
                                     foundReplacement = true;
-                                    // IMPORTANT: Do NOT advance rotationPosition to the replacement's index.
-                                    // Rotation should continue from the original rotation person so skipping doesn't affect the sequence.
                                     storeAssignmentReason(
                                         dateKey,
                                         groupNum,
@@ -12711,7 +12762,7 @@
                                     assignedPerson = pendingPerson;
                                     delete pendingSwaps[monthKey][groupNum];
                                     // Advance rotation normally from this position
-                                    globalSemiRotationPosition[groupNum] = rotationPosition + 1;
+                                    globalSemiRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                 } else {
                                     // Pending swap person is disabled/missing - skip them
                                     delete pendingSwaps[monthKey][groupNum];
@@ -12739,6 +12790,8 @@
                                         
                                         // Found eligible replacement
                                         assignedPerson = candidate;
+                                        replacementIndex = idx;
+                                        wasReplaced = true;
                                         foundReplacement = true;
                                         storeAssignmentReason(
                                             dateKey,
@@ -12763,8 +12816,24 @@
                                     }
                                     }
                                     
-                                // Advance rotation position
-                                globalSemiRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                // Advance rotation position from the person ACTUALLY assigned (not the skipped person)
+                                // This ensures that when Person A is replaced by Person B, next semi-duty assigns Person C, not Person B again
+                                if (wasReplaced && replacementIndex !== null && assignedPerson) {
+                                    // Person was replaced - advance from replacement's position
+                                    globalSemiRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
+                                } else if (assignedPerson) {
+                                    // No replacement - advance from assigned person's position
+                                    const assignedIndex = groupPeople.indexOf(assignedPerson);
+                                    if (assignedIndex !== -1) {
+                                        globalSemiRotationPosition[groupNum] = (assignedIndex + 1) % rotationDays;
+                                    } else {
+                                        // Fallback: advance from rotation position
+                                        globalSemiRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                    }
+                                } else {
+                                    // No one assigned - advance from rotation position
+                                    globalSemiRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                }
                                 } else {
                                 // For cross-month swap, advance from the assigned person's position
                                 const assignedIndex = groupPeople.indexOf(assignedPerson);
@@ -12812,38 +12881,41 @@
                 calculationSteps.tempSemiAssignments = semiAssignments;
                 calculationSteps.tempSemiBaselineAssignments = semiRotationPersons;
                 calculationSteps.lastSemiRotationPositions = {};
-                // IMPORTANT: Find the last ROTATION person (who should be assigned according to rotation)
-                // NOT the assigned person (who may have been swapped)
-                // Use the semiRotationPersons we tracked during processing
+                // IMPORTANT: Find the last ASSIGNED person (after replacement), not the rotation person
+                // This ensures that when Person A is replaced by Person B, next calculation starts from Person B's position
+                // Use the semiAssignments (actual assigned persons) instead of semiRotationPersons
                 for (let g = 1; g <= 4; g++) {
                     const sortedSemiKeys = [...semiNormalDays].sort();
-                    let lastRotationPerson = null;
+                    let lastAssignedPerson = null;
                     for (let i = sortedSemiKeys.length - 1; i >= 0; i--) {
                         const dateKey = sortedSemiKeys[i];
-                        if (semiRotationPersons[dateKey] && semiRotationPersons[dateKey][g]) {
-                            lastRotationPerson = semiRotationPersons[dateKey][g];
+                        if (semiAssignments[dateKey] && semiAssignments[dateKey][g]) {
+                            lastAssignedPerson = semiAssignments[dateKey][g];
                             break;
                         }
                     }
-                    if (lastRotationPerson) {
-                        calculationSteps.lastSemiRotationPositions[g] = lastRotationPerson;
-                        console.log(`[SEMI ROTATION] Storing last rotation person ${lastRotationPerson} for group ${g} (not swapped person)`);
+                    if (lastAssignedPerson) {
+                        calculationSteps.lastSemiRotationPositions[g] = lastAssignedPerson;
+                        console.log(`[SEMI ROTATION] Storing last assigned person ${lastAssignedPerson} for group ${g} (after replacement)`);
                     }
                 }
 
                 // Store last rotation person per month (for correct recalculation of individual months)
+                // IMPORTANT: Use the ASSIGNED person (after replacement), not the rotation person
+                // This ensures that when Person A is replaced by Person B, next calculation starts from Person B's position
                 const sortedSemiKeysForMonth = [...semiNormalDays].sort();
-                const lastSemiRotationPositionsByMonth = {}; // monthKey -> { groupNum -> rotationPerson }
+                const lastSemiRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
                 for (const dateKey of sortedSemiKeysForMonth) {
                     const d = new Date(dateKey + 'T00:00:00');
                     const monthKey = getMonthKeyFromDate(d);
                     for (let g = 1; g <= 4; g++) {
-                        const rp = semiRotationPersons[dateKey]?.[g];
-                        if (rp) {
+                        // Use the assigned person (after replacement), not the rotation person
+                        const assignedPerson = semiAssignments[dateKey]?.[g];
+                        if (assignedPerson) {
                             if (!lastSemiRotationPositionsByMonth[monthKey]) {
                                 lastSemiRotationPositionsByMonth[monthKey] = {};
                             }
-                            lastSemiRotationPositionsByMonth[monthKey][g] = rp;
+                            lastSemiRotationPositionsByMonth[monthKey][g] = assignedPerson;
                         }
                     }
                 }
