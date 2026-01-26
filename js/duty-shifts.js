@@ -10384,6 +10384,25 @@
                     updatedAssignments[dateKey] = { ...groups };
                 }
                 
+                // CRITICAL: Clear cross-month swaps that are outside the current calculation range
+                // Old cross-month swaps from previous calculations should not interfere with backward swap logic
+                if (calcStartDate && calcEndDate) {
+                    const calcStartKey = formatDateKey(calcStartDate);
+                    const calcEndKey = formatDateKey(calcEndDate);
+                    const crossMonthKeysToDelete = [];
+                    for (const swapDateKey in crossMonthSwaps) {
+                        // Only keep cross-month swaps that are within the calculation range
+                        // Cross-month swaps outside the range are from previous calculations and should be cleared
+                        if (swapDateKey < calcStartKey || swapDateKey > calcEndKey) {
+                            crossMonthKeysToDelete.push(swapDateKey);
+                        }
+                    }
+                    for (const keyToDelete of crossMonthKeysToDelete) {
+                        delete crossMonthSwaps[keyToDelete];
+                        console.log(`[SWAP LOGIC] Cleared old cross-month swap ${keyToDelete} (outside calculation range ${calcStartKey} to ${calcEndKey})`);
+                    }
+                }
+                
                 // Get global normal rotation positions for cross-month swap calculations
                 const globalNormalRotationPosition = calculationSteps.lastNormalRotationPositions || {};
 
@@ -10758,15 +10777,15 @@
                                         if (normalDays.includes(prevAlternativeKey)) {
                                             const prevAlternativeType = getDayType(prevAlternativeDay);
                                             
-                                            // Check both updatedAssignments (current state) and tempNormalAssignments (original) as fallback
-                                            const tempNormalAssignments = calculationSteps.tempNormalAssignments || {};
-                                            const candidateFromUpdated = updatedAssignments[prevAlternativeKey]?.[groupNum];
-                                            const candidateFromTemp = tempNormalAssignments[prevAlternativeKey]?.[groupNum];
-                                            const swapCandidate = candidateFromUpdated || candidateFromTemp;
+                                            // For backward swap, use the CURRENT person assigned (from updatedAssignments)
+                                            // This is the person who is currently assigned after any previous swaps in this run
+                                            // We can swap with whoever is there now, even if they were swapped earlier
+                                            const swapCandidate = updatedAssignments[prevAlternativeKey]?.[groupNum];
                                             
                                             if (prevAlternativeType === 'normal-day' && swapCandidate) {
-                                                console.log(`[SWAP LOGIC] Step 2b: Found candidate ${swapCandidate} on ${prevAlternativeKey} (previous alternative day)`);
+                                                console.log(`[SWAP LOGIC] Step 2b: Found candidate ${swapCandidate} on ${prevAlternativeKey} (previous alternative day, current assignment)`);
                                                 
+                                                // Check if swap candidate is available and has no conflicts
                                                 if (!isPersonMissingOnDate(swapCandidate, groupNum, prevAlternativeDay, 'normal') &&
                                                     !hasConsecutiveDuty(prevAlternativeKey, swapCandidate, groupNum, simulatedAssignments) &&
                                                     !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
@@ -10778,7 +10797,9 @@
                                                     console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: Candidate ${swapCandidate} has conflict or is missing`);
                                                 }
                                             } else {
-                                                console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: No candidate found on ${prevAlternativeKey} (updatedAssignments: ${candidateFromUpdated || 'none'}, tempNormalAssignments: ${candidateFromTemp || 'none'}) or not a normal day (type: ${prevAlternativeType})`);
+                                                const tempNormalAssignments = calculationSteps.tempNormalAssignments || {};
+                                                const candidateFromTemp = tempNormalAssignments[prevAlternativeKey]?.[groupNum];
+                                                console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: No candidate found on ${prevAlternativeKey} (updatedAssignments: ${swapCandidate || 'none'}, tempNormalAssignments: ${candidateFromTemp || 'none'}) or not a normal day (type: ${prevAlternativeType})`);
                                             }
                                         } else {
                                             console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: Previous alternative day ${prevAlternativeKey} is not in calculation range (normalDays). normalDays length: ${normalDays.length}, includes check: ${normalDays.includes(prevAlternativeKey)}`);
@@ -10812,15 +10833,15 @@
                                         if (normalDays.includes(prevSameDayKey)) {
                                             const prevSameDayType = getDayType(prevSameDay);
                                             
-                                            // Check both updatedAssignments (current state) and tempNormalAssignments (original) as fallback
-                                            const tempNormalAssignments = calculationSteps.tempNormalAssignments || {};
-                                            const candidateFromUpdated = updatedAssignments[prevSameDayKey]?.[groupNum];
-                                            const candidateFromTemp = tempNormalAssignments[prevSameDayKey]?.[groupNum];
-                                            const swapCandidate = candidateFromUpdated || candidateFromTemp;
+                                            // For backward swap, use the CURRENT person assigned (from updatedAssignments)
+                                            // This is the person who is currently assigned after any previous swaps in this run
+                                            // We can swap with whoever is there now, even if they were swapped earlier
+                                            const swapCandidate = updatedAssignments[prevSameDayKey]?.[groupNum];
                                             
                                             if (prevSameDayType === 'normal-day' && swapCandidate) {
-                                                console.log(`[SWAP LOGIC] Step 2c: Found candidate ${swapCandidate} on ${prevSameDayKey} (previous same day)`);
+                                                console.log(`[SWAP LOGIC] Step 2c: Found candidate ${swapCandidate} on ${prevSameDayKey} (previous same day, current assignment)`);
                                                 
+                                                // Check if swap candidate is available and has no conflicts
                                                 if (!isPersonMissingOnDate(swapCandidate, groupNum, prevSameDay, 'normal') &&
                                                     !hasConsecutiveDuty(prevSameDayKey, swapCandidate, groupNum, simulatedAssignments) &&
                                                     !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
@@ -10832,7 +10853,9 @@
                                                     console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: Candidate ${swapCandidate} has conflict or is missing`);
                                                 }
                                             } else {
-                                                console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: No candidate found on ${prevSameDayKey} (updatedAssignments: ${candidateFromUpdated || 'none'}, tempNormalAssignments: ${candidateFromTemp || 'none'}) or not a normal day (type: ${prevSameDayType})`);
+                                                const tempNormalAssignments = calculationSteps.tempNormalAssignments || {};
+                                                const candidateFromTemp = tempNormalAssignments[prevSameDayKey]?.[groupNum];
+                                                console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: No candidate found on ${prevSameDayKey} (updatedAssignments: ${swapCandidate || 'none'}, tempNormalAssignments: ${candidateFromTemp || 'none'}) or not a normal day (type: ${prevSameDayType})`);
                                             }
                                         } else {
                                             console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: Previous same day ${prevSameDayKey} is not in calculation range (normalDays). normalDays length: ${normalDays.length}, includes check: ${normalDays.includes(prevSameDayKey)}`);
