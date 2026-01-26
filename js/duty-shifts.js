@@ -15892,6 +15892,8 @@
                         violations.push({
                             date: dateKey,
                             dateFormatted: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                            dateObj: date, // Store date object for sorting and day of week
+                            dayTypeCategory: dayTypeCategory, // Store category for display
                             group: groupNum,
                             groupName: getGroupName(groupNum),
                             assignedPerson: assignedPerson,
@@ -15899,7 +15901,8 @@
                             conflicts: conflictSummary,
                             swapReason: swapOrSkipReasonText,
                             skippedReason: skippedReason,
-                            dayType: getDayTypeLabel(dayType)
+                            dayType: getDayTypeLabel(dayType),
+                            reasonType: reason.type // Store 'skip' or 'swap' to determine Αντικατάσταση vs Αλλαγή
                         });
                     }
                 }
@@ -15949,11 +15952,23 @@
                             const originStr = originDayKey ? new Date(originDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
                             const conflictStr = conflictDateKey ? new Date(conflictDateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
 
+                            const dayTypeForCrossMonth = getDayType(d);
+                            let dayTypeCategoryForCrossMonth = 'normal';
+                            if (dayTypeForCrossMonth === 'special-holiday') {
+                                dayTypeCategoryForCrossMonth = 'special';
+                            } else if (dayTypeForCrossMonth === 'weekend-holiday') {
+                                dayTypeCategoryForCrossMonth = 'weekend';
+                            } else if (dayTypeForCrossMonth === 'semi-normal-day') {
+                                dayTypeCategoryForCrossMonth = 'semi';
+                            }
+                            
                             violations.push({
                                 date: dateKey,
                                 dateFormatted: isNaN(d.getTime())
                                     ? dateKey
                                     : d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                dateObj: d,
+                                dayTypeCategory: dayTypeCategoryForCrossMonth,
                                 group: groupNum,
                                 groupName: getGroupName(groupNum),
                                 assignedPerson: personName,
@@ -15961,7 +15976,8 @@
                                 conflicts: `Από προηγούμενο μήνα: ${originStr} | Σύγκρουση: ${conflictStr}`,
                                 swapReason: r?.reason || '',
                                 skippedReason: '',
-                                dayType: getDayTypeLabel(getDayType(d))
+                                dayType: getDayTypeLabel(dayTypeForCrossMonth),
+                                reasonType: r?.type || 'swap' // Cross-month swaps are typically swaps
                             });
                         }
                     }
@@ -15990,21 +16006,67 @@
                 tableBody.parentElement.parentElement.style.display = 'table';
                 if (noViolationsMsg) noViolationsMsg.style.display = 'none';
                 
+                // Sort violations by date in ascending order
+                violations.sort((a, b) => {
+                    const dateA = a.dateObj || new Date(a.date + 'T00:00:00');
+                    const dateB = b.dateObj || new Date(b.date + 'T00:00:00');
+                    return dateA.getTime() - dateB.getTime();
+                });
+                
                 violations.forEach(violation => {
                     const row = document.createElement('tr');
-                    const reasonHtml = (() => {
-                        const main = violation.swapReason || '-';
-                        const extra = violation.skippedReason ? `<br><span class="text-muted">(${escapeHtml(violation.skippedReason)})</span>` : '';
-                        return `${escapeHtml(main)}${extra}`;
-                    })();
+                    
+                    // Get date object
+                    const dateObj = violation.dateObj || new Date(violation.date + 'T00:00:00');
+                    
+                    // Get day of week
+                    const dayOfWeek = getGreekDayName(dateObj);
+                    
+                    // Get duty type label based on category
+                    let dutyTypeLabel = '';
+                    if (violation.dayTypeCategory === 'special') {
+                        dutyTypeLabel = 'Ειδική Αργία';
+                    } else if (violation.dayTypeCategory === 'weekend') {
+                        dutyTypeLabel = 'Σαββατοκύριακο/Αργία';
+                    } else if (violation.dayTypeCategory === 'semi') {
+                        dutyTypeLabel = 'Ημιαργία';
+                    } else {
+                        dutyTypeLabel = 'Καθημερινή';
+                    }
+                    
+                    // Format date with day of week and duty type below
+                    const dateHtml = `
+                        <div>${violation.dateFormatted}</div>
+                        <div style="font-size: 0.85em; color: #666; margin-top: 2px;">${dayOfWeek}</div>
+                        <div style="font-size: 0.8em; color: #888; margin-top: 1px;">${dutyTypeLabel}</div>
+                    `;
+                    
+                    // Remove duplicates from conflicts column (split by | and deduplicate)
+                    let conflictsDisplay = violation.conflicts || '-';
+                    if (conflictsDisplay !== '-') {
+                        const conflictParts = conflictsDisplay.split('|').map(c => c.trim()).filter(c => c);
+                        const uniqueConflicts = [...new Set(conflictParts)];
+                        conflictsDisplay = uniqueConflicts.join(' | ') || '-';
+                    }
+                    
+                    // Remove text in parentheses from reason
+                    let reasonText = violation.swapReason || '-';
+                    if (reasonText !== '-') {
+                        // Remove text in parentheses at the end (e.g., "text. (Reason)" -> "text.")
+                        reasonText = reasonText.replace(/\s*\([^)]*\)\s*$/, '');
+                    }
+                    
+                    // Determine assignment type: "Αντικατάσταση" for skip, "Αλλαγή" for swap
+                    const assignmentType = violation.reasonType === 'skip' ? 'Αντικατάσταση' : 'Αλλαγή';
+                    
                     row.innerHTML = `
-                        <td>${violation.dateFormatted}</td>
+                        <td>${dateHtml}</td>
                         <td><span class="badge bg-primary">${violation.groupName}</span></td>
                         <td><strong>${violation.assignedPerson}</strong></td>
                         <td><strong class="text-danger">${violation.expectedPerson}</strong></td>
-                        <td><small>${violation.conflicts || '-'}</small></td>
-                        <td><small>${reasonHtml}</small></td>
-                        <td><small>${escapeHtml(violation.dayType || '-')}</small></td>
+                        <td><small>${escapeHtml(conflictsDisplay)}</small></td>
+                        <td><small>${escapeHtml(reasonText)}</small></td>
+                        <td><small>${escapeHtml(assignmentType)}</small></td>
                     `;
                     tableBody.appendChild(row);
                 });
