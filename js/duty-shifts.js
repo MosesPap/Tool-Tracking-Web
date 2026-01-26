@@ -10738,27 +10738,33 @@
                                         prevAlternativeDay.setDate(date.getDate() - (7 + daysToSubtract));
                                     }
                                     
-                                    // Make sure we're still in the same month
+                                    // Make sure we're still in the same month and the date is in calculation range
                                     if (prevAlternativeDay.getMonth() === month && prevAlternativeDay <= date) {
                                         const prevAlternativeKey = formatDateKey(prevAlternativeDay);
-                                        const prevAlternativeType = getDayType(prevAlternativeDay);
                                         
-                                        if (prevAlternativeType === 'normal-day' && updatedAssignments[prevAlternativeKey]?.[groupNum]) {
-                                            const swapCandidate = updatedAssignments[prevAlternativeKey][groupNum];
-                                            console.log(`[SWAP LOGIC] Step 2b: Found candidate ${swapCandidate} on ${prevAlternativeKey} (previous alternative day)`);
+                                        // CRITICAL: Check if this date is in the calculation range (normalDays) FIRST
+                                        if (normalDays.includes(prevAlternativeKey)) {
+                                            const prevAlternativeType = getDayType(prevAlternativeDay);
                                             
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, prevAlternativeDay, 'normal') &&
-                                                !hasConsecutiveDuty(prevAlternativeKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
-                                                swapDayKey = prevAlternativeKey;
-                                                swapDayIndex = normalDays.indexOf(prevAlternativeKey);
-                                                swapFound = true;
-                                                console.log(`[SWAP LOGIC] ✓ Step 2b SUCCESS: Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${prevAlternativeKey})`);
+                                            if (prevAlternativeType === 'normal-day' && updatedAssignments[prevAlternativeKey]?.[groupNum]) {
+                                                const swapCandidate = updatedAssignments[prevAlternativeKey][groupNum];
+                                                console.log(`[SWAP LOGIC] Step 2b: Found candidate ${swapCandidate} on ${prevAlternativeKey} (previous alternative day)`);
+                                                
+                                                if (!isPersonMissingOnDate(swapCandidate, groupNum, prevAlternativeDay, 'normal') &&
+                                                    !hasConsecutiveDuty(prevAlternativeKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                                    !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                                    swapDayKey = prevAlternativeKey;
+                                                    swapDayIndex = normalDays.indexOf(prevAlternativeKey);
+                                                    swapFound = true;
+                                                    console.log(`[SWAP LOGIC] ✓ Step 2b SUCCESS: Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${prevAlternativeKey})`);
+                                                } else {
+                                                    console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: Candidate ${swapCandidate} has conflict or is missing`);
+                                                }
                                             } else {
-                                                console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: Candidate ${swapCandidate} has conflict or is missing`);
+                                                console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: No candidate found on ${prevAlternativeKey} or not a normal day`);
                                             }
                                         } else {
-                                            console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: No candidate found on ${prevAlternativeKey} or not a normal day`);
+                                            console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: Previous alternative day ${prevAlternativeKey} is not in calculation range (normalDays)`);
                                         }
                                     } else {
                                         console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: Previous alternative day is not in same month or is after current date`);
@@ -10771,27 +10777,33 @@
                                     console.log(`[SWAP LOGIC] MONDAY/WEDNESDAY - Step 2c: Trying BACKWARD swap with previous same day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek]}) in current month`);
                                     const prevSameDay = new Date(year, month, date.getDate() - 7);
                                     
-                                    // Make sure we're still in the same month and before current date
+                                    // Make sure we're still in the same month, before current date, and in calculation range
                                     if (prevSameDay.getMonth() === month && prevSameDay < date) {
                                         const prevSameDayKey = formatDateKey(prevSameDay);
-                                        const prevSameDayType = getDayType(prevSameDay);
                                         
-                                        if (prevSameDayType === 'normal-day' && updatedAssignments[prevSameDayKey]?.[groupNum]) {
-                                            const swapCandidate = updatedAssignments[prevSameDayKey][groupNum];
-                                            console.log(`[SWAP LOGIC] Step 2c: Found candidate ${swapCandidate} on ${prevSameDayKey} (previous same day)`);
+                                        // CRITICAL: Check if this date is in the calculation range (normalDays) FIRST
+                                        if (normalDays.includes(prevSameDayKey)) {
+                                            const prevSameDayType = getDayType(prevSameDay);
                                             
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, prevSameDay, 'normal') &&
-                                                !hasConsecutiveDuty(prevSameDayKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
-                                                swapDayKey = prevSameDayKey;
-                                                swapDayIndex = normalDays.indexOf(prevSameDayKey);
-                                                swapFound = true;
-                                                console.log(`[SWAP LOGIC] ✓ Step 2c SUCCESS: Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${prevSameDayKey})`);
+                                            if (prevSameDayType === 'normal-day' && updatedAssignments[prevSameDayKey]?.[groupNum]) {
+                                                const swapCandidate = updatedAssignments[prevSameDayKey][groupNum];
+                                                console.log(`[SWAP LOGIC] Step 2c: Found candidate ${swapCandidate} on ${prevSameDayKey} (previous same day)`);
+                                                
+                                                if (!isPersonMissingOnDate(swapCandidate, groupNum, prevSameDay, 'normal') &&
+                                                    !hasConsecutiveDuty(prevSameDayKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                                    !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                                    swapDayKey = prevSameDayKey;
+                                                    swapDayIndex = normalDays.indexOf(prevSameDayKey);
+                                                    swapFound = true;
+                                                    console.log(`[SWAP LOGIC] ✓ Step 2c SUCCESS: Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${prevSameDayKey})`);
+                                                } else {
+                                                    console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: Candidate ${swapCandidate} has conflict or is missing`);
+                                                }
                                             } else {
-                                                console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: Candidate ${swapCandidate} has conflict or is missing`);
+                                                console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: No candidate found on ${prevSameDayKey} or not a normal day`);
                                             }
                                         } else {
-                                            console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: No candidate found on ${prevSameDayKey} or not a normal day`);
+                                            console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: Previous same day ${prevSameDayKey} is not in calculation range (normalDays)`);
                                         }
                                     } else {
                                         console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: Previous same day is not in same month or is not before current date`);
