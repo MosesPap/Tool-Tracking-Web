@@ -10611,6 +10611,12 @@
                             const month = date.getMonth();
                             const year = date.getFullYear();
                             
+                            // Get calculation range dates for validation
+                            const calcStartDateRaw = calculationSteps.startDate || null;
+                            const calcEndDateRaw = calculationSteps.endDate || null;
+                            const calcStartDate = (calcStartDateRaw instanceof Date) ? calcStartDateRaw : (calcStartDateRaw ? new Date(calcStartDateRaw) : null);
+                            const calcEndDate = (calcEndDateRaw instanceof Date) ? calcEndDateRaw : (calcEndDateRaw ? new Date(calcEndDateRaw) : null);
+                            
                             console.log(`[SWAP LOGIC] Starting swap logic for ${currentPerson} on ${dateKey} (Group ${groupNum}, Day: ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek]})`);
                             
                             // SEPARATE LOGIC: Monday/Wednesday vs Tuesday/Thursday
@@ -10740,16 +10746,25 @@
                                     
                                     // Make sure the date is before current date and in calculation range
                                     // For ranges spanning multiple months, allow backward swaps within the entire range
-                                    if (prevAlternativeDay <= date) {
-                                        const prevAlternativeKey = formatDateKey(prevAlternativeDay);
+                                    const prevAlternativeKey = formatDateKey(prevAlternativeDay);
+                                    console.log(`[SWAP LOGIC] Step 2b: Checking backward swap date ${prevAlternativeKey} (calculated from ${dateKey})`);
+                                    
+                                    if (prevAlternativeDay <= date && 
+                                        (!calcStartDate || prevAlternativeDay >= calcStartDate) &&
+                                        (!calcEndDate || prevAlternativeDay <= calcEndDate)) {
                                         
                                         // CRITICAL: Check if this date is in the calculation range (normalDays) FIRST
                                         // This ensures it's within startDate to endDate, regardless of month
                                         if (normalDays.includes(prevAlternativeKey)) {
                                             const prevAlternativeType = getDayType(prevAlternativeDay);
                                             
-                                            if (prevAlternativeType === 'normal-day' && updatedAssignments[prevAlternativeKey]?.[groupNum]) {
-                                                const swapCandidate = updatedAssignments[prevAlternativeKey][groupNum];
+                                            // Check both updatedAssignments (current state) and tempNormalAssignments (original) as fallback
+                                            const tempNormalAssignments = calculationSteps.tempNormalAssignments || {};
+                                            const candidateFromUpdated = updatedAssignments[prevAlternativeKey]?.[groupNum];
+                                            const candidateFromTemp = tempNormalAssignments[prevAlternativeKey]?.[groupNum];
+                                            const swapCandidate = candidateFromUpdated || candidateFromTemp;
+                                            
+                                            if (prevAlternativeType === 'normal-day' && swapCandidate) {
                                                 console.log(`[SWAP LOGIC] Step 2b: Found candidate ${swapCandidate} on ${prevAlternativeKey} (previous alternative day)`);
                                                 
                                                 if (!isPersonMissingOnDate(swapCandidate, groupNum, prevAlternativeDay, 'normal') &&
@@ -10763,13 +10778,16 @@
                                                     console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: Candidate ${swapCandidate} has conflict or is missing`);
                                                 }
                                             } else {
-                                                console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: No candidate found on ${prevAlternativeKey} or not a normal day`);
+                                                console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: No candidate found on ${prevAlternativeKey} (updatedAssignments: ${candidateFromUpdated || 'none'}, tempNormalAssignments: ${candidateFromTemp || 'none'}) or not a normal day (type: ${prevAlternativeType})`);
                                             }
                                         } else {
-                                            console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: Previous alternative day ${prevAlternativeKey} is not in calculation range (normalDays)`);
+                                            console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: Previous alternative day ${prevAlternativeKey} is not in calculation range (normalDays). normalDays length: ${normalDays.length}, includes check: ${normalDays.includes(prevAlternativeKey)}`);
                                         }
                                     } else {
-                                        console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: Previous alternative day is after current date`);
+                                        const dateCheck = prevAlternativeDay <= date ? 'OK' : 'FAIL (after current)';
+                                        const startCheck = (!calcStartDate || prevAlternativeDay >= calcStartDate) ? 'OK' : `FAIL (before start: ${calcStartDate ? formatDateKey(calcStartDate) : 'none'})`;
+                                        const endCheck = (!calcEndDate || prevAlternativeDay <= calcEndDate) ? 'OK' : `FAIL (after end: ${calcEndDate ? formatDateKey(calcEndDate) : 'none'})`;
+                                        console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: Previous alternative day ${prevAlternativeKey} validation - Date: ${dateCheck}, Start: ${startCheck}, End: ${endCheck}`);
                                     }
                                 }
                                 
@@ -10782,16 +10800,25 @@
                                     
                                     // Make sure the date is before current date and in calculation range
                                     // For ranges spanning multiple months, allow backward swaps within the entire range
-                                    if (prevSameDay < date) {
-                                        const prevSameDayKey = formatDateKey(prevSameDay);
+                                    const prevSameDayKey = formatDateKey(prevSameDay);
+                                    console.log(`[SWAP LOGIC] Step 2c: Checking backward swap date ${prevSameDayKey} (calculated from ${dateKey})`);
+                                    
+                                    if (prevSameDay < date &&
+                                        (!calcStartDate || prevSameDay >= calcStartDate) &&
+                                        (!calcEndDate || prevSameDay <= calcEndDate)) {
                                         
                                         // CRITICAL: Check if this date is in the calculation range (normalDays) FIRST
                                         // This ensures it's within startDate to endDate, regardless of month
                                         if (normalDays.includes(prevSameDayKey)) {
                                             const prevSameDayType = getDayType(prevSameDay);
                                             
-                                            if (prevSameDayType === 'normal-day' && updatedAssignments[prevSameDayKey]?.[groupNum]) {
-                                                const swapCandidate = updatedAssignments[prevSameDayKey][groupNum];
+                                            // Check both updatedAssignments (current state) and tempNormalAssignments (original) as fallback
+                                            const tempNormalAssignments = calculationSteps.tempNormalAssignments || {};
+                                            const candidateFromUpdated = updatedAssignments[prevSameDayKey]?.[groupNum];
+                                            const candidateFromTemp = tempNormalAssignments[prevSameDayKey]?.[groupNum];
+                                            const swapCandidate = candidateFromUpdated || candidateFromTemp;
+                                            
+                                            if (prevSameDayType === 'normal-day' && swapCandidate) {
                                                 console.log(`[SWAP LOGIC] Step 2c: Found candidate ${swapCandidate} on ${prevSameDayKey} (previous same day)`);
                                                 
                                                 if (!isPersonMissingOnDate(swapCandidate, groupNum, prevSameDay, 'normal') &&
@@ -10805,13 +10832,16 @@
                                                     console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: Candidate ${swapCandidate} has conflict or is missing`);
                                                 }
                                             } else {
-                                                console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: No candidate found on ${prevSameDayKey} or not a normal day`);
+                                                console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: No candidate found on ${prevSameDayKey} (updatedAssignments: ${candidateFromUpdated || 'none'}, tempNormalAssignments: ${candidateFromTemp || 'none'}) or not a normal day (type: ${prevSameDayType})`);
                                             }
                                         } else {
-                                            console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: Previous same day ${prevSameDayKey} is not in calculation range (normalDays)`);
+                                            console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: Previous same day ${prevSameDayKey} is not in calculation range (normalDays). normalDays length: ${normalDays.length}, includes check: ${normalDays.includes(prevSameDayKey)}`);
                                         }
                                     } else {
-                                        console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: Previous same day is not before current date`);
+                                        const dateCheck = prevSameDay < date ? 'OK' : 'FAIL (not before current)';
+                                        const startCheck = (!calcStartDate || prevSameDay >= calcStartDate) ? 'OK' : `FAIL (before start: ${calcStartDate ? formatDateKey(calcStartDate) : 'none'})`;
+                                        const endCheck = (!calcEndDate || prevSameDay <= calcEndDate) ? 'OK' : `FAIL (after end: ${calcEndDate ? formatDateKey(calcEndDate) : 'none'})`;
+                                        console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: Previous same day ${prevSameDayKey} validation - Date: ${dateCheck}, Start: ${startCheck}, End: ${endCheck}`);
                                     }
                                 }
                                 
