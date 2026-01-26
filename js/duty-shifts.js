@@ -10692,6 +10692,7 @@
                                 }
                                 
                                 // MONDAY/WEDNESDAY - Step 2: ONLY if Step 1 failed, try same day of week in same month
+                                let step2FailedNextMonth = false;
                                 if (!swapFound) {
                                     console.log(`[SWAP LOGIC] MONDAY/WEDNESDAY - Step 2: Trying same day of week (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek]}) in same month`);
                                     const nextSameDay = new Date(year, month, date.getDate() + 7);
@@ -10715,12 +10716,14 @@
                                             console.log(`[SWAP LOGIC] ✗ Step 2 FAILED: No candidate found on ${nextSameDayKey}`);
                                         }
                                     } else {
-                                        console.log(`[SWAP LOGIC] ✗ Step 2 FAILED: Next same day is in next month (will try backward swap in Step 2b)`);
+                                        step2FailedNextMonth = true;
+                                        console.log(`[SWAP LOGIC] ✗ Step 2 FAILED: Next same day is in next month (will try backward swap before cross-month)`);
                                     }
                                 }
                                 
                                 // MONDAY/WEDNESDAY - Step 2b: ONLY if Step 2 failed (next same day is in next month), try BACKWARD swap with previous alternative day (Wednesday) in current month
-                                if (!swapFound) {
+                                // IMPORTANT: This runs BEFORE any cross-month attempts to keep swaps within current month when possible
+                                if (!swapFound && step2FailedNextMonth) {
                                     console.log(`[SWAP LOGIC] MONDAY/WEDNESDAY - Step 2b: Trying BACKWARD swap with previous alternative day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][alternativeDayOfWeek]}) in current month`);
                                     const prevAlternativeDay = new Date(date);
                                     const daysToSubtract = dayOfWeek - alternativeDayOfWeek;
@@ -10761,7 +10764,8 @@
                                 }
                                 
                                 // MONDAY/WEDNESDAY - Step 2c: ONLY if Step 2b failed, try BACKWARD swap with previous same day (Monday) in current month
-                                if (!swapFound) {
+                                // IMPORTANT: This runs BEFORE any cross-month attempts to keep swaps within current month when possible
+                                if (!swapFound && step2FailedNextMonth) {
                                     console.log(`[SWAP LOGIC] MONDAY/WEDNESDAY - Step 2c: Trying BACKWARD swap with previous same day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek]}) in current month`);
                                     const prevSameDay = new Date(year, month, date.getDate() - 7);
                                     
