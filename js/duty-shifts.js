@@ -10738,11 +10738,13 @@
                                         prevAlternativeDay.setDate(date.getDate() - (7 + daysToSubtract));
                                     }
                                     
-                                    // Make sure we're still in the same month and the date is in calculation range
-                                    if (prevAlternativeDay.getMonth() === month && prevAlternativeDay <= date) {
+                                    // Make sure the date is before current date and in calculation range
+                                    // For ranges spanning multiple months, allow backward swaps within the entire range
+                                    if (prevAlternativeDay <= date) {
                                         const prevAlternativeKey = formatDateKey(prevAlternativeDay);
                                         
                                         // CRITICAL: Check if this date is in the calculation range (normalDays) FIRST
+                                        // This ensures it's within startDate to endDate, regardless of month
                                         if (normalDays.includes(prevAlternativeKey)) {
                                             const prevAlternativeType = getDayType(prevAlternativeDay);
                                             
@@ -10767,21 +10769,24 @@
                                             console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: Previous alternative day ${prevAlternativeKey} is not in calculation range (normalDays)`);
                                         }
                                     } else {
-                                        console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: Previous alternative day is not in same month or is after current date`);
+                                        console.log(`[SWAP LOGIC] ✗ Step 2b FAILED: Previous alternative day is after current date`);
                                     }
                                 }
                                 
-                                // MONDAY/WEDNESDAY - Step 2c: ONLY if Step 2b failed, try BACKWARD swap with previous same day (Monday) in current month
-                                // IMPORTANT: This runs BEFORE any cross-month attempts to keep swaps within current month when possible
+                                // MONDAY/WEDNESDAY - Step 2c: ONLY if Step 2b failed, try BACKWARD swap with previous same day (Monday)
+                                // IMPORTANT: This runs BEFORE any cross-month attempts to keep swaps within calculation range when possible
                                 if (!swapFound) {
-                                    console.log(`[SWAP LOGIC] MONDAY/WEDNESDAY - Step 2c: Trying BACKWARD swap with previous same day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek]}) in current month`);
-                                    const prevSameDay = new Date(year, month, date.getDate() - 7);
+                                    console.log(`[SWAP LOGIC] MONDAY/WEDNESDAY - Step 2c: Trying BACKWARD swap with previous same day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek]})`);
+                                    const prevSameDay = new Date(date);
+                                    prevSameDay.setDate(date.getDate() - 7);
                                     
-                                    // Make sure we're still in the same month, before current date, and in calculation range
-                                    if (prevSameDay.getMonth() === month && prevSameDay < date) {
+                                    // Make sure the date is before current date and in calculation range
+                                    // For ranges spanning multiple months, allow backward swaps within the entire range
+                                    if (prevSameDay < date) {
                                         const prevSameDayKey = formatDateKey(prevSameDay);
                                         
                                         // CRITICAL: Check if this date is in the calculation range (normalDays) FIRST
+                                        // This ensures it's within startDate to endDate, regardless of month
                                         if (normalDays.includes(prevSameDayKey)) {
                                             const prevSameDayType = getDayType(prevSameDay);
                                             
@@ -10806,7 +10811,7 @@
                                             console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: Previous same day ${prevSameDayKey} is not in calculation range (normalDays)`);
                                         }
                                     } else {
-                                        console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: Previous same day is not in same month or is not before current date`);
+                                        console.log(`[SWAP LOGIC] ✗ Step 2c FAILED: Previous same day is not before current date`);
                                     }
                                 }
                                 
