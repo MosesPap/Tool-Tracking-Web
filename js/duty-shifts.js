@@ -15735,6 +15735,7 @@
         function analyzeRotationViolations() {
             const violations = [];
             const seenSwapPairs = new Set(); // dayType|group|swapPairId -> dedupe swap rows
+            const seenViolations = new Set(); // dateKey|groupNum|assignedPerson -> dedupe all violations
 
             const extractShortReasonFromSavedText = (reasonText) => {
                 const t = String(reasonText || '');
@@ -15763,19 +15764,157 @@
                 allDates.push(formatDateKey(date));
             }
 
-            // Build expected rotation per day type, but SKIP unavailable persons without consuming their turn.
-            // This matches the calculation logic: if someone is disabled/missing for this duty type,
-            // rotation advances from the person actually assigned, not from the unavailable person.
-            const rotationPointerByType = {
-                special: {},
-                weekend: {},
-                semi: {},
-                normal: {}
-            };
+            // NEW APPROACH: Iterate directly through assignment reasons for the current month
+            // This ensures each assignment reason is processed exactly once, eliminating duplicates
+            const viewMonthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`; // YYYY-MM
             
-            // For each date, check each group
-            for (const dayKey of allDates) {
-                const date = new Date(dayKey + 'T00:00:00');
+            // First, collect all assignment reasons for the current month
+            for (const dateKey in assignmentReasons) {
+                // Only process dates in the viewed month
+                if (!dateKey.startsWith(viewMonthPrefix + '-')) continue;
+                
+                const date = new Date(dateKey + 'T00:00:00');
+                if (isNaN(date.getTime())) continue;
+                
+                const dayType = getDayType(date);
+                
+                // Determine day type category
+                let dayTypeCategory = 'normal';
+                if (dayType === 'special-holiday') {
+                    dayTypeCategory = 'special';
+                } else if (dayType === 'weekend-holiday') {
+                    dayTypeCategory = 'weekend';
+                } else if (dayType === 'semi-normal-day') {
+                    dayTypeCategory = 'semi';
+                }
+                
+                const dateReasons = assignmentReasons[dateKey];
+                if (!dateReasons) continue;
+                
+                // For each group in this date
+                for (const groupNumStr in dateReasons) {
+                    const groupReasons = dateReasons[groupNumStr];
+                    if (!groupReasons) continue;
+                    const groupNum = parseInt(groupNumStr);
+                    if (!groupNum || groupNum < 1 || groupNum > 4) continue;
+                    
+                    // For each person with an assignment reason
+                    for (const personName in groupReasons) {
+                        const reason = groupReasons[personName];
+                        if (!reason || (reason.type !== 'skip' && reason.type !== 'swap')) continue;
+                        
+                        // Skip cross-month swaps here (they're handled separately)
+                        if (reason.meta?.isCrossMonth) continue;
+                        
+                        // Deduplicate: check if we've already added a violation for this date+group+assignedPerson
+                        const violationKey = `${dateKey}|${groupNum}|${personName}`;
+                        if (seenViolations.has(violationKey)) {
+                            continue; // Skip duplicate entry
+                        }
+                        seenViolations.add(violationKey);
+                        
+                        // Handle swap pair deduplication
+                        if (reason.type === 'swap' && reason.swapPairId !== null && reason.swapPairId !== undefined) {
+                            const k = `${dayTypeCategory}|${groupNum}|${reason.swapPairId}`;
+                            if (seenSwapPairs.has(k)) continue; // only show one row per swap pair
+                            seenSwapPairs.add(k);
+                        }
+                        
+                        // Get the assigned person and expected person from the assignment reason
+                        const assignedPerson = personName;
+                        const expectedPerson = reason.swappedWith || null;
+                        
+                        if (!expectedPerson) continue; // Need to know who was replaced
+                        
+                        // Get group data for validation
+                        const groupData = groups[groupNum];
+                        if (!groupData) continue;
+                        
+                        // Get the appropriate list for this day type
+                        let groupPeople;
+                        if (dayTypeCategory === 'special') {
+                            groupPeople = groupData.special || [];
+                        } else if (dayTypeCategory === 'weekend') {
+                            groupPeople = groupData.weekend || [];
+                        } else if (dayTypeCategory === 'semi') {
+                            groupPeople = groupData.semi || [];
+                        } else {
+                            groupPeople = groupData.normal || [];
+                        }
+                        
+                        // Validate that both persons are in the list
+                        const assignedIndex = groupPeople.indexOf(assignedPerson);
+                        const expectedIndex = groupPeople.indexOf(expectedPerson);
+                        
+                        if (assignedIndex === -1 || expectedIndex === -1) continue;
+                        
+                        // Process the violation
+                        const swapOrSkipReasonText = reason.type === 'skip'
+                            ? normalizeSkipReasonText(reason.reason || '')
+                            : (reason.type === 'swap'
+                                ? normalizeSwapReasonText(reason.reason || '')
+                                : (reason.reason || ''));
+                        
+                        // Get conflict details
+                        const isDisabled = isPersonDisabledForDuty(expectedPerson, groupNum, dayTypeCategory);
+                        const isMissingPeriod = !isDisabled && isPersonMissingOnDate(expectedPerson, groupNum, date, dayTypeCategory);
+                        
+                        let conflictDetails = [];
+                        let hasLegitimateConflict = true; // Assignment reasons are always legitimate
+                        
+                        // Extract short reason for conflicts column
+                        if (swapOrSkipReasonText) {
+                            conflictDetails.push(extractShortReasonFromSavedText(swapOrSkipReasonText));
+                        }
+                        
+                        if (isDisabled) {
+                            conflictDetails.push('Απενεργοποιημένος');
+                        }
+                        
+                        if (isMissingPeriod) {
+                            conflictDetails.push(getUnavailableReasonShort(expectedPerson, groupNum, date, dayTypeCategory));
+                        }
+                        
+                        // Determine skipped reason
+                        let skippedReason = '';
+                        if (isDisabled) {
+                            skippedReason = 'Απενεργοποιημένος';
+                        } else if (isMissingPeriod) {
+                            skippedReason = getUnavailableReasonShort(expectedPerson, groupNum, date, dayTypeCategory);
+                        } else if (reason.type === 'skip' && swapOrSkipReasonText) {
+                            skippedReason = extractShortReasonFromSavedText(swapOrSkipReasonText);
+                        } else if (reason.type === 'swap') {
+                            skippedReason = 'Αλλαγή (swap)';
+                        }
+                        
+                        const conflictSummary = conflictDetails.length > 0 ? conflictDetails.join(' | ') : '';
+                        
+                        violations.push({
+                            date: dateKey,
+                            dateFormatted: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                            group: groupNum,
+                            groupName: getGroupName(groupNum),
+                            assignedPerson: assignedPerson,
+                            expectedPerson: expectedPerson,
+                            conflicts: conflictSummary,
+                            swapReason: swapOrSkipReasonText,
+                            skippedReason: skippedReason,
+                            dayType: getDayTypeLabel(dayType)
+                        });
+                    }
+                }
+            }
+            
+            // Also show cross-month swaps that fall INSIDE the viewed month.
+            // Cross-month swaps are stored on the swap day key (often in the next month).
+            // We intentionally keep the popup scoped to the current month, so:
+            // - viewing Feb will NOT show March dates
+            // - viewing March WILL show the March swap date row
+            try {
+                const viewMonthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`; // YYYY-MM
+                const seenCrossMonth = new Set(); // dateKey|group|person
+
+                for (const dateKey in assignmentReasons) {
                 const dayType = getDayType(date);
                 
                 // Determine day type category
@@ -15889,26 +16028,8 @@
                         }
                     }
                     
-                    // If we had to skip the base expected person due to missing, show it explicitly (even if assignments follow the adjusted rotation)
-                    if (baseExpectedPerson && baseExpectedPerson !== expectedPerson && isPersonMissingOnDate(baseExpectedPerson, groupNum, date, dayTypeCategory)) {
-                        const missingReason = getUnavailableReasonShort(baseExpectedPerson, groupNum, date, dayTypeCategory);
-                        const assignmentReason = assignmentReasonData || getAssignmentReason(dayKey, groupNum, assignedPerson);
-                        const swapOrSkipReasonText = assignmentReason?.reason || '';
-
-                        violations.push({
-                            date: dayKey,
-                            dateFormatted: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-                            group: groupNum,
-                            groupName: getGroupName(groupNum),
-                            assignedPerson: assignedPerson,
-                            expectedPerson: baseExpectedPerson,
-                            // Show the short reason in "Σύγκρουση" instead of a dash
-                            conflicts: missingReason,
-                            swapReason: swapOrSkipReasonText || `Παράλειψη λόγω ${missingReason}`,
-                            skippedReason: missingReason,
-                            dayType: getDayTypeLabel(dayType)
-                        });
-                    }
+                    // Skip the old logic that derived violations from rotation calculation
+                    // We now ONLY use assignment reasons as the source of truth
                     
                     let violationReason = '';
                     
@@ -15928,13 +16049,19 @@
                         actualExpectedPerson = assignmentReason.swappedWith;
                     }
                     
-                    // If we have an assignment reason (skip/swap), always show it as a violation
-                    // even if rotation calculation says assigned person matches expected person
-                    // This ensures assignment reasons are always displayed correctly
+                    // ONLY show violations if we have an assignment reason (skip/swap)
+                    // Assignment reasons are the source of truth - we don't derive violations from rotation calculation
                     const hasAssignmentReason = assignmentReason && (swapOrSkipType === 'skip' || swapOrSkipType === 'swap');
                     
-                    // Compare assigned vs expected
-                    if (hasAssignmentReason || (actualExpectedPerson && assignedPerson !== actualExpectedPerson)) {
+                    // Only process if we have an assignment reason
+                    if (hasAssignmentReason) {
+                        // Deduplicate: check if we've already added a violation for this date+group+assignedPerson
+                        const violationKey = `${dayKey}|${groupNum}|${assignedPerson}`;
+                        if (seenViolations.has(violationKey)) {
+                            continue; // Skip duplicate entry
+                        }
+                        seenViolations.add(violationKey);
+                        
                         if (swapOrSkipType === 'swap' && swapPairId !== null && swapPairId !== undefined) {
                             const k = `${dayTypeCategory}|${groupNum}|${swapPairId}`;
                             if (seenSwapPairs.has(k)) continue; // only show one row per swap pair
@@ -16134,8 +16261,9 @@
                                 }
                             }
                             
-                            // Only show violation if there's a legitimate conflict
-                            if (hasLegitimateConflict) {
+                            // Since we have an assignment reason, always show the violation
+                            // Assignment reasons are the source of truth
+                            if (hasLegitimateConflict || hasAssignmentReason) {
                             // Build detailed violation reason
                             if (isDisabled) {
                                 violationReason = 'Άτομο είναι απενεργοποιημένο';
@@ -16176,72 +16304,6 @@
                                 continue; // Skip adding this to violations
                             }
                         }
-                        
-                        // Determine why the EXPECTED person was skipped (missing vs special holiday in month, etc.)
-                        let skippedReason = '';
-                        if (isDisabled) {
-                            skippedReason = 'Απενεργοποιημένος';
-                        } else if (isMissingPeriod) {
-                            skippedReason = getUnavailableReasonShort(actualExpectedPerson, groupNum, date, dayTypeCategory);
-                        } else if (swapOrSkipType === 'skip' && swapOrSkipReasonText) {
-                            skippedReason = extractShortReasonFromSavedText(swapOrSkipReasonText);
-                        } else if (dayTypeCategory === 'weekend') {
-                            const specialKey = getSpecialHolidayDutyDateInMonth(actualExpectedPerson, groupNum, year, month);
-                            if (specialKey) {
-                                const dd = new Date(specialKey + 'T00:00:00');
-                                skippedReason = `Ειδική αργία στον ίδιο μήνα (${getGreekDayName(dd)} ${dd.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })})`;
-                            } else {
-                                // Fallback: if the stored reason indicates special-holiday skip, show it explicitly
-                                skippedReason = swapOrSkipReasonText.includes('ειδική αργία')
-                                    ? 'Ειδική αργία στον ίδιο μήνα'
-                                    : 'Παράλειψη (πιθανή ειδική αργία/περιορισμός μήνα)';
-                            }
-                        } else if (swapOrSkipType === 'skip') {
-                            skippedReason = 'Παράλειψη';
-                        } else if (swapOrSkipType === 'swap') {
-                            skippedReason = 'Αλλαγή (swap)';
-                        }
-
-                        // Conflicts: show the computed conflict details (what it conflicted with)
-                        const conflictSummary = (conflictDetails && conflictDetails.length > 0) ? conflictDetails.join(' | ') : '';
-
-                        // If we don't have a stored assignmentReason, derive a reason in the same style requested by the user.
-                        let derivedSwapReason = '';
-                        if (!swapOrSkipReasonText && hasLegitimateConflict) {
-                            if (isDisabled) {
-                                derivedSwapReason = `Αντικατέστησε τον/την ${actualExpectedPerson} επειδή ήταν Απενεργοποιημένος. Ανατέθηκε ο/η ${assignedPerson}.`;
-                            } else if (isMissingPeriod) {
-                                const missingReason = getUnavailableReasonShort(actualExpectedPerson, groupNum, date, dayTypeCategory);
-                                derivedSwapReason = `Αντικατέστησε τον/την ${actualExpectedPerson} επειδή είχε ${missingReason}. Ανατέθηκε ο/η ${assignedPerson}.`;
-                            } else if (dayTypeCategory === 'normal') {
-                                // Normal-day conflict is typically with a semi-normal day on the next day
-                                const dayAfter = new Date(date);
-                                dayAfter.setDate(dayAfter.getDate() + 1);
-                                const afterKey = formatDateKey(dayAfter);
-                                const afterType = getDayType(dayAfter);
-                                if (afterType === 'semi-normal-day') {
-                                    const dd = formatGreekDayDate(afterKey);
-                                    derivedSwapReason = `Αντικατέστησε τον/την ${actualExpectedPerson} επειδή είχε σύγκρουση με Ημιαργία την ${dd.dayName} ${dd.dateStr}. Ανατέθηκε ο/η ${assignedPerson}.`;
-                                } else {
-                                    derivedSwapReason = violationReason;
-                                }
-                            } else {
-                                derivedSwapReason = violationReason;
-                            }
-                        }
-                        
-                        violations.push({
-                            date: dayKey,
-                            dateFormatted: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-                            group: groupNum,
-                            groupName: getGroupName(groupNum),
-                            assignedPerson: assignedPerson,
-                            expectedPerson: actualExpectedPerson,
-                            conflicts: conflictSummary,
-                            swapReason: swapOrSkipReasonText || derivedSwapReason || violationReason,
-                            skippedReason: skippedReason,
-                            dayType: getDayTypeLabel(dayType)
-                        });
                     }
                 }
             }
@@ -16254,7 +16316,6 @@
             try {
                 const viewMonthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`; // YYYY-MM
                 const seenCrossMonth = new Set(); // dateKey|group|person
-                const existingRowKeys = new Set(violations.map(v => `${v.date}|${v.group}|${v.assignedPerson}`));
 
                 for (const dateKey in assignmentReasons) {
                     // Only show rows for dates in the viewed month
@@ -16281,8 +16342,11 @@
                             const uniqueKey = `${dateKey}|${groupNum}|${personName}`;
                             if (seenCrossMonth.has(uniqueKey)) continue;
                             seenCrossMonth.add(uniqueKey);
-                            if (existingRowKeys.has(uniqueKey)) continue; // already present via normal mismatch logic
-                            existingRowKeys.add(uniqueKey);
+                            
+                            // Use the same deduplication key format as main violation detection
+                            const violationKey = `${dateKey}|${groupNum}|${personName}`;
+                            if (seenViolations.has(violationKey)) continue; // already present via normal mismatch logic
+                            seenViolations.add(violationKey);
 
                             const d = new Date(dateKey + 'T00:00:00');
                             const originStr = originDayKey ? new Date(originDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
