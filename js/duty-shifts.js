@@ -10721,18 +10721,20 @@
                                     }
                                 }
                                 
-                                // MONDAY/WEDNESDAY - Step 2b: ONLY if Step 2 failed (next same day is in next month), try BACKWARD swap with previous alternative day (Wednesday) in current month
+                                // MONDAY/WEDNESDAY - Step 2b: Try BACKWARD swap with previous alternative day (Wednesday) in current month
                                 // IMPORTANT: This runs BEFORE any cross-month attempts to keep swaps within current month when possible
-                                if (!swapFound && step2FailedNextMonth) {
+                                if (!swapFound) {
                                     console.log(`[SWAP LOGIC] MONDAY/WEDNESDAY - Step 2b: Trying BACKWARD swap with previous alternative day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][alternativeDayOfWeek]}) in current month`);
                                     const prevAlternativeDay = new Date(date);
+                                    // Calculate days to go back to previous alternative day
+                                    // For Monday (1) -> Wednesday (3): go back 5 days (to previous week's Wednesday)
+                                    // For Wednesday (3) -> Monday (1): go back 2 days (to same week's Monday)
                                     const daysToSubtract = dayOfWeek - alternativeDayOfWeek;
-                                    // If current day is Monday (1) and alternative is Wednesday (3), we need to go back 5 days (or forward 2 days in previous week)
-                                    // If current day is Wednesday (3) and alternative is Monday (1), we need to go back 2 days
                                     if (daysToSubtract > 0) {
+                                        // Same week: e.g., Wednesday (3) -> Monday (1) = 2 days back
                                         prevAlternativeDay.setDate(date.getDate() - daysToSubtract);
                                     } else {
-                                        // Need to go to previous week
+                                        // Previous week: e.g., Monday (1) -> Wednesday (3) = 5 days back (7 - 2)
                                         prevAlternativeDay.setDate(date.getDate() - (7 + daysToSubtract));
                                     }
                                     
@@ -10765,7 +10767,7 @@
                                 
                                 // MONDAY/WEDNESDAY - Step 2c: ONLY if Step 2b failed, try BACKWARD swap with previous same day (Monday) in current month
                                 // IMPORTANT: This runs BEFORE any cross-month attempts to keep swaps within current month when possible
-                                if (!swapFound && step2FailedNextMonth) {
+                                if (!swapFound) {
                                     console.log(`[SWAP LOGIC] MONDAY/WEDNESDAY - Step 2c: Trying BACKWARD swap with previous same day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek]}) in current month`);
                                     const prevSameDay = new Date(year, month, date.getDate() - 7);
                                     
