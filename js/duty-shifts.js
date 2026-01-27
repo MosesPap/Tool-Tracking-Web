@@ -914,6 +914,7 @@
         function startDutyShiftsAppInit() {
             if (dutyShiftsInitStarted) return;
             dutyShiftsInitStarted = true;
+            restoreCalendarCellHeight();
             
             const tryAttach = () => {
                 // Wait for Firebase to be ready (do NOT re-dispatch DOMContentLoaded)
@@ -6625,6 +6626,35 @@
             
             // Then check auto-detected Orthodox/Cyprus holidays
             return getOrthodoxHolidayNameAuto(date);
+        }
+
+        // Apply custom calendar cell height from input and persist to localStorage
+        const CALENDAR_CELL_HEIGHT_KEY = 'dutyShiftsCalendarCellHeight';
+        function applyCalendarCellHeight() {
+            const inp = document.getElementById('calendarCellHeight');
+            if (!inp) return;
+            let val = parseFloat(inp.value);
+            if (isNaN(val) || val < 2) val = 2;
+            if (val > 8) val = 8;
+            inp.value = val;
+            document.documentElement.style.setProperty('--calendar-cell-height', val + 'rem');
+            try { localStorage.setItem(CALENDAR_CELL_HEIGHT_KEY, String(val)); } catch (_) {}
+        }
+        function restoreCalendarCellHeight() {
+            try {
+                const stored = localStorage.getItem(CALENDAR_CELL_HEIGHT_KEY);
+                if (stored !== null) {
+                    const val = parseFloat(stored);
+                    if (!isNaN(val) && val >= 2 && val <= 8) {
+                        document.documentElement.style.setProperty('--calendar-cell-height', val + 'rem');
+                        const inp = document.getElementById('calendarCellHeight');
+                        if (inp) inp.value = val;
+                    }
+                }
+            } catch (_) {}
+        }
+        if (typeof window !== 'undefined') {
+            window.applyCalendarCellHeight = applyCalendarCellHeight;
         }
 
         // Render calendar
