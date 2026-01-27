@@ -1167,30 +1167,17 @@
                 </a>
                 <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.278</span></h4>
             </div>
-            <div>
-                <button class="btn btn-light btn-sm" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
-                    <i class="fas fa-sort-numeric-down me-1"></i>Ιεραρχία
-                </button>
+            <div class="d-flex align-items-center gap-3">
+                <div class="d-flex align-items-center gap-2" style="font-size: 0.9em; opacity: 0.95;">
+                    <span><i class="fas fa-chart-bar me-1"></i>Statistics</span>
+                    <span><span id="totalPeople">0</span> Συνολικό</span>
+                    <span><span id="avgRotation">0</span> Μέσες ημέρες</span>
+                </div>
             </div>
         </div>
     </div>
 
     <div class="container-fluid">
-        <!-- Statistics Card -->
-        <div class="stats-card">
-            <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Στατιστικά Εναλλαγής</h5>
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <div class="stat-value" id="totalPeople">0</div>
-                    <div class="stat-label">Συνολικό Προσωπικό</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="avgRotation">0</div>
-                    <div class="stat-label">Μέσες Ημέρες Εναλλαγής</div>
-                </div>
-            </div>
-        </div>
-
         <!-- Groups Section -->
         <div class="row">
             <div class="col-12 col-md-6 col-lg-3 mb-3" id="group1Container">
@@ -1329,6 +1316,9 @@
                     <h5 class="mb-0 mx-3" id="currentMonthYear"></h5>
                     <button class="btn btn-sm btn-outline-secondary" onclick="nextMonth()">
                         <i class="fas fa-chevron-right"></i>
+                    </button>
+                    <button class="btn btn-sm btn-light ms-2" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
+                        <i class="fas fa-sort-numeric-down me-1"></i>Ιεραρχία
                     </button>
                     <button class="btn btn-sm btn-primary ms-2" onclick="openCalculateDutiesModal()">
                         <i class="fas fa-calculator me-1"></i>Υπολογισμός Υπηρεσιών
