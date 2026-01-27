@@ -790,13 +790,14 @@
             border: 2px solid #e0e0e0;
             border-radius: 8px;
             padding: 0.25rem 0.35rem;
+            padding-top: 1.35rem;
             cursor: pointer;
             transition: all 0.2s;
             background: white;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             position: relative;
         }
 
@@ -852,6 +853,12 @@
             font-size: 1rem;
             font-weight: bold;
             line-height: 1;
+            color: #333;
+            text-shadow:
+                1px 1px 0 rgba(0, 0, 0, 0.12),
+                2px 2px 0 rgba(0, 0, 0, 0.08),
+                3px 3px 4px rgba(0, 0, 0, 0.15),
+                -1px -1px 0 rgba(255, 255, 255, 0.4);
         }
 
         .day-type {
@@ -862,7 +869,7 @@
 
         .orthodox-holiday-name {
             font-size: 0.7rem;
-            margin-top: 0.2rem;
+            margin-top: 0.1rem;
             color: #7B1FA2;
             font-weight: bold;
             text-align: center;
@@ -874,14 +881,14 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            margin-top: 0.25rem;
+            justify-content: flex-start;
+            margin-top: 0.1rem;
             pointer-events: none; /* Allow clicks to pass through to parent */
         }
 
         .duty-person {
             font-size: 0.75rem;
-            margin-top: 0.25rem;
+            margin-top: 0.1rem;
             color: #FF9800;
             font-weight: bold;
             text-align: center;
@@ -891,7 +898,7 @@
 
         .duty-person-critical {
             font-size: 0.75rem;
-            margin-top: 0.25rem;
+            margin-top: 0.1rem;
             color: #DC3545;
             font-weight: bold;
             text-align: center;
@@ -901,7 +908,7 @@
 
         .duty-person-swapped {
             font-size: 0.75rem;
-            margin-top: 0.25rem;
+            margin-top: 0.1rem;
             color: #FF9800;
             font-weight: bold;
             text-align: center;
