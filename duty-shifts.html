@@ -770,7 +770,7 @@
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
-            gap: 0.5rem;
+            gap: 0.35rem;
             width: 100%;
             box-sizing: border-box;
         }
@@ -778,16 +778,18 @@
         .calendar-day-header {
             text-align: center;
             font-weight: bold;
-            padding: 0.5rem;
+            padding: 0.25rem 0.35rem;
             color: #666;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
         }
 
         .calendar-day {
-            aspect-ratio: 1;
+            aspect-ratio: unset;
+            height: 3.2rem;
+            min-height: 2.8rem;
             border: 2px solid #e0e0e0;
             border-radius: 8px;
-            padding: 0.5rem;
+            padding: 0.25rem 0.35rem;
             cursor: pointer;
             transition: all 0.2s;
             background: white;
@@ -1080,16 +1082,18 @@
             }
             
             .calendar-day {
-                padding: 0.25rem;
-                font-size: 0.85rem;
+                padding: 0.2rem 0.25rem;
+                font-size: 0.8rem;
+                height: 2.6rem;
+                min-height: 2.2rem;
             }
             
             .day-number {
-                font-size: 0.9rem;
+                font-size: 0.85rem;
             }
             
             .day-type, .duty-person, .duty-person-critical, .orthodox-holiday-name {
-                font-size: 0.65rem;
+                font-size: 0.6rem;
             }
             
             .group-card {
@@ -1168,11 +1172,11 @@
                 <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.278</span></h4>
             </div>
             <div class="d-flex align-items-center flex-wrap gap-3 title-bar-stats" style="font-size: 1.25em; font-weight: 500; opacity: 0.98;">
-                <span>Συνολο Ατόμων: <strong id="totalPeople">0</strong></span>
+                <span>Σύνολο Ατόμων: <strong id="totalPeople">0</strong></span>
                 <span>ΑΥΜ: <strong id="statAym">0</strong></span>
                 <span>ΔΤΑ: <strong id="statDta">0</strong></span>
                 <span>AW139: <strong id="statAw139">0</strong></span>
-                <span>Επιγεια: <strong id="statEpigeia">0</strong></span>
+                <span>Επίγεια: <strong id="statEpigeia">0</strong></span>
             </div>
         </div>
     </div>
