@@ -6802,93 +6802,82 @@
                 // Get holiday name (special holiday first, then Orthodox/Cyprus holiday)
                 const holidayName = specialHolidayNameByDate.get(key) || getOrthodoxHolidayNameAuto(date);
                 
-                // Parse assignment and display each person on a separate line (no commas)
+                // Parse assignment, sort by hierarchy (lower rank = higher = first), then display with numbering
                 let displayAssignmentHtml = '';
                 if (assignment) {
                     const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
                     const parts = assignmentStr.split(',').map(p => p.trim()).filter(p => p);
                     if (parts.length > 0) {
-                        displayAssignmentHtml = '<div class="duty-person-container">';
+                        const dayTypeCategory = (dayType === 'special-holiday')
+                            ? 'special'
+                            : (dayType === 'weekend-holiday')
+                                ? 'weekend'
+                                : (dayType === 'semi-normal-day')
+                                    ? 'semi'
+                                    : 'normal';
+                        const dateObj = new Date(key + 'T00:00:00');
+                        const swapColors = [
+                            { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.12)' },
+                            { border: '#00E676', bg: 'rgba(0, 230, 118, 0.12)' },
+                            { border: '#FFD600', bg: 'rgba(255, 214, 0, 0.12)' },
+                            { border: '#00B0FF', bg: 'rgba(0, 176, 255, 0.12)' },
+                            { border: '#D500F9', bg: 'rgba(213, 0, 249, 0.12)' },
+                            { border: '#FF6D00', bg: 'rgba(255, 109, 0, 0.12)' },
+                            { border: '#00E5FF', bg: 'rgba(0, 229, 255, 0.12)' },
+                            { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.12)' }
+                        ];
+                        const entries = [];
                         for (const part of parts) {
                             const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                             const nameOnly = part.replace(/\s*\(Ομάδα\s*\d+\)\s*/g, '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
+                            const personName = m ? m[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '') : nameOnly;
+                            const g = m ? parseInt(m[2], 10) : 0;
+                            const rank = Number.isFinite(parseInt(rankings?.[personName], 10)) ? parseInt(rankings[personName], 10) : 9999;
                             let underline = false;
                             let isSwap = false;
                             let swapStyle = '';
-                            if (m) {
-                                const personName = m[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
-                                const g = parseInt(m[2], 10);
-                                if (personName && g >= 1 && g <= 4) {
-                                    const r = getAssignmentReason(key, g, personName);
-                                    if (r && r.type === 'swap') {
-                                        isSwap = true;
-                                        // Colorize swap borders by swapPairId (matches earlier swap palette concept)
-                                        const swapColors = [
-                                            { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.12)' },
-                                            { border: '#00E676', bg: 'rgba(0, 230, 118, 0.12)' },
-                                            { border: '#FFD600', bg: 'rgba(255, 214, 0, 0.12)' },
-                                            { border: '#00B0FF', bg: 'rgba(0, 176, 255, 0.12)' },
-                                            { border: '#D500F9', bg: 'rgba(213, 0, 249, 0.12)' },
-                                            { border: '#FF6D00', bg: 'rgba(255, 109, 0, 0.12)' },
-                                            { border: '#00E5FF', bg: 'rgba(0, 229, 255, 0.12)' },
-                                            { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.12)' }
-                                        ];
-                                        const pidRaw = r.swapPairId;
-                                        const pid = typeof pidRaw === 'number' ? pidRaw : parseInt(pidRaw, 10);
-                                        const c = swapColors[(isNaN(pid) ? 0 : pid) % swapColors.length];
-                                        swapStyle = `border: 2px solid ${c.border}; background-color: ${c.bg};`;
-                                    }
-                                    if (r && r.type === 'skip') {
-                                        // IMPORTANT: Underline is historical and must not depend on current missing/disabled state.
-                                        // If we have a saved skip reason, always underline.
-                                        underline = true;
-                                    } else if (r && r.type === 'shift') {
-                                        // Person was shifted forward due to reinsertion - do NOT underline them
-                                        // Only the direct replacement should be underlined, not those who moved forward
-                                        underline = false;
-                                    } else if (!r) {
-                                        // Fallback for older data: if baseline rotation differs from final assignment, underline.
-                                        // BUT: Don't underline if this is a cascading shift (baseline person was disabled/missing)
-                                        const dayTypeCategory = (dayType === 'special-holiday')
-                                            ? 'special'
-                                            : (dayType === 'weekend-holiday')
-                                                ? 'weekend'
-                                                : (dayType === 'semi-normal-day')
-                                                    ? 'semi'
-                                                    : 'normal';
-                                        const baselineStr = getRotationBaselineAssignmentForType(dayTypeCategory, key);
-                                        const baselinePerson = parseAssignedPersonForGroupFromAssignment(baselineStr, g);
-                                        if (baselinePerson && baselinePerson !== personName) {
-                                            // Double-check: if this person has a shift reason, don't underline
-                                            const shiftCheck = getAssignmentReason(key, g, personName);
-                                            if (shiftCheck && shiftCheck.type === 'shift') {
-                                                underline = false;
-                                            } else {
-                                                // Check if baseline person was disabled/missing - if so, this is a cascading shift
-                                                const dateObj = new Date(key + 'T00:00:00');
-                                                const isBaselineDisabledOrMissing = dayTypeCategory === 'normal' && 
-                                                    (isPersonDisabledForDuty(baselinePerson, g, dayTypeCategory) || 
-                                                     isPersonMissingOnDate(baselinePerson, g, dateObj, dayTypeCategory));
-                                                if (isBaselineDisabledOrMissing) {
-                                                    // This is a cascading shift - don't underline
-                                                    underline = false;
-                                                } else {
-                                                    // This is a real change - underline
-                                                    underline = true;
-                                                }
-                                            }
+                            if (personName && g >= 1 && g <= 4) {
+                                const r = getAssignmentReason(key, g, personName);
+                                if (r && r.type === 'swap') {
+                                    isSwap = true;
+                                    const pidRaw = r.swapPairId;
+                                    const pid = typeof pidRaw === 'number' ? pidRaw : parseInt(pidRaw, 10);
+                                    const c = swapColors[(isNaN(pid) ? 0 : pid) % swapColors.length];
+                                    swapStyle = `border: 2px solid ${c.border}; background-color: ${c.bg};`;
+                                }
+                                if (r && r.type === 'skip') {
+                                    underline = true;
+                                } else if (r && r.type === 'shift') {
+                                    underline = false;
+                                } else if (!r) {
+                                    const baselineStr = getRotationBaselineAssignmentForType(dayTypeCategory, key);
+                                    const baselinePerson = parseAssignedPersonForGroupFromAssignment(baselineStr, g);
+                                    if (baselinePerson && baselinePerson !== personName) {
+                                        const shiftCheck = getAssignmentReason(key, g, personName);
+                                        if (shiftCheck && shiftCheck.type === 'shift') {
+                                            underline = false;
+                                        } else {
+                                            const isBaselineDisabledOrMissing = dayTypeCategory === 'normal' &&
+                                                (isPersonDisabledForDuty(baselinePerson, g, dayTypeCategory) ||
+                                                 isPersonMissingOnDate(baselinePerson, g, dateObj, dayTypeCategory));
+                                            underline = !isBaselineDisabledOrMissing;
                                         }
                                     }
                                 }
                             }
-                            const cls = isSwap ? 'duty-person-swapped' : 'duty-person';
-                            displayAssignmentHtml += `<div class="${cls}${underline ? ' duty-person-replacement' : ''}" ${swapStyle ? `style="${swapStyle}"` : ''}>${nameOnly}</div>`;
+                            entries.push({ personName, nameOnly, rank, underline, isSwap, swapStyle });
                         }
-                        // Optional: show a small marker if there are reasons on this date (without heavy per-person checks)
+                        entries.sort((a, b) => (a.rank - b.rank) || (a.personName || '').localeCompare(b.personName || ''));
+                        displayAssignmentHtml = '<div class="duty-person-container">';
+                        entries.forEach((e, idx) => {
+                            const cls = e.isSwap ? 'duty-person-swapped' : 'duty-person';
+                            const num = idx + 1;
+                            displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${num}. ${e.nameOnly}</div>`;
+                        });
                         if (shouldShowHeavyIndicators && assignmentReasons[key]) {
                             displayAssignmentHtml += `<div class="duty-person-swapped" title="Υπάρχουν λόγοι αλλαγής/παράλειψης">*</div>`;
                         }
-                    displayAssignmentHtml += '</div>';
+                        displayAssignmentHtml += '</div>';
                     }
                 }
                 
