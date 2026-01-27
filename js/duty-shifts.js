@@ -6635,7 +6635,7 @@
             if (!inp) return;
             let val = parseFloat(inp.value);
             if (isNaN(val) || val < 2) val = 2;
-            if (val > 8) val = 8;
+            if (val > 16) val = 16;
             inp.value = val;
             document.documentElement.style.setProperty('--calendar-cell-height', val + 'rem');
             try { localStorage.setItem(CALENDAR_CELL_HEIGHT_KEY, String(val)); } catch (_) {}
@@ -6645,7 +6645,7 @@
                 const stored = localStorage.getItem(CALENDAR_CELL_HEIGHT_KEY);
                 if (stored !== null) {
                     const val = parseFloat(stored);
-                    if (!isNaN(val) && val >= 2 && val <= 8) {
+                    if (!isNaN(val) && val >= 2 && val <= 16) {
                         document.documentElement.style.setProperty('--calendar-cell-height', val + 'rem');
                         const inp = document.getElementById('calendarCellHeight');
                         if (inp) inp.value = val;
