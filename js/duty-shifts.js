@@ -12806,21 +12806,6 @@
                             const year = date.getFullYear();
                             const rotationDays = groupPeople.length;
                             const currentRotationPosition = groupPeople.indexOf(currentPerson);
-                            if (rotationDays > 0) {
-                                const originalCrossMonth = crossMonthSwaps;
-                                const crossMonthCopy = (typeof structuredClone === 'function')
-                                    ? structuredClone(crossMonthSwaps || {})
-                                    : JSON.parse(JSON.stringify(crossMonthSwaps || {}));
-                                crossMonthSwaps = crossMonthCopy;
-                                try {
-                                    const nextMonthResult = getPersonFromNextMonth(dateKey, 'semi', groupNum, month, year, rotationDays, groupPeople, currentRotationPosition);
-                                    if (nextMonthResult?.person) {
-                                        previewSemiAssignments[dateKey][groupNum] = nextMonthResult.person;
-                                    }
-                                } finally {
-                                    crossMonthSwaps = originalCrossMonth;
-                                }
-                            }
                         }
                     }
 
@@ -12876,9 +12861,6 @@
             const semiNormalDays = dayTypeLists.semi || [];
             const specialHolidays = dayTypeLists.special || [];
             const weekendHolidays = dayTypeLists.weekend || [];
-            
-            // Use global crossMonthSwaps variable (loaded from Firestore/localStorage)
-            // Structure: crossMonthSwaps[dateKey][groupNum] = personName
             
             // First, simulate Step 1 (special holidays)
             const simulatedSpecialAssignments = {}; // monthKey -> { groupNum -> Set of person names }
@@ -13406,9 +13388,6 @@
                                 }
                             }
                             
-                            // IMPORTANT: Check cross-month swaps FIRST (before rotation calculation)
-                            // If a person was swapped from previous month, assign them and skip the normal rotation person
-                            let isCrossMonthSwapDay = false;
                             let assignedPerson = null;
                             let rotationAlreadyAdvanced = false; // Track if rotation was already advanced (e.g., by pending swap)
                             
@@ -13470,47 +13449,10 @@
                             }
                             normalRotationPersons[dateKey][groupNum] = originalRotationPerson;
                             
-                            if (crossMonthSwaps[dateKey] && crossMonthSwaps[dateKey][groupNum]) {
-                                // This person was swapped from previous month and must be assigned to this day
-                                const crossMonthPerson = crossMonthSwaps[dateKey][groupNum];
-                                assignedPerson = crossMonthPerson;
-                                isCrossMonthSwapDay = true;
-                                console.log(`[PREVIEW CROSS-MONTH] Assigning ${crossMonthPerson} to ${dateKey} (Group ${groupNum}, swapped from previous month)`);
-                                
-                                // Check if the cross-month person is the same as the normal rotation person
-                                const normalRotationPerson = groupPeople[rotationPosition];
-                                if (normalRotationPerson === crossMonthPerson) {
-                                    // The cross-month person IS the normal rotation person - just advance rotation
-                                    // No need to skip anyone, just continue normally
-                                    console.log(`[PREVIEW CROSS-MONTH] Cross-month person ${crossMonthPerson} matches normal rotation - no skip needed`);
-                                    // IMPORTANT: Advance rotation position so next person gets their turn
-                                    globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                } else {
-                                    // The cross-month person is different from normal rotation person
-                                    // Skip the person who would normally be assigned (they were swapped to previous month)
-                                    // Advance rotation position by 1 to skip the normal person
-                                    globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                    console.log(`[PREVIEW CROSS-MONTH] Skipping normal rotation person ${normalRotationPerson} (swapped to previous month)`);
-                                }
-                                
-                                // IMPORTANT: Mark this person as assigned to prevent duplicate assignment
-                                // Initialize assigned people set for this group if needed
-                                if (!assignedPeoplePreview[monthKey][groupNum]) {
-                                    assignedPeoplePreview[monthKey][groupNum] = new Set();
-                                }
-                                assignedPeoplePreview[monthKey][groupNum].add(crossMonthPerson);
-                                
-                                // Remove from tracking since we're assigning them now (will be saved when calculation completes)
-                                delete crossMonthSwaps[dateKey][groupNum];
-                                // If no more groups for this date, remove the date entry
-                                if (Object.keys(crossMonthSwaps[dateKey]).length === 0) {
-                                    delete crossMonthSwaps[dateKey];
-                                }
-                            } else {
-                                // No cross-month swap - use normal rotation
-                                // Use rotationPerson (which may be a replacement from baselineNormalByDate if original was missing/disabled)
-                                assignedPerson = rotationPerson;
-                                
+                            // Use normal rotation
+                            // Use rotationPerson (which may be a replacement from baselineNormalByDate if original was missing/disabled)
+                            assignedPerson = rotationPerson;
+                            
                             // Initialize assigned people set for this group if needed
                             if (!assignedPeoplePreview[monthKey][groupNum]) {
                                 assignedPeoplePreview[monthKey][groupNum] = new Set();
@@ -13980,38 +13922,6 @@
                                     swapDayKey = nextSameDayKey;
                                     swapFound = true;
                                 }
-                            } else if (nextSameDay.getMonth() !== month) {
-                                // Next same day is in next month but not in calculation range - use getPersonFromNextMonth
-                                const rotationDays = groupPeople.length;
-                                const currentRotationPosition = globalNormalRotationPosition[groupNum];
-                                const nextMonthResult = getPersonFromNextMonth(dateKey, 'normal', groupNum, month, year, rotationDays, groupPeople, currentRotationPosition);
-                                
-                                if (nextMonthResult && nextMonthResult.person) {
-                                    const swapCandidate = nextMonthResult.person;
-                                    const nextMonthSwapDayKey = nextMonthResult.swapDayKey;
-                                    
-                                    // Verify it's the same day of week (next Tuesday/Thursday)
-                                    const nextMonthSwapDate = new Date(nextMonthSwapDayKey + 'T00:00:00');
-                                    if (nextMonthSwapDate.getDay() === dayOfWeek) {
-                                        // Check if swap candidate is valid for current date
-                                        if (!isPersonMissingOnDate(swapCandidate, groupNum, date, 'normal') &&
-                                            !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
-                                            // Check if swap candidate is valid for next month swap day
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthSwapDate, 'normal') &&
-                                                !hasConsecutiveDuty(nextMonthSwapDayKey, swapCandidate, groupNum, simulatedAssignments)) {
-                                                swapDayKey = nextMonthSwapDayKey;
-                                                swapFound = true;
-                                                
-                                                // Store cross-month swap info
-                                                if (!crossMonthSwaps[nextMonthSwapDayKey]) {
-                                                    crossMonthSwaps[nextMonthSwapDayKey] = {};
-                                                }
-                                                crossMonthSwaps[nextMonthSwapDayKey][groupNum] = currentPerson;
-                                                console.log(`[PREVIEW CROSS-MONTH SWAP NORMAL Step 1a] Person ${currentPerson} (had conflict on ${dateKey}) must be assigned to ${nextMonthSwapDayKey} (Group ${groupNum})`);
-                                            }
-                                        }
-                                    }
-                                }
                             }
                             
                             // TUESDAY/THURSDAY - Step 2: ONLY if Step 1 failed, try alternative day in same week
@@ -14058,29 +13968,17 @@
                         
                         // Perform swap if found
                         if (swapFound && swapDayKey) {
-                            // For cross-month swaps, swapCandidate might not be in normalAssignments yet
-                            // Get it from the stored value or from getPersonFromNextMonth
-                            let swapCandidate;
+                            // Get swap candidate from normalAssignments
+                            let swapCandidate = null;
                             if (normalAssignments[swapDayKey] && normalAssignments[swapDayKey][groupNum]) {
                                 // Regular swap within calculation range
                                 swapCandidate = normalAssignments[swapDayKey][groupNum];
-                                            } else {
-                                // Cross-month swap - get candidate from getPersonFromNextMonth
-                                const rotationDays = groupPeople.length;
-                                const currentRotationPosition = globalNormalRotationPosition[groupNum];
-                                const nextMonthResult = getPersonFromNextMonth(dateKey, 'normal', groupNum, month, year, rotationDays, groupPeople, currentRotationPosition);
-                                if (nextMonthResult && nextMonthResult.person && nextMonthResult.swapDayKey === swapDayKey) {
-                                    swapCandidate = nextMonthResult.person;
-                                    // Store it in normalAssignments for the swap execution
-                                    if (!normalAssignments[swapDayKey]) {
-                                        normalAssignments[swapDayKey] = {};
-                                    }
-                                    normalAssignments[swapDayKey][groupNum] = swapCandidate;
-                                        } else {
-                                    // Can't find candidate - skip this swap
-                                    console.warn(`[PREVIEW SWAP WARNING] Could not find swap candidate for cross-month swap ${swapDayKey} (Group ${groupNum})`);
-                                    continue; // Skip to next iteration
-                                }
+                            }
+                            
+                            if (!swapCandidate) {
+                                // Can't find candidate - skip this swap
+                                console.warn(`[PREVIEW SWAP WARNING] Could not find swap candidate for swap ${swapDayKey} (Group ${groupNum})`);
+                                continue; // Skip to next iteration
                             }
                             
                             // Generate unique swap pair ID for color coding
