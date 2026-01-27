@@ -13583,43 +13583,42 @@
                                         assignedPerson = null;
                                     }
                                 }
+                            
+                            // Check if assigned person has a conflict (will be swapped later)
+                            // If so, DO NOT assign anyone to this day - leave it for swap logic to handle
+                            // Also DO NOT assign the next person in rotation to this day
+                            // IMPORTANT: Always advance rotation position from the ORIGINAL rotationPosition
+                            // (not from replacement's position) to maintain rotation sequence
+                            // BUT: Skip if rotation was already advanced (e.g., by pending swap)
+                            if (!rotationAlreadyAdvanced) {
+                                if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
+                                    // Build simulated assignments for conflict checking
+                                    const simulatedAssignments = {
+                                        special: simulatedSpecialAssignments,
+                                        weekend: simulatedWeekendAssignments,
+                                        semi: simulatedSemiAssignments,
+                                        normal: normalAssignments,
+                                        normalRotationPositions: globalNormalRotationPosition // Pass current rotation positions for conflict checking
+                                    };
                                     
-                                    // Check if assigned person has a conflict (will be swapped later)
-                                    // If so, DO NOT assign anyone to this day - leave it for swap logic to handle
-                                    // Also DO NOT assign the next person in rotation to this day
-                                    // IMPORTANT: Always advance rotation position from the ORIGINAL rotationPosition
-                                    // (not from replacement's position) to maintain rotation sequence
-                                    // BUT: Skip if rotation was already advanced (e.g., by pending swap)
-                                    if (!rotationAlreadyAdvanced) {
-                                        if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
-                                            // Build simulated assignments for conflict checking
-                                        const simulatedAssignments = {
-                                            special: simulatedSpecialAssignments,
-                                            weekend: simulatedWeekendAssignments,
-                                            semi: simulatedSemiAssignments,
-                                                normal: normalAssignments,
-                                                normalRotationPositions: globalNormalRotationPosition // Pass current rotation positions for conflict checking
-                                            };
-                                            
-                                            // Check for consecutive conflict
-                                            const hasConflict = hasConsecutiveDuty(dateKey, assignedPerson, groupNum, simulatedAssignments);
-                                            
-                                            if (hasConflict) {
-                                                // Person has conflict - STORE THEM so swap logic can process them
-                                                // The preview should show the exact rotation order (who would be assigned)
-                                                // even if they have a conflict. Swap logic will handle swapping them.
-                                                // DO NOT set to null - we need to know who has the conflict to swap them
-                                                // Still advance rotation position from ORIGINAL position so next person gets their correct turn
-                                                globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                            } else {
-                                                // No conflict - assign person and advance rotation from ORIGINAL position
-                                                globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                            }
-                                        } else {
-                                            // Person is missing or no person assigned - advance rotation position from ORIGINAL position
-                                            globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                        }
+                                    // Check for consecutive conflict
+                                    const hasConflict = hasConsecutiveDuty(dateKey, assignedPerson, groupNum, simulatedAssignments);
+                                    
+                                    if (hasConflict) {
+                                        // Person has conflict - STORE THEM so swap logic can process them
+                                        // The preview should show the exact rotation order (who would be assigned)
+                                        // even if they have a conflict. Swap logic will handle swapping them.
+                                        // DO NOT set to null - we need to know who has the conflict to swap them
+                                        // Still advance rotation position from ORIGINAL position so next person gets their correct turn
+                                        globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                    } else {
+                                        // No conflict - assign person and advance rotation from ORIGINAL position
+                                        globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                     }
+                                } else {
+                                    // Person is missing or no person assigned - advance rotation position from ORIGINAL position
+                                    globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                }
                             }
                             
                             // Store baseline assignment for comparison (original rotation person, not replacement)
@@ -13707,7 +13706,6 @@
                             const baselinePersonForDisplay = normalRotationPersons[dateKey]?.[groupNum] || originalRotationPerson;
                             html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplay, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
-                    }
                     
                     html += '</tr>';
                 });
