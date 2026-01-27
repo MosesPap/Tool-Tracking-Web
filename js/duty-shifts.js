@@ -33,6 +33,9 @@
         // Track critical assignments from last duties - these must NEVER be deleted
         // Format: { "2025-12-25": ["Person Name (Ομάδα 1)", ...], ... }
         let criticalAssignments = {};
+        // REMOVED: crossMonthSwaps - cross-month swaps are no longer supported
+        // Declare as empty object to prevent ReferenceError if any old code references it
+        let crossMonthSwaps = {};
         // Track last rotation positions (normal rotation, ignoring swaps) for each day type and group.
         //
         // NEW (month-scoped) structure:
@@ -13536,9 +13539,9 @@
                                 delete pendingNormalSwaps[monthKey][groupNum];
                                 globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                 rotationAlreadyAdvanced = true; // Mark that rotation was already advanced
-                                }
-                                
-                                // PREVIEW MODE: Just show basic rotation WITHOUT swap logic
+                            }
+                            
+                            // PREVIEW MODE: Just show basic rotation WITHOUT swap logic
                                 // Swap logic will run when Next is pressed
                                 // NOTE: Disabled/missing check already happened above, so this is just a safety check
                                 if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
@@ -13863,7 +13866,7 @@
                                 }
                             }
                             
-                            // MONDAY/WEDNESDAY - Step 3: ONLY if Step 2 failed, try alternative day in week after next OR next month
+                            // MONDAY/WEDNESDAY - Step 3: ONLY if Step 2 failed, try alternative day in week after next
                             if (!swapFound) {
                                 // Try week after next (2 weeks later) - alternative day
                                 const weekAfterNextDate = new Date(date);
@@ -13879,30 +13882,10 @@
                                         !hasConsecutiveDuty(weekAfterNextKey, swapCandidate, groupNum, simulatedAssignments) &&
                                         !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                         swapDayKey = weekAfterNextKey;
-                                                            swapFound = true;
+                                        swapFound = true;
                                     }
                                 }
-                                
-                                // If still not found, try next month - alternative day
-                                if (!swapFound) {
-                                    const nextMonthDate = new Date(year, month + 1, date.getDate());
-                                    while (nextMonthDate.getDay() !== alternativeDayOfWeek && nextMonthDate.getDate() <= 31) {
-                                        nextMonthDate.setDate(nextMonthDate.getDate() + 1);
-                                    }
-                                    if (nextMonthDate.getDate() <= 31) {
-                                        const nextMonthKey = formatDateKey(nextMonthDate);
-                                        if (normalDays.includes(nextMonthKey) && normalAssignments[nextMonthKey]?.[groupNum]) {
-                                            const swapCandidate = normalAssignments[nextMonthKey][groupNum];
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextMonthDate) &&
-                                                !hasConsecutiveDuty(nextMonthKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
-                                                swapDayKey = nextMonthKey;
-                                                            swapFound = true;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
+                            }
                         }
                         // TUESDAY/THURSDAY - Separate logic block
                         else if (dayOfWeek === 2 || dayOfWeek === 4) {
