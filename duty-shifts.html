@@ -1167,7 +1167,7 @@
                 </a>
                 <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.278</span></h4>
             </div>
-            <div class="d-flex align-items-center flex-wrap gap-3" style="font-size: 0.9em; opacity: 0.95;">
+            <div class="d-flex align-items-center flex-wrap gap-3 title-bar-stats" style="font-size: 1.25em; font-weight: 500; opacity: 0.98;">
                 <span>Συνολο Ατόμων: <strong id="totalPeople">0</strong></span>
                 <span>ΑΥΜ: <strong id="statAym">0</strong></span>
                 <span>ΔΤΑ: <strong id="statDta">0</strong></span>
@@ -1213,6 +1213,11 @@
                     </button>
                 </div>
             </div>
+        </div>
+
+        <!-- Calendar grid directly below Ημερολόγιο Υπηρεσιών -->
+        <div class="calendar-section mb-4">
+            <div class="calendar-grid" id="calendarGrid"></div>
         </div>
 
         <!-- Groups Section -->
@@ -1340,11 +1345,6 @@
                 </div>
                 <div id="holidaysList"></div>
             </div>
-        </div>
-
-        <!-- Calendar grid (below groups & holidays) -->
-        <div class="calendar-section">
-            <div class="calendar-grid" id="calendarGrid"></div>
         </div>
     </div>
 

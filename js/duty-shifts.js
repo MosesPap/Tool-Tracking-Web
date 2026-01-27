@@ -15430,7 +15430,7 @@
             window.toggleListCollapse = toggleListCollapse;
         }
 
-        // Update statistics (title bar: Συνολο Ατόμων, ΑΥΜ, ΔΤΑ, AW139, Επιγεια)
+        // Update statistics (title bar: Σύνολο Ατόμων, ΑΥΜ, ΔΤΑ, AW139, Επίγεια)
         function updateStatistics() {
             let totalPeople = 0;
             const statIds = { 1: 'statAym', 2: 'statDta', 3: 'statAw139', 4: 'statEpigeia' };
