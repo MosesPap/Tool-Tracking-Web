@@ -3374,6 +3374,194 @@
             actionsModal.show();
         }
 
+        // Open modal to view and manage all missing/disabled people
+        function openMissingDisabledPeopleModal() {
+            const container = document.getElementById('missingDisabledPeopleList');
+            if (!container) return;
+            
+            container.innerHTML = '';
+            
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            let hasAnyPeople = false;
+            
+            // Iterate through all groups
+            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
+                const allPeople = new Set();
+                
+                // Collect all people from all lists
+                ['special', 'weekend', 'semi', 'normal'].forEach(listType => {
+                    const list = groupData[listType] || [];
+                    list.forEach(person => allPeople.add(person));
+                });
+                
+                // Check for disabled people
+                const disabledPeople = [];
+                const disabledPersons = groupData.disabledPersons || {};
+                allPeople.forEach(person => {
+                    const disabledState = getDisabledState(groupNum, person);
+                    if (disabledState.all || disabledState.special || disabledState.weekend || disabledState.semi || disabledState.normal) {
+                        disabledPeople.push({ person, state: disabledState });
+                    }
+                });
+                
+                // Check for missing people
+                const missingPeople = [];
+                const missingPeriods = groupData.missingPeriods || {};
+                allPeople.forEach(person => {
+                    const periods = missingPeriods[person] || [];
+                    const activePeriods = periods.filter(period => {
+                        const start = new Date(period.start + 'T00:00:00');
+                        const end = new Date(period.end + 'T00:00:00');
+                        return today <= end; // Show if period hasn't ended yet
+                    });
+                    if (activePeriods.length > 0) {
+                        missingPeople.push({ person, periods: activePeriods });
+                    }
+                });
+                
+                if (disabledPeople.length === 0 && missingPeople.length === 0) continue;
+                
+                hasAnyPeople = true;
+                
+                // Create group section
+                const groupSection = document.createElement('div');
+                groupSection.className = 'mb-4';
+                groupSection.innerHTML = `
+                    <h5 class="mb-3">
+                        <i class="fas fa-users me-2"></i>${getGroupName(groupNum)}
+                        <span class="badge bg-secondary ms-2">${disabledPeople.length + missingPeople.length} άτομα</span>
+                    </h5>
+                `;
+                
+                const peopleList = document.createElement('div');
+                peopleList.className = 'list-group';
+                
+                // Add disabled people
+                disabledPeople.forEach(({ person, state }) => {
+                    const disabledTypes = [];
+                    if (state.all) disabledTypes.push('Όλες');
+                    if (state.special) disabledTypes.push('Ειδικές');
+                    if (state.weekend) disabledTypes.push('Σαββατοκύριακα');
+                    if (state.semi) disabledTypes.push('Ημιαργίες');
+                    if (state.normal) disabledTypes.push('Καθημερινές');
+                    
+                    const item = document.createElement('div');
+                    item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+                    item.style.cursor = 'pointer';
+                    item.innerHTML = `
+                        <div class="flex-grow-1">
+                            <strong>${person}</strong>
+                            <span class="badge bg-danger ms-2">Απενεργοποιημένο</span>
+                            <div class="text-muted small mt-1">
+                                <i class="fas fa-info-circle me-1"></i>${disabledTypes.join(', ')}
+                            </div>
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary" onclick="editPersonStatus(${groupNum}, '${person.replace(/'/g, "\\'")}')">
+                            <i class="fas fa-edit me-1"></i>Επεξεργασία
+                        </button>
+                    `;
+                    peopleList.appendChild(item);
+                });
+                
+                // Add missing people
+                missingPeople.forEach(({ person, periods }) => {
+                    const periodTexts = periods.map(period => {
+                        const start = new Date(period.start + 'T00:00:00');
+                        const end = new Date(period.end + 'T00:00:00');
+                        const startStr = start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        const endStr = end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        const isActive = today >= start && today <= end;
+                        return `${startStr} - ${endStr}${isActive ? ' (Ενεργό)' : ' (Μέλλον)'}`;
+                    }).join(', ');
+                    
+                    const item = document.createElement('div');
+                    item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+                    item.style.cursor = 'pointer';
+                    item.innerHTML = `
+                        <div class="flex-grow-1">
+                            <strong>${person}</strong>
+                            <span class="badge bg-warning text-dark ms-2">Απουσία</span>
+                            <div class="text-muted small mt-1">
+                                <i class="fas fa-calendar-times me-1"></i>${periodTexts}
+                            </div>
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary" onclick="editPersonStatus(${groupNum}, '${person.replace(/'/g, "\\'")}')">
+                            <i class="fas fa-edit me-1"></i>Επεξεργασία
+                        </button>
+                    `;
+                    peopleList.appendChild(item);
+                });
+                
+                groupSection.appendChild(peopleList);
+                container.appendChild(groupSection);
+            }
+            
+            if (!hasAnyPeople) {
+                container.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle me-2"></i>
+                        <strong>Καμία εγγραφή!</strong> Δεν υπάρχουν απενεργοποιημένα ή απουσιάζοντα άτομα.
+                    </div>
+                `;
+            }
+            
+            const modal = new bootstrap.Modal(document.getElementById('missingDisabledPeopleModal'));
+            modal.show();
+        }
+        
+        // Edit person status (opens the person actions modal)
+        function editPersonStatus(groupNum, personName) {
+            // Close the missing/disabled modal
+            const missingModal = bootstrap.Modal.getInstance(document.getElementById('missingDisabledPeopleModal'));
+            if (missingModal) missingModal.hide();
+            
+            // Set current person for actions modal
+            currentPersonActionsGroup = groupNum;
+            currentPersonActionsName = personName;
+            
+            // Find the person's index and list type
+            const groupData = groups[groupNum] || {};
+            let foundIndex = -1;
+            let foundListType = null;
+            
+            ['special', 'weekend', 'semi', 'normal'].forEach(listType => {
+                const list = groupData[listType] || [];
+                const index = list.indexOf(personName);
+                if (index >= 0 && foundIndex < 0) {
+                    foundIndex = index;
+                    foundListType = listType;
+                }
+            });
+            
+            if (foundIndex >= 0 && foundListType) {
+                currentPersonActionsIndex = foundIndex;
+                currentPersonActionsListType = foundListType;
+                
+                // Update person actions modal
+                document.getElementById('personActionsName').textContent = personName;
+                document.getElementById('personActionsGroup').textContent = getGroupName(groupNum);
+                
+                // Update disable button text
+                const disabledState = getDisabledState(groupNum, personName);
+                const isAnyDisabled = disabledState.all || disabledState.special || disabledState.weekend || disabledState.semi || disabledState.normal;
+                const toggleButton = document.getElementById('toggleDisablePersonButton');
+                const toggleButtonText = document.getElementById('toggleDisablePersonButtonText');
+                if (toggleButton && toggleButtonText) {
+                    toggleButton.className = isAnyDisabled ? 'btn btn-outline-success' : 'btn btn-outline-secondary';
+                    toggleButtonText.textContent = isAnyDisabled ? 'Ενεργοποίηση (Ρυθμίσεις)' : 'Απενεργοποίηση (Ρυθμίσεις)';
+                }
+                
+                // Show person actions modal
+                const actionsModal = new bootstrap.Modal(document.getElementById('personActionsModal'));
+                actionsModal.show();
+            } else {
+                alert(`Το άτομο "${personName}" δεν βρέθηκε στις λίστες της ομάδας ${getGroupName(groupNum)}.`);
+            }
+        }
+
         function getDisabledState(groupNum, personName) {
             const g = groups?.[groupNum];
             const dp = g?.disabledPersons || {};
