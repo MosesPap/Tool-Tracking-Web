@@ -1167,17 +1167,54 @@
                 </a>
                 <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.278</span></h4>
             </div>
-            <div class="d-flex align-items-center gap-3">
-                <div class="d-flex align-items-center gap-2" style="font-size: 0.9em; opacity: 0.95;">
-                    <span><i class="fas fa-chart-bar me-1"></i>Statistics</span>
-                    <span><span id="totalPeople">0</span> Συνολικό</span>
-                    <span><span id="avgRotation">0</span> Μέσες ημέρες</span>
-                </div>
+            <div class="d-flex align-items-center flex-wrap gap-3" style="font-size: 0.9em; opacity: 0.95;">
+                <span>Συνολο Ατόμων: <strong id="totalPeople">0</strong></span>
+                <span>ΑΥΜ: <strong id="statAym">0</strong></span>
+                <span>ΔΤΑ: <strong id="statDta">0</strong></span>
+                <span>AW139: <strong id="statAw139">0</strong></span>
+                <span>Επιγεια: <strong id="statEpigeia">0</strong></span>
             </div>
         </div>
     </div>
 
     <div class="container-fluid">
+        <!-- Calendar / Ημερολόγιο bar at top: title + buttons -->
+        <div class="calendar-top-bar mb-3 p-3 rounded" style="background: #f8f9fa; border: 1px solid #dee2e6;">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Ημερολόγιο Υπηρεσιών</h5>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="previousMonth()">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <h5 class="mb-0 mx-2" id="currentMonthYear"></h5>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="nextMonth()">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                    <button class="btn btn-sm btn-light ms-2" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
+                        <i class="fas fa-sort-numeric-down me-1"></i>Ιεραρχία
+                    </button>
+                    <button class="btn btn-sm btn-primary ms-2" onclick="openCalculateDutiesModal()">
+                        <i class="fas fa-calculator me-1"></i>Υπολογισμός Υπηρεσιών
+                    </button>
+                    <button class="btn btn-sm btn-success ms-2" onclick="showExcelPreview()">
+                        <i class="fas fa-file-excel me-1"></i>Δημιουργία Excel
+                    </button>
+                    <button class="btn btn-sm btn-danger ms-2" onclick="clearDutyShiftsFirestoreDocs()">
+                        <i class="fas fa-broom me-1"></i>Καθαρισμός Firebase (Υπηρεσίες)
+                    </button>
+                    <button class="btn btn-sm btn-warning ms-2" onclick="analyzeRotationViolations()">
+                        <i class="fas fa-exclamation-triangle me-1"></i>Έλεγχος Αναθέσεων Υπηρεσιών
+                    </button>
+                    <button class="btn btn-sm btn-info ms-2" onclick="printRotationAndRankings()">
+                        <i class="fas fa-print me-1"></i>Εκτύπωση Σειρών & Ιεραρχίας
+                    </button>
+                    <button class="btn btn-sm btn-secondary ms-2" onclick="openMissingDisabledPeopleModal()">
+                        <i class="fas fa-user-times me-1"></i>Απενεργοποιημένοι/Απουσιάζοντες
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Groups Section -->
         <div class="row">
             <div class="col-12 col-md-6 col-lg-3 mb-3" id="group1Container">
@@ -1305,41 +1342,8 @@
             </div>
         </div>
 
-        <!-- Calendar Section -->
+        <!-- Calendar grid (below groups & holidays) -->
         <div class="calendar-section">
-            <div class="calendar-header">
-                <h5><i class="fas fa-calendar-alt me-2"></i>Ημερολόγιο Υπηρεσιών</h5>
-                <div class="calendar-nav">
-                    <button class="btn btn-sm btn-outline-secondary" onclick="previousMonth()">
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
-                    <h5 class="mb-0 mx-3" id="currentMonthYear"></h5>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="nextMonth()">
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
-                    <button class="btn btn-sm btn-light ms-2" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
-                        <i class="fas fa-sort-numeric-down me-1"></i>Ιεραρχία
-                    </button>
-                    <button class="btn btn-sm btn-primary ms-2" onclick="openCalculateDutiesModal()">
-                        <i class="fas fa-calculator me-1"></i>Υπολογισμός Υπηρεσιών
-                    </button>
-                    <button class="btn btn-sm btn-success ms-2" onclick="showExcelPreview()">
-                        <i class="fas fa-file-excel me-1"></i>Δημιουργία Excel
-                    </button>
-                    <button class="btn btn-sm btn-danger ms-2" onclick="clearDutyShiftsFirestoreDocs()">
-                        <i class="fas fa-broom me-1"></i>Καθαρισμός Firebase (Υπηρεσίες)
-                    </button>
-                    <button class="btn btn-sm btn-warning ms-2" onclick="analyzeRotationViolations()">
-                        <i class="fas fa-exclamation-triangle me-1"></i>Έλεγχος Αναθέσεων Υπηρεσιών
-                    </button>
-                    <button class="btn btn-sm btn-info ms-2" onclick="printRotationAndRankings()">
-                        <i class="fas fa-print me-1"></i>Εκτύπωση Σειρών & Ιεραρχίας
-                    </button>
-                    <button class="btn btn-sm btn-secondary ms-2" onclick="openMissingDisabledPeopleModal()">
-                        <i class="fas fa-user-times me-1"></i>Απενεργοποιημένοι/Απουσιάζοντες
-                    </button>
-                </div>
-            </div>
             <div class="calendar-grid" id="calendarGrid"></div>
         </div>
     </div>

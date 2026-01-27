@@ -15430,11 +15430,10 @@
             window.toggleListCollapse = toggleListCollapse;
         }
 
-        // Update statistics
+        // Update statistics (title bar: Συνολο Ατόμων, ΑΥΜ, ΔΤΑ, AW139, Επιγεια)
         function updateStatistics() {
             let totalPeople = 0;
-            let totalRotation = 0;
-            let groupCount = 0;
+            const statIds = { 1: 'statAym', 2: 'statDta', 3: 'statAw139', 4: 'statEpigeia' };
             
             for (let i = 1; i <= 4; i++) {
                 const groupData = groups[i] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
@@ -15442,20 +15441,16 @@
                 const weekendList = groupData.weekend || [];
                 const semiList = groupData.semi || [];
                 const normalList = groupData.normal || [];
-                // Count unique people across all lists
                 const uniquePeople = new Set([...specialList, ...weekendList, ...semiList, ...normalList]);
                 const peopleCount = uniquePeople.size;
+                totalPeople += peopleCount;
                 
-                if (peopleCount > 0) {
-                    totalPeople += peopleCount;
-                    totalRotation += peopleCount;
-                    groupCount++;
-                }
+                const el = document.getElementById(statIds[i]);
+                if (el) el.textContent = peopleCount;
             }
             
-            document.getElementById('totalPeople').textContent = totalPeople;
-            document.getElementById('avgRotation').textContent = 
-                groupCount > 0 ? Math.round(totalRotation / groupCount) : 0;
+            const totalEl = document.getElementById('totalPeople');
+            if (totalEl) totalEl.textContent = totalPeople;
         }
 
         // Helper function to get consecutive duty dates for detailed violation messages
