@@ -12603,54 +12603,6 @@
                 const sortedSemi = [...semiNormalDays].sort();
                 sortedSemiForPreview = sortedSemi;
                 
-                // Return-from-missing for semi: missing period ends on D (inclusive); count 3 calendar days (D+1, D+2, D+3);
-                // assign the person to the first semi-normal day after day D+3 (i.e. on or after D+4).
-                const returnFromMissingSemiTargets = {}; // dateKey -> { groupNum -> { personName, missingEnd } }
-                const calcStartKey = (startDate && !isNaN(startDate.getTime())) ? formatDateKey(startDate) : null;
-                const calcEndKey = (endDate && !isNaN(endDate.getTime())) ? formatDateKey(endDate) : null;
-                const addDaysToDateKey = (dk, days) => {
-                    if (!dk || typeof dk !== 'string') return null;
-                    const d = new Date(dk + 'T00:00:00');
-                    if (isNaN(d.getTime())) return null;
-                    d.setDate(d.getDate() + (days || 0));
-                    return formatDateKey(d);
-                };
-                const findFirstSemiOnOrAfter = (sorted, thresholdKey) => {
-                    for (const dk of sorted) {
-                        if (dk >= thresholdKey) return dk;
-                    }
-                    return null;
-                };
-                if (calcStartKey && calcEndKey && sortedSemi.length > 0) {
-                    const processed = new Set(); // "groupNum|personName|pEndKey"
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const g = groups?.[groupNum];
-                        const missingMap = g?.missingPeriods || {};
-                        const semiList = g?.semi || [];
-                        for (const personName of Object.keys(missingMap)) {
-                            if (!semiList.includes(personName)) continue;
-                            const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
-                            for (const period of periods) {
-                                const pEndKey = inputValueToDateKey(period?.end);
-                                if (!pEndKey) continue;
-                                if (pEndKey < calcStartKey || pEndKey > calcEndKey) continue;
-                                const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
-                                if (processed.has(dedupeKey)) continue;
-                                processed.add(dedupeKey);
-                                // First semi on or after (end + 4 days) = after 3 calendar days 11,12,13
-                                const thresholdKey = addDaysToDateKey(pEndKey, 4);
-                                if (!thresholdKey) continue;
-                                const targetSemiKey = findFirstSemiOnOrAfter(sortedSemi, thresholdKey);
-                                if (!targetSemiKey) continue;
-                                if (!returnFromMissingSemiTargets[targetSemiKey]) returnFromMissingSemiTargets[targetSemiKey] = {};
-                                if (!returnFromMissingSemiTargets[targetSemiKey][groupNum]) {
-                                    returnFromMissingSemiTargets[targetSemiKey][groupNum] = { personName, missingEnd: pEndKey };
-                                }
-                            }
-                        }
-                    }
-                }
-                
                 // Track assignments for swapping logic
                 const semiAssignments = semiAssignmentsForPreview; // dateKey -> { groupNum -> person name }
                 const globalSemiRotationPosition = {}; // groupNum -> global position (continues across months)
@@ -12691,36 +12643,6 @@
                             html += '<td class="text-muted">-</td>';
                         } else {
                             const rotationDays = groupPeople.length;
-                            // Return-from-missing: if this (dateKey, groupNum) is a designated slot, assign that person
-                            const designated = returnFromMissingSemiTargets[dateKey]?.[groupNum];
-                            if (designated && designated.personName && groupPeople.includes(designated.personName) &&
-                                !isPersonMissingOnDate(designated.personName, groupNum, date, 'semi')) {
-                                const assignedPerson = designated.personName;
-                                if (!semiRotationPersons[dateKey]) semiRotationPersons[dateKey] = {};
-                                semiRotationPersons[dateKey][groupNum] = assignedPerson;
-                                const designatedIndex = groupPeople.indexOf(assignedPerson);
-                                globalSemiRotationPosition[groupNum] = (designatedIndex + 1) % rotationDays;
-                                storeAssignmentReason(
-                                    dateKey,
-                                    groupNum,
-                                    assignedPerson,
-                                    'skip',
-                                    'Επέστρεψε από απουσία και επανεντάχθηκε στην ημιάργια μετά από 3 ημερολογιακές ημέρες.',
-                                    null,
-                                    null,
-                                    { returnFromMissing: true, missingEnd: designated.missingEnd }
-                                );
-                                if (!semiAssignments[dateKey]) semiAssignments[dateKey] = {};
-                                semiAssignments[dateKey][groupNum] = assignedPerson;
-                                if (!assignedPeoplePreviewSemi[monthKey][groupNum]) assignedPeoplePreviewSemi[monthKey][groupNum] = new Set();
-                                assignedPeoplePreviewSemi[monthKey][groupNum].add(assignedPerson);
-                                const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'semi', dayTypeLists, startDate);
-                                const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'semi', groupPeople.length);
-                                const lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
-                                const daysCountInfo = (daysSince !== null && daysSince !== Infinity) ? ` <span class="text-info">${daysSince}/${rotationDays} ημέρες</span>` : (daysSince === Infinity ? ' <span class="text-success">πρώτη φορά</span>' : '');
-                                html += `<td>${buildBaselineComputedCellHtml(assignedPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
-                                continue;
-                            }
                             if (globalSemiRotationPosition[groupNum] === undefined) {
                                 // If start date is February 2026, always start from first person (position 0)
                                 const isFebruary2026 = calculationSteps.startDate && 
