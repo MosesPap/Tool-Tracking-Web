@@ -7132,24 +7132,23 @@
                                     }
                                 }
                             }
-                            entries.push({ personName, nameOnly, rank, groupNum: g, underline, isSwap, swapStyle });
+                            entries.push({ personName, nameOnly, rank, underline, isSwap, swapStyle, groupNum: g });
                         }
-                        // Sort by group order (1, 2, 3, 4) instead of hierarchy rank
-                        entries.sort((a, b) => {
-                            // First sort by group number (1, 2, 3, 4)
-                            if (a.groupNum !== b.groupNum) {
-                                return (a.groupNum || 999) - (b.groupNum || 999);
-                            }
-                            // If same group, sort by hierarchy rank as tiebreaker
-                            return (a.rank - b.rank) || (a.personName || '').localeCompare(b.personName || '');
+                        // Store hierarchy-ordered entries for popup (sorted by rank) - do this BEFORE sorting by group
+                        const hierarchyOrderedEntries = [...entries].sort((a, b) => (a.rank - b.rank) || (a.personName || '').localeCompare(b.personName || ''));
+                        const hierarchyData = JSON.stringify(hierarchyOrderedEntries.map(e => ({ name: e.nameOnly, rank: e.rank })));
+                        // Sort by group order (1, 2, 3, 4) for display
+                        const entriesByGroup = [...entries].sort((a, b) => {
+                            const groupA = a.groupNum || 999;
+                            const groupB = b.groupNum || 999;
+                            return groupA - groupB;
                         });
-                        displayAssignmentHtml = '<div class="duty-person-container">';
-                        entries.forEach((e, idx) => {
+                        
+                        displayAssignmentHtml = '<div class="duty-person-container" data-hierarchy-order="' + escapeHtml(hierarchyData) + '">';
+                        entriesByGroup.forEach((e, idx) => {
                             const cls = e.isSwap ? 'duty-person-swapped' : 'duty-person';
-                            const num = idx + 1;
-                            // Store hierarchy rank in data attribute for popup
-                            const hierarchyRank = e.rank !== 9999 ? e.rank : 'N/A';
-                            displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''} hierarchy-hover-trigger" data-hierarchy-rank="${hierarchyRank}" data-person-name="${e.nameOnly}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${num}. ${e.nameOnly}</div>`;
+                            const groupDisplay = e.groupNum && e.groupNum >= 1 && e.groupNum <= 4 ? e.groupNum : '';
+                            displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${groupDisplay}. ${e.nameOnly}</div>`;
                         });
                         if (shouldShowHeavyIndicators && assignmentReasons[key]) {
                             displayAssignmentHtml += `<div class="duty-person-swapped" title="Υπάρχουν λόγοι αλλαγής/παράλειψης">*</div>`;
@@ -7178,66 +7177,98 @@
                     }
                 });
                 
+                // Add hover handler with 1 second delay for popup
+                let hoverTimeout = null;
+                const container = dayDiv.querySelector('.duty-person-container');
+                if (container && container.getAttribute('data-hierarchy-order')) {
+                    dayDiv.addEventListener('mouseenter', (e) => {
+                        hoverTimeout = setTimeout(() => {
+                            showHierarchyPopup(dayDiv, container);
+                        }, 1000);
+                    });
+                    dayDiv.addEventListener('mouseleave', (e) => {
+                        if (hoverTimeout) {
+                            clearTimeout(hoverTimeout);
+                            hoverTimeout = null;
+                        }
+                        hideHierarchyPopup();
+                    });
+                }
+                
                 frag.appendChild(dayDiv);
             }
             
             grid.appendChild(frag);
-            
-            // Initialize hierarchy hover popups after calendar is rendered
-            initializeHierarchyHoverPopups();
         }
 
-        // Initialize hierarchy hover popups with 1 second delay
-        function initializeHierarchyHoverPopups() {
-            const triggers = document.querySelectorAll('.hierarchy-hover-trigger');
-            triggers.forEach(trigger => {
-                let hoverTimeout = null;
-                let popup = null;
+        // Show hierarchy popup on hover
+        let hierarchyPopup = null;
+        function showHierarchyPopup(dayDiv, container) {
+            // Remove existing popup if any
+            if (hierarchyPopup) {
+                hierarchyPopup.remove();
+            }
+            
+            const hierarchyData = container.getAttribute('data-hierarchy-order');
+            if (!hierarchyData) return;
+            
+            try {
+                const entries = JSON.parse(hierarchyData);
+                if (!entries || entries.length === 0) return;
                 
-                const createPopup = () => {
-                    if (popup) return popup;
-                    popup = document.createElement('div');
-                    popup.className = 'hierarchy-popup';
-                    const hierarchyRank = trigger.getAttribute('data-hierarchy-rank');
-                    const personName = trigger.getAttribute('data-person-name');
-                    popup.textContent = `Ιεραρχία: ${hierarchyRank}`;
-                    trigger.appendChild(popup);
-                    return popup;
-                };
+                // Create popup element
+                hierarchyPopup = document.createElement('div');
+                hierarchyPopup.className = 'hierarchy-popup';
+                hierarchyPopup.innerHTML = '<div class="hierarchy-popup-content"><div class="hierarchy-popup-title">Ιεραρχική Σειρά</div><div class="hierarchy-popup-list">' +
+                    entries.map((e, idx) => `<div class="hierarchy-popup-item">${idx + 1}. ${escapeHtml(e.name)}</div>`).join('') +
+                    '</div></div>';
                 
-                const showPopup = () => {
-                    const popupEl = createPopup();
-                    // Force reflow to ensure transition works
-                    void popupEl.offsetWidth;
-                    popupEl.classList.add('show');
-                };
+                document.body.appendChild(hierarchyPopup);
                 
-                const hidePopup = () => {
-                    if (popup) {
-                        popup.classList.remove('show');
-                        setTimeout(() => {
-                            if (popup && popup.parentNode) {
-                                popup.parentNode.removeChild(popup);
-                                popup = null;
-                            }
-                        }, 300); // Wait for transition to complete
+                // Position popup near the cell
+                const rect = dayDiv.getBoundingClientRect();
+                const popupRect = hierarchyPopup.getBoundingClientRect();
+                const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+                const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+                
+                // Position to the right of the cell, or left if not enough space
+                let left = rect.right + 10;
+                if (left + popupRect.width > window.innerWidth) {
+                    left = rect.left - popupRect.width - 10;
+                }
+                
+                // Position vertically centered on cell, or adjust if near edges
+                let top = rect.top + (rect.height / 2) - (popupRect.height / 2);
+                if (top < scrollY + 10) {
+                    top = scrollY + 10;
+                } else if (top + popupRect.height > scrollY + window.innerHeight - 10) {
+                    top = scrollY + window.innerHeight - popupRect.height - 10;
+                }
+                
+                hierarchyPopup.style.left = left + 'px';
+                hierarchyPopup.style.top = top + 'px';
+                
+                // Trigger zoom animation
+                setTimeout(() => {
+                    if (hierarchyPopup) {
+                        hierarchyPopup.classList.add('hierarchy-popup-visible');
                     }
-                };
-                
-                trigger.addEventListener('mouseenter', () => {
-                    hoverTimeout = setTimeout(() => {
-                        showPopup();
-                    }, 1000); // 1 second delay
-                });
-                
-                trigger.addEventListener('mouseleave', () => {
-                    if (hoverTimeout) {
-                        clearTimeout(hoverTimeout);
-                        hoverTimeout = null;
+                }, 10);
+            } catch (error) {
+                console.error('Error showing hierarchy popup:', error);
+            }
+        }
+        
+        function hideHierarchyPopup() {
+            if (hierarchyPopup) {
+                hierarchyPopup.classList.remove('hierarchy-popup-visible');
+                setTimeout(() => {
+                    if (hierarchyPopup) {
+                        hierarchyPopup.remove();
+                        hierarchyPopup = null;
                     }
-                    hidePopup();
-                });
-            });
+                }, 300); // Wait for fade-out animation
+            }
         }
 
         // Get day type label

@@ -899,49 +899,7 @@
             font-weight: bold;
             text-align: left;
             word-break: break-word;
-            pointer-events: auto; /* Enable hover for hierarchy popup */
-            position: relative;
-            cursor: help;
-        }
-
-        /* Hierarchy popup styles */
-        .hierarchy-popup {
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%) scale(0);
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 0.5rem 0.75rem;
-            border-radius: 8px;
-            font-size: 0.7rem;
-            font-weight: 600;
-            white-space: nowrap;
-            z-index: 1000;
-            margin-bottom: 0.5rem;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-            opacity: 0;
-            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
-            pointer-events: none;
-        }
-
-        .hierarchy-popup::after {
-            content: '';
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            border: 6px solid transparent;
-            border-top-color: #764ba2;
-        }
-
-        .hierarchy-popup.show {
-            transform: translateX(-50%) scale(1);
-            opacity: 1;
-        }
-
-        .hierarchy-hover-trigger {
-            position: relative;
+            pointer-events: none; /* Allow clicks to pass through */
         }
 
         .duty-person-critical {
@@ -961,9 +919,7 @@
             font-weight: bold;
             text-align: left;
             word-break: break-word;
-            pointer-events: auto; /* Enable hover for hierarchy popup */
-            position: relative;
-            cursor: help;
+            pointer-events: none; /* Allow clicks to pass through */
             border: 2px solid #17a2b8;
             border-radius: 20px;
             padding: 4px 8px;
@@ -979,6 +935,77 @@
             text-decoration: underline;
             text-decoration-thickness: 2px;
             text-underline-offset: 2px;
+        }
+
+        /* Hierarchy popup styles */
+        .hierarchy-popup {
+            position: fixed;
+            z-index: 10000;
+            opacity: 0;
+            transform: scale(0.8);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            pointer-events: none;
+        }
+
+        .hierarchy-popup-visible {
+            opacity: 1;
+            transform: scale(1);
+            pointer-events: auto;
+        }
+
+        .hierarchy-popup-content {
+            background: linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%);
+            border: 3px solid #FF9800;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(255, 152, 0, 0.2);
+            padding: 1rem;
+            min-width: 200px;
+            max-width: 300px;
+            animation: popupZoom 0.3s ease-out;
+        }
+
+        @keyframes popupZoom {
+            0% {
+                transform: scale(0.8);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.05);
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .hierarchy-popup-title {
+            font-weight: bold;
+            font-size: 1rem;
+            color: #FF9800;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #FF9800;
+            text-align: center;
+        }
+
+        .hierarchy-popup-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .hierarchy-popup-item {
+            font-size: 0.9rem;
+            color: #333;
+            padding: 0.4rem 0.6rem;
+            background: rgba(255, 152, 0, 0.1);
+            border-radius: 6px;
+            border-left: 3px solid #FF9800;
+            transition: background 0.2s ease;
+        }
+
+        .hierarchy-popup-item:hover {
+            background: rgba(255, 152, 0, 0.2);
         }
 
         .holiday-list {
