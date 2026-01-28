@@ -10067,15 +10067,16 @@
                                     swapPairId: swapPairId
                                 });
                                 
-                                // Perform the swap: conflicted person goes to swap date, swapped person goes to conflicted date
-                                updatedAssignments[dateKey][groupNum] = swapCandidate;
-                                updatedAssignments[swapDateKey][groupNum] = currentPerson;
+                                // If this is a BACKWARD swap (swapDateKey earlier than dateKey in same month),
+                                // do a forward SHIFT across the intervening semi-normal days so that:
+                                // - currentPerson moves backward to swapDateKey
+                                // - the displaced person (swapCandidate) becomes the EXACT next semi-normal after swapDateKey
+                                // - everyone in between shifts forward by one semi slot (no one gets "skipped")
+                                const fromIndex = sortedSemi.indexOf(swapDateKey);
+                                const toIndex = sortedSemi.indexOf(dateKey);
+                                const isBackwardWithinMonth = fromIndex >= 0 && toIndex >= 0 && fromIndex < toIndex &&
+                                    (swapDateKey.substring(0, 7) === dateKey.substring(0, 7));
 
-                                // Mark both days as swapped in this run to prevent re-swapping loops
-                                swappedSemiSet.add(`${dateKey}:${groupNum}`);
-                                swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
-                                
-                                // Store assignment reasons for both swapped people with swap pair ID
                                 // Use the ACTUAL conflict neighbor day (e.g. Fri) instead of the swap-execution day (e.g. Thu).
                                 const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, {
                                     special: simulatedSpecialAssignments,
@@ -10083,36 +10084,76 @@
                                     semi: updatedAssignments,
                                     normal: null
                                 }) || dateKey;
-                                storeAssignmentReason(
-                                    dateKey,
-                                    groupNum,
-                                    swapCandidate,
-                                    'swap',
-                                    buildSwapReasonGreek({
-                                        changedWithName: currentPerson,
-                                        conflictedPersonName: currentPerson,
-                                        conflictDateKey: conflictNeighborKey,
-                                        newAssignmentDateKey: swapDateKey,
-                                        subjectName: swapCandidate
-                                    }),
-                                    currentPerson,
-                                    swapPairId
-                                );
-                                storeAssignmentReason(
-                                    swapDateKey,
-                                    groupNum,
-                                    currentPerson,
-                                    'swap',
-                                    buildSwapReasonGreek({
-                                        changedWithName: swapCandidate,
-                                        conflictedPersonName: currentPerson,
-                                        conflictDateKey: conflictNeighborKey,
-                                        newAssignmentDateKey: swapDateKey,
-                                        subjectName: currentPerson
-                                    }),
-                                    swapCandidate,
-                                    swapPairId
-                                );
+
+                                if (isBackwardWithinMonth) {
+                                    const changes = []; // { dk, prevPerson, newPerson }
+                                    let carry = currentPerson;
+                                    for (let i = fromIndex; i <= toIndex; i++) {
+                                        const dk = sortedSemi[i];
+                                        if (!updatedAssignments[dk]) updatedAssignments[dk] = {};
+                                        const prev = updatedAssignments[dk][groupNum] || null;
+                                        updatedAssignments[dk][groupNum] = carry;
+                                        changes.push({ dk, prevPerson: prev, newPerson: carry });
+                                        carry = prev;
+                                        swappedSemiSet.add(`${dk}:${groupNum}`);
+                                    }
+
+                                    // Store "shift" reasons for all moved assignments (keeps UI explanations consistent).
+                                    for (const ch of changes) {
+                                        if (!ch.newPerson) continue;
+                                        storeAssignmentReason(
+                                            ch.dk,
+                                            groupNum,
+                                            ch.newPerson,
+                                            'shift',
+                                            `Μετακίνηση (οπισθοδρομική ανταλλαγή) λόγω σύγκρουσης γειτονικής υπηρεσίας (${conflictNeighborKey}).`,
+                                            ch.prevPerson || null,
+                                            swapPairId,
+                                            { backwardShift: true, originDayKey: dateKey, swapDayKey: swapDateKey, conflictDateKey: conflictNeighborKey }
+                                        );
+                                    }
+                                } else {
+                                    // Forward swap (or cross-month) keeps original swap behavior
+                                    // Perform the swap: conflicted person goes to swap date, swapped person goes to conflicted date
+                                    updatedAssignments[dateKey][groupNum] = swapCandidate;
+                                    updatedAssignments[swapDateKey][groupNum] = currentPerson;
+
+                                    // Mark both days as swapped in this run to prevent re-swapping loops
+                                    swappedSemiSet.add(`${dateKey}:${groupNum}`);
+                                    swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
+                                    
+                                    // Store assignment reasons for both swapped people with swap pair ID
+                                    storeAssignmentReason(
+                                        dateKey,
+                                        groupNum,
+                                        swapCandidate,
+                                        'swap',
+                                        buildSwapReasonGreek({
+                                            changedWithName: currentPerson,
+                                            conflictedPersonName: currentPerson,
+                                            conflictDateKey: conflictNeighborKey,
+                                            newAssignmentDateKey: swapDateKey,
+                                            subjectName: swapCandidate
+                                        }),
+                                        currentPerson,
+                                        swapPairId
+                                    );
+                                    storeAssignmentReason(
+                                        swapDateKey,
+                                        groupNum,
+                                        currentPerson,
+                                        'swap',
+                                        buildSwapReasonGreek({
+                                            changedWithName: swapCandidate,
+                                            conflictedPersonName: currentPerson,
+                                            conflictDateKey: conflictNeighborKey,
+                                            newAssignmentDateKey: swapDateKey,
+                                            subjectName: currentPerson
+                                        }),
+                                        swapCandidate,
+                                        swapPairId
+                                    );
+                                }
                                 
                                 // IMPORTANT: Stop processing this conflict - swap found, don't try cross-month swap
                                 // Break out of the loop to prevent unnecessary swaps
@@ -11621,53 +11662,105 @@
                                     swapPairId: swapPairId
                                 });
                                 
-                                // Perform the swap: conflicted person goes to swap date, swapped person goes to conflicted date
-                                updatedAssignments[dateKey][groupNum] = swapCandidate;
-                                updatedAssignments[swapDayKey][groupNum] = currentPerson;
+                                // If this is a BACKWARD swap inside the same month, do a forward SHIFT along the same track
+                                // so the displaced person is assigned on the EXACT next track day (not skipped).
+                                const isCrossMonthSwap = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
+                                const isBackwardWithinMonth = !isCrossMonthSwap && swapDayKey < dateKey;
+
+                                // Use the ACTUAL conflict neighbor day instead of the swap-execution day.
+                                const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, simulatedAssignments) || dateKey;
+
+                                if (isBackwardWithinMonth) {
+                                    // Determine track from the CURRENT normal day (Mon/Wed track or Tue/Thu track)
+                                    const curDow = new Date(dateKey + 'T00:00:00').getDay(); // 0..6
+                                    const track = (curDow === 1 || curDow === 3) ? 1 : ((curDow === 2 || curDow === 4) ? 2 : null);
+                                    const trackKeys = track
+                                        ? normalDays
+                                            .filter(dk => dk >= swapDayKey && dk <= dateKey)
+                                            .filter(dk => {
+                                                const d = new Date(dk + 'T00:00:00').getDay();
+                                                return track === 1 ? (d === 1 || d === 3) : (d === 2 || d === 4);
+                                            })
+                                            .sort()
+                                        : [swapDayKey, dateKey].sort();
+
+                                    const changes = []; // { dk, prevPerson, newPerson }
+                                    let carry = currentPerson;
+                                    for (const dk of trackKeys) {
+                                        if (!updatedAssignments[dk]) updatedAssignments[dk] = {};
+                                        const prev = updatedAssignments[dk][groupNum] || null;
+                                        updatedAssignments[dk][groupNum] = carry;
+                                        changes.push({ dk, prevPerson: prev, newPerson: carry });
+                                        carry = prev;
+                                    }
+
+                                    // Store "shift" reasons for all moved assignments (keeps UI explanations consistent).
+                                    const shiftMeta = { backwardShift: true, originDayKey: dateKey, swapDayKey, conflictDateKey: conflictNeighborKey };
+                                    for (const ch of changes) {
+                                        if (!ch.newPerson) continue;
+                                        storeAssignmentReason(
+                                            ch.dk,
+                                            groupNum,
+                                            ch.newPerson,
+                                            'shift',
+                                            `Μετακίνηση (οπισθοδρομική ανταλλαγή) λόγω σύγκρουσης γειτονικής υπηρεσίας (${conflictNeighborKey}).`,
+                                            ch.prevPerson || null,
+                                            swapPairId,
+                                            shiftMeta
+                                        );
+                                    }
+                                } else {
+                                    // Forward swap / cross-month swap keeps original behavior
+                                    // Perform the swap: conflicted person goes to swap date, swapped person goes to conflicted date
+                                    updatedAssignments[dateKey][groupNum] = swapCandidate;
+                                    updatedAssignments[swapDayKey][groupNum] = currentPerson;
+                                }
                                 
                                 // Store assignment reasons for BOTH people involved in the swap with swap pair ID
                                 // Improved Greek reasons:
                                 // Use the ACTUAL conflict neighbor day (e.g. Fri) instead of the swap-execution day (e.g. Thu).
-                                const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, simulatedAssignments) || dateKey;
-                                const isCrossMonthSwap = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
                                 const swapMeta = isCrossMonthSwap ? {
                                     isCrossMonth: true,
                                     originDayKey: dateKey,
                                     swapDayKey: swapDayKey,
                                     conflictDateKey: conflictNeighborKey
                                 } : null;
-                                storeAssignmentReason(
-                                    dateKey,
-                                    groupNum,
-                                    swapCandidate,
-                                    'swap',
-                                    buildSwapReasonGreek({
-                                        changedWithName: currentPerson,
-                                        conflictedPersonName: currentPerson,
-                                        conflictDateKey: conflictNeighborKey,
-                                        newAssignmentDateKey: swapDayKey,
-                                        subjectName: swapCandidate
-                                    }),
-                                    currentPerson,
-                                    swapPairId,
-                                    swapMeta
-                                );
-                                storeAssignmentReason(
-                                    swapDayKey,
-                                    groupNum,
-                                    currentPerson,
-                                    'swap',
-                                    buildSwapReasonGreek({
-                                        changedWithName: swapCandidate,
-                                        conflictedPersonName: currentPerson,
-                                        conflictDateKey: conflictNeighborKey,
-                                        newAssignmentDateKey: swapDayKey,
-                                        subjectName: currentPerson
-                                    }),
-                                    swapCandidate,
-                                    swapPairId,
-                                    swapMeta
-                                );
+                                // Only store classic "swap" reasons when we actually performed a swap.
+                                // For backward shifts we already stored per-day "shift" reasons above.
+                                if (!isBackwardWithinMonth) {
+                                    storeAssignmentReason(
+                                        dateKey,
+                                        groupNum,
+                                        swapCandidate,
+                                        'swap',
+                                        buildSwapReasonGreek({
+                                            changedWithName: currentPerson,
+                                            conflictedPersonName: currentPerson,
+                                            conflictDateKey: conflictNeighborKey,
+                                            newAssignmentDateKey: swapDayKey,
+                                            subjectName: swapCandidate
+                                        }),
+                                        currentPerson,
+                                        swapPairId,
+                                        swapMeta
+                                    );
+                                    storeAssignmentReason(
+                                        swapDayKey,
+                                        groupNum,
+                                        currentPerson,
+                                        'swap',
+                                        buildSwapReasonGreek({
+                                            changedWithName: swapCandidate,
+                                            conflictedPersonName: currentPerson,
+                                            conflictDateKey: conflictNeighborKey,
+                                            newAssignmentDateKey: swapDayKey,
+                                            subjectName: currentPerson
+                                        }),
+                                        swapCandidate,
+                                        swapPairId,
+                                        swapMeta
+                                    );
+                                }
                                 
                                 // Mark both people as swapped to prevent re-swapping
                                 swappedPeopleSet.add(`${dateKey}:${groupNum}:${currentPerson}`);
