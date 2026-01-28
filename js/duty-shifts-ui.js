@@ -2,6 +2,9 @@
         // DUTY-SHIFTS-UI.JS - User Interface & Rendering
         // ============================================================================
 
+        // Global variables for missing period modal
+        let currentMissingPeriodGroup = null;
+        let currentMissingPeriodPerson = null;
 
         function renderAutoAddRankingsPicker() {
             const body = document.getElementById('autoAddRankPickerBody');
