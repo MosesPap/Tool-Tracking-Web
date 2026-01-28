@@ -3857,6 +3857,147 @@
             return null;
         }
 
+        // Get person details (groupNum, index, listType) - returns first match found
+        function getPersonDetails(personName) {
+            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                const group = groups[groupNum];
+                if (group) {
+                    const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                    for (const listType of listTypes) {
+                        if (Array.isArray(group[listType])) {
+                            const index = group[listType].indexOf(personName);
+                            if (index >= 0) {
+                                return { groupNum, index, listType };
+                            }
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Filter people search dropdown
+        function filterPeopleSearch() {
+            const input = document.getElementById('personSearchInput');
+            const dropdown = document.getElementById('peopleSearchDropdown');
+            if (!input || !dropdown) return;
+
+            const searchTerm = (input.value || '').trim().toLowerCase();
+            
+            if (searchTerm.length === 0) {
+                dropdown.innerHTML = '';
+                dropdown.style.display = 'none';
+                return;
+            }
+
+            const allPeople = getAllPeople();
+            const filtered = allPeople.filter(person => {
+                const personLower = person.toLowerCase();
+                return personLower.includes(searchTerm);
+            }).slice(0, 10); // Limit to 10 results
+
+            if (filtered.length === 0) {
+                dropdown.innerHTML = '<div class="dropdown-item-text text-muted">Δεν βρέθηκαν αποτελέσματα</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+
+            dropdown.innerHTML = filtered.map((person, index) => {
+                const details = getPersonDetails(person);
+                const groupName = details ? getGroupName(details.groupNum) : '';
+                const escapedPerson = person.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                return `
+                    <a href="#" class="dropdown-item" data-person-name="${escapedPerson}" onclick="selectPersonFromSearch('${escapedPerson}'); return false;">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span><strong>${escapeHtml(person)}</strong></span>
+                            ${groupName ? `<small class="text-muted">${groupName}</small>` : ''}
+                        </div>
+                    </a>
+                `;
+            }).join('');
+            dropdown.style.display = 'block';
+        }
+
+        // Show people search dropdown
+        function showPeopleSearchDropdown() {
+            const input = document.getElementById('personSearchInput');
+            const dropdown = document.getElementById('peopleSearchDropdown');
+            if (!input || !dropdown) return;
+            
+            if (input.value.trim().length > 0) {
+                filterPeopleSearch();
+            }
+        }
+
+        // Hide people search dropdown
+        function hidePeopleSearchDropdown() {
+            const dropdown = document.getElementById('peopleSearchDropdown');
+            if (dropdown) {
+                dropdown.style.display = 'none';
+            }
+        }
+
+        // Select person from search dropdown and open actions modal
+        function selectPersonFromSearch(personName) {
+            const input = document.getElementById('personSearchInput');
+            const dropdown = document.getElementById('peopleSearchDropdown');
+            
+            if (input) input.value = '';
+            if (dropdown) dropdown.style.display = 'none';
+
+            const details = getPersonDetails(personName);
+            if (details) {
+                openPersonActionsModal(details.groupNum, personName, details.index, details.listType);
+            } else {
+                alert(`Το άτομο "${personName}" δεν βρέθηκε στις λίστες.`);
+            }
+        }
+
+        // Handle keyboard events in person search
+        function handlePersonSearchKeydown(event) {
+            const dropdown = document.getElementById('peopleSearchDropdown');
+            if (!dropdown) return;
+
+            if (event.key === 'Escape') {
+                hidePeopleSearchDropdown();
+                const input = document.getElementById('personSearchInput');
+                if (input) input.blur();
+                return;
+            }
+
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                const activeItem = dropdown.querySelector('.dropdown-item.active') || dropdown.querySelector('.dropdown-item');
+                if (activeItem) {
+                    const personName = activeItem.getAttribute('data-person-name') || activeItem.querySelector('strong')?.textContent?.trim();
+                    if (personName) {
+                        selectPersonFromSearch(personName);
+                    }
+                }
+                return;
+            }
+
+            // Arrow key navigation
+            const items = Array.from(dropdown.querySelectorAll('.dropdown-item'));
+            if (items.length === 0) return;
+
+            let currentIndex = items.findIndex(item => item.classList.contains('active'));
+            
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                items.forEach(item => item.classList.remove('active'));
+                const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+                items[nextIndex].classList.add('active');
+                items[nextIndex].scrollIntoView({ block: 'nearest' });
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                items.forEach(item => item.classList.remove('active'));
+                const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+                items[prevIndex].classList.add('active');
+                items[prevIndex].scrollIntoView({ block: 'nearest' });
+            }
+        }
+
         // Open rankings management modal
         function openRankingsModal() {
             const allPeople = getAllPeople();
@@ -15632,6 +15773,11 @@
         // Expose to window for onclick handlers
         if (typeof window !== 'undefined') {
             window.toggleListCollapse = toggleListCollapse;
+            window.filterPeopleSearch = filterPeopleSearch;
+            window.showPeopleSearchDropdown = showPeopleSearchDropdown;
+            window.hidePeopleSearchDropdown = hidePeopleSearchDropdown;
+            window.selectPersonFromSearch = selectPersonFromSearch;
+            window.handlePersonSearchKeydown = handlePersonSearchKeydown;
         }
 
         // Update statistics (title bar: Σύνολο Ατόμων, ΑΥΜ, ΔΤΑ, AW139, Επίγεια)
