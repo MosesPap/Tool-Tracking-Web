@@ -6367,12 +6367,11 @@
                         headerRow.height = 30;
                         
                         // Set column widths
-                        // ExcelJS width is in characters. 1cm ≈ 2.835 characters, so 7.5cm ≈ 21.3
                         worksheet.getColumn(1).width = 14;
                         worksheet.getColumn(2).width = 17;
                         worksheet.getColumn(3).width = 57;
-                        worksheet.getColumn(4).width = 21.3;   // ΑΛΛΑΓΕΣ column (D) - 7.5cm
-                        worksheet.getColumn(5).width = 48;  // right table (E)
+                        worksheet.getColumn(4).width = 56.5;   // ΑΛΛΑΓΕΣ column (D)
+                        worksheet.getColumn(9).width = 48;  // right table (I)
                         
                         // Data rows
                         for (let day = 1; day <= daysInMonth; day++) {
@@ -6442,7 +6441,7 @@
                             groupData,
                             dutyAssignments
                         });
-                        const rightCol = 5; // E
+                        const rightCol = 9; // I
 
                         const setBlockBorder = (r, isTop, isBottom) => {
                             const cell = worksheet.getRow(r).getCell(rightCol);
@@ -6534,12 +6533,12 @@
                             const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
                             
                             const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
-                            // Add extra columns so we can place the right-side table in E
-                            data.push([dateStr, dayName, personName, '', '']);
+                            // Add extra columns so we can place the right-side table in I (columns E-H are empty)
+                            data.push([dateStr, dayName, personName, '', '', '', '', '', '']);
                             rowDayTypes.push(dayType);
                         }
 
-                        // Add "next on rotation" table on the RIGHT of the main duty list (E–F)
+                        // Add "next on rotation" table on the RIGHT of the main duty list (I)
                         const rotationInfo = getNextTwoRotationPeopleForCurrentMonth({
                             year,
                             month,
@@ -6548,7 +6547,7 @@
                             groupData,
                             dutyAssignments
                         });
-                        // We will write values into column E and merge E:F for each row.
+                        // We will write values into column I
                         const rightRows = [
                             { row: 4, text: 'ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ', kind: 'title' },
                             { row: 6, text: 'ΚΑΘΗΜΕΡΙΝΕΣ', kind: 'normalHeader' },
@@ -6566,13 +6565,17 @@
                         ];
                         
                         const ws = XLSX.utils.aoa_to_sheet(data);
-                        // Column widths: A14, B17, C57, D21.3 (7.5cm), E48
+                        // Column widths: A14, B17, C57, D56.5, I48
                         ws['!cols'] = [
                             { wch: 14 }, // A
                             { wch: 17 }, // B
                             { wch: 57 }, // C
-                            { wch: 21.3 },  // D ΑΛΛΑΓΕΣ (7.5cm)
-                            { wch: 48 }  // E right table
+                            { wch: 56.5 },  // D ΑΛΛΑΓΕΣ
+                            { wch: 10 }, // E (empty)
+                            { wch: 10 }, // F (empty)
+                            { wch: 10 }, // G (empty)
+                            { wch: 10 }, // H (empty)
+                            { wch: 48 }  // I right table
                         ];
                         if (!ws['!merges']) ws['!merges'] = [];
                         // Title merge A1:M1 (columns 0-12)
@@ -6620,21 +6623,21 @@
 
                         rightRows.forEach(rr => {
                             const excelRow = rr.row + 1; // 1-based
-                            const eAddr = 'E' + excelRow;
-                            if (!ws[eAddr]) ws[eAddr] = { t: 's', v: rr.text || '' };
-                            else ws[eAddr].v = rr.text || '';
+                            const iAddr = 'I' + excelRow;
+                            if (!ws[iAddr]) ws[iAddr] = { t: 's', v: rr.text || '' };
+                            else ws[iAddr].v = rr.text || '';
 
                             const kind = rr.kind || '';
                             if (kind === 'title') {
-                                styleCell(eAddr, { bold: true, center: true });
+                                styleCell(iAddr, { bold: true, center: true });
                             } else if (kind.startsWith('normal')) {
-                                styleCell(eAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: normalRgb });
+                                styleCell(iAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: normalRgb });
                             } else if (kind.startsWith('semi')) {
-                                styleCell(eAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: semiRgb });
+                                styleCell(iAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: semiRgb });
                             } else if (kind.startsWith('weekend')) {
-                                styleCell(eAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: weekendRgb });
+                                styleCell(iAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: weekendRgb });
                             } else if (kind.startsWith('special')) {
-                                styleCell(eAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: specialRgb });
+                                styleCell(iAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: specialRgb });
                             }
                         });
                         
@@ -6647,7 +6650,7 @@
                             const hexColor = color.map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase();
                             const excelRow = rowIdx + 1;
                             
-                            ['A', 'B', 'C'].forEach((col, colIdx) => {
+                            ['A', 'B', 'C', 'D'].forEach((col, colIdx) => {
                                 const cellRef = col + excelRow;
                                 if (!ws[cellRef]) {
                                     ws[cellRef] = { t: 's', v: data[rowIdx] ? (data[rowIdx][colIdx] || '') : '' };
