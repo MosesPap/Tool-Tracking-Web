@@ -8263,99 +8263,6 @@
             return currentIndex - lastDutyIndex - 1;
         }
 
-        // Initialize Flatpickr for month inputs
-        let flatpickrMonthInstances = {};
-        function initMonthPicker(inputId) {
-            const input = document.getElementById(inputId);
-            if (!input) return;
-            
-            // Check if Flatpickr is available
-            if (typeof flatpickr === 'undefined') {
-                console.warn('Flatpickr is not loaded. Months will display in browser default language.');
-                return;
-            }
-            
-            // Destroy existing instance if any
-            if (flatpickrMonthInstances[inputId]) {
-                flatpickrMonthInstances[inputId].destroy();
-            }
-            
-            // Change input type to text so Flatpickr can replace it properly
-            const originalType = input.type;
-            input.type = 'text';
-            
-            // Get Greek locale object - check multiple possible locations
-            let greekLocale = null;
-            if (flatpickr.l10ns && flatpickr.l10ns.el) {
-                greekLocale = flatpickr.l10ns.el;
-            } else if (window.flatpickr && window.flatpickr.l10ns && window.flatpickr.l10ns.el) {
-                greekLocale = window.flatpickr.l10ns.el;
-            }
-            
-            // Initialize Flatpickr with Greek locale
-            try {
-                const config = {
-                    dateFormat: 'Y-m',
-                    altInput: false, // Don't use altInput for month picker
-                    allowInput: false,
-                    monthSelectorType: 'static',
-                    locale: greekLocale || 'el'
-                };
-                
-                flatpickrMonthInstances[inputId] = flatpickr(input, config);
-            } catch (e) {
-                console.error('Error initializing Flatpickr for month picker:', e);
-                // Restore original type on error
-                input.type = originalType;
-            }
-        }
-
-        // Initialize Flatpickr for date inputs
-        let flatpickrDateInstances = {};
-        function initDatePicker(inputId) {
-            const input = document.getElementById(inputId);
-            if (!input) return;
-            
-            // Check if Flatpickr is available
-            if (typeof flatpickr === 'undefined') {
-                console.warn('Flatpickr is not loaded. Dates will display in browser default language.');
-                return;
-            }
-            
-            // Destroy existing instance if any
-            if (flatpickrDateInstances[inputId]) {
-                flatpickrDateInstances[inputId].destroy();
-            }
-            
-            // Change input type to text so Flatpickr can replace it properly
-            const originalType = input.type;
-            input.type = 'text';
-            
-            // Get Greek locale object - check multiple possible locations
-            let greekLocale = null;
-            if (flatpickr.l10ns && flatpickr.l10ns.el) {
-                greekLocale = flatpickr.l10ns.el;
-            } else if (window.flatpickr && window.flatpickr.l10ns && window.flatpickr.l10ns.el) {
-                greekLocale = window.flatpickr.l10ns.el;
-            }
-            
-            // Initialize Flatpickr with Greek locale
-            try {
-                const config = {
-                    dateFormat: 'Y-m-d',
-                    altInput: false, // Don't use altInput for date picker
-                    allowInput: false,
-                    locale: greekLocale || 'el'
-                };
-                
-                flatpickrDateInstances[inputId] = flatpickr(input, config);
-            } catch (e) {
-                console.error('Error initializing Flatpickr for date picker:', e);
-                // Restore original type on error
-                input.type = originalType;
-            }
-        }
-
         // Open calculate duties modal
         function openCalculateDutiesModal() {
             // Set default to current month
@@ -8376,22 +8283,8 @@
                 preserveCheckbox.checked = false;
             }
 
-            // Initialize Flatpickr for month inputs after modal is shown
-            const modalElement = document.getElementById('calculateDutiesModal');
-            if (modalElement) {
-                modalElement.addEventListener('shown.bs.modal', function() {
-                    setTimeout(() => {
-                        initMonthPicker('calculateStartMonth');
-                        initMonthPicker('calculateEndMonth');
-                    }, 100);
-                }, { once: true });
-            } else {
-                // Fallback if event listener fails
-                setTimeout(() => {
-                    initMonthPicker('calculateStartMonth');
-                    initMonthPicker('calculateEndMonth');
-                }, 300);
-            }
+            // Make month picker open when clicking anywhere on the month fields (label/container too)
+            ensureMonthPickerClickTargets();
             
             // Add event listener to button as backup (remove old listeners first)
             const calculateButton = document.getElementById('calculateDutiesButton');
@@ -8471,26 +8364,8 @@
                     return;
                 }
                 
-                // Get values from Flatpickr instances if they exist
-                let startMonth = startMonthInput.value;
-                let endMonth = endMonthInput ? endMonthInput.value : '';
-                
-                if (flatpickrMonthInstances['calculateStartMonth']) {
-                    const selectedDates = flatpickrMonthInstances['calculateStartMonth'].selectedDates;
-                    if (selectedDates.length > 0) {
-                        const date = selectedDates[0];
-                        startMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                    }
-                }
-                
-                if (endMonthInput && flatpickrMonthInstances['calculateEndMonth']) {
-                    const selectedDates = flatpickrMonthInstances['calculateEndMonth'].selectedDates;
-                    if (selectedDates.length > 0) {
-                        const date = selectedDates[0];
-                        endMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                    }
-                }
-                
+                const startMonth = startMonthInput.value;
+                const endMonth = endMonthInput ? endMonthInput.value : '';
                 const preserveExisting = preserveCheckbox.checked;
                 
                 if (!startMonth) {
@@ -15388,7 +15263,7 @@
             let content = `
                 <div class="mb-3">
                     <div class="day-type-label" style="background: linear-gradient(135deg, ${hexColor}15 0%, ${hexColor}25 100%); border: 2px solid ${hexColor}40;">
-                        <i class="fas fa-calendar-check me-2" style="color: ${hexColor};"></i><strong style="color: ${hexColor};">Τύπος Ημέρας:</strong> <span style="color: ${hexColor};">${getDayTypeLabel(dayType)}</span>
+                        <i class="fas fa-calendar-check me-2" style="color: #000000;"></i><strong style="color: #000000;">Τύπος Ημέρας:</strong> <span style="color: #000000;">${getDayTypeLabel(dayType)}</span>
                     </div>
                 </div>
             `;
@@ -15483,8 +15358,8 @@
             content += `
                 <div class="mb-3">
                     <div class="section-title" style="border-bottom-color: ${hexColor};">
-                        <i class="fas fa-user-shield" style="color: ${hexColor};"></i>
-                        <span style="color: ${hexColor};">Σε Υπηρεσία</span>
+                        <i class="fas fa-user-shield" style="color: #000000;"></i>
+                        <span style="color: #000000; font-weight: 800;">Σε Υπηρεσία</span>
                     </div>
                     <div id="dutyPersonsContainer" class="mt-2">
             `;
@@ -15771,24 +15646,6 @@
             renderMissingPeriodsList();
             
             const modal = new bootstrap.Modal(document.getElementById('missingPeriodModal'));
-            
-            // Initialize Flatpickr for date inputs after modal is shown
-            const modalElement = document.getElementById('missingPeriodModal');
-            if (modalElement) {
-                modalElement.addEventListener('shown.bs.modal', function() {
-                    setTimeout(() => {
-                        initDatePicker('missingPeriodStart');
-                        initDatePicker('missingPeriodEnd');
-                    }, 100);
-                }, { once: true });
-            } else {
-                // Fallback if event listener fails
-                setTimeout(() => {
-                    initDatePicker('missingPeriodStart');
-                    initDatePicker('missingPeriodEnd');
-                }, 300);
-            }
-            
             modal.show();
         }
 
@@ -15840,26 +15697,9 @@
 
         // Add missing period
         function addMissingPeriod() {
-            let start = document.getElementById('missingPeriodStart').value;
-            let end = document.getElementById('missingPeriodEnd').value;
+            const start = document.getElementById('missingPeriodStart').value;
+            const end = document.getElementById('missingPeriodEnd').value;
             const reason = (document.getElementById('missingPeriodReason')?.value || '').trim();
-            
-            // Get values from Flatpickr instances if they exist
-            if (flatpickrDateInstances['missingPeriodStart']) {
-                const selectedDates = flatpickrDateInstances['missingPeriodStart'].selectedDates;
-                if (selectedDates.length > 0) {
-                    const date = selectedDates[0];
-                    start = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-                }
-            }
-            
-            if (flatpickrDateInstances['missingPeriodEnd']) {
-                const selectedDates = flatpickrDateInstances['missingPeriodEnd'].selectedDates;
-                if (selectedDates.length > 0) {
-                    const date = selectedDates[0];
-                    end = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-                }
-            }
             
             if (!start || !end) {
                 alert('Παρακαλώ συμπληρώστε και τις δύο ημερομηνίες');
