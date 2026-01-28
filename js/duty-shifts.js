@@ -8280,19 +8280,33 @@
                 flatpickrMonthInstances[inputId].destroy();
             }
             
+            // Change input type to text so Flatpickr can replace it properly
+            const originalType = input.type;
+            input.type = 'text';
+            
+            // Get Greek locale object - check multiple possible locations
+            let greekLocale = null;
+            if (flatpickr.l10ns && flatpickr.l10ns.el) {
+                greekLocale = flatpickr.l10ns.el;
+            } else if (window.flatpickr && window.flatpickr.l10ns && window.flatpickr.l10ns.el) {
+                greekLocale = window.flatpickr.l10ns.el;
+            }
+            
             // Initialize Flatpickr with Greek locale
             try {
-                flatpickrMonthInstances[inputId] = flatpickr(input, {
-                    locale: 'el',
+                const config = {
                     dateFormat: 'Y-m',
-                    altInput: true,
-                    altFormat: 'F Y',
-                    altInputClass: 'form-control',
+                    altInput: false, // Don't use altInput for month picker
                     allowInput: false,
-                    monthSelectorType: 'static'
-                });
+                    monthSelectorType: 'static',
+                    locale: greekLocale || 'el'
+                };
+                
+                flatpickrMonthInstances[inputId] = flatpickr(input, config);
             } catch (e) {
                 console.error('Error initializing Flatpickr for month picker:', e);
+                // Restore original type on error
+                input.type = originalType;
             }
         }
 
@@ -8313,18 +8327,32 @@
                 flatpickrDateInstances[inputId].destroy();
             }
             
+            // Change input type to text so Flatpickr can replace it properly
+            const originalType = input.type;
+            input.type = 'text';
+            
+            // Get Greek locale object - check multiple possible locations
+            let greekLocale = null;
+            if (flatpickr.l10ns && flatpickr.l10ns.el) {
+                greekLocale = flatpickr.l10ns.el;
+            } else if (window.flatpickr && window.flatpickr.l10ns && window.flatpickr.l10ns.el) {
+                greekLocale = window.flatpickr.l10ns.el;
+            }
+            
             // Initialize Flatpickr with Greek locale
             try {
-                flatpickrDateInstances[inputId] = flatpickr(input, {
-                    locale: 'el',
+                const config = {
                     dateFormat: 'Y-m-d',
-                    altInput: true,
-                    altFormat: 'd/m/Y',
-                    altInputClass: 'form-control',
-                    allowInput: false
-                });
+                    altInput: false, // Don't use altInput for date picker
+                    allowInput: false,
+                    locale: greekLocale || 'el'
+                };
+                
+                flatpickrDateInstances[inputId] = flatpickr(input, config);
             } catch (e) {
                 console.error('Error initializing Flatpickr for date picker:', e);
+                // Restore original type on error
+                input.type = originalType;
             }
         }
 
@@ -8348,11 +8376,22 @@
                 preserveCheckbox.checked = false;
             }
 
-            // Initialize Flatpickr for month inputs
-            setTimeout(() => {
-                initMonthPicker('calculateStartMonth');
-                initMonthPicker('calculateEndMonth');
-            }, 100);
+            // Initialize Flatpickr for month inputs after modal is shown
+            const modalElement = document.getElementById('calculateDutiesModal');
+            if (modalElement) {
+                modalElement.addEventListener('shown.bs.modal', function() {
+                    setTimeout(() => {
+                        initMonthPicker('calculateStartMonth');
+                        initMonthPicker('calculateEndMonth');
+                    }, 100);
+                }, { once: true });
+            } else {
+                // Fallback if event listener fails
+                setTimeout(() => {
+                    initMonthPicker('calculateStartMonth');
+                    initMonthPicker('calculateEndMonth');
+                }, 300);
+            }
             
             // Add event listener to button as backup (remove old listeners first)
             const calculateButton = document.getElementById('calculateDutiesButton');
@@ -15731,13 +15770,25 @@
             
             renderMissingPeriodsList();
             
-            // Initialize Flatpickr for date inputs
-            setTimeout(() => {
-                initDatePicker('missingPeriodStart');
-                initDatePicker('missingPeriodEnd');
-            }, 100);
-            
             const modal = new bootstrap.Modal(document.getElementById('missingPeriodModal'));
+            
+            // Initialize Flatpickr for date inputs after modal is shown
+            const modalElement = document.getElementById('missingPeriodModal');
+            if (modalElement) {
+                modalElement.addEventListener('shown.bs.modal', function() {
+                    setTimeout(() => {
+                        initDatePicker('missingPeriodStart');
+                        initDatePicker('missingPeriodEnd');
+                    }, 100);
+                }, { once: true });
+            } else {
+                // Fallback if event listener fails
+                setTimeout(() => {
+                    initDatePicker('missingPeriodStart');
+                    initDatePicker('missingPeriodEnd');
+                }, 300);
+            }
+            
             modal.show();
         }
 
