@@ -8714,23 +8714,13 @@
                                 }
                                 simulatedSpecialAssignmentsForConflict[monthKeyForConflict][groupNum].add(assignedPerson);
                                 
-                                // Advance rotation position from the person ACTUALLY assigned (not the skipped person)
-                                // This ensures that when Person A is replaced by Person B, next special-duty assigns Person C, not Person B again
-                                if (wasReplaced && replacementIndex !== null) {
-                                    // Person was replaced - advance from replacement's position
-                                    globalSpecialRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
-                                } else {
-                                    // No replacement - advance from assigned person's position
-                                    const assignedIndex = groupPeople.indexOf(assignedPerson);
-                                    if (assignedIndex !== -1) {
-                                        globalSpecialRotationPosition[groupNum] = (assignedIndex + 1) % rotationDays;
-                                    } else {
-                                        // Fallback: advance from rotation position
-                                        globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                    }
-                                }
+                                // IMPORTANT: Always advance rotation from the ORIGINAL rotation person's position (rotationPosition),
+                                // not from the replacement. This ensures that when Person A (disabled) is replaced by Person B,
+                                // next month starts from Person C (next after A), maintaining proper rotation order.
+                                // The replacement is temporary - rotation should continue as if Person A was assigned.
+                                globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                             } else {
-                                // No person found, still advance rotation position
+                                // No person found (everyone disabled), still advance rotation position from original rotation person
                                 globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                             }
                             
@@ -12553,23 +12543,13 @@
                                     assignedPeoplePreviewWeekend[monthKey][groupNum].add(assignedPerson);
                                 }
                                 
-                                // Advance rotation position from the person ACTUALLY assigned (not the skipped person)
-                                // This ensures that when Person A is replaced by Person B, next weekend assigns Person C, not Person B again
-                                if (wasReplaced && replacementIndex !== null) {
-                                    // Person was replaced - advance from replacement's position
-                                    globalWeekendRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
-                                } else {
-                                    // No replacement - advance from assigned person's position
-                                    const assignedIndex = groupPeople.indexOf(assignedPerson);
-                                    if (assignedIndex !== -1) {
-                                        globalWeekendRotationPosition[groupNum] = (assignedIndex + 1) % rotationDays;
-                                    } else {
-                                        // Fallback: advance from rotation position
-                                        globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                    }
-                                }
+                                // IMPORTANT: Always advance rotation from the ORIGINAL rotation person's position (rotationPosition),
+                                // not from the replacement. This ensures that when Person A (disabled) is replaced by Person B,
+                                // next month starts from Person C (next after A), maintaining proper rotation order.
+                                // The replacement is temporary - rotation should continue as if Person A was assigned.
+                                globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                             } else {
-                                // No person found, still advance rotation position
+                                // No person found (everyone disabled), still advance rotation position from original rotation person
                                 globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                             }
                             
@@ -13288,24 +13268,11 @@
                                     }
                                     }
                                     
-                                // Advance rotation position from the person ACTUALLY assigned (not the skipped person)
-                                // This ensures that when Person A is replaced by Person B, next semi-duty assigns Person C, not Person B again
-                                if (wasReplaced && replacementIndex !== null && assignedPerson) {
-                                    // Person was replaced - advance from replacement's position
-                                    globalSemiRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
-                                } else if (assignedPerson) {
-                                    // No replacement - advance from assigned person's position
-                                    const assignedIndex = groupPeople.indexOf(assignedPerson);
-                                    if (assignedIndex !== -1) {
-                                        globalSemiRotationPosition[groupNum] = (assignedIndex + 1) % rotationDays;
-                                    } else {
-                                        // Fallback: advance from rotation position
-                                        globalSemiRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                    }
-                                } else {
-                                    // No one assigned - advance from rotation position
-                                    globalSemiRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                }
+                                // IMPORTANT: Always advance rotation from the ORIGINAL rotation person's position (rotationPosition),
+                                // not from the replacement. This ensures that when Person A (disabled) is replaced by Person B,
+                                // next month starts from Person C (next after A), maintaining proper rotation order.
+                                // The replacement is temporary - rotation should continue as if Person A was assigned.
+                                globalSemiRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                             }
                             
                             // Store assignment for potential future swaps
