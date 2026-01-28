@@ -6297,8 +6297,8 @@
                         const workbook = new ExcelJS.Workbook();
                         const worksheet = workbook.addWorksheet('Υπηρεσίες');
                         
-                        // Set title - merge cells A1 through E1
-                        worksheet.mergeCells('A1:E1');
+                        // Set title - merge cells A1 through M1
+                        worksheet.mergeCells('A1:M1');
                         const titleCell = worksheet.getCell('A1');
                         titleCell.value = `ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`;
                         titleCell.font = { 
@@ -6333,9 +6333,10 @@
                         headerRow.getCell(1).value = 'ΗΜΕΡ.';
                         headerRow.getCell(2).value = 'ΗΜΕΡΑ';
                         headerRow.getCell(3).value = 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ';
+                        headerRow.getCell(4).value = 'ΑΛΛΑΓΕΣ';
                         
                         // Style each header cell individually
-                        ['A3', 'B3', 'C3'].forEach(cellRef => {
+                        ['A3', 'B3', 'C3', 'D3'].forEach(cellRef => {
                             const cell = worksheet.getCell(cellRef);
                             cell.font = { 
                                 name: 'Arial', 
@@ -6362,14 +6363,15 @@
                         });
                         // Add thick left and right borders to first and last header cells
                         worksheet.getCell('A3').border.left = { style: 'thick' };
-                        worksheet.getCell('C3').border.right = { style: 'thick' };
+                        worksheet.getCell('D3').border.right = { style: 'thick' };
                         headerRow.height = 30;
                         
                         // Set column widths
+                        // ExcelJS width is in characters. 1cm ≈ 2.835 characters, so 7.5cm ≈ 21.3
                         worksheet.getColumn(1).width = 14;
                         worksheet.getColumn(2).width = 17;
                         worksheet.getColumn(3).width = 57;
-                        worksheet.getColumn(4).width = 3;   // spacer column (D)
+                        worksheet.getColumn(4).width = 21.3;   // ΑΛΛΑΓΕΣ column (D) - 7.5cm
                         worksheet.getColumn(5).width = 48;  // right table (E)
                         
                         // Data rows
@@ -6390,6 +6392,7 @@
                             row.getCell(1).value = dateStr;
                             row.getCell(2).value = dayName;
                             row.getCell(3).value = personName;
+                            row.getCell(4).value = ''; // ΑΛΛΑΓΕΣ column - empty for user to fill
                             
                             // Apply color based on day type
                             const color = getDayTypeColor(dayType);
@@ -6399,7 +6402,7 @@
                             const isFirstDataRow = day === 1;
                             const isLastDataRow = day === daysInMonth;
                             
-                            [1, 2, 3].forEach(colNum => {
+                            [1, 2, 3, 4].forEach(colNum => {
                                 const cell = row.getCell(colNum);
                                 cell.fill = {
                                     type: 'pattern',
@@ -6417,7 +6420,7 @@
                                 
                                 // Add borders - thick on outside, thin on inside
                                 const isFirstCol = colNum === 1;
-                                const isLastCol = colNum === 3;
+                                const isLastCol = colNum === 4;
                                 
                                 cell.border = {
                                     top: isFirstDataRow ? { style: 'thick' } : { style: 'thin' },
@@ -6518,7 +6521,7 @@
                         data.push([]);
                         rowDayTypes.push(null, null);
                         
-                        data.push(['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ']);
+                        data.push(['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΑΛΛΑΓΕΣ']);
                         rowDayTypes.push(null);
                         
                         for (let day = 1; day <= daysInMonth; day++) {
@@ -6563,17 +6566,17 @@
                         ];
                         
                         const ws = XLSX.utils.aoa_to_sheet(data);
-                        // Column widths: A14, B17, C57, E48 (D spacer)
+                        // Column widths: A14, B17, C57, D21.3 (7.5cm), E48
                         ws['!cols'] = [
                             { wch: 14 }, // A
                             { wch: 17 }, // B
                             { wch: 57 }, // C
-                            { wch: 3 },  // D spacer
+                            { wch: 21.3 },  // D ΑΛΛΑΓΕΣ (7.5cm)
                             { wch: 48 }  // E right table
                         ];
                         if (!ws['!merges']) ws['!merges'] = [];
-                        // Title merge A1:E1
-                        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } });
+                        // Title merge A1:M1 (columns 0-12)
+                        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 12 } });
 
                         // Row heights (30) for the whole produced sheet
                         ws['!rows'] = Array.from({ length: data.length }, () => ({ hpt: 30 }));
@@ -6588,7 +6591,7 @@
                         
                         // Style header row (row 3)
                         const headerRow = 2; // 0-indexed, so row 3 is index 2
-                        ['A', 'B', 'C'].forEach((col, idx) => {
+                        ['A', 'B', 'C', 'D'].forEach((col, idx) => {
                             const cellRef = col + (headerRow + 1);
                             if (!ws[cellRef]) ws[cellRef] = { t: 's', v: data[headerRow][idx] || '' };
                             if (!ws[cellRef].s) ws[cellRef].s = {};
