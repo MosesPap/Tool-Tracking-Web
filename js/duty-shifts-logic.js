@@ -10188,6 +10188,13 @@
                 // Store final assignments (after swap logic) for saving when OK is pressed
                 calculationSteps.finalSemiAssignments = updatedAssignments;
                 
+                // IMPORTANT: Also update tempAssignments.semi with final swapped data
+                // This ensures executeCalculation() can use the correct data if finalSemiAssignments isn't available
+                if (!calculationSteps.tempAssignments) {
+                    calculationSteps.tempAssignments = {};
+                }
+                calculationSteps.tempAssignments.semi = updatedAssignments;
+                
                 // Show popup with results (will save when OK is pressed)
                 showSemiNormalSwapResults(swappedPeople, updatedAssignments);
             } catch (error) {
