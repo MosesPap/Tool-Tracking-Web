@@ -3475,8 +3475,15 @@
                         const startStr = start.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                         const endStr = end.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                         const isActive = today >= start && today <= end;
-                        return `${startStr} - ${endStr}${isActive ? ' (Ενεργό)' : ' (Μέλλον)'}`;
+                        const reason = (period.reason || '').trim();
+                        const reasonText = reason ? ` - ${reason}` : '';
+                        return `${startStr} - ${endStr}${isActive ? ' (Ενεργό)' : ' (Μέλλον)'}${reasonText}`;
                     }).join(', ');
+                    
+                    // Get all unique reasons for this person
+                    const reasons = periods.map(p => (p.reason || '').trim()).filter(r => r.length > 0);
+                    const uniqueReasons = [...new Set(reasons)];
+                    const reasonDisplay = uniqueReasons.length > 0 ? uniqueReasons.join(', ') : 'Απουσία';
                     
                     const item = document.createElement('div');
                     item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
@@ -3484,7 +3491,7 @@
                     item.innerHTML = `
                         <div class="flex-grow-1">
                             <strong>${person}</strong>
-                            <span class="badge bg-warning text-dark ms-2">Απουσία</span>
+                            <span class="badge bg-warning text-dark ms-2">${escapeHtml(reasonDisplay)}</span>
                             <div class="text-muted small mt-1">
                                 <i class="fas fa-calendar-times me-1"></i>${periodTexts}
                             </div>
@@ -3513,15 +3520,52 @@
             modal.show();
         }
         
-        // Edit person status (opens the person actions modal or missing period modal)
+        // Edit person status (opens disable settings for disabled people, missing period modal for missing people)
         function editPersonStatus(groupNum, personName) {
             // Close the missing/disabled modal
             const missingModal = bootstrap.Modal.getInstance(document.getElementById('missingDisabledPeopleModal'));
             if (missingModal) missingModal.hide();
             
-            // When called from "Απενεργοποιημένοι / Απουσιάζοντες" window, go directly to missing period management
-            // Go directly to missing period management window
-            openMissingPeriodModal(groupNum, personName);
+            // Check if person is disabled
+            const disabledState = getDisabledState(groupNum, personName);
+            const isDisabled = disabledState.all || disabledState.special || disabledState.weekend || disabledState.semi || disabledState.normal;
+            
+            // Check if person has missing periods
+            const groupData = groups[groupNum] || {};
+            const missingPeriods = groupData.missingPeriods?.[personName] || [];
+            const hasMissingPeriods = missingPeriods.length > 0;
+            
+            if (isDisabled) {
+                // Person is disabled - open disable settings modal
+                currentPersonActionsGroup = groupNum;
+                currentPersonActionsName = personName;
+                openDisableSettingsFromActions();
+            } else if (hasMissingPeriods) {
+                // Person has missing periods - open missing period management
+                openMissingPeriodModal(groupNum, personName);
+            } else {
+                // Neither disabled nor missing - open person actions modal
+                const groupData = groups[groupNum] || {};
+                let foundIndex = -1;
+                let foundListType = null;
+                
+                ['special', 'weekend', 'semi', 'normal'].forEach(listType => {
+                    const list = groupData[listType] || [];
+                    const index = list.indexOf(personName);
+                    if (index >= 0 && foundIndex < 0) {
+                        foundIndex = index;
+                        foundListType = listType;
+                    }
+                });
+                
+                if (foundIndex >= 0 && foundListType) {
+                    currentPersonActionsIndex = foundIndex;
+                    currentPersonActionsListType = foundListType;
+                    openPersonActionsModal(groupNum, personName, foundIndex, foundListType);
+                } else {
+                    alert(`Το άτομο "${personName}" δεν βρέθηκε στις λίστες της ομάδας ${getGroupName(groupNum)}.`);
+                }
+            }
         }
 
         function getDisabledState(groupNum, personName) {
