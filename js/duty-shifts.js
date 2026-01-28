@@ -3513,54 +3513,15 @@
             modal.show();
         }
         
-        // Edit person status (opens the person actions modal)
+        // Edit person status (opens the person actions modal or missing period modal)
         function editPersonStatus(groupNum, personName) {
             // Close the missing/disabled modal
             const missingModal = bootstrap.Modal.getInstance(document.getElementById('missingDisabledPeopleModal'));
             if (missingModal) missingModal.hide();
             
-            // Set current person for actions modal
-            currentPersonActionsGroup = groupNum;
-            currentPersonActionsName = personName;
-            
-            // Find the person's index and list type
-            const groupData = groups[groupNum] || {};
-            let foundIndex = -1;
-            let foundListType = null;
-            
-            ['special', 'weekend', 'semi', 'normal'].forEach(listType => {
-                const list = groupData[listType] || [];
-                const index = list.indexOf(personName);
-                if (index >= 0 && foundIndex < 0) {
-                    foundIndex = index;
-                    foundListType = listType;
-                }
-            });
-            
-            if (foundIndex >= 0 && foundListType) {
-                currentPersonActionsIndex = foundIndex;
-                currentPersonActionsListType = foundListType;
-                
-                // Update person actions modal
-                document.getElementById('personActionsName').textContent = personName;
-                document.getElementById('personActionsGroup').textContent = getGroupName(groupNum);
-                
-                // Update disable button text
-                const disabledState = getDisabledState(groupNum, personName);
-                const isAnyDisabled = disabledState.all || disabledState.special || disabledState.weekend || disabledState.semi || disabledState.normal;
-                const toggleButton = document.getElementById('toggleDisablePersonButton');
-                const toggleButtonText = document.getElementById('toggleDisablePersonButtonText');
-                if (toggleButton && toggleButtonText) {
-                    toggleButton.className = isAnyDisabled ? 'btn btn-outline-success' : 'btn btn-outline-secondary';
-                    toggleButtonText.textContent = isAnyDisabled ? 'Ενεργοποίηση (Ρυθμίσεις)' : 'Απενεργοποίηση (Ρυθμίσεις)';
-                }
-                
-                // Show person actions modal
-                const actionsModal = new bootstrap.Modal(document.getElementById('personActionsModal'));
-                actionsModal.show();
-            } else {
-                alert(`Το άτομο "${personName}" δεν βρέθηκε στις λίστες της ομάδας ${getGroupName(groupNum)}.`);
-            }
+            // When called from "Απενεργοποιημένοι / Απουσιάζοντες" window, go directly to missing period management
+            // Go directly to missing period management window
+            openMissingPeriodModal(groupNum, personName);
         }
 
         function getDisabledState(groupNum, personName) {
