@@ -7132,14 +7132,24 @@
                                     }
                                 }
                             }
-                            entries.push({ personName, nameOnly, rank, underline, isSwap, swapStyle });
+                            entries.push({ personName, nameOnly, rank, groupNum: g, underline, isSwap, swapStyle });
                         }
-                        entries.sort((a, b) => (a.rank - b.rank) || (a.personName || '').localeCompare(b.personName || ''));
+                        // Sort by group order (1, 2, 3, 4) instead of hierarchy rank
+                        entries.sort((a, b) => {
+                            // First sort by group number (1, 2, 3, 4)
+                            if (a.groupNum !== b.groupNum) {
+                                return (a.groupNum || 999) - (b.groupNum || 999);
+                            }
+                            // If same group, sort by hierarchy rank as tiebreaker
+                            return (a.rank - b.rank) || (a.personName || '').localeCompare(b.personName || '');
+                        });
                         displayAssignmentHtml = '<div class="duty-person-container">';
                         entries.forEach((e, idx) => {
                             const cls = e.isSwap ? 'duty-person-swapped' : 'duty-person';
                             const num = idx + 1;
-                            displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${num}. ${e.nameOnly}</div>`;
+                            // Store hierarchy rank in data attribute for popup
+                            const hierarchyRank = e.rank !== 9999 ? e.rank : 'N/A';
+                            displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''} hierarchy-hover-trigger" data-hierarchy-rank="${hierarchyRank}" data-person-name="${e.nameOnly}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${num}. ${e.nameOnly}</div>`;
                         });
                         if (shouldShowHeavyIndicators && assignmentReasons[key]) {
                             displayAssignmentHtml += `<div class="duty-person-swapped" title="Υπάρχουν λόγοι αλλαγής/παράλειψης">*</div>`;
@@ -7172,6 +7182,62 @@
             }
             
             grid.appendChild(frag);
+            
+            // Initialize hierarchy hover popups after calendar is rendered
+            initializeHierarchyHoverPopups();
+        }
+
+        // Initialize hierarchy hover popups with 1 second delay
+        function initializeHierarchyHoverPopups() {
+            const triggers = document.querySelectorAll('.hierarchy-hover-trigger');
+            triggers.forEach(trigger => {
+                let hoverTimeout = null;
+                let popup = null;
+                
+                const createPopup = () => {
+                    if (popup) return popup;
+                    popup = document.createElement('div');
+                    popup.className = 'hierarchy-popup';
+                    const hierarchyRank = trigger.getAttribute('data-hierarchy-rank');
+                    const personName = trigger.getAttribute('data-person-name');
+                    popup.textContent = `Ιεραρχία: ${hierarchyRank}`;
+                    trigger.appendChild(popup);
+                    return popup;
+                };
+                
+                const showPopup = () => {
+                    const popupEl = createPopup();
+                    // Force reflow to ensure transition works
+                    void popupEl.offsetWidth;
+                    popupEl.classList.add('show');
+                };
+                
+                const hidePopup = () => {
+                    if (popup) {
+                        popup.classList.remove('show');
+                        setTimeout(() => {
+                            if (popup && popup.parentNode) {
+                                popup.parentNode.removeChild(popup);
+                                popup = null;
+                            }
+                        }, 300); // Wait for transition to complete
+                    }
+                };
+                
+                trigger.addEventListener('mouseenter', () => {
+                    hoverTimeout = setTimeout(() => {
+                        showPopup();
+                    }, 1000); // 1 second delay
+                });
+                
+                trigger.addEventListener('mouseleave', () => {
+                    if (hoverTimeout) {
+                        clearTimeout(hoverTimeout);
+                        hoverTimeout = null;
+                    }
+                    hidePopup();
+                });
+            });
         }
 
         // Get day type label
