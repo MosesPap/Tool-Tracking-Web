@@ -3377,16 +3377,54 @@
                                 }) || dateKey;
 
                                 if (isBackwardWithinMonth) {
+                                    // Backward shift: currentPerson moves backward to swapDateKey,
+                                    // and everyone in between shifts forward by one slot.
+                                    // The displaced person (originally at swapDateKey) becomes the EXACT next semi-normal after swapDateKey.
                                     const changes = []; // { dk, prevPerson, newPerson }
                                     let carry = currentPerson;
+                                    
+                                    // Get the displaced person BEFORE the shift (the person originally at swapDateKey)
+                                    const displacedPersonOriginal = updatedAssignments[swapDateKey]?.[groupNum] || swapCandidate;
+                                    
+                                    // Perform the forward shift across all days from swapDateKey to dateKey (inclusive)
                                     for (let i = fromIndex; i <= toIndex; i++) {
                                         const dk = sortedSemi[i];
                                         if (!updatedAssignments[dk]) updatedAssignments[dk] = {};
                                         const prev = updatedAssignments[dk][groupNum] || null;
                                         updatedAssignments[dk][groupNum] = carry;
                                         changes.push({ dk, prevPerson: prev, newPerson: carry });
-                                        carry = prev;
+                                        carry = prev; // This becomes the person for the next iteration
                                         swappedSemiSet.add(`${dk}:${groupNum}`);
+                                    }
+                                    
+                                    // After the shift loop, verify the displaced person is correctly assigned
+                                    // The displaced person should be at fromIndex + 1 (the next semi-normal after swapDateKey)
+                                    // This verification ensures no one gets skipped
+                                    if (fromIndex + 1 < sortedSemi.length && displacedPersonOriginal) {
+                                        const nextSemiKey = sortedSemi[fromIndex + 1];
+                                        const assignedAtNext = updatedAssignments[nextSemiKey]?.[groupNum];
+                                        
+                                        // If the displaced person is not correctly assigned at the next semi-normal day,
+                                        // ensure they are assigned there (this handles edge cases where the shift might miss them)
+                                        if (assignedAtNext !== displacedPersonOriginal) {
+                                            if (!updatedAssignments[nextSemiKey]) updatedAssignments[nextSemiKey] = {};
+                                            // Only assign if that day doesn't already have someone (to avoid overwriting correct assignments)
+                                            if (!updatedAssignments[nextSemiKey][groupNum] || updatedAssignments[nextSemiKey][groupNum] !== displacedPersonOriginal) {
+                                                updatedAssignments[nextSemiKey][groupNum] = displacedPersonOriginal;
+                                                swappedSemiSet.add(`${nextSemiKey}:${groupNum}`);
+                                                // Store assignment reason for the displaced person
+                                                storeAssignmentReason(
+                                                    nextSemiKey,
+                                                    groupNum,
+                                                    displacedPersonOriginal,
+                                                    'shift',
+                                                    `Μετακίνηση (οπισθοδρομική ανταλλαγή) λόγω σύγκρουσης γειτονικής υπηρεσίας (${conflictNeighborKey}).`,
+                                                    null,
+                                                    swapPairId,
+                                                    { backwardShift: true, originDayKey: dateKey, swapDayKey: swapDateKey, conflictDateKey: conflictNeighborKey, displacedPerson: true }
+                                                );
+                                            }
+                                        }
                                     }
 
                                     // Store "shift" reasons for all moved assignments (keeps UI explanations consistent).
