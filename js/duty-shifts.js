@@ -12675,22 +12675,87 @@
                                 const pStartKey = inputValueToDateKey(period?.start);
                                 const pEndKey = inputValueToDateKey(period?.end);
                                 if (!pStartKey || !pEndKey) continue;
-                                if (pEndKey < calcStartKey || pEndKey > calcEndKey) continue;
+                                // Allow periods that ended within calculation range OR in the month immediately before calcStartKey
+                                // (e.g., if calculating March, also check periods ending in February)
+                                const pEndDate = new Date(pEndKey + 'T00:00:00');
+                                const calcStartDateObj = calcStartKey ? new Date(calcStartKey + 'T00:00:00') : null;
+                                const prevMonthStart = calcStartDateObj ? new Date(calcStartDateObj.getFullYear(), calcStartDateObj.getMonth() - 1, 1) : null;
+                                const prevMonthStartKey = prevMonthStart ? formatDateKey(prevMonthStart) : null;
+                                const prevMonthEnd = calcStartDateObj ? new Date(calcStartDateObj.getFullYear(), calcStartDateObj.getMonth(), 0) : null;
+                                const prevMonthEndKey = prevMonthEnd ? formatDateKey(prevMonthEnd) : null;
+                                const periodEndsInRange = (pEndKey >= calcStartKey && pEndKey <= calcEndKey);
+                                const periodEndsInPrevMonth = (prevMonthStartKey && prevMonthEndKey && pEndKey >= prevMonthStartKey && pEndKey <= prevMonthEndKey);
+                                if (!periodEndsInRange && !periodEndsInPrevMonth) continue;
                                 const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                                 if (processedSemiReturn.has(dedupeKey)) continue;
                                 processedSemiReturn.add(dedupeKey);
-                                const pEndDate = new Date(pEndKey + 'T00:00:00');
                                 const monthStartKey = formatDateKey(new Date(pEndDate.getFullYear(), pEndDate.getMonth(), 1));
-                                const scanStartKey = maxDateKeyLocal(maxDateKeyLocal(monthStartKey, pStartKey), calcStartKey);
-                                const scanEndKey = minDateKeyLocal(pEndKey, calcEndKey);
+                                // For scan window: if period ended in previous month, scan from period start to period end (within that month)
+                                // If period ended in current range, scan from max(monthStart, periodStart, calcStart) to min(periodEnd, calcEnd)
+                                const scanStartKey = periodEndsInPrevMonth 
+                                    ? maxDateKeyLocal(monthStartKey, pStartKey)
+                                    : maxDateKeyLocal(maxDateKeyLocal(monthStartKey, pStartKey), calcStartKey);
+                                const scanEndKey = periodEndsInPrevMonth 
+                                    ? pEndKey
+                                    : minDateKeyLocal(pEndKey, calcEndKey);
                                 if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
+                                // Check if they had a missed semi duty during the missing period
+                                // We need to check semi days in the missing window, but baselineSemiByDate only has semi days in sortedSemi (current calculation range)
+                                // For periods ending in previous month, we need to check if ANY semi day in that period would have been them by rotation
+                                // Since we don't have baseline for previous month semi days, we'll check if the period overlaps with any semi day in sortedSemi
+                                // OR we check if there's a semi day in the period window that would have been them
+                                // Actually, for previous month periods, we can't use baselineSemiByDate because it only covers sortedSemi (current range)
+                                // So we need to compute baseline for semi days in the period window if they're not in sortedSemi
+                                // But wait - if the period is 25-28 Feb and there's a semi on 27 Feb, that semi day might not be in sortedSemi if we're calculating March
+                                // So we need to check: did the period overlap with ANY semi day? And if so, would that person have been assigned by rotation?
+                                // For simplicity, let's check: if period ended in previous month, assume they had a missed semi if the period overlaps with any semi day
+                                // Actually, let's be more precise: check if there's a semi day in the period window (pStartKey to pEndKey) that exists
+                                // For now, let's check if any semi day in sortedSemi falls within the period window (for periods ending in current range)
+                                // For periods ending in previous month, we'll check if the period would have contained a semi day by checking the semi pattern
                                 let hadMissedSemi = false;
-                                for (const dk of sortedSemi) {
-                                    if (dk < scanStartKey) continue;
-                                    if (dk > scanEndKey) break;
-                                    if (baselineSemiByDate[dk]?.[groupNum] === personName) {
-                                        hadMissedSemi = true;
-                                        break;
+                                if (periodEndsInRange) {
+                                    // Period ended in current range - check baselineSemiByDate for semi days in scan window
+                                    for (const dk of sortedSemi) {
+                                        if (dk < scanStartKey) continue;
+                                        if (dk > scanEndKey) break;
+                                        if (baselineSemiByDate[dk]?.[groupNum] === personName) {
+                                            hadMissedSemi = true;
+                                            break;
+                                        }
+                                    }
+                                } else {
+                                    // Period ended in previous month - check if period overlaps with any semi day
+                                    // We can't use baselineSemiByDate because those semi days aren't in sortedSemi
+                                    // Instead, check if there's a semi day that falls within the period window
+                                    // For this, we need to know what semi days exist - but we only have sortedSemi (current range)
+                                    // So we'll assume: if the period is long enough and contains typical semi days, they likely had a missed semi
+                                    // Actually, a better approach: check if the period window (pStartKey to pEndKey) would contain a semi day
+                                    // by checking if getDayType for dates in that range includes semi-normal-day
+                                    // But we don't have that info easily. For now, let's assume if period is >= 3 days, they likely had a missed semi
+                                    // OR we can check: if period ended in previous month and threshold (end+4) falls in current range, assign them
+                                    // Actually, the user's requirement is: "if they have seminormal duty during the missing period"
+                                    // So we need to verify they had one. Since we don't have previous month semi days in sortedSemi,
+                                    // we'll check: if period ended in previous month and threshold falls in current range, check if they would have been assigned
+                                    // by rotation on any date in the period window that is a semi day
+                                    // For simplicity, let's check if any date in the period window (pStartKey to pEndKey) is a semi-normal-day type
+                                    // and if so, check if rotation would assign this person on that date
+                                    const periodStartDate = new Date(pStartKey + 'T00:00:00');
+                                    const periodEndDate = new Date(pEndKey + 'T00:00:00');
+                                    for (let checkDate = new Date(periodStartDate); checkDate <= periodEndDate; checkDate.setDate(checkDate.getDate() + 1)) {
+                                        const checkDateKey = formatDateKey(checkDate);
+                                        const dayType = getDayType(checkDate);
+                                        if (dayType === 'semi-normal-day') {
+                                            // Check if rotation would assign this person on this date
+                                            const rotationPos = getRotationPosition(checkDate, 'semi', groupNum);
+                                            const groupPeopleForCheck = g?.semi || [];
+                                            if (groupPeopleForCheck.length > 0) {
+                                                const expectedPerson = groupPeopleForCheck[rotationPos % groupPeopleForCheck.length];
+                                                if (expectedPerson === personName) {
+                                                    hadMissedSemi = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                                 if (!hadMissedSemi) continue;
@@ -12698,6 +12763,8 @@
                                 if (!thresholdKey) continue;
                                 const targetSemiKey = findFirstSemiOnOrAfter(sortedSemi, thresholdKey);
                                 if (!targetSemiKey) continue;
+                                // Ensure target semi is within calculation range (for previous month periods, target must be in current range)
+                                if (targetSemiKey < calcStartKey || targetSemiKey > calcEndKey) continue;
                                 if (!returnFromMissingSemiTargets[targetSemiKey]) returnFromMissingSemiTargets[targetSemiKey] = {};
                                 returnFromMissingSemiTargets[targetSemiKey][groupNum] = { personName, missingEnd: pEndKey };
                             }
