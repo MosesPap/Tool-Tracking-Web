@@ -3876,25 +3876,40 @@
             return null;
         }
 
-        // Filter people search dropdown
+        // Filter people search dropdown - shows all people initially, filters as you type
         function filterPeopleSearch() {
             const input = document.getElementById('personSearchInput');
             const dropdown = document.getElementById('peopleSearchDropdown');
             if (!input || !dropdown) return;
 
             const searchTerm = (input.value || '').trim().toLowerCase();
-            
-            if (searchTerm.length === 0) {
-                dropdown.innerHTML = '';
-                dropdown.style.display = 'none';
-                return;
-            }
-
             const allPeople = getAllPeople();
-            const filtered = allPeople.filter(person => {
-                const personLower = person.toLowerCase();
-                return personLower.includes(searchTerm);
-            }).slice(0, 10); // Limit to 10 results
+            
+            let filtered;
+            if (searchTerm.length === 0) {
+                // Show all people when search is empty
+                filtered = allPeople;
+            } else {
+                // Filter and prioritize: exact matches first, then starts with, then contains
+                filtered = allPeople.map(person => {
+                    const personLower = person.toLowerCase();
+                    let score = 0;
+                    if (personLower === searchTerm) {
+                        score = 3; // Exact match
+                    } else if (personLower.startsWith(searchTerm)) {
+                        score = 2; // Starts with
+                    } else if (personLower.includes(searchTerm)) {
+                        score = 1; // Contains
+                    } else {
+                        return null; // No match
+                    }
+                    return { person, score };
+                })
+                .filter(item => item !== null)
+                .sort((a, b) => b.score - a.score) // Sort by relevance
+                .map(item => item.person)
+                .slice(0, 50); // Limit to 50 results for better performance
+            }
 
             if (filtered.length === 0) {
                 dropdown.innerHTML = '<div class="dropdown-item-text text-muted">Δεν βρέθηκαν αποτελέσματα</div>';
@@ -3918,15 +3933,14 @@
             dropdown.style.display = 'block';
         }
 
-        // Show people search dropdown
+        // Show people search dropdown - always shows all people when focused
         function showPeopleSearchDropdown() {
             const input = document.getElementById('personSearchInput');
             const dropdown = document.getElementById('peopleSearchDropdown');
             if (!input || !dropdown) return;
             
-            if (input.value.trim().length > 0) {
-                filterPeopleSearch();
-            }
+            // Always show dropdown with filtered/all people
+            filterPeopleSearch();
         }
 
         // Hide people search dropdown
