@@ -15248,7 +15248,7 @@
                 }
             
             let content = `
-                <div class="mb-4">
+                <div class="mb-3">
                     <div class="day-type-label">
                         <i class="fas fa-calendar-check me-2"></i><strong>Τύπος Ημέρας:</strong> ${getDayTypeLabel(dayType)}
                     </div>
@@ -15343,12 +15343,12 @@
             
             // Create editable dropdown fields for each group
             content += `
-                <div class="mb-4">
+                <div class="mb-3">
                     <div class="section-title">
                         <i class="fas fa-user-shield"></i>
                         <span>Σε Υπηρεσία</span>
                     </div>
-                    <div id="dutyPersonsContainer" class="mt-3">
+                    <div id="dutyPersonsContainer" class="mt-2">
             `;
             
             personGroups.forEach((person, index) => {
@@ -15418,7 +15418,7 @@
                         : (reason.type === 'swap' ? normalizeSwapReasonText(reason.reason) : reason.reason))
                     : derivedReasonText;
                 const reasonDisplay = (reason || derivedReasonText)
-                    ? `<div class="mt-2 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${reasonDisplayText}</div>`
+                    ? `<div class="mt-1 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${reasonDisplayText}</div>`
                     : '';
                 
                 // Get all people from this group for dropdown
@@ -15459,102 +15459,7 @@
                 </div>
             `;
             
-            // Collect all swap details for this date
-            const swapDetails = [];
-            if (assignmentReasons[key]) {
-                for (const groupNumStr in assignmentReasons[key]) {
-                    const groupNum = parseInt(groupNumStr);
-                    if (isNaN(groupNum)) continue;
-                    
-                    for (const personName in assignmentReasons[key][groupNum]) {
-                        const reason = assignmentReasons[key][groupNum][personName];
-                        if (reason && reason.type === 'swap') {
-                            // Find the other person in the swap pair
-                            let swappedWithPerson = reason.swappedWith || 'Άγνωστο';
-                            let swapDate = null;
-                            
-                            // Search for the other person in the swap pair by swapPairId
-                            if (reason.swapPairId !== null && reason.swapPairId !== undefined) {
-                                for (const otherDateKey in assignmentReasons) {
-                                    for (const otherGroupNumStr in assignmentReasons[otherDateKey]) {
-                                        const otherGroupNum = parseInt(otherGroupNumStr);
-                                        if (isNaN(otherGroupNum)) continue;
-                                        
-                                        for (const otherPersonName in assignmentReasons[otherDateKey][otherGroupNum]) {
-                                            const otherReason = assignmentReasons[otherDateKey][otherGroupNum][otherPersonName];
-                                            if (otherReason && 
-                                                otherReason.type === 'swap' && 
-                                                otherReason.swapPairId === reason.swapPairId &&
-                                                (otherDateKey !== key || otherGroupNum !== groupNum || otherPersonName !== personName)) {
-                                                swappedWithPerson = otherPersonName;
-                                                swapDate = otherDateKey;
-                                                break;
-                                            }
-                                        }
-                                        if (swapDate) break;
-                                    }
-                                    if (swapDate) break;
-                                }
-                            }
-                            
-                            swapDetails.push({
-                                groupNum: groupNum,
-                                personName: personName,
-                                swappedWith: swappedWithPerson,
-                                swapDate: swapDate,
-                                reason: reason.reason,
-                                swapPairId: reason.swapPairId
-                            });
-                        }
-                    }
-                }
-            }
-            
-            // Display swap details if any
-            if (swapDetails.length > 0) {
-                content += `
-                    <div class="mt-3 mb-3">
-                        <strong><i class="fas fa-exchange-alt me-2"></i>Λεπτομέρειες Αλλαγών:</strong>
-                        <div class="mt-2">
-                `;
-                
-                swapDetails.forEach((swap, index) => {
-                    const swapColors = [
-                        { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.15)' }, // Bright Red
-                        { border: '#00E676', bg: 'rgba(0, 230, 118, 0.15)' }, // Bright Green
-                        { border: '#FFD600', bg: 'rgba(255, 214, 0, 0.15)' }, // Bright Yellow
-                        { border: '#00B0FF', bg: 'rgba(0, 176, 255, 0.15)' }, // Bright Blue
-                        { border: '#D500F9', bg: 'rgba(213, 0, 249, 0.15)' }, // Bright Purple
-                        { border: '#FF6D00', bg: 'rgba(255, 109, 0, 0.15)' }, // Bright Orange
-                        { border: '#00E5FF', bg: 'rgba(0, 229, 255, 0.15)' }, // Bright Cyan
-                        { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.15)' }  // Bright Pink
-                    ];
-                    const swapPairId = typeof swap.swapPairId === 'number' ? swap.swapPairId : parseInt(swap.swapPairId);
-                    const swapColor = !isNaN(swapPairId) ? swapColors[swapPairId % swapColors.length] : swapColors[0];
-                    const swapDateStr = swap.swapDate ? new Date(swap.swapDate + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Άγνωστη';
-                    
-                    content += `
-                        <div class="p-2 mb-2 border rounded swap-detail-card" style="border-color: ${swapColor.border} !important; background-color: ${swapColor.bg};">
-                            <div class="d-flex align-items-center mb-1">
-                                <i class="fas fa-exchange-alt me-2" style="color: ${swapColor.border};"></i>
-                                <strong>Ομάδα ${swap.groupNum}:</strong>
-                            </div>
-                            <div class="ms-4 small">
-                                <div><strong>${swap.personName}</strong> <i class="fas fa-arrow-right mx-1"></i> <strong>${swap.swappedWith}</strong></div>
-                                <div class="text-muted mt-1">
-                                    <i class="fas fa-calendar-alt me-1"></i>Ημερομηνία αλλαγής: ${swapDateStr}
-                                </div>
-                                ${swap.reason ? `<div class="text-muted mt-1"><i class="fas fa-info-circle me-1"></i>${swap.reason}</div>` : ''}
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                content += `
-                        </div>
-                    </div>
-                `;
-            }
+            // Swap details section removed - information is already shown in individual group cards
             
                 document.getElementById('dayDetailsContent').innerHTML = content;
                 

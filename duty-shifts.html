@@ -1041,7 +1041,7 @@
         #dayDetailsModal .modal-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border-bottom: 3px solid rgba(255, 255, 255, 0.2);
-            padding: 1.5rem 2rem;
+            padding: 0.75rem 1.5rem;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
             position: relative;
         }
@@ -1058,66 +1058,68 @@
         }
 
         #dayDetailsModal .modal-title {
-            font-size: 2rem !important;
-            font-weight: 800 !important;
+            font-size: 1.25rem !important;
+            font-weight: 700 !important;
             color: #ffffff !important;
             text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3),
                          0 0 20px rgba(255, 255, 255, 0.2);
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px;
             margin: 0;
             position: relative;
             z-index: 1;
         }
 
         #dayDetailsModal .modal-body {
-            padding: 2rem;
+            padding: 1.25rem 1.5rem;
             background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
         }
 
         #dayDetailsModal .section-title {
-            font-size: 1.5rem !important;
+            font-size: 1.2rem !important;
             font-weight: 700 !important;
             color: #2c3e50 !important;
-            margin-bottom: 1.5rem !important;
-            padding-bottom: 0.75rem;
-            border-bottom: 3px solid #667eea;
+            margin-bottom: 1rem !important;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #667eea;
             text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.1);
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            gap: 0.5rem;
         }
 
         #dayDetailsModal .section-title i {
-            font-size: 1.75rem;
+            font-size: 1.3rem;
             color: #667eea;
             filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
         }
 
         #dayDetailsModal .day-type-label {
-            font-size: 1.3rem !important;
+            font-size: 1rem !important;
             font-weight: 600 !important;
             color: #495057 !important;
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            padding: 0.5rem 1rem;
-            border-radius: 12px;
+            padding: 0.4rem 0.8rem;
+            border-radius: 10px;
             display: inline-block;
-            margin-bottom: 1rem;
+            margin-bottom: 0.75rem;
             box-shadow: 0 4px 15px rgba(245, 87, 108, 0.2);
         }
 
         #dayDetailsModal .duty-person-card,
         #dayDetailsModal .swap-detail-card {
             background: linear-gradient(180deg, #ffffff 0%, #f6f7fb 100%);
-            border-radius: 16px !important;
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15),
-                        0 3px 10px rgba(0, 0, 0, 0.1),
+            border-radius: 12px !important;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12),
+                        0 2px 8px rgba(0, 0, 0, 0.08),
                         inset 0 1px 0 rgba(255, 255, 255, 0.8);
             border: 2px solid rgba(0, 0, 0, 0.08);
-            padding: 1.25rem !important;
-            margin-bottom: 1rem !important;
+            padding: 0.9rem !important;
+            margin-bottom: 0.75rem !important;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
             overflow: hidden;
@@ -1158,10 +1160,10 @@
         }
 
         #dayDetailsModal .duty-person-card label {
-            font-size: 1.1rem !important;
+            font-size: 0.95rem !important;
             font-weight: 700 !important;
             color: #2c3e50 !important;
-            margin-bottom: 0.75rem !important;
+            margin-bottom: 0.5rem !important;
             display: block;
             text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
         }
@@ -1195,13 +1197,14 @@
 
         #dayDetailsModal .reason-card {
             background: linear-gradient(135deg, rgba(13, 202, 240, 0.1) 0%, rgba(13, 202, 240, 0.05) 100%);
-            border-left: 5px solid rgba(13, 202, 240, 0.9);
-            padding: 1rem 1.25rem;
-            border-radius: 12px;
+            border-left: 4px solid rgba(13, 202, 240, 0.9);
+            padding: 0.6rem 0.9rem;
+            border-radius: 10px;
             box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.08),
                         0 2px 8px rgba(13, 202, 240, 0.15);
-            margin-top: 0.75rem;
+            margin-top: 0.5rem;
             transition: all 0.3s ease;
+            font-size: 0.85rem;
         }
 
         #dayDetailsModal .reason-card:hover {
@@ -1218,10 +1221,10 @@
         }
 
         #dayDetailsModal .btn {
-            border-radius: 12px;
-            padding: 0.75rem 2rem;
+            border-radius: 10px;
+            padding: 0.6rem 1.5rem;
             font-weight: 600;
-            font-size: 1rem;
+            font-size: 0.95rem;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2),
                         0 2px 5px rgba(0, 0, 0, 0.1);
@@ -1436,7 +1439,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.285</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.286</span></h4>
             </div>
             <div class="d-flex align-items-center flex-wrap gap-3 title-bar-stats" style="font-size: 1.25em; font-weight: 500; opacity: 0.98;">
                 <span>Σύνολο Ατόμων: <strong id="totalPeople">0</strong></span>
@@ -2254,7 +2257,7 @@
 
     <!-- Day Details Modal -->
     <div class="modal fade" id="dayDetailsModal" tabindex="-1">
-        <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
                     <h2 class="modal-title" id="dayDetailsTitle"></h2>
