@@ -10074,8 +10074,10 @@
                                 // - everyone in between shifts forward by one semi slot (no one gets "skipped")
                                 const fromIndex = sortedSemi.indexOf(swapDateKey);
                                 const toIndex = sortedSemi.indexOf(dateKey);
-                                const isBackwardWithinMonth = fromIndex >= 0 && toIndex >= 0 && fromIndex < toIndex &&
-                                    (swapDateKey.substring(0, 7) === dateKey.substring(0, 7));
+                                // Backward shift across the intervening semi days.
+                                // Allow across month boundaries too (as long as both keys exist in sortedSemi for this run),
+                                // so the displaced person is not lost in multi-month calculations.
+                                const isBackwardWithinMonth = fromIndex >= 0 && toIndex >= 0 && fromIndex < toIndex;
 
                                 // Use the ACTUAL conflict neighbor day (e.g. Fri) instead of the swap-execution day (e.g. Thu).
                                 const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, {
@@ -11698,6 +11700,8 @@
                                     const shiftMeta = { backwardShift: true, originDayKey: dateKey, swapDayKey, conflictDateKey: conflictNeighborKey };
                                     for (const ch of changes) {
                                         if (!ch.newPerson) continue;
+                                        // Mark as handled so later swap passes don't re-process and drop the displaced person.
+                                        swappedPeopleSet.add(`${ch.dk}:${groupNum}:${ch.newPerson}`);
                                         storeAssignmentReason(
                                             ch.dk,
                                             groupNum,
