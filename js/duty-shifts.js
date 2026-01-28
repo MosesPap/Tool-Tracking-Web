@@ -6297,9 +6297,36 @@
                         const workbook = new ExcelJS.Workbook();
                         const worksheet = workbook.addWorksheet('Υπηρεσίες');
                         
-                        // Set title - merge cells A1 through M1
-                        worksheet.mergeCells('A1:M1');
-                        const titleCell = worksheet.getCell('A1');
+                        // Helper function to format date as "10 ΔΕΚ 2026"
+                        const formatDateGreekAbbr = (date) => {
+                            const day = date.getDate();
+                            const monthAbbr = ['ΙΑΝ', 'ΦΕΒ', 'ΜΑΡ', 'ΑΠΡ', 'ΜΑΪ', 'ΙΟΥΝ', 'ΙΟΥΛ', 'ΑΥΓ', 'ΣΕΠ', 'ΟΚΤ', 'ΝΟΕ', 'ΔΕΚ'];
+                            const month = monthAbbr[date.getMonth()];
+                            const year = date.getFullYear();
+                            return `${day} ${month} ${year}`;
+                        };
+                        
+                        const today = new Date();
+                        const formattedDate = formatDateGreekAbbr(today);
+                        
+                        // Set I1 cell with header information
+                        const i1Cell = worksheet.getCell('I1');
+                        i1Cell.value = `55 ΣΜ. ΜΑΧΗΣ\nΜΣΑ\nΤΜ. ΠΡΟΣΩΠΙΚΟΥ\nΤΙΜΗ, ${formattedDate}`;
+                        i1Cell.font = { 
+                            name: 'Arial', 
+                            bold: true, 
+                            size: 12
+                        };
+                        i1Cell.alignment = { 
+                            horizontal: 'left', 
+                            vertical: 'top',
+                            wrapText: true
+                        };
+                        worksheet.getRow(1).height = 80;
+                        
+                        // Set title in row 2 - merge cells A2 through I2
+                        worksheet.mergeCells('A2:I2');
+                        const titleCell = worksheet.getCell('A2');
                         titleCell.value = `ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`;
                         titleCell.font = { 
                             name: 'Arial', 
@@ -6323,20 +6350,20 @@
                             bottom: { style: 'thick' },
                             right: { style: 'thick' }
                         };
-                        worksheet.getRow(1).height = 30;
+                        worksheet.getRow(2).height = 30;
                         
                         // Empty row
-                        worksheet.getRow(2).height = 5;
+                        worksheet.getRow(3).height = 5;
                         
                         // Header row
-                        const headerRow = worksheet.getRow(3);
+                        const headerRow = worksheet.getRow(4);
                         headerRow.getCell(1).value = 'ΗΜΕΡ.';
                         headerRow.getCell(2).value = 'ΗΜΕΡΑ';
                         headerRow.getCell(3).value = 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ';
                         headerRow.getCell(4).value = 'ΑΛΛΑΓΕΣ';
                         
                         // Style each header cell individually
-                        ['A3', 'B3', 'C3', 'D3'].forEach(cellRef => {
+                        ['A4', 'B4', 'C4', 'D4'].forEach(cellRef => {
                             const cell = worksheet.getCell(cellRef);
                             cell.font = { 
                                 name: 'Arial', 
@@ -6362,8 +6389,8 @@
                             };
                         });
                         // Add thick left and right borders to first and last header cells
-                        worksheet.getCell('A3').border.left = { style: 'thick' };
-                        worksheet.getCell('D3').border.right = { style: 'thick' };
+                        worksheet.getCell('A4').border.left = { style: 'thick' };
+                        worksheet.getCell('D4').border.right = { style: 'thick' };
                         headerRow.height = 30;
                         
                         // Set column widths
@@ -6387,7 +6414,7 @@
                             // Format date as DD/MM/YYYY
                             const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
                             
-                            const row = worksheet.getRow(day + 3); // +3 for title, empty, header rows
+                            const row = worksheet.getRow(day + 4); // +4 for I1, title, empty, header rows
                             row.getCell(1).value = dateStr;
                             row.getCell(2).value = dayName;
                             row.getCell(3).value = personName;
@@ -6476,7 +6503,7 @@
                         };
 
                         // Layout (matching screenshot): start around row 5, stacked blocks with blank separators.
-                        let rr = 5;
+                        let rr = 5; // Row 5 in Excel (after I1, title, empty, header)
                         writeRightRow(rr, 'ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ', { bold: true, center: true });
                         setBlockBorder(rr, true, true);
                         rr += 2; // blank row between title and first block
@@ -6516,10 +6543,32 @@
                         const data = [];
                         const rowDayTypes = [];
                         
-                        data.push([`ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`]);
-                        data.push([]);
-                        rowDayTypes.push(null, null);
+                        // Helper function to format date as "10 ΔΕΚ 2026"
+                        const formatDateGreekAbbr = (date) => {
+                            const day = date.getDate();
+                            const monthAbbr = ['ΙΑΝ', 'ΦΕΒ', 'ΜΑΡ', 'ΑΠΡ', 'ΜΑΪ', 'ΙΟΥΝ', 'ΙΟΥΛ', 'ΑΥΓ', 'ΣΕΠ', 'ΟΚΤ', 'ΝΟΕ', 'ΔΕΚ'];
+                            const month = monthAbbr[date.getMonth()];
+                            const year = date.getFullYear();
+                            return `${day} ${month} ${year}`;
+                        };
                         
+                        const today = new Date();
+                        const formattedDate = formatDateGreekAbbr(today);
+                        
+                        // Row 1: I1 cell with header information
+                        const row1 = ['', '', '', '', '', '', '', '', `55 ΣΜ. ΜΑΧΗΣ\nΜΣΑ\nΤΜ. ΠΡΟΣΩΠΙΚΟΥ\nΤΙΜΗ, ${formattedDate}`];
+                        data.push(row1);
+                        rowDayTypes.push(null);
+                        
+                        // Row 2: Title merged A2:I2
+                        data.push([`ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`]);
+                        rowDayTypes.push(null);
+                        
+                        // Row 3: Empty
+                        data.push([]);
+                        rowDayTypes.push(null);
+                        
+                        // Row 4: Header row
                         data.push(['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΑΛΛΑΓΕΣ']);
                         rowDayTypes.push(null);
                         
@@ -6549,19 +6598,19 @@
                         });
                         // We will write values into column I
                         const rightRows = [
-                            { row: 4, text: 'ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ', kind: 'title' },
-                            { row: 6, text: 'ΚΑΘΗΜΕΡΙΝΕΣ', kind: 'normalHeader' },
-                            { row: 7, text: rotationInfo.next.normal[0] || '', kind: 'normal' },
-                            { row: 8, text: rotationInfo.next.normal[1] || '', kind: 'normal' },
-                            { row: 10, text: 'ΗΜΙΑΡΓΙΕΣ', kind: 'semiHeader' },
-                            { row: 11, text: rotationInfo.next.semi[0] || '', kind: 'semi' },
-                            { row: 12, text: rotationInfo.next.semi[1] || '', kind: 'semi' },
-                            { row: 14, text: 'ΑΡΓΙΕΣ', kind: 'weekendHeader' },
-                            { row: 15, text: rotationInfo.next.weekend[0] || '', kind: 'weekend' },
-                            { row: 16, text: rotationInfo.next.weekend[1] || '', kind: 'weekend' },
-                            { row: 18, text: 'ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', kind: 'specialHeader' },
-                            { row: 19, text: rotationInfo.next.special[0] || '', kind: 'special' },
-                            { row: 20, text: rotationInfo.next.special[1] || '', kind: 'special' }
+                            { row: 5, text: 'ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ', kind: 'title' },
+                            { row: 7, text: 'ΚΑΘΗΜΕΡΙΝΕΣ', kind: 'normalHeader' },
+                            { row: 8, text: rotationInfo.next.normal[0] || '', kind: 'normal' },
+                            { row: 9, text: rotationInfo.next.normal[1] || '', kind: 'normal' },
+                            { row: 11, text: 'ΗΜΙΑΡΓΙΕΣ', kind: 'semiHeader' },
+                            { row: 12, text: rotationInfo.next.semi[0] || '', kind: 'semi' },
+                            { row: 13, text: rotationInfo.next.semi[1] || '', kind: 'semi' },
+                            { row: 15, text: 'ΑΡΓΙΕΣ', kind: 'weekendHeader' },
+                            { row: 16, text: rotationInfo.next.weekend[0] || '', kind: 'weekend' },
+                            { row: 17, text: rotationInfo.next.weekend[1] || '', kind: 'weekend' },
+                            { row: 19, text: 'ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', kind: 'specialHeader' },
+                            { row: 20, text: rotationInfo.next.special[0] || '', kind: 'special' },
+                            { row: 21, text: rotationInfo.next.special[1] || '', kind: 'special' }
                         ];
                         
                         const ws = XLSX.utils.aoa_to_sheet(data);
@@ -6578,22 +6627,29 @@
                             { wch: 48 }  // I right table
                         ];
                         if (!ws['!merges']) ws['!merges'] = [];
-                        // Title merge A1:M1 (columns 0-12)
-                        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 12 } });
+                        // Title merge A2:I2 (row 1, columns 0-8)
+                        ws['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: 8 } });
 
                         // Row heights (30) for the whole produced sheet
                         ws['!rows'] = Array.from({ length: data.length }, () => ({ hpt: 30 }));
                         
-                        // Style title row (row 1)
-                        const titleCell = 'A1';
-                        if (!ws[titleCell]) ws[titleCell] = { t: 's', v: data[0][0] || '' };
+                        // Style I1 cell (row 1, column I)
+                        const i1Cell = 'I1';
+                        if (!ws[i1Cell]) ws[i1Cell] = { t: 's', v: data[0][8] || '' };
+                        if (!ws[i1Cell].s) ws[i1Cell].s = {};
+                        ws[i1Cell].s.font = { name: 'Arial', bold: true, sz: 12, color: { rgb: '000000' } };
+                        ws[i1Cell].s.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+                        
+                        // Style title row (row 2)
+                        const titleCell = 'A2';
+                        if (!ws[titleCell]) ws[titleCell] = { t: 's', v: data[1][0] || '' };
                         if (!ws[titleCell].s) ws[titleCell].s = {};
                         ws[titleCell].s.font = { name: 'Arial', bold: true, sz: 16, color: { rgb: 'FFFFFF' } };
                         ws[titleCell].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
                         ws[titleCell].s.alignment = { horizontal: 'center', vertical: 'center' };
                         
-                        // Style header row (row 3)
-                        const headerRow = 2; // 0-indexed, so row 3 is index 2
+                        // Style header row (row 4)
+                        const headerRow = 3; // 0-indexed, so row 4 is index 3
                         ['A', 'B', 'C', 'D'].forEach((col, idx) => {
                             const cellRef = col + (headerRow + 1);
                             if (!ws[cellRef]) ws[cellRef] = { t: 's', v: data[headerRow][idx] || '' };
@@ -6642,7 +6698,7 @@
                         });
                         
                         // Apply colors and fonts to data rows
-                        for (let rowIdx = 3; rowIdx < rowDayTypes.length; rowIdx++) {
+                        for (let rowIdx = 4; rowIdx < rowDayTypes.length; rowIdx++) {
                             const dayType = rowDayTypes[rowIdx];
                             if (!dayType) continue;
                             
