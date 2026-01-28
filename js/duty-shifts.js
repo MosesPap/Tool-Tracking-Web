@@ -6309,23 +6309,23 @@
                         const today = new Date();
                         const formattedDate = formatDateGreekAbbr(today);
                         
-                        // Set H1 cell with header information (moved from I1)
-                        const h1Cell = worksheet.getCell('H1');
-                        h1Cell.value = `55 ΣΜ. ΜΑΧΗΣ\nΜΣΑ\nΤΜ. ΠΡΟΣΩΠΙΚΟΥ\nΤΙΜΗ, ${formattedDate}`;
-                        h1Cell.font = { 
+                        // Set I1 cell with header information
+                        const i1Cell = worksheet.getCell('I1');
+                        i1Cell.value = `55 ΣΜ. ΜΑΧΗΣ\nΜΣΑ\nΤΜ. ΠΡΟΣΩΠΙΚΟΥ\nΤΙΜΗ, ${formattedDate}`;
+                        i1Cell.font = { 
                             name: 'Arial', 
                             bold: true, 
                             size: 12
                         };
-                        h1Cell.alignment = { 
+                        i1Cell.alignment = { 
                             horizontal: 'left', 
                             vertical: 'top',
                             wrapText: true
                         };
                         worksheet.getRow(1).height = 80;
                         
-                        // Set title in row 2 - merge cells A2 through H2 (changed from I2)
-                        worksheet.mergeCells('A2:H2');
+                        // Set title in row 2 - merge cells A2 through I2
+                        worksheet.mergeCells('A2:I2');
                         const titleCell = worksheet.getCell('A2');
                         titleCell.value = `ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`;
                         titleCell.font = { 
@@ -6398,7 +6398,8 @@
                         worksheet.getColumn(2).width = 17;
                         worksheet.getColumn(3).width = 57;
                         worksheet.getColumn(4).width = 56.5;   // ΑΛΛΑΓΕΣ column (D)
-                        worksheet.getColumn(8).width = 48;  // right table (H, moved from I)
+                        worksheet.getColumn(8).width = 48;  // right table (H)
+                        worksheet.getColumn(9).width = 25;  // header info (I)
                         
                         // Data rows
                         for (let day = 1; day <= daysInMonth; day++) {
@@ -6459,10 +6460,13 @@
                             row.height = 30;
                         }
 
-                        // Add signature cells under the duty list
+                        // Add signature cells under the duty list (with one blank row before)
                         const lastDataRow = daysInMonth + 4; // Last row of duty data
-                        const sigRow1 = worksheet.getRow(lastDataRow + 1);
-                        const sigRow2 = worksheet.getRow(lastDataRow + 2);
+                        const blankRow = worksheet.getRow(lastDataRow + 1);
+                        blankRow.height = 5; // Blank row
+                        
+                        const sigRow1 = worksheet.getRow(lastDataRow + 2);
+                        const sigRow2 = worksheet.getRow(lastDataRow + 3);
                         
                         // Column B: Signature cells
                         sigRow1.getCell(2).value = 'Ο';
@@ -6471,7 +6475,7 @@
                         // Column H: Signature cells
                         sigRow1.getCell(8).value = 'ΕΘ-ΘΗ';
                         sigRow2.getCell(8).value = 'Ο';
-                        const sigRow3 = worksheet.getRow(lastDataRow + 3);
+                        const sigRow3 = worksheet.getRow(lastDataRow + 4);
                         sigRow3.getCell(8).value = 'ΔΚΤΗΣ';
                         
                         // Style signature cells
@@ -6527,7 +6531,7 @@
                         };
 
                         // Layout (matching screenshot): start around row 5, stacked blocks with blank separators.
-                        let rr = 5; // Row 5 in Excel (after H1, title, empty, header)
+                        let rr = 5; // Row 5 in Excel (after I1, title, empty, header)
                         writeRightRow(rr, 'ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ', { bold: true, center: true });
                         setBlockBorder(rr, true, true);
                         rr += 2; // blank row between title and first block
@@ -6579,12 +6583,12 @@
                         const today = new Date();
                         const formattedDate = formatDateGreekAbbr(today);
                         
-                        // Row 1: H1 cell with header information (moved from I1)
-                        const row1 = ['', '', '', '', '', '', '', `55 ΣΜ. ΜΑΧΗΣ\nΜΣΑ\nΤΜ. ΠΡΟΣΩΠΙΚΟΥ\nΤΙΜΗ, ${formattedDate}`];
+                        // Row 1: I1 cell with header information
+                        const row1 = ['', '', '', '', '', '', '', '', `55 ΣΜ. ΜΑΧΗΣ\nΜΣΑ\nΤΜ. ΠΡΟΣΩΠΙΚΟΥ\nΤΙΜΗ, ${formattedDate}`];
                         data.push(row1);
                         rowDayTypes.push(null);
                         
-                        // Row 2: Title merged A2:H2 (changed from I2)
+                        // Row 2: Title merged A2:I2
                         data.push([`ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`]);
                         rowDayTypes.push(null);
                         
@@ -6611,8 +6615,12 @@
                             rowDayTypes.push(dayType);
                         }
                         
+                        // Add blank row before signature cells
+                        data.push(['', '', '', '', '', '', '', '']);
+                        rowDayTypes.push(null);
+                        
                         // Add signature cells under the duty list
-                        const lastDataRowIdx = data.length - 1; // Last row index of duty data
+                        const lastDataRowIdx = data.length - 1; // Last row index of duty data (blank row)
                         // Column B: Signature cells
                         data.push(['', 'Ο', '', '', '', '', '', '']);
                         data.push(['', 'ΣΥΝΤΑΞΑΣ', '', '', '', '', '', '']);
@@ -6651,7 +6659,7 @@
                         ];
                         
                         const ws = XLSX.utils.aoa_to_sheet(data);
-                        // Column widths: A14, B17, C57, D56.5, H48
+                        // Column widths: A14, B17, C57, D56.5, H48, I (auto)
                         ws['!cols'] = [
                             { wch: 14 }, // A
                             { wch: 17 }, // B
@@ -6660,21 +6668,22 @@
                             { wch: 10 }, // E (empty)
                             { wch: 10 }, // F (empty)
                             { wch: 10 }, // G (empty)
-                            { wch: 48 }  // H right table (moved from I)
+                            { wch: 48 },  // H right table
+                            { wch: 25 }  // I header info
                         ];
                         if (!ws['!merges']) ws['!merges'] = [];
-                        // Title merge A2:H2 (row 1, columns 0-7)
-                        ws['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: 7 } });
+                        // Title merge A2:I2 (row 1, columns 0-8)
+                        ws['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: 8 } });
 
                         // Row heights (30) for the whole produced sheet
                         ws['!rows'] = Array.from({ length: data.length }, () => ({ hpt: 30 }));
                         
-                        // Style H1 cell (row 1, column H, moved from I1)
-                        const h1Cell = 'H1';
-                        if (!ws[h1Cell]) ws[h1Cell] = { t: 's', v: data[0][7] || '' };
-                        if (!ws[h1Cell].s) ws[h1Cell].s = {};
-                        ws[h1Cell].s.font = { name: 'Arial', bold: true, sz: 12, color: { rgb: '000000' } };
-                        ws[h1Cell].s.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+                        // Style I1 cell (row 1, column I)
+                        const i1Cell = 'I1';
+                        if (!ws[i1Cell]) ws[i1Cell] = { t: 's', v: data[0][8] || '' };
+                        if (!ws[i1Cell].s) ws[i1Cell].s = {};
+                        ws[i1Cell].s.font = { name: 'Arial', bold: true, sz: 12, color: { rgb: '000000' } };
+                        ws[i1Cell].s.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
                         
                         // Style title row (row 2)
                         const titleCell = 'A2';
