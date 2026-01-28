@@ -12373,8 +12373,10 @@
                 // This is separate from assigned persons (who may have been swapped/skipped)
                 const weekendRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
                 
-                // Track which people have been assigned to which days (to prevent duplicate assignments after replacements)
-                const assignedPeoplePreviewWeekend = {}; // monthKey -> { groupNum -> Set of person names }
+                // Track which people have been assigned to which days (to prevent nearby duplicate assignments)
+                // Structure: monthKey -> { groupNum -> { personName -> dateKey } }
+                // Only prevents duplicates if assigned within 5 days (too close)
+                const assignedPeoplePreviewWeekend = {}; // monthKey -> { groupNum -> { personName -> dateKey } }
                 
                 sortedWeekends.forEach((dateKey, weekendIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
@@ -12475,9 +12477,9 @@
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
                                 // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
                                 // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
-                                // IMPORTANT: Also check if replacement was already assigned this month to prevent duplicate assignments
+                                // IMPORTANT: Also check if replacement was already assigned recently (within 5 days) - prevent nearby duplicates
                                 if (!assignedPeoplePreviewWeekend[monthKey][groupNum]) {
-                                    assignedPeoplePreviewWeekend[monthKey][groupNum] = new Set();
+                                    assignedPeoplePreviewWeekend[monthKey][groupNum] = {};
                                 }
                                 let foundReplacement = false;
                                 for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
@@ -12485,8 +12487,18 @@
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                                    // Check if candidate was already assigned this month (to prevent duplicate assignments)
-                                    if (assignedPeoplePreviewWeekend[monthKey][groupNum] && assignedPeoplePreviewWeekend[monthKey][groupNum].has(candidate)) continue;
+                                    // Check if candidate was already assigned recently (within 5 days) - prevent nearby duplicates
+                                    if (assignedPeoplePreviewWeekend[monthKey][groupNum] && assignedPeoplePreviewWeekend[monthKey][groupNum][candidate]) {
+                                        const lastAssignmentDateKey = assignedPeoplePreviewWeekend[monthKey][groupNum][candidate];
+                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                        const currentDate = new Date(dateKey + 'T00:00:00');
+                                        const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+                                        // Only prevent if assigned within 5 days (too close)
+                                        if (daysDiff <= 5 && daysDiff > 0) {
+                                            continue; // Too close, skip this candidate
+                                        }
+                                        // If daysDiff > 5, allow duplicate (far enough apart, even if they replaced someone before)
+                                    }
                                     
                                     // Found eligible replacement
                                     assignedPerson = candidate;
@@ -12548,9 +12560,9 @@
                                 }
                                 simulatedWeekendAssignments[dateKey][groupNum] = assignedPerson;
                                 
-                                // Track that this person has been assigned (to prevent duplicate assignment later)
+                                // Track that this person has been assigned (to prevent nearby duplicate assignments)
                                 if (assignedPeoplePreviewWeekend[monthKey] && assignedPeoplePreviewWeekend[monthKey][groupNum]) {
-                                    assignedPeoplePreviewWeekend[monthKey][groupNum].add(assignedPerson);
+                                    assignedPeoplePreviewWeekend[monthKey][groupNum][assignedPerson] = dateKey;
                                 }
                                 
                                 // Advance rotation position from the person ACTUALLY assigned (not the skipped person)
@@ -12878,8 +12890,10 @@
                 const semiRotationPersons = semiRotationPersonsForPreview; // dateKey -> { groupNum -> rotationPerson }
                 // Track pending swaps: when Person A is swapped, Person B should be assigned to Person A's next day
                 const pendingSwaps = {}; // monthKey -> { groupNum -> { skippedPerson, swapToPosition } }
-                // Track which people have been assigned to which days (to prevent duplicate assignments after replacements)
-                const assignedPeoplePreviewSemi = {}; // monthKey -> { groupNum -> Set of person names }
+                // Track which people have been assigned to which days (to prevent nearby duplicate assignments)
+                // Structure: monthKey -> { groupNum -> { personName -> dateKey } }
+                // Only prevents duplicates if assigned within 5 days (too close)
+                const assignedPeoplePreviewSemi = {}; // monthKey -> { groupNum -> { personName -> dateKey } }
                 
                 // Return-from-missing for semi-normal: count 3 calendar days after period end, then first semi after that.
                 // Only apply if the person had a semi-normal duty during the missing period that was replaced.
@@ -13183,9 +13197,9 @@
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
                                 // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
                                 // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
-                                // IMPORTANT: Also check if replacement was already assigned this month to prevent duplicate assignments
+                                // IMPORTANT: Also check if replacement was already assigned recently (within 5 days) - prevent nearby duplicates
                                 if (!assignedPeoplePreviewSemi[monthKey][groupNum]) {
-                                    assignedPeoplePreviewSemi[monthKey][groupNum] = new Set();
+                                    assignedPeoplePreviewSemi[monthKey][groupNum] = {};
                                 }
                                 let foundReplacement = false;
                                 for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
@@ -13193,8 +13207,18 @@
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
-                                    // Check if candidate was already assigned this month (to prevent duplicate assignments)
-                                    if (assignedPeoplePreviewSemi[monthKey][groupNum] && assignedPeoplePreviewSemi[monthKey][groupNum].has(candidate)) continue;
+                                    // Check if candidate was already assigned recently (within 5 days) - prevent nearby duplicates
+                                    if (assignedPeoplePreviewSemi[monthKey][groupNum] && assignedPeoplePreviewSemi[monthKey][groupNum][candidate]) {
+                                        const lastAssignmentDateKey = assignedPeoplePreviewSemi[monthKey][groupNum][candidate];
+                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                        const currentDate = new Date(dateKey + 'T00:00:00');
+                                        const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+                                        // Only prevent if assigned within 5 days (too close)
+                                        if (daysDiff <= 5 && daysDiff > 0) {
+                                            continue; // Too close, skip this candidate
+                                        }
+                                        // If daysDiff > 5, allow duplicate (far enough apart, even if they replaced someone before)
+                                    }
                                     
                                     // Found eligible replacement
                                     assignedPerson = candidate;
@@ -13257,8 +13281,18 @@
                                         const candidate = groupPeople[idx];
                                         if (!candidate) continue;
                                         if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
-                                        // Check if candidate was already assigned this month (to prevent duplicate assignments)
-                                        if (assignedPeoplePreviewSemi[monthKey][groupNum] && assignedPeoplePreviewSemi[monthKey][groupNum].has(candidate)) continue;
+                                        // Check if candidate was already assigned recently (within 5 days) - prevent nearby duplicates
+                                        if (assignedPeoplePreviewSemi[monthKey][groupNum] && assignedPeoplePreviewSemi[monthKey][groupNum][candidate]) {
+                                            const lastAssignmentDateKey = assignedPeoplePreviewSemi[monthKey][groupNum][candidate];
+                                            const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                            const currentDate = new Date(dateKey + 'T00:00:00');
+                                            const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+                                            // Only prevent if assigned within 5 days (too close)
+                                            if (daysDiff <= 5 && daysDiff > 0) {
+                                                continue; // Too close, skip this candidate
+                                            }
+                                            // If daysDiff > 5, allow duplicate (far enough apart, even if they replaced someone before)
+                                        }
                                         
                                         // Found eligible replacement
                                         assignedPerson = candidate;
@@ -13824,8 +13858,10 @@
                 }
                 // Track pending swaps: when Person A is swapped, Person B should be assigned to Person A's next normal day
                 const pendingNormalSwaps = {}; // monthKey -> { groupNum -> { skippedPerson, swapToPosition } }
-                // Track which people have been assigned to which days (to prevent duplicate assignments after swaps)
-                const assignedPeoplePreview = {}; // monthKey -> { groupNum -> Set of person names }
+                // Track which people have been assigned to which days (to prevent nearby duplicate assignments)
+                // Structure: monthKey -> { groupNum -> { personName -> dateKey } }
+                // Only prevents duplicates if assigned within 5 days (too close)
+                const assignedPeoplePreview = {}; // monthKey -> { groupNum -> { personName -> dateKey } }
                 // Track days that have been swapped (to use already-assigned person when we reach them)
                 const swappedDaysPreview = {}; // dateKey -> { groupNum -> true }
                 // Track which people have already been swapped (to prevent swapping them again on subsequent days)
@@ -14170,9 +14206,9 @@
                             // Use rotationPerson (which may be a replacement from baselineNormalByDate if original was missing/disabled)
                             assignedPerson = rotationPerson;
                             
-                            // Initialize assigned people set for this group if needed
+                            // Initialize assigned people tracking for this group if needed
                             if (!assignedPeoplePreview[monthKey][groupNum]) {
-                                assignedPeoplePreview[monthKey][groupNum] = new Set();
+                                assignedPeoplePreview[monthKey][groupNum] = {};
                             }
                             
                             // CRITICAL: Check if the rotation person is disabled/missing BEFORE any other logic.
@@ -14182,15 +14218,25 @@
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
                                 // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
                                 // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
-                                // IMPORTANT: Also check if replacement was already assigned this month to prevent duplicate assignments
+                                // IMPORTANT: Also check if replacement was already assigned recently (within 5 days) - prevent nearby duplicates
                                 let foundReplacement = false;
                                 for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
-                                    // Check if candidate was already assigned this month (to prevent duplicate assignments)
-                                    if (assignedPeoplePreview[monthKey][groupNum] && assignedPeoplePreview[monthKey][groupNum].has(candidate)) continue;
+                                    // Check if candidate was already assigned recently (within 5 days) - prevent nearby duplicates
+                                    if (assignedPeoplePreview[monthKey][groupNum] && assignedPeoplePreview[monthKey][groupNum][candidate]) {
+                                        const lastAssignmentDateKey = assignedPeoplePreview[monthKey][groupNum][candidate];
+                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                        const currentDate = new Date(dateKey + 'T00:00:00');
+                                        const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+                                        // Only prevent if assigned within 5 days (too close)
+                                        if (daysDiff <= 5 && daysDiff > 0) {
+                                            continue; // Too close, skip this candidate
+                                        }
+                                        // If daysDiff > 5, allow duplicate (far enough apart, even if they replaced someone before)
+                                    }
                                     
                                     // Found eligible replacement
                                     assignedPerson = candidate;
@@ -14220,29 +14266,45 @@
                                 }
                             }
                             
-                            // If assigned person was already assigned this month (due to swap), skip to next person
+                            // If assigned person was already assigned recently (due to swap), skip to next person
                             // BUT: Skip this check if we just replaced a disabled person - swap logic will handle duplicates
-                            if (!wasDisabledPersonSkipped && assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal') && assignedPeoplePreview[monthKey][groupNum].has(assignedPerson)) {
-                                // This person was already assigned (swapped), find next available person in rotation
-                                // Keep searching through entire rotation until we find someone not disabled and not already assigned
-                                let foundReplacement = false;
-                                for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
-                                    const nextIndex = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[nextIndex];
+                            // Check if assigned within 5 days (too close)
+                            if (!wasDisabledPersonSkipped && assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal') && assignedPeoplePreview[monthKey][groupNum][assignedPerson]) {
+                                const lastAssignmentDateKey = assignedPeoplePreview[monthKey][groupNum][assignedPerson];
+                                const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                const currentDate = new Date(dateKey + 'T00:00:00');
+                                const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+                                // Only skip if assigned within 5 days (too close)
+                                if (daysDiff <= 5 && daysDiff > 0) {
+                                    // This person was already assigned recently (swapped), find next available person in rotation
+                                    // Keep searching through entire rotation until we find someone not disabled and not already assigned recently
+                                    let foundReplacement = false;
+                                    for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
+                                        const nextIndex = (rotationPosition + offset) % rotationDays;
+                                        const candidate = groupPeople[nextIndex];
+                                        
+                                        if (!candidate) continue;
+                                        if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
+                                        // Check if candidate was assigned recently (within 5 days)
+                                        if (assignedPeoplePreview[monthKey][groupNum][candidate]) {
+                                            const candidateLastDateKey = assignedPeoplePreview[monthKey][groupNum][candidate];
+                                            const candidateLastDate = new Date(candidateLastDateKey + 'T00:00:00');
+                                            const candidateDaysDiff = Math.floor((currentDate - candidateLastDate) / (1000 * 60 * 60 * 24));
+                                            if (candidateDaysDiff <= 5 && candidateDaysDiff > 0) {
+                                                continue; // Too close
+                                            }
+                                        }
                                     
-                                    if (!candidate) continue;
-                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
-                                    if (assignedPeoplePreview[monthKey][groupNum].has(candidate)) continue;
+                                        // Found available person
+                                        assignedPerson = candidate;
+                                        foundReplacement = true;
+                                    }
                                     
-                                    // Found available person
-                                    assignedPerson = candidate;
-                                    foundReplacement = true;
-                                }
-                                
-                                // If still no replacement found after checking everyone twice, leave unassigned
-                                // (This should be extremely rare - only if everyone is disabled or already assigned)
-                                if (!foundReplacement) {
-                                    assignedPerson = null;
+                                    // If still no replacement found after checking everyone twice, leave unassigned
+                                    // (This should be extremely rare - only if everyone is disabled or already assigned recently)
+                                    if (!foundReplacement) {
+                                        assignedPerson = null;
+                                    }
                                 }
                             }
                             
@@ -14269,8 +14331,18 @@
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
-                                    // Check if candidate was already assigned this month (to prevent duplicate assignments)
-                                    if (assignedPeoplePreview[monthKey][groupNum] && assignedPeoplePreview[monthKey][groupNum].has(candidate)) continue;
+                                    // Check if candidate was already assigned recently (within 5 days) - prevent nearby duplicates
+                                    if (assignedPeoplePreview[monthKey][groupNum] && assignedPeoplePreview[monthKey][groupNum][candidate]) {
+                                        const lastAssignmentDateKey = assignedPeoplePreview[monthKey][groupNum][candidate];
+                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                        const currentDate = new Date(dateKey + 'T00:00:00');
+                                        const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+                                        // Only prevent if assigned within 5 days (too close)
+                                        if (daysDiff <= 5 && daysDiff > 0) {
+                                            continue; // Too close, skip this candidate
+                                        }
+                                        // If daysDiff > 5, allow duplicate (far enough apart, even if they replaced someone before)
+                                    }
                                     
                                     // Found eligible replacement
                                     assignedPerson = candidate;
@@ -14371,9 +14443,9 @@
                             }
                             normalAssignments[dateKey][groupNum] = assignedPerson;
                             
-                            // Track that this person has been assigned (to prevent duplicate assignment later)
+                            // Track that this person has been assigned (to prevent nearby duplicate assignments)
                             if (assignedPerson && assignedPeoplePreview[monthKey] && assignedPeoplePreview[monthKey][groupNum]) {
-                                assignedPeoplePreview[monthKey][groupNum].add(assignedPerson);
+                                assignedPeoplePreview[monthKey][groupNum][assignedPerson] = dateKey;
                             }
                             
                             // CRITICAL: If assigned person differs from baseline (rotationPerson), check if this is a cascading shift
@@ -15627,7 +15699,7 @@
         // When the rotation-selected person is missing, pick the next person in rotation
         // BUT also validate consecutive-duty conflicts (before/after) and cross-month (via hasConsecutiveDuty).
         // - startRotationPosition: the index of the rotation-selected person
-        // - alreadyAssignedSet: optional Set to prevent duplicates (used in preview normal logic)
+        // - alreadyAssignedSet: optional Set or Object { personName -> dateKey } to prevent nearby duplicates (used in preview logic)
         // - exhaustive: if true, search through the entire rotation multiple times until finding someone eligible
         function findNextEligiblePersonAfterMissing({
             dateKey,
@@ -15643,6 +15715,23 @@
             if (!Array.isArray(groupPeople) || groupPeople.length === 0) return null;
             const rotationDays = groupPeople.length;
             
+            // Helper to check if candidate was assigned recently (within 5 days)
+            const isAssignedRecently = (candidate) => {
+                if (!alreadyAssignedSet) return false;
+                // Handle both Set (legacy) and Object (new structure)
+                if (alreadyAssignedSet instanceof Set) {
+                    return alreadyAssignedSet.has(candidate);
+                } else if (typeof alreadyAssignedSet === 'object' && alreadyAssignedSet[candidate]) {
+                    const lastAssignmentDateKey = alreadyAssignedSet[candidate];
+                    const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                    const currentDate = new Date(dateKey + 'T00:00:00');
+                    const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+                    // Only prevent if assigned within 5 days (too close)
+                    return daysDiff <= 5 && daysDiff > 0;
+                }
+                return false;
+            };
+            
             if (exhaustive) {
                 // Search through the entire rotation (potentially multiple times) until we find someone eligible
                 // This ensures rotation continues assigning people even if many are disabled
@@ -15650,7 +15739,7 @@
                     const idx = (startRotationPosition + totalOffset) % rotationDays;
                     const candidate = groupPeople[idx];
                     if (!candidate) continue;
-                    if (alreadyAssignedSet && alreadyAssignedSet.has(candidate)) continue;
+                    if (isAssignedRecently(candidate)) continue;
                     if (isPersonMissingOnDate(candidate, groupNum, date, dutyCategory)) continue;
                     if (simulatedAssignments && hasConsecutiveDuty(dateKey, candidate, groupNum, simulatedAssignments)) continue;
                     return { person: candidate, index: idx };
@@ -15663,7 +15752,7 @@
                     const idx = (startRotationPosition + offset) % rotationDays;
                     const candidate = groupPeople[idx];
                     if (!candidate) continue;
-                    if (alreadyAssignedSet && alreadyAssignedSet.has(candidate)) continue;
+                    if (isAssignedRecently(candidate)) continue;
                     if (isPersonMissingOnDate(candidate, groupNum, date, dutyCategory)) continue;
                     if (simulatedAssignments && hasConsecutiveDuty(dateKey, candidate, groupNum, simulatedAssignments)) continue;
                     return { person: candidate, index: idx };
