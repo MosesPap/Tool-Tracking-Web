@@ -15248,8 +15248,10 @@
                 }
             
             let content = `
-                <div class="mb-3">
-                    <strong>Τύπος Ημέρας:</strong> ${getDayTypeLabel(dayType)}
+                <div class="mb-4">
+                    <div class="day-type-label">
+                        <i class="fas fa-calendar-check me-2"></i><strong>Τύπος Ημέρας:</strong> ${getDayTypeLabel(dayType)}
+                    </div>
                 </div>
             `;
             
@@ -15341,9 +15343,12 @@
             
             // Create editable dropdown fields for each group
             content += `
-                <div class="mb-3">
-                    <strong><i class="fas fa-user-shield me-2"></i>Σε Υπηρεσία:</strong>
-                    <div id="dutyPersonsContainer" class="mt-2">
+                <div class="mb-4">
+                    <div class="section-title">
+                        <i class="fas fa-user-shield"></i>
+                        <span>Σε Υπηρεσία</span>
+                    </div>
+                    <div id="dutyPersonsContainer" class="mt-3">
             `;
             
             personGroups.forEach((person, index) => {
@@ -15433,8 +15438,8 @@
                 ).join('');
                 
                 content += `
-                    <div class="mb-2 p-2 border rounded duty-person-card ${criticalClass}" ${disabledTitle}>
-                        <label class="form-label small text-muted">Ομάδα ${person.group}: ${groupName}${criticalLabel}${reasonBadge}</label>
+                    <div class="mb-3 border rounded duty-person-card ${criticalClass}" ${disabledTitle}>
+                        <label class="form-label">Ομάδα ${person.group}: ${groupName}${criticalLabel}${reasonBadge}</label>
                         <select class="form-select duty-person-select" 
                                 data-index="${index}" 
                                 data-group="${person.group}" 
@@ -15444,7 +15449,7 @@
                             ${peopleOptions}
                         </select>
                         ${reasonDisplay}
-                        ${isCritical ? '<small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i>Αυτή η ανάθεση προέρχεται από τις ημερομηνίες τελευταίας υπηρεσίας και δεν μπορεί να αλλάξει.</small>' : ''}
+                        ${isCritical ? '<small class="text-muted d-block mt-2"><i class="fas fa-info-circle me-1"></i>Αυτή η ανάθεση προέρχεται από τις ημερομηνίες τελευταίας υπηρεσίας και δεν μπορεί να αλλάξει.</small>' : ''}
                     </div>
                 `;
             });
