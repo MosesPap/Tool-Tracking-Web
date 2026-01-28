@@ -12614,6 +12614,97 @@
                 // Track which people have been assigned to which days (to prevent duplicate assignments after replacements)
                 const assignedPeoplePreviewSemi = {}; // monthKey -> { groupNum -> Set of person names }
                 
+                // Return-from-missing for semi-normal: count 3 calendar days after period end, then first semi after that.
+                // Only apply if the person had a semi-normal duty during the missing period that was replaced.
+                const returnFromMissingSemiTargets = {}; // dateKey -> { groupNum -> { personName, missingEnd } }
+                const calcStartDate = calculationSteps.startDate;
+                const calcEndDate = calculationSteps.endDate;
+                const calcStartKey = (calcStartDate && !isNaN(new Date(calcStartDate).getTime())) ? formatDateKey(new Date(calcStartDate)) : null;
+                const calcEndKey = (calcEndDate && !isNaN(new Date(calcEndDate).getTime())) ? formatDateKey(new Date(calcEndDate)) : null;
+                const addDaysToDateKeyLocal = (dk, days) => {
+                    if (!dk || typeof dk !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return null;
+                    const d = new Date(dk + 'T00:00:00');
+                    if (isNaN(d.getTime())) return null;
+                    d.setDate(d.getDate() + (days || 0));
+                    return formatDateKey(d);
+                };
+                const findFirstSemiOnOrAfter = (sorted, thresholdKey) => {
+                    for (const semiDk of sorted) {
+                        if (semiDk >= thresholdKey) return semiDk;
+                    }
+                    return null;
+                };
+                const maxDateKeyLocal = (a, b) => (!a ? b : (!b ? a : (a > b ? a : b)));
+                const minDateKeyLocal = (a, b) => (!a ? b : (!b ? a : (a < b ? a : b)));
+                // Build baseline semi (rotation-only, no skip): who would be assigned on each semi day by rotation
+                const baselineSemiByDate = {};
+                const baselineSemiRotationPosition = {};
+                for (const dk of sortedSemi) {
+                    const dt = new Date(dk + 'T00:00:00');
+                    for (let g = 1; g <= 4; g++) {
+                        const grp = groups[g] || { semi: [] };
+                        const people = grp.semi || [];
+                        if (people.length === 0) continue;
+                        const rotLen = people.length;
+                        if (baselineSemiRotationPosition[g] === undefined) {
+                            const isFeb2026 = calcStartDate && new Date(calcStartDate).getFullYear() === 2026 && new Date(calcStartDate).getMonth() === 1;
+                            if (isFeb2026) baselineSemiRotationPosition[g] = 0;
+                            else {
+                                const last = getLastRotationPersonForDate('semi', dt, g);
+                                const idx = people.indexOf(last);
+                                if (last && idx >= 0) baselineSemiRotationPosition[g] = (idx + 1) % rotLen;
+                                else baselineSemiRotationPosition[g] = getRotationPosition(dt, 'semi', g) % rotLen;
+                            }
+                        }
+                        const pos = baselineSemiRotationPosition[g] % rotLen;
+                        if (!baselineSemiByDate[dk]) baselineSemiByDate[dk] = {};
+                        baselineSemiByDate[dk][g] = people[pos];
+                        baselineSemiRotationPosition[g] = (pos + 1) % rotLen;
+                    }
+                }
+                if (calcStartKey && calcEndKey && sortedSemi.length > 0) {
+                    const processedSemiReturn = new Set();
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        const g = groups[groupNum];
+                        const missingMap = g?.missingPeriods || {};
+                        const semiList = g?.semi || [];
+                        for (const personName of Object.keys(missingMap)) {
+                            if (!semiList.includes(personName)) continue;
+                            const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
+                            for (const period of periods) {
+                                const pStartKey = inputValueToDateKey(period?.start);
+                                const pEndKey = inputValueToDateKey(period?.end);
+                                if (!pStartKey || !pEndKey) continue;
+                                if (pEndKey < calcStartKey || pEndKey > calcEndKey) continue;
+                                const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
+                                if (processedSemiReturn.has(dedupeKey)) continue;
+                                processedSemiReturn.add(dedupeKey);
+                                const pEndDate = new Date(pEndKey + 'T00:00:00');
+                                const monthStartKey = formatDateKey(new Date(pEndDate.getFullYear(), pEndDate.getMonth(), 1));
+                                const scanStartKey = maxDateKeyLocal(maxDateKeyLocal(monthStartKey, pStartKey), calcStartKey);
+                                const scanEndKey = minDateKeyLocal(pEndKey, calcEndKey);
+                                if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
+                                let hadMissedSemi = false;
+                                for (const dk of sortedSemi) {
+                                    if (dk < scanStartKey) continue;
+                                    if (dk > scanEndKey) break;
+                                    if (baselineSemiByDate[dk]?.[groupNum] === personName) {
+                                        hadMissedSemi = true;
+                                        break;
+                                    }
+                                }
+                                if (!hadMissedSemi) continue;
+                                const thresholdKey = addDaysToDateKeyLocal(pEndKey, 4);
+                                if (!thresholdKey) continue;
+                                const targetSemiKey = findFirstSemiOnOrAfter(sortedSemi, thresholdKey);
+                                if (!targetSemiKey) continue;
+                                if (!returnFromMissingSemiTargets[targetSemiKey]) returnFromMissingSemiTargets[targetSemiKey] = {};
+                                returnFromMissingSemiTargets[targetSemiKey][groupNum] = { personName, missingEnd: pEndKey };
+                            }
+                        }
+                    }
+                }
+                
                 sortedSemi.forEach((dateKey, semiIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -12643,6 +12734,27 @@
                             html += '<td class="text-muted">-</td>';
                         } else {
                             const rotationDays = groupPeople.length;
+                            const designated = returnFromMissingSemiTargets[dateKey]?.[groupNum];
+                            if (designated && groupPeople.includes(designated.personName) && !isPersonMissingOnDate(designated.personName, groupNum, date, 'semi')) {
+                                const assignedPerson = designated.personName;
+                                const designatedIndex = groupPeople.indexOf(designated.personName);
+                                if (globalSemiRotationPosition[groupNum] === undefined) globalSemiRotationPosition[groupNum] = 0;
+                                globalSemiRotationPosition[groupNum] = (designatedIndex + 1) % rotationDays;
+                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', 'Επέστρεψε από απουσία – ημιάργια μετά από 3 ημερολογιακές ημέρες.', null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
+                                if (!assignedPeoplePreviewSemi[monthKey][groupNum]) assignedPeoplePreviewSemi[monthKey][groupNum] = new Set();
+                                assignedPeoplePreviewSemi[monthKey][groupNum].add(assignedPerson);
+                                if (!semiAssignments[dateKey]) semiAssignments[dateKey] = {};
+                                semiAssignments[dateKey][groupNum] = assignedPerson;
+                                let lastDutyInfo = ''; let daysCountInfo = '';
+                                if (assignedPerson) {
+                                    const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'semi', dayTypeLists, startDate);
+                                    const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'semi', groupPeople.length);
+                                    lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
+                                    if (daysSince !== null && daysSince !== Infinity) daysCountInfo = ` <span class="text-info">${daysSince}/${rotationDays} ημέρες</span>`;
+                                    else if (daysSince === Infinity) daysCountInfo = ' <span class="text-success">πρώτη φορά</span>';
+                                }
+                                html += `<td>${buildBaselineComputedCellHtml(assignedPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                            } else {
                             if (globalSemiRotationPosition[groupNum] === undefined) {
                                 // If start date is February 2026, always start from first person (position 0)
                                 const isFebruary2026 = calculationSteps.startDate && 
@@ -12845,6 +12957,7 @@
                             }
                             
                             html += `<td>${buildBaselineComputedCellHtml(rotationPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                            }
                         }
                     }
                     
