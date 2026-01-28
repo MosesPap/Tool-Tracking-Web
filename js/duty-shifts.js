@@ -8263,6 +8263,71 @@
             return currentIndex - lastDutyIndex - 1;
         }
 
+        // Initialize Flatpickr for month inputs
+        let flatpickrMonthInstances = {};
+        function initMonthPicker(inputId) {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            
+            // Check if Flatpickr is available
+            if (typeof flatpickr === 'undefined') {
+                console.warn('Flatpickr is not loaded. Months will display in browser default language.');
+                return;
+            }
+            
+            // Destroy existing instance if any
+            if (flatpickrMonthInstances[inputId]) {
+                flatpickrMonthInstances[inputId].destroy();
+            }
+            
+            // Initialize Flatpickr with Greek locale
+            try {
+                flatpickrMonthInstances[inputId] = flatpickr(input, {
+                    locale: 'el',
+                    dateFormat: 'Y-m',
+                    altInput: true,
+                    altFormat: 'F Y',
+                    altInputClass: 'form-control',
+                    allowInput: false,
+                    monthSelectorType: 'static'
+                });
+            } catch (e) {
+                console.error('Error initializing Flatpickr for month picker:', e);
+            }
+        }
+
+        // Initialize Flatpickr for date inputs
+        let flatpickrDateInstances = {};
+        function initDatePicker(inputId) {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            
+            // Check if Flatpickr is available
+            if (typeof flatpickr === 'undefined') {
+                console.warn('Flatpickr is not loaded. Dates will display in browser default language.');
+                return;
+            }
+            
+            // Destroy existing instance if any
+            if (flatpickrDateInstances[inputId]) {
+                flatpickrDateInstances[inputId].destroy();
+            }
+            
+            // Initialize Flatpickr with Greek locale
+            try {
+                flatpickrDateInstances[inputId] = flatpickr(input, {
+                    locale: 'el',
+                    dateFormat: 'Y-m-d',
+                    altInput: true,
+                    altFormat: 'd/m/Y',
+                    altInputClass: 'form-control',
+                    allowInput: false
+                });
+            } catch (e) {
+                console.error('Error initializing Flatpickr for date picker:', e);
+            }
+        }
+
         // Open calculate duties modal
         function openCalculateDutiesModal() {
             // Set default to current month
@@ -8283,8 +8348,11 @@
                 preserveCheckbox.checked = false;
             }
 
-            // Make month picker open when clicking anywhere on the month fields (label/container too)
-            ensureMonthPickerClickTargets();
+            // Initialize Flatpickr for month inputs
+            setTimeout(() => {
+                initMonthPicker('calculateStartMonth');
+                initMonthPicker('calculateEndMonth');
+            }, 100);
             
             // Add event listener to button as backup (remove old listeners first)
             const calculateButton = document.getElementById('calculateDutiesButton');
@@ -8364,8 +8432,26 @@
                     return;
                 }
                 
-                const startMonth = startMonthInput.value;
-                const endMonth = endMonthInput ? endMonthInput.value : '';
+                // Get values from Flatpickr instances if they exist
+                let startMonth = startMonthInput.value;
+                let endMonth = endMonthInput ? endMonthInput.value : '';
+                
+                if (flatpickrMonthInstances['calculateStartMonth']) {
+                    const selectedDates = flatpickrMonthInstances['calculateStartMonth'].selectedDates;
+                    if (selectedDates.length > 0) {
+                        const date = selectedDates[0];
+                        startMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    }
+                }
+                
+                if (endMonthInput && flatpickrMonthInstances['calculateEndMonth']) {
+                    const selectedDates = flatpickrMonthInstances['calculateEndMonth'].selectedDates;
+                    if (selectedDates.length > 0) {
+                        const date = selectedDates[0];
+                        endMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    }
+                }
+                
                 const preserveExisting = preserveCheckbox.checked;
                 
                 if (!startMonth) {
@@ -15645,6 +15731,12 @@
             
             renderMissingPeriodsList();
             
+            // Initialize Flatpickr for date inputs
+            setTimeout(() => {
+                initDatePicker('missingPeriodStart');
+                initDatePicker('missingPeriodEnd');
+            }, 100);
+            
             const modal = new bootstrap.Modal(document.getElementById('missingPeriodModal'));
             modal.show();
         }
@@ -15697,9 +15789,26 @@
 
         // Add missing period
         function addMissingPeriod() {
-            const start = document.getElementById('missingPeriodStart').value;
-            const end = document.getElementById('missingPeriodEnd').value;
+            let start = document.getElementById('missingPeriodStart').value;
+            let end = document.getElementById('missingPeriodEnd').value;
             const reason = (document.getElementById('missingPeriodReason')?.value || '').trim();
+            
+            // Get values from Flatpickr instances if they exist
+            if (flatpickrDateInstances['missingPeriodStart']) {
+                const selectedDates = flatpickrDateInstances['missingPeriodStart'].selectedDates;
+                if (selectedDates.length > 0) {
+                    const date = selectedDates[0];
+                    start = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                }
+            }
+            
+            if (flatpickrDateInstances['missingPeriodEnd']) {
+                const selectedDates = flatpickrDateInstances['missingPeriodEnd'].selectedDates;
+                if (selectedDates.length > 0) {
+                    const date = selectedDates[0];
+                    end = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                }
+            }
             
             if (!start || !end) {
                 alert('Παρακαλώ συμπληρώστε και τις δύο ημερομηνίες');
