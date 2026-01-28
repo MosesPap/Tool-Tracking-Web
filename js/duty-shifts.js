@@ -15195,6 +15195,13 @@
                 
                 currentEditingDayKey = key;
                 currentEditingDayDate = date;
+                
+                // Get day type color for theme
+                const dayTypeColor = getDayTypeColor(dayType);
+                const rgbColor = `rgb(${dayTypeColor[0]}, ${dayTypeColor[1]}, ${dayTypeColor[2]})`;
+                const hexColor = '#' + dayTypeColor.map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase();
+                const darkerShade = dayTypeColor.map(c => Math.max(0, c - 30));
+                const darkerRgb = `rgb(${darkerShade[0]}, ${darkerShade[1]}, ${darkerShade[2]})`;
 
                 // Derive who SHOULD be assigned for this date/group, using month-scoped seeding from lastRotationPositions.
                 const getExpectedPersonForDay = (groupNum) => {
@@ -15246,11 +15253,17 @@
                 if (titleElement) {
                     titleElement.textContent = formatDate(date);
                 }
+                
+                // Apply day type color theme to modal header
+                const modalHeader = modalElement.querySelector('.modal-header');
+                if (modalHeader) {
+                    modalHeader.style.background = `linear-gradient(135deg, ${rgbColor} 0%, ${darkerRgb} 100%)`;
+                }
             
             let content = `
                 <div class="mb-3">
-                    <div class="day-type-label">
-                        <i class="fas fa-calendar-check me-2"></i><strong>Τύπος Ημέρας:</strong> ${getDayTypeLabel(dayType)}
+                    <div class="day-type-label" style="background: linear-gradient(135deg, ${hexColor}15 0%, ${hexColor}25 100%); border: 2px solid ${hexColor}40;">
+                        <i class="fas fa-calendar-check me-2" style="color: ${hexColor};"></i><strong style="color: ${hexColor};">Τύπος Ημέρας:</strong> <span style="color: ${hexColor};">${getDayTypeLabel(dayType)}</span>
                     </div>
                 </div>
             `;
@@ -15344,9 +15357,9 @@
             // Create editable dropdown fields for each group
             content += `
                 <div class="mb-3">
-                    <div class="section-title">
-                        <i class="fas fa-user-shield"></i>
-                        <span>Σε Υπηρεσία</span>
+                    <div class="section-title" style="border-bottom-color: ${hexColor};">
+                        <i class="fas fa-user-shield" style="color: ${hexColor};"></i>
+                        <span style="color: ${hexColor};">Σε Υπηρεσία</span>
                     </div>
                     <div id="dutyPersonsContainer" class="mt-2">
             `;
@@ -15369,7 +15382,7 @@
                 if (reason) {
                     if (reason.type === 'skip') {
                         const displayReason = normalizeSkipReasonText(reason.reason);
-                        reasonBadge = `<span class="badge bg-warning ms-2" title="${displayReason}"><i class="fas fa-arrow-right me-1"></i>Παραλείφθηκε</span>`;
+                        reasonBadge = `<span class="badge bg-warning ms-2" title="${displayReason}"><i class="fas fa-user-check me-1"></i>Αντικατάσταση</span>`;
                     } else if (reason.type === 'swap') {
                         const displayReason = normalizeSwapReasonText(reason.reason);
                         reasonBadge = `<span class="badge bg-info ms-2" title="${displayReason}"><i class="fas fa-exchange-alt me-1"></i>Αλλαγή${reason.swappedWith ? ` με ${reason.swappedWith}` : ''}</span>`;

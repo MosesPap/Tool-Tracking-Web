@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.285 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.287 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -1039,11 +1039,12 @@
         }
 
         #dayDetailsModal .modal-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            /* Background will be set dynamically based on day type */
             border-bottom: 3px solid rgba(255, 255, 255, 0.2);
             padding: 0.75rem 1.5rem;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
             position: relative;
+            transition: background 0.3s ease;
         }
 
         #dayDetailsModal .modal-header::before {
@@ -1082,7 +1083,7 @@
             color: #2c3e50 !important;
             margin-bottom: 1rem !important;
             padding-bottom: 0.5rem;
-            border-bottom: 2px solid #667eea;
+            border-bottom: 2px solid;
             text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.1);
             display: flex;
             align-items: center;
@@ -1091,7 +1092,6 @@
 
         #dayDetailsModal .section-title i {
             font-size: 1.3rem;
-            color: #667eea;
             filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
         }
 
@@ -1439,7 +1439,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.286</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.287</span></h4>
             </div>
             <div class="d-flex align-items-center flex-wrap gap-3 title-bar-stats" style="font-size: 1.25em; font-weight: 500; opacity: 0.98;">
                 <span>Σύνολο Ατόμων: <strong id="totalPeople">0</strong></span>
