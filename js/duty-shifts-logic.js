@@ -1836,6 +1836,12 @@
                 alert('Σφάλμα κατά τον υπολογισμό: ' + error.message);
             }
         }
+        
+        // Expose to window for compatibility
+        if (typeof window !== 'undefined') {
+            window.calculateDutiesForSelectedMonths = calculateDutiesForSelectedMonths;
+        }
+        
         function renderCurrentStep() {
             const stepContent = document.getElementById('stepContent');
             const stepNumber = document.getElementById('currentStepNumber');

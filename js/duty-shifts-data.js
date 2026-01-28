@@ -2035,10 +2035,123 @@
         const SPECIAL_HOLIDAYS_YEARS_AHEAD = 30; // Calculate for next 30 years
 
         // Initialize default special holidays based on recurring configuration
+        function initializeDefaultSpecialHolidays() {
+            const currentYear = new Date().getFullYear();
+            const yearsToCalculate = SPECIAL_HOLIDAYS_YEARS_AHEAD;
+            const expectedHolidays = new Map(); // Track which dates SHOULD be special holidays with their names
+            
+            // First, collect all dates that SHOULD be special holidays based on recurring config
+            recurringSpecialHolidays.forEach(holidayDef => {
+                if (holidayDef.type === 'fixed') {
+                    // Fixed date holidays (month + day)
+                    for (let year = currentYear; year <= currentYear + yearsToCalculate; year++) {
+                        const date = new Date(year, holidayDef.month - 1, holidayDef.day);
+                        const dateKey = formatDateKey(date);
+                        expectedHolidays.set(dateKey, holidayDef.name);
+                    }
+                } else if (holidayDef.type === 'easter-relative') {
+                    // Movable holidays based on Orthodox Easter
+                    for (let year = currentYear; year <= currentYear + yearsToCalculate; year++) {
+                        const orthodoxHolidays = calculateOrthodoxHolidays(year);
+                        const easterDate = orthodoxHolidays.easterSunday;
+                        
+                        const holidayDate = new Date(easterDate);
+                        holidayDate.setDate(holidayDate.getDate() + (holidayDef.offset || 0));
+                        
+                        const dateKey = formatDateKey(holidayDate);
+                        expectedHolidays.set(dateKey, holidayDef.name);
+                    }
+                }
+            });
+            
+            // Remove special holidays that are no longer in the recurring configuration
+            // (but keep manually added ones if they exist - though currently all are from recurring)
+            specialHolidays = specialHolidays.filter(h => {
+                // Keep if it's in the expected list OR if it's a manually added one
+                // For now, we'll remove all that aren't in expected list since all come from recurring
+                return expectedHolidays.has(h.date);
+            });
+            
+            // Add missing holidays from recurring configuration
+            expectedHolidays.forEach((holidayName, dateKey) => {
+                if (!specialHolidays.some(h => h.date === dateKey)) {
+                    specialHolidays.push({
+                        date: dateKey,
+                        name: holidayName
+                    });
+                } else {
+                    // Update the name if it changed
+                    const existing = specialHolidays.find(h => h.date === dateKey);
+                    if (existing && existing.name !== holidayName) {
+                        existing.name = holidayName;
+                    }
+                }
+            });
+            
+            // Sort by date
+            specialHolidays.sort((a, b) => a.date.localeCompare(b.date));
+            // NOTE: Do NOT call saveData() here - it will be called when user makes actual changes
+            // This prevents unnecessary Firebase writes on every page load
+        }
         
         // Load recurring holidays configuration
+        async function loadRecurringHolidaysConfig() {
+            try {
+                if (window.db) {
+                    const db = window.db || firebase.firestore();
+                    const user = window.auth?.currentUser;
+                    
+                    if (user) {
+                        const doc = await db.collection('dutyShifts').doc('recurringSpecialHolidays').get();
+                        if (doc.exists) {
+                            const data = doc.data();
+                            recurringSpecialHolidays = data.list || recurringSpecialHolidays;
+                        }
+                    }
+                }
+                
+                // Fallback to localStorage
+                const saved = localStorage.getItem('dutyShiftsRecurringHolidays');
+                if (saved) {
+                    recurringSpecialHolidays = JSON.parse(saved);
+                }
+            } catch (error) {
+                console.error('Error loading recurring holidays config:', error);
+                const saved = localStorage.getItem('dutyShiftsRecurringHolidays');
+                if (saved) {
+                    recurringSpecialHolidays = JSON.parse(saved);
+                }
+            }
+        }
         
         // Save recurring holidays configuration to Firebase
+        async function saveRecurringHolidaysConfig() {
+            try {
+                if (!window.db) {
+                    localStorage.setItem('dutyShiftsRecurringHolidays', JSON.stringify(recurringSpecialHolidays));
+                    return;
+                }
+                
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                
+                if (!user) {
+                    localStorage.setItem('dutyShiftsRecurringHolidays', JSON.stringify(recurringSpecialHolidays));
+                    return;
+                }
+                
+                await db.collection('dutyShifts').doc('recurringSpecialHolidays').set({
+                    list: recurringSpecialHolidays,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: user.uid
+                });
+                
+                localStorage.setItem('dutyShiftsRecurringHolidays', JSON.stringify(recurringSpecialHolidays));
+            } catch (error) {
+                console.error('Error saving recurring holidays config:', error);
+                localStorage.setItem('dutyShiftsRecurringHolidays', JSON.stringify(recurringSpecialHolidays));
+            }
+        }
 
         // Render special holidays
 
@@ -4469,10 +4582,8 @@
             }
         }
         
-        // Expose to window for compatibility
-        if (typeof window !== 'undefined') {
-            window.calculateDutiesForSelectedMonths = calculateDutiesForSelectedMonths;
-        }
+        // Expose to window for compatibility (function is defined in duty-shifts-logic.js)
+        // This will be set after logic.js loads
 
         // Helper function to add/remove person from day assignment
 
