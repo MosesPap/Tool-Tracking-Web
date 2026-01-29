@@ -3540,24 +3540,26 @@
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const base = baselineByDate?.[dateKey]?.[groupNum] || null;
                     const comp = computedByDate?.[dateKey]?.[groupNum] || null;
-                    if (!base || !comp) continue;
+                    if (!base) continue;
                     if (base === comp) continue;
 
-                    const reasonObj = assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null;
+                    const reasonObj = comp ? (assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null) : null;
                     const reasonText = reasonObj?.reason
                         ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
                         : '';
-                    const briefReason = reasonText
-                        ? reasonText.split('.').filter(Boolean)[0]
-                        : ((isPersonDisabledForDuty(base, groupNum, 'semi') || isPersonMissingOnDate(base, groupNum, dateObj, 'semi'))
-                            ? (buildUnavailableReplacementReason({
-                                skippedPersonName: base,
-                                replacementPersonName: comp,
-                                dateObj,
-                                groupNum,
-                                dutyCategory: 'semi'
-                            }).split('.').filter(Boolean)[0] || '')
-                            : 'Αλλαγή');
+                    const briefReason = comp
+                        ? (reasonText
+                            ? reasonText.split('.').filter(Boolean)[0]
+                            : ((isPersonDisabledForDuty(base, groupNum, 'semi') || isPersonMissingOnDate(base, groupNum, dateObj, 'semi'))
+                                ? (buildUnavailableReplacementReason({
+                                    skippedPersonName: base,
+                                    replacementPersonName: comp,
+                                    dateObj,
+                                    groupNum,
+                                    dutyCategory: 'semi'
+                                }).split('.').filter(Boolean)[0] || '')
+                                : 'Αλλαγή'))
+                        : 'Δεν βρέθηκε αντικαταστάτης';
 
                     const otherKey = reasonObj?.type === 'swap'
                         ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
@@ -3573,7 +3575,7 @@
                         groupNum,
                         service: getGroupName(groupNum),
                         skipped: base,
-                        replacement: comp,
+                        replacement: comp || '(κενό)',
                         swapDateStr,
                         briefReason
                     });
@@ -6640,8 +6642,8 @@
                                 if (globalSemiRotationPosition[groupNum] === undefined) globalSemiRotationPosition[groupNum] = 0;
                                 globalSemiRotationPosition[groupNum] = (designatedIndex + 1) % rotationDays;
                                 storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', 'Επέστρεψε από απουσία – ημιάργια μετά από 3 ημερολογιακές ημέρες.', null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
-                                if (!assignedPeoplePreviewSemi[monthKey][groupNum]) assignedPeoplePreviewSemi[monthKey][groupNum] = new Set();
-                                assignedPeoplePreviewSemi[monthKey][groupNum].add(assignedPerson);
+                                if (!assignedPeoplePreviewSemi[monthKey][groupNum]) assignedPeoplePreviewSemi[monthKey][groupNum] = {};
+                                assignedPeoplePreviewSemi[monthKey][groupNum][assignedPerson] = dateKey;
                                 if (!semiAssignments[dateKey]) semiAssignments[dateKey] = {};
                                 semiAssignments[dateKey][groupNum] = assignedPerson;
                                 let lastDutyInfo = ''; let daysCountInfo = '';
@@ -6732,20 +6734,21 @@
                                     replacementIndex = idx;
                                     wasReplaced = true;
                                     foundReplacement = true;
+                                    assignedPeoplePreviewSemi[monthKey][groupNum][assignedPerson] = dateKey;
                                     storeAssignmentReason(
-                                        dateKey,
-                                        groupNum,
-                                        assignedPerson,
-                                        'skip',
-                                        buildUnavailableReplacementReason({
-                                            skippedPersonName: rotationPerson,
-                                            replacementPersonName: assignedPerson,
-                                            dateObj: date,
+                                            dateKey,
                                             groupNum,
-                                            dutyCategory: 'semi'
-                                        }),
-                                        rotationPerson,
-                                        null
+                                            assignedPerson,
+                                            'skip',
+                                            buildUnavailableReplacementReason({
+                                                skippedPersonName: rotationPerson,
+                                                replacementPersonName: assignedPerson,
+                                                dateObj: date,
+                                                groupNum,
+                                                dutyCategory: 'semi'
+                                            }),
+                                            rotationPerson,
+                                            null
                                     );
                                     break;
                                 }
@@ -6780,7 +6783,7 @@
                                     // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
                                     // IMPORTANT: Also check if replacement was already assigned this month to prevent duplicate assignments
                                     if (!assignedPeoplePreviewSemi[monthKey][groupNum]) {
-                                        assignedPeoplePreviewSemi[monthKey][groupNum] = new Set();
+                                        assignedPeoplePreviewSemi[monthKey][groupNum] = {};
                                     }
                                     let foundReplacement = false;
                                     for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
@@ -6806,6 +6809,7 @@
                                         replacementIndex = idx;
                                         wasReplaced = true;
                                         foundReplacement = true;
+                                        assignedPeoplePreviewSemi[monthKey][groupNum][assignedPerson] = dateKey;
                                         storeAssignmentReason(
                                             dateKey,
                                             groupNum,
@@ -6827,7 +6831,7 @@
                                     if (!foundReplacement) {
                                         assignedPerson = null;
                                     }
-                                    }
+                                }
                                     
                                 // Advance rotation position from the person ACTUALLY assigned (not the skipped person)
                                 // This ensures that when Person A is replaced by Person B, next semi-duty assigns Person C, not Person B again
@@ -6857,7 +6861,7 @@
                             
                             // Track that this person has been assigned (to prevent duplicate assignment later)
                             if (assignedPerson && assignedPeoplePreviewSemi[monthKey] && assignedPeoplePreviewSemi[monthKey][groupNum]) {
-                                assignedPeoplePreviewSemi[monthKey][groupNum].add(assignedPerson);
+                                assignedPeoplePreviewSemi[monthKey][groupNum][assignedPerson] = dateKey;
                             }
                             
                             // Get last duty date and days since for display
