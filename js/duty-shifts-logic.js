@@ -3405,61 +3405,30 @@
                                     
                                     // After the shift loop, verify the displaced person is correctly assigned
                                     // The displaced person should be at fromIndex + 1 (the next semi-normal after swapDateKey)
-                                    // This verification ensures no one gets skipped, especially if fromIndex + 1 was empty before the shift
+                                    // This verification ensures no one gets skipped
                                     if (fromIndex + 1 < sortedSemi.length && displacedPersonOriginal) {
                                         const nextSemiKey = sortedSemi[fromIndex + 1];
                                         const assignedAtNext = updatedAssignments[nextSemiKey]?.[groupNum];
                                         
-                                        // CRITICAL: The displaced person MUST be assigned to the next semi-normal day
-                                        // If they're not there (either the day is empty or has someone else), assign them
+                                        // If the displaced person is not correctly assigned at the next semi-normal day,
+                                        // ensure they are assigned there (this handles edge cases where the shift might miss them)
                                         if (assignedAtNext !== displacedPersonOriginal) {
                                             if (!updatedAssignments[nextSemiKey]) updatedAssignments[nextSemiKey] = {};
-                                            
-                                            // Store the previous person if there was one (for assignment reason)
-                                            const previousPersonAtNext = assignedAtNext || null;
-                                            
-                                            // Always assign the displaced person to ensure they're not skipped
-                                            updatedAssignments[nextSemiKey][groupNum] = displacedPersonOriginal;
-                                            swappedSemiSet.add(`${nextSemiKey}:${groupNum}`);
-                                            
-                                            // Store assignment reason for the displaced person
-                                            storeAssignmentReason(
-                                                nextSemiKey,
-                                                groupNum,
-                                                displacedPersonOriginal,
-                                                'shift',
-                                                `Μετακίνηση (οπισθοδρομική ανταλλαγή) λόγω σύγκρουσης γειτονικής υπηρεσίας (${conflictNeighborKey}).`,
-                                                previousPersonAtNext,
-                                                swapPairId,
-                                                { backwardShift: true, originDayKey: dateKey, swapDayKey: swapDateKey, conflictDateKey: conflictNeighborKey, displacedPerson: true }
-                                            );
-                                            
-                                            // If there was someone else at nextSemiKey, we need to shift them forward too
-                                            // This handles the case where the shift chain was broken
-                                            if (previousPersonAtNext && previousPersonAtNext !== displacedPersonOriginal) {
-                                                // Find the next available semi-normal day after nextSemiKey
-                                                const nextNextIndex = fromIndex + 2;
-                                                if (nextNextIndex < sortedSemi.length && nextNextIndex <= toIndex) {
-                                                    const nextNextSemiKey = sortedSemi[nextNextIndex];
-                                                    if (!updatedAssignments[nextNextSemiKey]) updatedAssignments[nextNextSemiKey] = {};
-                                                    const existingAtNextNext = updatedAssignments[nextNextSemiKey][groupNum];
-                                                    
-                                                    // Only assign if the slot is empty or if we're continuing the shift chain
-                                                    if (!existingAtNextNext) {
-                                                        updatedAssignments[nextNextSemiKey][groupNum] = previousPersonAtNext;
-                                                        swappedSemiSet.add(`${nextNextSemiKey}:${groupNum}`);
-                                                        storeAssignmentReason(
-                                                            nextNextSemiKey,
-                                                            groupNum,
-                                                            previousPersonAtNext,
-                                                            'shift',
-                                                            `Μετακίνηση (οπισθοδρομική ανταλλαγή) λόγω σύγκρουσης γειτονικής υπηρεσίας (${conflictNeighborKey}).`,
-                                                            null,
-                                                            swapPairId,
-                                                            { backwardShift: true, originDayKey: dateKey, swapDayKey: swapDateKey, conflictDateKey: conflictNeighborKey }
-                                                        );
-                                                    }
-                                                }
+                                            // Only assign if that day doesn't already have someone (to avoid overwriting correct assignments)
+                                            if (!updatedAssignments[nextSemiKey][groupNum] || updatedAssignments[nextSemiKey][groupNum] !== displacedPersonOriginal) {
+                                                updatedAssignments[nextSemiKey][groupNum] = displacedPersonOriginal;
+                                                swappedSemiSet.add(`${nextSemiKey}:${groupNum}`);
+                                                // Store assignment reason for the displaced person
+                                                storeAssignmentReason(
+                                                    nextSemiKey,
+                                                    groupNum,
+                                                    displacedPersonOriginal,
+                                                    'shift',
+                                                    `Μετακίνηση (οπισθοδρομική ανταλλαγή) λόγω σύγκρουσης γειτονικής υπηρεσίας (${conflictNeighborKey}).`,
+                                                    null,
+                                                    swapPairId,
+                                                    { backwardShift: true, originDayKey: dateKey, swapDayKey: swapDateKey, conflictDateKey: conflictNeighborKey, displacedPerson: true }
+                                                );
                                             }
                                         }
                                     }
@@ -7043,9 +7012,11 @@
                             }
                             if (!hasConsecutiveConflict) continue;
 
-                            // Swap with next semi-normal day(s), validate both sides
+                            // STEP 1: Try forward swap with next semi-normal day(s)
                             let swapCandidate = null;
                             let swapDateKey = null;
+                            const month = date.getMonth();
+                            const year = date.getFullYear();
                             for (let j = semiIndex + 1; j < sortedSemiForPreview.length; j++) {
                                 const candidateDateKey = sortedSemiForPreview[j];
                                 const candidateDate = new Date(candidateDateKey + 'T00:00:00');
@@ -7068,15 +7039,88 @@
                             }
 
                             if (swapCandidate && swapDateKey) {
-                                previewSemiAssignments[dateKey][groupNum] = swapCandidate;
-                                previewSemiAssignments[swapDateKey][groupNum] = currentPerson;
-                                swappedSemiSet.add(`${dateKey}:${groupNum}`);
-                                swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
+                                const fromIdx = sortedSemiForPreview.indexOf(swapDateKey);
+                                const toIdx = semiIndex;
+                                const isBackwardPreview = fromIdx >= 0 && toIdx >= 0 && fromIdx < toIdx;
+
+                                if (isBackwardPreview) {
+                                    // Backward swap in preview: apply same shift as runSemiNormalSwapLogic
+                                    // currentPerson moves to swapDateKey, displaced person becomes next semi-normal after swapDateKey
+                                    const displacedPersonOriginal = previewSemiAssignments[swapDateKey]?.[groupNum] || swapCandidate;
+                                    let carry = currentPerson;
+                                    for (let i = fromIdx; i <= toIdx; i++) {
+                                        const dk = sortedSemiForPreview[i];
+                                        if (!previewSemiAssignments[dk]) previewSemiAssignments[dk] = {};
+                                        const prev = previewSemiAssignments[dk][groupNum] || null;
+                                        previewSemiAssignments[dk][groupNum] = carry;
+                                        carry = prev;
+                                        swappedSemiSet.add(`${dk}:${groupNum}`);
+                                    }
+                                    if (fromIdx + 1 < sortedSemiForPreview.length && displacedPersonOriginal) {
+                                        const nextSemiKey = sortedSemiForPreview[fromIdx + 1];
+                                        if (previewSemiAssignments[nextSemiKey]?.[groupNum] !== displacedPersonOriginal) {
+                                            if (!previewSemiAssignments[nextSemiKey]) previewSemiAssignments[nextSemiKey] = {};
+                                            previewSemiAssignments[nextSemiKey][groupNum] = displacedPersonOriginal;
+                                            swappedSemiSet.add(`${nextSemiKey}:${groupNum}`);
+                                        }
+                                    }
+                                } else {
+                                    // Forward swap: simple two-way swap
+                                    previewSemiAssignments[dateKey][groupNum] = swapCandidate;
+                                    previewSemiAssignments[swapDateKey][groupNum] = currentPerson;
+                                    swappedSemiSet.add(`${dateKey}:${groupNum}`);
+                                    swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
+                                }
                                 continue;
                             }
 
-                            const month = date.getMonth();
-                            const year = date.getFullYear();
+                            // STEP 2: Try backward swap with previous semi-normal days in same month
+                            for (let j = semiIndex - 1; j >= 0; j--) {
+                                const candidateDateKey = sortedSemiForPreview[j];
+                                const candidateDate = new Date(candidateDateKey + 'T00:00:00');
+                                if (isNaN(candidateDate.getTime())) continue;
+                                if (candidateDate.getMonth() !== month || candidateDate.getFullYear() !== year) break;
+
+                                const candidatePerson = previewSemiAssignments[candidateDateKey]?.[groupNum];
+                                if (!candidatePerson) continue;
+                                if (swappedSemiSet.has(`${candidateDateKey}:${groupNum}`)) continue;
+
+                                if (isPersonMissingOnDate(candidatePerson, groupNum, date, 'semi')) continue;
+                                if (isPersonMissingOnDate(currentPerson, groupNum, candidateDate, 'semi')) continue;
+
+                                const candidateWouldConflict = hasSemiConsecutiveConflictForPerson(dateKey, candidatePerson, groupNum);
+                                const currentWouldConflict = hasSemiConsecutiveConflictForPerson(candidateDateKey, currentPerson, groupNum);
+                                if (!candidateWouldConflict && !currentWouldConflict) {
+                                    swapCandidate = candidatePerson;
+                                    swapDateKey = candidateDateKey;
+                                    break;
+                                }
+                            }
+
+                            if (swapCandidate && swapDateKey) {
+                                const fromIdx = sortedSemiForPreview.indexOf(swapDateKey);
+                                const toIdx = semiIndex;
+                                const displacedPersonOriginal = previewSemiAssignments[swapDateKey]?.[groupNum] || swapCandidate;
+                                let carry = currentPerson;
+                                for (let i = fromIdx; i <= toIdx; i++) {
+                                    const dk = sortedSemiForPreview[i];
+                                    if (!previewSemiAssignments[dk]) previewSemiAssignments[dk] = {};
+                                    const prev = previewSemiAssignments[dk][groupNum] || null;
+                                    previewSemiAssignments[dk][groupNum] = carry;
+                                    carry = prev;
+                                    swappedSemiSet.add(`${dk}:${groupNum}`);
+                                }
+                                if (fromIdx + 1 < sortedSemiForPreview.length && displacedPersonOriginal) {
+                                    const nextSemiKey = sortedSemiForPreview[fromIdx + 1];
+                                    if (previewSemiAssignments[nextSemiKey]?.[groupNum] !== displacedPersonOriginal) {
+                                        if (!previewSemiAssignments[nextSemiKey]) previewSemiAssignments[nextSemiKey] = {};
+                                        previewSemiAssignments[nextSemiKey][groupNum] = displacedPersonOriginal;
+                                        swappedSemiSet.add(`${nextSemiKey}:${groupNum}`);
+                                    }
+                                }
+                                continue;
+                            }
+
                             const rotationDays = groupPeople.length;
                             const currentRotationPosition = groupPeople.indexOf(currentPerson);
                         }
