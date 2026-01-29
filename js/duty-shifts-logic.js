@@ -6974,82 +6974,139 @@
                         return checkNeighbor(dayBefore) || checkNeighbor(dayAfter);
                     };
 
-                    const swappedSemiSet = new Set(); // `${dateKey}:${groupNum}`
+                    // Run swap pass up to 2 times so backward/mutual swaps and chain shifts fully propagate
+                    // (e.g. displaced person at nextSemiKey may have a new conflict that second pass can fix)
+                    for (let swapPass = 0; swapPass < 2; swapPass++) {
+                        const swappedSemiSet = new Set(); // `${dateKey}:${groupNum}` — fresh per pass
 
-                    for (let semiIndex = 0; semiIndex < sortedSemiForPreview.length; semiIndex++) {
-                        const dateKey = sortedSemiForPreview[semiIndex];
-                        const date = new Date(dateKey + 'T00:00:00');
-                        if (isNaN(date.getTime())) continue;
+                        for (let semiIndex = 0; semiIndex < sortedSemiForPreview.length; semiIndex++) {
+                            const dateKey = sortedSemiForPreview[semiIndex];
+                            const date = new Date(dateKey + 'T00:00:00');
+                            if (isNaN(date.getTime())) continue;
 
-                        const dayBefore = new Date(date);
-                        dayBefore.setDate(dayBefore.getDate() - 1);
-                        const dayAfter = new Date(date);
-                        dayAfter.setDate(dayAfter.getDate() + 1);
-                        const dayBeforeKey = formatDateKey(dayBefore);
-                        const dayAfterKey = formatDateKey(dayAfter);
-                        const beforeType = getDayType(dayBefore);
-                        const afterType = getDayType(dayAfter);
+                            const dayBefore = new Date(date);
+                            dayBefore.setDate(dayBefore.getDate() - 1);
+                            const dayAfter = new Date(date);
+                            dayAfter.setDate(dayAfter.getDate() + 1);
+                            const dayBeforeKey = formatDateKey(dayBefore);
+                            const dayAfterKey = formatDateKey(dayAfter);
+                            const beforeType = getDayType(dayBefore);
+                            const afterType = getDayType(dayAfter);
 
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            const groupPeople = groups?.[groupNum]?.semi || [];
-                            if (!groupPeople.length) continue;
+                            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                                const groupPeople = groups?.[groupNum]?.semi || [];
+                                if (!groupPeople.length) continue;
 
-                            const currentPerson = previewSemiAssignments?.[dateKey]?.[groupNum] || null;
-                            if (!currentPerson) continue;
-                            if (swappedSemiSet.has(`${dateKey}:${groupNum}`)) continue;
+                                const currentPerson = previewSemiAssignments?.[dateKey]?.[groupNum] || null;
+                                if (!currentPerson) continue;
+                                if (swappedSemiSet.has(`${dateKey}:${groupNum}`)) continue;
 
-                            // Conflict detection same as runSemiNormalSwapLogic()
-                            let hasConsecutiveConflict = false;
-                            if (beforeType === 'weekend-holiday' || beforeType === 'special-holiday') {
-                                const personBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] ||
-                                    (beforeType === 'special-holiday'
-                                        ? (simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(currentPerson) ? currentPerson : null)
-                                        : null);
-                                if (personBefore === currentPerson) hasConsecutiveConflict = true;
-                            }
-                            if (!hasConsecutiveConflict && (afterType === 'weekend-holiday' || afterType === 'special-holiday')) {
-                                const personAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] ||
-                                    (afterType === 'special-holiday'
-                                        ? (simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(currentPerson) ? currentPerson : null)
-                                        : null);
-                                if (personAfter === currentPerson) hasConsecutiveConflict = true;
-                            }
-                            if (!hasConsecutiveConflict) continue;
-
-                            // STEP 1: Try forward swap with next semi-normal day(s)
-                            let swapCandidate = null;
-                            let swapDateKey = null;
-                            const month = date.getMonth();
-                            const year = date.getFullYear();
-                            for (let j = semiIndex + 1; j < sortedSemiForPreview.length; j++) {
-                                const candidateDateKey = sortedSemiForPreview[j];
-                                const candidateDate = new Date(candidateDateKey + 'T00:00:00');
-                                if (isNaN(candidateDate.getTime())) continue;
-
-                                const candidatePerson = previewSemiAssignments[candidateDateKey]?.[groupNum];
-                                if (!candidatePerson) continue;
-                                if (swappedSemiSet.has(`${candidateDateKey}:${groupNum}`)) continue;
-
-                                if (isPersonMissingOnDate(candidatePerson, groupNum, date, 'semi')) continue;
-                                if (isPersonMissingOnDate(currentPerson, groupNum, candidateDate, 'semi')) continue;
-
-                                const candidateWouldConflict = hasSemiConsecutiveConflictForPerson(dateKey, candidatePerson, groupNum);
-                                const currentWouldConflict = hasSemiConsecutiveConflictForPerson(candidateDateKey, currentPerson, groupNum);
-                                if (!candidateWouldConflict && !currentWouldConflict) {
-                                    swapCandidate = candidatePerson;
-                                    swapDateKey = candidateDateKey;
-                                    break;
+                                // Conflict detection same as runSemiNormalSwapLogic()
+                                let hasConsecutiveConflict = false;
+                                if (beforeType === 'weekend-holiday' || beforeType === 'special-holiday') {
+                                    const personBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] ||
+                                        (beforeType === 'special-holiday'
+                                            ? (simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(currentPerson) ? currentPerson : null)
+                                            : null);
+                                    if (personBefore === currentPerson) hasConsecutiveConflict = true;
                                 }
-                            }
+                                if (!hasConsecutiveConflict && (afterType === 'weekend-holiday' || afterType === 'special-holiday')) {
+                                    const personAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] ||
+                                        (afterType === 'special-holiday'
+                                            ? (simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(currentPerson) ? currentPerson : null)
+                                            : null);
+                                    if (personAfter === currentPerson) hasConsecutiveConflict = true;
+                                }
+                                if (!hasConsecutiveConflict) continue;
 
-                            if (swapCandidate && swapDateKey) {
-                                const fromIdx = sortedSemiForPreview.indexOf(swapDateKey);
-                                const toIdx = semiIndex;
-                                const isBackwardPreview = fromIdx >= 0 && toIdx >= 0 && fromIdx < toIdx;
+                                // STEP 1: Try forward swap with next semi-normal day(s)
+                                let swapCandidate = null;
+                                let swapDateKey = null;
+                                const month = date.getMonth();
+                                const year = date.getFullYear();
+                                for (let j = semiIndex + 1; j < sortedSemiForPreview.length; j++) {
+                                    const candidateDateKey = sortedSemiForPreview[j];
+                                    const candidateDate = new Date(candidateDateKey + 'T00:00:00');
+                                    if (isNaN(candidateDate.getTime())) continue;
 
-                                if (isBackwardPreview) {
-                                    // Backward swap in preview: apply same shift as runSemiNormalSwapLogic
-                                    // currentPerson moves to swapDateKey, displaced person becomes next semi-normal after swapDateKey
+                                    const candidatePerson = previewSemiAssignments[candidateDateKey]?.[groupNum];
+                                    if (!candidatePerson) continue;
+                                    if (swappedSemiSet.has(`${candidateDateKey}:${groupNum}`)) continue;
+
+                                    if (isPersonMissingOnDate(candidatePerson, groupNum, date, 'semi')) continue;
+                                    if (isPersonMissingOnDate(currentPerson, groupNum, candidateDate, 'semi')) continue;
+
+                                    const candidateWouldConflict = hasSemiConsecutiveConflictForPerson(dateKey, candidatePerson, groupNum);
+                                    const currentWouldConflict = hasSemiConsecutiveConflictForPerson(candidateDateKey, currentPerson, groupNum);
+                                    if (!candidateWouldConflict && !currentWouldConflict) {
+                                        swapCandidate = candidatePerson;
+                                        swapDateKey = candidateDateKey;
+                                        break;
+                                    }
+                                }
+
+                                if (swapCandidate && swapDateKey) {
+                                    const fromIdx = sortedSemiForPreview.indexOf(swapDateKey);
+                                    const toIdx = semiIndex;
+                                    const isBackwardPreview = fromIdx >= 0 && toIdx >= 0 && fromIdx < toIdx;
+
+                                    if (isBackwardPreview) {
+                                        // Backward swap in preview: apply same shift as runSemiNormalSwapLogic
+                                        // currentPerson moves to swapDateKey, displaced person becomes next semi-normal after swapDateKey
+                                        const displacedPersonOriginal = previewSemiAssignments[swapDateKey]?.[groupNum] || swapCandidate;
+                                        let carry = currentPerson;
+                                        for (let i = fromIdx; i <= toIdx; i++) {
+                                            const dk = sortedSemiForPreview[i];
+                                            if (!previewSemiAssignments[dk]) previewSemiAssignments[dk] = {};
+                                            const prev = previewSemiAssignments[dk][groupNum] || null;
+                                            previewSemiAssignments[dk][groupNum] = carry;
+                                            carry = prev;
+                                            swappedSemiSet.add(`${dk}:${groupNum}`);
+                                        }
+                                        if (fromIdx + 1 < sortedSemiForPreview.length && displacedPersonOriginal) {
+                                            const nextSemiKey = sortedSemiForPreview[fromIdx + 1];
+                                            if (previewSemiAssignments[nextSemiKey]?.[groupNum] !== displacedPersonOriginal) {
+                                                if (!previewSemiAssignments[nextSemiKey]) previewSemiAssignments[nextSemiKey] = {};
+                                                previewSemiAssignments[nextSemiKey][groupNum] = displacedPersonOriginal;
+                                                swappedSemiSet.add(`${nextSemiKey}:${groupNum}`);
+                                            }
+                                        }
+                                    } else {
+                                        // Forward swap: simple two-way swap
+                                        previewSemiAssignments[dateKey][groupNum] = swapCandidate;
+                                        previewSemiAssignments[swapDateKey][groupNum] = currentPerson;
+                                        swappedSemiSet.add(`${dateKey}:${groupNum}`);
+                                        swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
+                                    }
+                                    continue;
+                                }
+
+                                // STEP 2: Try backward swap with previous semi-normal days in same month
+                                for (let j = semiIndex - 1; j >= 0; j--) {
+                                    const candidateDateKey = sortedSemiForPreview[j];
+                                    const candidateDate = new Date(candidateDateKey + 'T00:00:00');
+                                    if (isNaN(candidateDate.getTime())) continue;
+                                    if (candidateDate.getMonth() !== month || candidateDate.getFullYear() !== year) break;
+
+                                    const candidatePerson = previewSemiAssignments[candidateDateKey]?.[groupNum];
+                                    if (!candidatePerson) continue;
+                                    if (swappedSemiSet.has(`${candidateDateKey}:${groupNum}`)) continue;
+
+                                    if (isPersonMissingOnDate(candidatePerson, groupNum, date, 'semi')) continue;
+                                    if (isPersonMissingOnDate(currentPerson, groupNum, candidateDate, 'semi')) continue;
+
+                                    const candidateWouldConflict = hasSemiConsecutiveConflictForPerson(dateKey, candidatePerson, groupNum);
+                                    const currentWouldConflict = hasSemiConsecutiveConflictForPerson(candidateDateKey, currentPerson, groupNum);
+                                    if (!candidateWouldConflict && !currentWouldConflict) {
+                                        swapCandidate = candidatePerson;
+                                        swapDateKey = candidateDateKey;
+                                        break;
+                                    }
+                                }
+
+                                if (swapCandidate && swapDateKey) {
+                                    const fromIdx = sortedSemiForPreview.indexOf(swapDateKey);
+                                    const toIdx = semiIndex;
                                     const displacedPersonOriginal = previewSemiAssignments[swapDateKey]?.[groupNum] || swapCandidate;
                                     let carry = currentPerson;
                                     for (let i = fromIdx; i <= toIdx; i++) {
@@ -7068,65 +7125,12 @@
                                             swappedSemiSet.add(`${nextSemiKey}:${groupNum}`);
                                         }
                                     }
-                                } else {
-                                    // Forward swap: simple two-way swap
-                                    previewSemiAssignments[dateKey][groupNum] = swapCandidate;
-                                    previewSemiAssignments[swapDateKey][groupNum] = currentPerson;
-                                    swappedSemiSet.add(`${dateKey}:${groupNum}`);
-                                    swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
+                                    continue;
                                 }
-                                continue;
+
+                                const rotationDays = groupPeople.length;
+                                const currentRotationPosition = groupPeople.indexOf(currentPerson);
                             }
-
-                            // STEP 2: Try backward swap with previous semi-normal days in same month
-                            for (let j = semiIndex - 1; j >= 0; j--) {
-                                const candidateDateKey = sortedSemiForPreview[j];
-                                const candidateDate = new Date(candidateDateKey + 'T00:00:00');
-                                if (isNaN(candidateDate.getTime())) continue;
-                                if (candidateDate.getMonth() !== month || candidateDate.getFullYear() !== year) break;
-
-                                const candidatePerson = previewSemiAssignments[candidateDateKey]?.[groupNum];
-                                if (!candidatePerson) continue;
-                                if (swappedSemiSet.has(`${candidateDateKey}:${groupNum}`)) continue;
-
-                                if (isPersonMissingOnDate(candidatePerson, groupNum, date, 'semi')) continue;
-                                if (isPersonMissingOnDate(currentPerson, groupNum, candidateDate, 'semi')) continue;
-
-                                const candidateWouldConflict = hasSemiConsecutiveConflictForPerson(dateKey, candidatePerson, groupNum);
-                                const currentWouldConflict = hasSemiConsecutiveConflictForPerson(candidateDateKey, currentPerson, groupNum);
-                                if (!candidateWouldConflict && !currentWouldConflict) {
-                                    swapCandidate = candidatePerson;
-                                    swapDateKey = candidateDateKey;
-                                    break;
-                                }
-                            }
-
-                            if (swapCandidate && swapDateKey) {
-                                const fromIdx = sortedSemiForPreview.indexOf(swapDateKey);
-                                const toIdx = semiIndex;
-                                const displacedPersonOriginal = previewSemiAssignments[swapDateKey]?.[groupNum] || swapCandidate;
-                                let carry = currentPerson;
-                                for (let i = fromIdx; i <= toIdx; i++) {
-                                    const dk = sortedSemiForPreview[i];
-                                    if (!previewSemiAssignments[dk]) previewSemiAssignments[dk] = {};
-                                    const prev = previewSemiAssignments[dk][groupNum] || null;
-                                    previewSemiAssignments[dk][groupNum] = carry;
-                                    carry = prev;
-                                    swappedSemiSet.add(`${dk}:${groupNum}`);
-                                }
-                                if (fromIdx + 1 < sortedSemiForPreview.length && displacedPersonOriginal) {
-                                    const nextSemiKey = sortedSemiForPreview[fromIdx + 1];
-                                    if (previewSemiAssignments[nextSemiKey]?.[groupNum] !== displacedPersonOriginal) {
-                                        if (!previewSemiAssignments[nextSemiKey]) previewSemiAssignments[nextSemiKey] = {};
-                                        previewSemiAssignments[nextSemiKey][groupNum] = displacedPersonOriginal;
-                                        swappedSemiSet.add(`${nextSemiKey}:${groupNum}`);
-                                    }
-                                }
-                                continue;
-                            }
-
-                            const rotationDays = groupPeople.length;
-                            const currentRotationPosition = groupPeople.indexOf(currentPerson);
                         }
                     }
 
@@ -7152,7 +7156,7 @@
                                 }
                                 const baselinePerson = semiRotationPersonsForPreview?.[dateKey]?.[groupNum] || null;
                                 const computedPerson = previewSemiAssignments?.[dateKey]?.[groupNum] || null;
-                                rowHtml += `<td>${buildBaselineComputedCellHtml(baselinePerson, computedPerson)}</td>`;
+                                rowHtml += `<td>${buildBaselineComputedCellHtmlSemiPreview(baselinePerson, computedPerson)}</td>`;
                             }
 
                             rowHtml += '</tr>';
