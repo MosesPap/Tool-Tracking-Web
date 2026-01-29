@@ -6304,6 +6304,109 @@
                 }
             }
 
+            // 3b) Missing-period swap: person assigned to semi on a day they're missing -> swap with another semi in same month (before or after missing period)
+            for (let i = 0; i < sortedSemi.length; i++) {
+                const dateKey = sortedSemi[i];
+                const dateObj = new Date(dateKey + 'T00:00:00');
+                if (isNaN(dateObj.getTime())) continue;
+                const monthKey = getMonthKeyFromDate(dateObj);
+                const semiInMonth = sortedSemi.filter(dk => getMonthKeyFromDate(new Date(dk + 'T00:00:00')) === monthKey);
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const slotId = `${dateKey}:${groupNum}`;
+                    if (swappedSet.has(slotId)) continue;
+                    const person = finalAssignments[dateKey]?.[groupNum];
+                    if (!person) continue;
+                    if (!isPersonMissingOnDate(person, groupNum, dateObj, 'semi')) continue;
+                    const missingPeriods = (groups[groupNum]?.missingPeriods || {})[person] || [];
+                    const periodContaining = missingPeriods.find(p => {
+                        const start = new Date(p.start + 'T00:00:00');
+                        const end = new Date(p.end + 'T00:00:00');
+                        return dateObj >= start && dateObj <= end;
+                    });
+                    // Prefer: first semi after period end, then last semi before period start
+                    const periodEnd = periodContaining ? new Date(periodContaining.end + 'T00:00:00') : null;
+                    const periodStart = periodContaining ? new Date(periodContaining.start + 'T00:00:00') : null;
+                    let candidateIndices = [];
+                    if (periodEnd) {
+                        const firstAfter = semiInMonth.findIndex(dk => new Date(dk + 'T00:00:00') > periodEnd);
+                        if (firstAfter >= 0) for (let k = firstAfter; k < semiInMonth.length; k++) candidateIndices.push(sortedSemi.indexOf(semiInMonth[k]));
+                    }
+                    if (periodStart) {
+                        const lastBefore = semiInMonth.map((dk, idx) => ({ dk, idx })).filter(({ dk }) => new Date(dk + 'T00:00:00') < periodStart).pop();
+                        if (lastBefore) for (let k = lastBefore.idx; k >= 0; k--) candidateIndices.push(sortedSemi.indexOf(semiInMonth[k]));
+                    }
+                    if (candidateIndices.length === 0) {
+                        for (let k = 0; k < semiInMonth.length; k++) {
+                            const dk = semiInMonth[k];
+                            if (dk === dateKey) continue;
+                            candidateIndices.push(sortedSemi.indexOf(dk));
+                        }
+                    }
+                    candidateIndices = [...new Set(candidateIndices)];
+                    let swapped = false;
+                    for (const j of candidateIndices) {
+                        if (j < 0 || j >= sortedSemi.length) continue;
+                        const dk2 = sortedSemi[j];
+                        if (dk2 === dateKey) continue;
+                        if (getMonthKeyFromDate(new Date(dk2 + 'T00:00:00')) !== monthKey) continue;
+                        const other = finalAssignments[dk2]?.[groupNum];
+                        if (!other || other === person) continue;
+                        const dateKeyObj = new Date(dateKey + 'T00:00:00');
+                        const dk2Obj = new Date(dk2 + 'T00:00:00');
+                        if (isPersonMissingOnDate(other, groupNum, dateKeyObj, 'semi')) continue;
+                        if (isPersonMissingOnDate(person, groupNum, dk2Obj, 'semi')) continue;
+                        if (hasConflict(dateKey, other, groupNum)) continue;
+                        if (hasConflict(dk2, person, groupNum)) continue;
+                        finalAssignments[dateKey][groupNum] = other;
+                        finalAssignments[dk2][groupNum] = person;
+                        const otherStr = new Date(dk2 + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        const dateStr = new Date(dateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        if (!swapInfo[dateKey]) swapInfo[dateKey] = {};
+                        swapInfo[dateKey][groupNum] = { otherDateKey: dk2, otherDateStr: otherStr, missingPeriod: true };
+                        if (!swapInfo[dk2]) swapInfo[dk2] = {};
+                        swapInfo[dk2][groupNum] = { otherDateKey: dateKey, otherDateStr: dateStr, missingPeriod: true };
+                        swappedSet.add(slotId);
+                        swappedSet.add(`${dk2}:${groupNum}`);
+                        semiSwapPairId++;
+                        const reasonText = 'Ανταλλαγή ημιαργίας λόγω απουσίας. Από ' + dateStr + ' (κατά τη διάρκεια απουσίας) σε ' + otherStr + '.';
+                        storeAssignmentReason(dateKey, groupNum, other, 'swap', reasonText, person, semiSwapPairId);
+                        storeAssignmentReason(dk2, groupNum, person, 'swap', 'Ανταλλαγή ημιαργίας λόγω απουσίας. Από ' + dateStr + ' σε αυτή την ημέρα.', other, semiSwapPairId);
+                        swapped = true;
+                        break;
+                    }
+                    if (!swapped) {
+                        for (let j = 0; j < sortedSemi.length; j++) {
+                            const dk2 = sortedSemi[j];
+                            if (dk2 === dateKey) continue;
+                            if (getMonthKeyFromDate(new Date(dk2 + 'T00:00:00')) !== monthKey) continue;
+                            const other = finalAssignments[dk2]?.[groupNum];
+                            if (!other || other === person) continue;
+                            const dateKeyObj = new Date(dateKey + 'T00:00:00');
+                            const dk2Obj = new Date(dk2 + 'T00:00:00');
+                            if (isPersonMissingOnDate(other, groupNum, dateKeyObj, 'semi')) continue;
+                            if (isPersonMissingOnDate(person, groupNum, dk2Obj, 'semi')) continue;
+                            if (hasConflict(dateKey, other, groupNum)) continue;
+                            if (hasConflict(dk2, person, groupNum)) continue;
+                            finalAssignments[dateKey][groupNum] = other;
+                            finalAssignments[dk2][groupNum] = person;
+                            const otherStr = new Date(dk2 + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                            const dateStr = new Date(dateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                            if (!swapInfo[dateKey]) swapInfo[dateKey] = {};
+                            swapInfo[dateKey][groupNum] = { otherDateKey: dk2, otherDateStr: otherStr, missingPeriod: true };
+                            if (!swapInfo[dk2]) swapInfo[dk2] = {};
+                            swapInfo[dk2][groupNum] = { otherDateKey: dateKey, otherDateStr: dateStr, missingPeriod: true };
+                            swappedSet.add(slotId);
+                            swappedSet.add(`${dk2}:${groupNum}`);
+                            semiSwapPairId++;
+                            const reasonText = 'Ανταλλαγή ημιαργίας λόγω απουσίας. Από ' + dateStr + ' (κατά τη διάρκεια απουσίας) σε ' + otherStr + '.';
+                            storeAssignmentReason(dateKey, groupNum, other, 'swap', reasonText, person, semiSwapPairId);
+                            storeAssignmentReason(dk2, groupNum, person, 'swap', 'Ανταλλαγή ημιαργίας λόγω απουσίας. Από ' + dateStr + ' σε αυτή την ημέρα.', other, semiSwapPairId);
+                            break;
+                        }
+                    }
+                }
+            }
+
             // 4) Last rotation positions: use final assignments (after swaps) per month
             const lastSemiRotationPositionsByMonth = {};
             for (const dateKey of sortedSemi) {
@@ -6357,7 +6460,8 @@
                     const swap = swapInfo[dateKey]?.[groupNum];
                     let cell = '';
                     if (swap) {
-                        cell = '<div class="small text-muted">Βασική: ' + basePerson + '</div><div><strong>' + finalPerson + '</strong></div><div class="small text-primary">↔ ανταλλαγή με ' + swap.otherDateStr + '</div>';
+                        const swapLabel = swap.missingPeriod ? '↔ ανταλλαγή λόγω απουσίας με ' : '↔ ανταλλαγή με ';
+                        cell = '<div class="small text-muted">Βασική: ' + basePerson + '</div><div><strong>' + finalPerson + '</strong></div><div class="small text-primary">' + swapLabel + swap.otherDateStr + '</div>';
                     } else if (basePerson !== finalPerson) {
                         cell = '<div class="small text-muted">Βασική: ' + basePerson + '</div><div><strong>' + finalPerson + '</strong></div>';
                     } else {
