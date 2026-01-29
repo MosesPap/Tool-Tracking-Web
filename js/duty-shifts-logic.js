@@ -7210,6 +7210,7 @@
                     }
                 }
             } catch (e) {}
+            }
         }
         function renderStep4_Normal() {
             const stepContent = document.getElementById('stepContent');
