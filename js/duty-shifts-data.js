@@ -124,19 +124,6 @@
             `;
         }
 
-        // For semi-normal preview: always show baseline (rotation) and replacement so user sees both.
-        // When no change, replacement shows same name or '-'.
-        function buildBaselineComputedCellHtmlSemiPreview(baselinePerson, computedPerson) {
-            const base = baselinePerson || '-';
-            const comp = computedPerson || '-';
-            return `
-                <div class="small text-muted">Βασική Σειρά</div>
-                <div><strong>${base}</strong></div>
-                <div class="small text-primary mt-1">Αντικατάσταση</div>
-                <div><strong>${comp}</strong></div>
-            `;
-        }
-
         function greekUpperNoTones(s) {
             return String(s || '')
                 .normalize('NFD')
