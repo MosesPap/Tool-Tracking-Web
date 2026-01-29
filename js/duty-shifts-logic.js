@@ -2974,88 +2974,23 @@
             }
         }
         async function saveStep3_SemiNormal() {
-            try {
-                if (!window.db) {
-                    console.log('Firebase not ready, skipping Step 3 save');
-                    return;
-                }
-                
-                const db = window.db || firebase.firestore();
-                const user = window.auth?.currentUser;
-                
-                if (!user) {
-                    console.log('User not authenticated, skipping Step 3 save');
-                    return;
-                }
-                
-                const tempSemiAssignments = calculationSteps.tempSemiAssignments || {};
-                const tempSemiBaselineAssignments = calculationSteps.tempSemiBaselineAssignments || {};
-                const lastSemiRotationPositionsByMonth = calculationSteps.lastSemiRotationPositionsByMonth || {};
-                
-                // Save semi-normal rotation baseline (pure rotation order) to Firestore
-                if (Object.keys(tempSemiBaselineAssignments).length > 0) {
-                    const formattedBaseline = formatGroupAssignmentsToStringMap(tempSemiBaselineAssignments);
-                    const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
-                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineSemiAssignments', organizedBaseline);
-                    Object.assign(rotationBaselineSemiAssignments, formattedBaseline);
-                }
-                
-                // NOTE: legacy dutyShifts/assignments is deprecated; we no longer save pre-logic snapshots there.
-                if (Object.keys(tempSemiAssignments).length > 0) {
-                    // Convert to format: dateKey -> "Person (Ομάδα 1), Person (Ομάδα 2), ..."
-                    const formattedAssignments = {};
-                    for (const dateKey in tempSemiAssignments) {
-                        const groups = tempSemiAssignments[dateKey];
-                        const parts = [];
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            if (groups[groupNum]) {
-                                parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
-                            }
-                        }
-                        if (parts.length > 0) {
-                            formattedAssignments[dateKey] = parts.join(', ');
-                        }
-                    }
-                    
-                    // Update local memory (for preview and subsequent steps)
-                    Object.assign(semiNormalAssignments, formattedAssignments);
-                }
-                
-                // Save last rotation positions for semi-normal (per month)
-                if (Object.keys(lastSemiRotationPositionsByMonth).length > 0) {
-                    for (const monthKey in lastSemiRotationPositionsByMonth) {
-                        const groupsForMonth = lastSemiRotationPositionsByMonth[monthKey] || {};
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            if (groupsForMonth[groupNum] !== undefined) {
-                                setLastRotationPersonForMonth('semi', monthKey, groupNum, groupsForMonth[groupNum]);
-                            }
-                        }
-                    }
-                    
-                    // Save to Firestore
-                    const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
-                    await db.collection('dutyShifts').doc('lastRotationPositions').set({
-                        ...sanitizedPositions,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
-                    console.log('Saved Step 3 last rotation positions for semi-normal (per month) to Firestore:', lastSemiRotationPositionsByMonth);
-                }
-                
-                // Now run swap logic and show popup
-                await runSemiNormalSwapLogic();
-            } catch (error) {
-                console.error('Error saving Step 3 (Semi-Normal) to Firestore:', error);
-            }
+            // Semi-normal baseline + swap already run when Step 3 was rendered (after OK on weekend).
+            // Show results modal (like normal days); OK on modal advances to Step 4.
+            const updatedAssignments = calculationSteps.finalSemiAssignments || calculationSteps.tempSemiAssignments || {};
+            const swappedPeople = []; // modal builds rows from tempSemiBaselineAssignments vs finalSemiAssignments + assignmentReasons
+            showSemiNormalSwapResults(swappedPeople, updatedAssignments);
         }
         async function runSemiNormalSwapLogic() {
+            // Semi-normal baseline + conflict + swap now run in renderStep3_SemiNormal (after OK on weekend).
+            return;
+        }
+        function _runSemiNormalSwapLogic_REMOVED() {
             try {
                 const dayTypeLists = calculationSteps.dayTypeLists || { semi: [], special: [], weekend: [] };
                 const semiNormalDays = dayTypeLists.semi || [];
                 const specialHolidays = dayTypeLists.special || [];
                 const weekendHolidays = dayTypeLists.weekend || [];
                 
-                // Load special holiday assignments from Step 1 saved data (tempSpecialAssignments)
                 const tempSpecialAssignments = calculationSteps.tempSpecialAssignments || {};
                 const simulatedSpecialAssignments = {}; // monthKey -> { groupNum -> Set of person names }
                 const sortedSpecial = [...specialHolidays].sort();
@@ -3181,33 +3116,6 @@
                 for (const dateKey in tempSemiAssignments) {
                     const groups = tempSemiAssignments[dateKey];
                     updatedAssignments[dateKey] = { ...groups };
-                }
-                
-                // Temporarily calculate missing people of the month: fill any blank slots by finding the appropriate semi-normal.
-                // For each semi day/group with no assignment, compute rotation person for that date; if missing, assign next eligible.
-                for (const dateKey of sortedSemi) {
-                    const date = new Date(dateKey + 'T00:00:00');
-                    if (isNaN(date.getTime())) continue;
-                    if (!updatedAssignments[dateKey]) updatedAssignments[dateKey] = {};
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        if (updatedAssignments[dateKey][groupNum]) continue; // already assigned (e.g. return-from-missing)
-                        const groupData = groups[groupNum] || { semi: [] };
-                        const groupPeople = groupData.semi || [];
-                        if (groupPeople.length === 0) continue;
-                        const rotationDays = groupPeople.length;
-                        const rotationPosition = getRotationPosition(date, 'semi', groupNum) % rotationDays;
-                        let assignedPerson = groupPeople[rotationPosition];
-                        if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
-                            for (let offset = 1; offset <= rotationDays * 2; offset++) {
-                                const idx = (rotationPosition + offset) % rotationDays;
-                                const candidate = groupPeople[idx];
-                                if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
-                                assignedPerson = candidate;
-                                break;
-                            }
-                        }
-                        if (assignedPerson) updatedAssignments[dateKey][groupNum] = assignedPerson;
-                    }
                 }
                 
                 // Helper: check if a person would have a semi-normal consecutive conflict on a given semi-normal day
@@ -3567,26 +3475,24 @@
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const base = baselineByDate?.[dateKey]?.[groupNum] || null;
                     const comp = computedByDate?.[dateKey]?.[groupNum] || null;
-                    if (!base) continue;
+                    if (!base || !comp) continue;
                     if (base === comp) continue;
 
-                    const reasonObj = comp ? (assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null) : null;
+                    const reasonObj = assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null;
                     const reasonText = reasonObj?.reason
                         ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
                         : '';
-                    const briefReason = comp
-                        ? (reasonText
-                            ? reasonText.split('.').filter(Boolean)[0]
-                            : ((isPersonDisabledForDuty(base, groupNum, 'semi') || isPersonMissingOnDate(base, groupNum, dateObj, 'semi'))
-                                ? (buildUnavailableReplacementReason({
-                                    skippedPersonName: base,
-                                    replacementPersonName: comp,
-                                    dateObj,
-                                    groupNum,
-                                    dutyCategory: 'semi'
-                                }).split('.').filter(Boolean)[0] || '')
-                                : 'Αλλαγή'))
-                        : 'Δεν βρέθηκε αντικαταστάτης';
+                    const briefReason = reasonText
+                        ? reasonText.split('.').filter(Boolean)[0]
+                        : ((isPersonDisabledForDuty(base, groupNum, 'semi') || isPersonMissingOnDate(base, groupNum, dateObj, 'semi'))
+                            ? (buildUnavailableReplacementReason({
+                                skippedPersonName: base,
+                                replacementPersonName: comp,
+                                dateObj,
+                                groupNum,
+                                dutyCategory: 'semi'
+                            }).split('.').filter(Boolean)[0] || '')
+                            : 'Αλλαγή');
 
                     const otherKey = reasonObj?.type === 'swap'
                         ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
@@ -3602,7 +3508,7 @@
                         groupNum,
                         service: getGroupName(groupNum),
                         skipped: base,
-                        replacement: comp || '(κενό)',
+                        replacement: comp,
                         swapDateStr,
                         briefReason
                     });
@@ -6197,84 +6103,277 @@
             html += '</div>';
             stepContent.innerHTML = html;
         }
-        function renderStep3_SemiNormal() {
+        async function renderStep3_SemiNormal() {
             const stepContent = document.getElementById('stepContent');
             const startDate = calculationSteps.startDate;
             const endDate = calculationSteps.endDate;
             const dayTypeLists = calculationSteps.dayTypeLists || { semi: [], special: [], weekend: [] };
-            
-            // Check for semi-normal days
             const semiNormalDays = dayTypeLists.semi || [];
             const specialHolidays = dayTypeLists.special || [];
             const weekendHolidays = dayTypeLists.weekend || [];
-            
-            // For Step 3 display-only swap preview we need these after initial table render.
-            let sortedSemiForPreview = [];
-            const semiAssignmentsForPreview = {}; // dateKey -> { groupNum -> person }
-            const semiRotationPersonsForPreview = {}; // dateKey -> { groupNum -> rotation person }
-            
-            // First, load special holiday assignments from Step 1 saved data (already includes missing replacements)
-            const simulatedSpecialAssignments = {}; // monthKey -> { groupNum -> Set of person names }
-            const sortedSpecial = [...specialHolidays].sort();
-            sortedSpecial.forEach((dateKey) => {
+
+            stepContent.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin me-2"></i>Υπολογισμός ημιαργιών...</div>';
+
+            // Load weekend assignments (Step 2 result)
+            const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person }
+            const finalWeekend = calculationSteps.finalWeekendAssignments || {};
+            for (const dateKey of Object.keys(finalWeekend)) {
+                const g = finalWeekend[dateKey];
+                if (g && typeof g === 'object') simulatedWeekendAssignments[dateKey] = { ...g };
+            }
+            for (const dateKey of [...(weekendHolidays || [])].sort()) {
+                if (simulatedWeekendAssignments[dateKey]) continue;
+                const a = weekendAssignments[dateKey];
+                if (typeof a === 'string') {
+                    a.split(',').map(p => p.trim()).forEach(part => {
+                        const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
+                        if (m) {
+                            if (!simulatedWeekendAssignments[dateKey]) simulatedWeekendAssignments[dateKey] = {};
+                            simulatedWeekendAssignments[dateKey][parseInt(m[2])] = m[1].trim();
+                        }
+                    });
+                } else if (a && typeof a === 'object') {
+                    simulatedWeekendAssignments[dateKey] = { ...a };
+                }
+            }
+
+            // Load special holiday assignments (Step 1)
+            const simulatedSpecialAssignments = {}; // monthKey -> { groupNum -> Set of person }
+            (calculationSteps.tempSpecialAssignments && typeof calculationSteps.tempSpecialAssignments === 'object') && Object.keys(calculationSteps.tempSpecialAssignments).forEach(dateKey => {
                 const date = new Date(dateKey + 'T00:00:00');
                 if (isNaN(date.getTime())) return;
                 const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
                 if (!simulatedSpecialAssignments[monthKey]) simulatedSpecialAssignments[monthKey] = {};
-
-                // Prefer tempSpecialAssignments (canonical Step 1 preview format), fall back to specialHolidayAssignments
-                const fromTemp = calculationSteps.tempSpecialAssignments?.[dateKey] || null; // { groupNum -> personName }
-                const groupMap = fromTemp && typeof fromTemp === 'object'
-                    ? fromTemp
-                    : extractGroupAssignmentsMap(specialHolidayAssignments?.[dateKey]);
-                
+                const gmap = calculationSteps.tempSpecialAssignments[dateKey];
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const personName = groupMap?.[groupNum];
-                    if (!personName) continue;
+                    const p = gmap[groupNum];
+                    if (!p) continue;
                     if (!simulatedSpecialAssignments[monthKey][groupNum]) simulatedSpecialAssignments[monthKey][groupNum] = new Set();
-                    simulatedSpecialAssignments[monthKey][groupNum].add(personName);
+                    simulatedSpecialAssignments[monthKey][groupNum].add(p);
                 }
             });
-            
-            // Second, simulate what weekends will be assigned (from Step 2)
-            const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
-            // Prefer loading saved Step 2 weekend assignments (already includes skip logic)
-            let hasSavedWeekendAssignments = false;
-            for (const dateKey of [...weekendHolidays].sort()) {
-                const assignment = weekendAssignments[dateKey];
-                if (!assignment) continue;
-                hasSavedWeekendAssignments = true;
-                if (typeof assignment === 'string') {
-                    const parts = assignment.split(',').map(p => p.trim());
-                    parts.forEach(part => {
-                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
-                        if (!match) return;
-                        const personName = match[1].trim();
-                        const groupNum = parseInt(match[2]);
-                        if (!simulatedWeekendAssignments[dateKey]) simulatedWeekendAssignments[dateKey] = {};
-                        simulatedWeekendAssignments[dateKey][groupNum] = personName;
-                    });
-                } else if (typeof assignment === 'object' && !Array.isArray(assignment)) {
-                    for (const groupNum in assignment) {
-                        const personName = assignment[groupNum];
-                        if (!personName) continue;
-                        if (!simulatedWeekendAssignments[dateKey]) simulatedWeekendAssignments[dateKey] = {};
-                        simulatedWeekendAssignments[dateKey][parseInt(groupNum)] = personName;
+            (specialHolidays || []).forEach(dateKey => {
+                const date = new Date(dateKey + 'T00:00:00');
+                if (isNaN(date.getTime())) return;
+                const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+                if (!simulatedSpecialAssignments[monthKey]) simulatedSpecialAssignments[monthKey] = {};
+                const gmap = extractGroupAssignmentsMap(specialHolidayAssignments?.[dateKey]);
+                if (!gmap) return;
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const p = gmap[groupNum];
+                    if (!p) continue;
+                    if (!simulatedSpecialAssignments[monthKey][groupNum]) simulatedSpecialAssignments[monthKey][groupNum] = new Set();
+                    simulatedSpecialAssignments[monthKey][groupNum].add(p);
+                }
+            });
+
+            const sortedSemi = [...(semiNormalDays || [])].sort();
+            if (sortedSemi.length === 0) {
+                stepContent.innerHTML = '<div class="step-content"><h6 class="mb-3">Ημιαργίες</h6><div class="alert alert-info">Δεν υπάρχουν ημιαργίες στην επιλεγμένη περίοδο.</div></div>';
+                return;
+            }
+
+            // 1) Build baseline by rotation order (per group)
+            const baseline = {}; // dateKey -> { groupNum -> person }
+            const globalSemiPos = {}; // groupNum -> index (continues across semi days)
+            for (const dateKey of sortedSemi) {
+                const date = new Date(dateKey + 'T00:00:00');
+                if (isNaN(date.getTime())) continue;
+                const monthKey = getMonthKeyFromDate(date);
+                if (!baseline[dateKey]) baseline[dateKey] = {};
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const groupData = groups[groupNum] || { semi: [] };
+                    const groupPeople = groupData.semi || [];
+                    if (groupPeople.length === 0) continue;
+                    const rotationDays = groupPeople.length;
+                    if (globalSemiPos[groupNum] === undefined) {
+                        const isFeb2026 = startDate && startDate.getFullYear() === 2026 && startDate.getMonth() === 1;
+                        if (isFeb2026) globalSemiPos[groupNum] = 0;
+                        else {
+                            const lastPerson = getLastRotationPersonForDate('semi', date, groupNum);
+                            const idx = groupPeople.indexOf(lastPerson);
+                            globalSemiPos[groupNum] = (lastPerson && idx >= 0) ? (idx + 1) % rotationDays : (getRotationPosition(date, 'semi', groupNum) % rotationDays);
+                        }
+                    }
+                    const pos = globalSemiPos[groupNum] % rotationDays;
+                    const person = groupPeople[pos];
+                    baseline[dateKey][groupNum] = person;
+                    globalSemiPos[groupNum] = (pos + 1) % rotationDays;
+                }
+            }
+
+            // 2) Save baseline to Firebase
+            try {
+                if (typeof window !== 'undefined' && window.db && window.auth?.currentUser) {
+                    const db = window.db;
+                    const user = window.auth.currentUser;
+                    const formattedBaseline = formatGroupAssignmentsToStringMap(baseline);
+                    const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineSemiAssignments', organizedBaseline);
+                    Object.assign(rotationBaselineSemiAssignments, formattedBaseline);
+                }
+            } catch (e) { console.error('Save baseline semi:', e); }
+
+            // 3) Conflict check: person on semi has weekend or special on day before/after
+            const hasConflict = (semiDateKey, person, groupNum) => {
+                const d = new Date(semiDateKey + 'T00:00:00');
+                if (isNaN(d.getTime())) return false;
+                const dayBefore = new Date(d); dayBefore.setDate(dayBefore.getDate() - 1);
+                const dayAfter = new Date(d); dayAfter.setDate(dayAfter.getDate() + 1);
+                const keyBefore = formatDateKey(dayBefore);
+                const keyAfter = formatDateKey(dayAfter);
+                if (getDayType(dayBefore) === 'weekend-holiday' && simulatedWeekendAssignments[keyBefore]?.[groupNum] === person) return true;
+                if (getDayType(dayBefore) === 'special-holiday') {
+                    const mk = `${dayBefore.getFullYear()}-${dayBefore.getMonth()}`;
+                    if (simulatedSpecialAssignments[mk]?.[groupNum]?.has(person)) return true;
+                }
+                if (getDayType(dayAfter) === 'weekend-holiday' && simulatedWeekendAssignments[keyAfter]?.[groupNum] === person) return true;
+                if (getDayType(dayAfter) === 'special-holiday') {
+                    const mk = `${dayAfter.getFullYear()}-${dayAfter.getMonth()}`;
+                    if (simulatedSpecialAssignments[mk]?.[groupNum]?.has(person)) return true;
+                }
+                return false;
+            };
+
+            const finalAssignments = {}; // dateKey -> { groupNum -> person }
+            for (const dk of Object.keys(baseline)) {
+                finalAssignments[dk] = { ...baseline[dk] };
+            }
+            const swapInfo = {}; // dateKey -> { groupNum -> { otherDateKey, otherDateStr } }
+            const swappedSet = new Set(); // 'dateKey:groupNum' already swapped (skip when iterating)
+            let semiSwapPairId = 0; // for assignmentReasons so results modal can show swap pairs
+
+            for (let i = 0; i < sortedSemi.length; i++) {
+                const dateKey = sortedSemi[i];
+                const date = new Date(dateKey + 'T00:00:00');
+                const monthKey = getMonthKeyFromDate(date);
+                const semiInMonth = sortedSemi.filter(dk => getMonthKeyFromDate(new Date(dk + 'T00:00:00')) === monthKey);
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    if (swappedSet.has(`${dateKey}:${groupNum}`)) continue;
+                    const person = finalAssignments[dateKey]?.[groupNum];
+                    if (!person || !hasConflict(dateKey, person, groupNum)) continue;
+                    // Try forward: later semi days in same month
+                    let swapped = false;
+                    for (let j = i + 1; j < sortedSemi.length; j++) {
+                        const dk2 = sortedSemi[j];
+                        if (getMonthKeyFromDate(new Date(dk2 + 'T00:00:00')) !== monthKey) break;
+                        if (swappedSet.has(`${dk2}:${groupNum}`)) continue;
+                        const other = finalAssignments[dk2]?.[groupNum];
+                        if (!other || other === person) continue;
+                        if (hasConflict(dk2, other, groupNum)) continue;
+                        finalAssignments[dateKey][groupNum] = other;
+                        finalAssignments[dk2][groupNum] = person;
+                        const otherStr = new Date(dk2 + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        const dateStr = new Date(dateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        if (!swapInfo[dateKey]) swapInfo[dateKey] = {};
+                        swapInfo[dateKey][groupNum] = { otherDateKey: dk2, otherDateStr: otherStr };
+                        if (!swapInfo[dk2]) swapInfo[dk2] = {};
+                        swapInfo[dk2][groupNum] = { otherDateKey: dateKey, otherDateStr: dateStr };
+                        swappedSet.add(`${dateKey}:${groupNum}`); swappedSet.add(`${dk2}:${groupNum}`);
+                        semiSwapPairId++;
+                        const reasonText = 'Ανταλλαγή ημιαργίας λόγω σύγκρουσης γειτονικής ημέρας (αργία/ΣΚ). Αλλαγή με ' + otherStr + '.';
+                        storeAssignmentReason(dateKey, groupNum, other, 'swap', reasonText, person, semiSwapPairId);
+                        storeAssignmentReason(dk2, groupNum, person, 'swap', 'Ανταλλαγή ημιαργίας λόγω σύγκρουσης γειτονικής ημέρας (αργία/ΣΚ). Αλλαγή με ' + dateStr + '.', other, semiSwapPairId);
+                        swapped = true;
+                        break;
+                    }
+                    if (swapped) continue;
+                    // Try backward: earlier semi days in same month
+                    for (let j = i - 1; j >= 0; j--) {
+                        const dk2 = sortedSemi[j];
+                        if (getMonthKeyFromDate(new Date(dk2 + 'T00:00:00')) !== monthKey) break;
+                        if (swappedSet.has(`${dk2}:${groupNum}`)) continue;
+                        const other = finalAssignments[dk2]?.[groupNum];
+                        if (!other || other === person) continue;
+                        if (hasConflict(dk2, other, groupNum)) continue;
+                        finalAssignments[dateKey][groupNum] = other;
+                        finalAssignments[dk2][groupNum] = person;
+                        const otherStr = new Date(dk2 + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        const dateStr = new Date(dateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        if (!swapInfo[dateKey]) swapInfo[dateKey] = {};
+                        swapInfo[dateKey][groupNum] = { otherDateKey: dk2, otherDateStr: otherStr };
+                        if (!swapInfo[dk2]) swapInfo[dk2] = {};
+                        swapInfo[dk2][groupNum] = { otherDateKey: dateKey, otherDateStr: dateStr };
+                        swappedSet.add(`${dateKey}:${groupNum}`); swappedSet.add(`${dk2}:${groupNum}`);
+                        semiSwapPairId++;
+                        const reasonText = 'Ανταλλαγή ημιαργίας λόγω σύγκρουσης γειτονικής ημέρας (αργία/ΣΚ). Αλλαγή με ' + otherStr + '.';
+                        storeAssignmentReason(dateKey, groupNum, other, 'swap', reasonText, person, semiSwapPairId);
+                        storeAssignmentReason(dk2, groupNum, person, 'swap', 'Ανταλλαγή ημιαργίας λόγω σύγκρουσης γειτονικής ημέρας (αργία/ΣΚ). Αλλαγή με ' + dateStr + '.', other, semiSwapPairId);
+                        break;
                     }
                 }
             }
 
-            // Fallback (first-time run): recalculate weekends from rotation (no skip logic here)
-            const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
-            const globalWeekendRotationPosition = {}; // groupNum -> global position (continues across months)
-            // IMPORTANT: Track weekend rotation persons (who SHOULD be assigned according to rotation)
-            // This is separate from assigned persons (who may have been swapped/skipped)
-            const weekendRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
-            // Track which people have been assigned to which days (to prevent duplicate assignments after replacements)
-            const assignedPeoplePreviewWeekend = {}; // monthKey -> { groupNum -> Set of person names }
-            const sortedWeekends = [...weekendHolidays].sort();
-            
-            if (!hasSavedWeekendAssignments) sortedWeekends.forEach((dateKey, weekendIndex) => {
+            // 4) Last rotation positions: use final assignments (after swaps) per month
+            const lastSemiRotationPositionsByMonth = {};
+            for (const dateKey of sortedSemi) {
+                const d = new Date(dateKey + 'T00:00:00');
+                if (isNaN(d.getTime())) continue;
+                const monthKey = getMonthKeyFromDate(d);
+                if (!lastSemiRotationPositionsByMonth[monthKey]) lastSemiRotationPositionsByMonth[monthKey] = {};
+                const g = finalAssignments[dateKey];
+                if (g) for (let groupNum = 1; groupNum <= 4; groupNum++) if (g[groupNum]) lastSemiRotationPositionsByMonth[monthKey][groupNum] = g[groupNum];
+            }
+
+            try {
+                if (typeof window !== 'undefined' && window.db && window.auth?.currentUser) {
+                    const db = window.db;
+                    const user = window.auth.currentUser;
+                    const formattedFinal = formatGroupAssignmentsToStringMap(finalAssignments);
+                    const organizedFinal = organizeAssignmentsByMonth(formattedFinal);
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'semiNormalAssignments', organizedFinal);
+                    Object.assign(semiNormalAssignments, formattedFinal);
+                    for (const monthKey in lastSemiRotationPositionsByMonth) {
+                        const gmap = lastSemiRotationPositionsByMonth[monthKey];
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            if (gmap[groupNum] !== undefined) setLastRotationPersonForMonth('semi', monthKey, groupNum, gmap[groupNum]);
+                        }
+                    }
+                    const sanitized = sanitizeForFirestore(lastRotationPositions);
+                    await db.collection('dutyShifts').doc('lastRotationPositions').set({ ...sanitized, lastUpdated: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: user.uid });
+                }
+            } catch (e) { console.error('Save final semi:', e); }
+
+            calculationSteps.tempSemiAssignments = finalAssignments;
+            calculationSteps.tempSemiBaselineAssignments = baseline;
+            calculationSteps.finalSemiAssignments = finalAssignments;
+            calculationSteps.lastSemiRotationPositionsByMonth = lastSemiRotationPositionsByMonth;
+
+            // 5) Build table: baseline vs final, show swap on both affected days
+            const periodLabel = (startDate && endDate) ? `${startDate.toLocaleDateString('el-GR')} – ${endDate.toLocaleDateString('el-GR')}` : '';
+            let html = '<div class="step-content"><h6 class="mb-3"><i class="fas fa-calendar-alt me-2"></i>Περίοδος: ' + periodLabel + '</h6>';
+            html += '<div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr><th>Ημερομηνία</th><th>Ημέρα</th>';
+            for (let g = 1; g <= 4; g++) html += '<th>' + (getGroupName(g) || 'Ομάδα ' + g) + '</th>';
+            html += '</tr></thead><tbody>';
+            for (const dateKey of sortedSemi) {
+                const date = new Date(dateKey + 'T00:00:00');
+                if (isNaN(date.getTime())) continue;
+                const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const dayName = getGreekDayName(date);
+                html += '<tr><td><strong>' + dateStr + '</strong></td><td>' + dayName + '</td>';
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const basePerson = baseline[dateKey]?.[groupNum] || '-';
+                    const finalPerson = finalAssignments[dateKey]?.[groupNum] || '-';
+                    const swap = swapInfo[dateKey]?.[groupNum];
+                    let cell = '';
+                    if (swap) {
+                        cell = '<div class="small text-muted">Βασική: ' + basePerson + '</div><div><strong>' + finalPerson + '</strong></div><div class="small text-primary">↔ ανταλλαγή με ' + swap.otherDateStr + '</div>';
+                    } else if (basePerson !== finalPerson) {
+                        cell = '<div class="small text-muted">Βασική: ' + basePerson + '</div><div><strong>' + finalPerson + '</strong></div>';
+                    } else {
+                        cell = '<div><strong>' + (basePerson || '-') + '</strong></div>';
+                    }
+                    html += '<td>' + cell + '</td>';
+                }
+                html += '</tr>';
+            }
+            html += '</tbody></table></div></div>';
+            stepContent.innerHTML = html;
+        }
+        function _OLD_renderStep3_SemiNormal_REMOVED() {
+            if (false) {
+            const sortedWeekends = [];
+            sortedWeekends.forEach((dateKey, weekendIndex) => {
                 const date = new Date(dateKey + 'T00:00:00');
                 const month = date.getMonth();
                 const year = date.getFullYear();
@@ -6669,8 +6768,8 @@
                                 if (globalSemiRotationPosition[groupNum] === undefined) globalSemiRotationPosition[groupNum] = 0;
                                 globalSemiRotationPosition[groupNum] = (designatedIndex + 1) % rotationDays;
                                 storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', 'Επέστρεψε από απουσία – ημιάργια μετά από 3 ημερολογιακές ημέρες.', null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
-                                if (!assignedPeoplePreviewSemi[monthKey][groupNum]) assignedPeoplePreviewSemi[monthKey][groupNum] = {};
-                                assignedPeoplePreviewSemi[monthKey][groupNum][assignedPerson] = dateKey;
+                                if (!assignedPeoplePreviewSemi[monthKey][groupNum]) assignedPeoplePreviewSemi[monthKey][groupNum] = new Set();
+                                assignedPeoplePreviewSemi[monthKey][groupNum].add(assignedPerson);
                                 if (!semiAssignments[dateKey]) semiAssignments[dateKey] = {};
                                 semiAssignments[dateKey][groupNum] = assignedPerson;
                                 let lastDutyInfo = ''; let daysCountInfo = '';
@@ -6761,53 +6860,26 @@
                                     replacementIndex = idx;
                                     wasReplaced = true;
                                     foundReplacement = true;
-                                    assignedPeoplePreviewSemi[monthKey][groupNum][assignedPerson] = dateKey;
                                     storeAssignmentReason(
-                                            dateKey,
+                                        dateKey,
+                                        groupNum,
+                                        assignedPerson,
+                                        'skip',
+                                        buildUnavailableReplacementReason({
+                                            skippedPersonName: rotationPerson,
+                                            replacementPersonName: assignedPerson,
+                                            dateObj: date,
                                             groupNum,
-                                            assignedPerson,
-                                            'skip',
-                                            buildUnavailableReplacementReason({
-                                                skippedPersonName: rotationPerson,
-                                                replacementPersonName: assignedPerson,
-                                                dateObj: date,
-                                                groupNum,
-                                                dutyCategory: 'semi'
-                                            }),
-                                            rotationPerson,
-                                            null
+                                            dutyCategory: 'semi'
+                                        }),
+                                        rotationPerson,
+                                        null
                                     );
                                     break;
                                 }
-                                // If no replacement found after checking everyone twice, last-resort: assign first person not missing (ignore 5-day rule)
+                                // If no replacement found after checking everyone twice (everyone disabled or already assigned), leave unassigned
                                 if (!foundReplacement) {
-                                    for (let offset = 1; offset <= rotationDays; offset++) {
-                                        const idx = (rotationPosition + offset) % rotationDays;
-                                        const candidate = groupPeople[idx];
-                                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
-                                        assignedPerson = candidate;
-                                        replacementIndex = idx;
-                                        wasReplaced = true;
-                                        foundReplacement = true;
-                                        assignedPeoplePreviewSemi[monthKey][groupNum][assignedPerson] = dateKey;
-                                        storeAssignmentReason(
-                                            dateKey,
-                                            groupNum,
-                                            assignedPerson,
-                                            'skip',
-                                            buildUnavailableReplacementReason({
-                                                skippedPersonName: rotationPerson,
-                                                replacementPersonName: assignedPerson,
-                                                dateObj: date,
-                                                groupNum,
-                                                dutyCategory: 'semi'
-                                            }),
-                                            rotationPerson,
-                                            null
-                                        );
-                                        break;
-                                    }
-                                    if (!foundReplacement) assignedPerson = null;
+                                    assignedPerson = null;
                                 }
                             }
                             
@@ -6836,7 +6908,7 @@
                                     // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
                                     // IMPORTANT: Also check if replacement was already assigned this month to prevent duplicate assignments
                                     if (!assignedPeoplePreviewSemi[monthKey][groupNum]) {
-                                        assignedPeoplePreviewSemi[monthKey][groupNum] = {};
+                                        assignedPeoplePreviewSemi[monthKey][groupNum] = new Set();
                                     }
                                     let foundReplacement = false;
                                     for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
@@ -6862,7 +6934,6 @@
                                         replacementIndex = idx;
                                         wasReplaced = true;
                                         foundReplacement = true;
-                                        assignedPeoplePreviewSemi[monthKey][groupNum][assignedPerson] = dateKey;
                                         storeAssignmentReason(
                                             dateKey,
                                             groupNum,
@@ -6880,38 +6951,12 @@
                                         );
                                         break;
                                     }
-                                    // If no replacement found, last-resort: first person not missing (ignore 5-day rule)
+                                    // If no replacement found (everyone disabled or already assigned), leave unassigned
                                     if (!foundReplacement) {
-                                        for (let offset = 1; offset <= rotationDays; offset++) {
-                                            const idx = (rotationPosition + offset) % rotationDays;
-                                            const candidate = groupPeople[idx];
-                                            if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
-                                            assignedPerson = candidate;
-                                            replacementIndex = idx;
-                                            wasReplaced = true;
-                                            foundReplacement = true;
-                                            assignedPeoplePreviewSemi[monthKey][groupNum][assignedPerson] = dateKey;
-                                            storeAssignmentReason(
-                                                dateKey,
-                                                groupNum,
-                                                assignedPerson,
-                                                'skip',
-                                                buildUnavailableReplacementReason({
-                                                    skippedPersonName: rotationPerson,
-                                                    replacementPersonName: assignedPerson,
-                                                    dateObj: date,
-                                                    groupNum,
-                                                    dutyCategory: 'semi'
-                                                }),
-                                                rotationPerson,
-                                                null
-                                            );
-                                            break;
-                                        }
-                                        if (!foundReplacement) assignedPerson = null;
+                                        assignedPerson = null;
                                     }
-                                }
-                                
+                                    }
+                                    
                                 // Advance rotation position from the person ACTUALLY assigned (not the skipped person)
                                 // This ensures that when Person A is replaced by Person B, next semi-duty assigns Person C, not Person B again
                                 if (wasReplaced && replacementIndex !== null && assignedPerson) {
@@ -6940,7 +6985,7 @@
                             
                             // Track that this person has been assigned (to prevent duplicate assignment later)
                             if (assignedPerson && assignedPeoplePreviewSemi[monthKey] && assignedPeoplePreviewSemi[monthKey][groupNum]) {
-                                assignedPeoplePreviewSemi[monthKey][groupNum][assignedPerson] = dateKey;
+                                assignedPeoplePreviewSemi[monthKey][groupNum].add(assignedPerson);
                             }
                             
                             // Get last duty date and days since for display
@@ -7095,11 +7140,9 @@
                             }
                             if (!hasConsecutiveConflict) continue;
 
-                            // STEP 1: Try forward swap with next semi-normal day(s)
+                            // Swap with next semi-normal day(s), validate both sides
                             let swapCandidate = null;
                             let swapDateKey = null;
-                            const month = date.getMonth();
-                            const year = date.getFullYear();
                             for (let j = semiIndex + 1; j < sortedSemiForPreview.length; j++) {
                                 const candidateDateKey = sortedSemiForPreview[j];
                                 const candidateDate = new Date(candidateDateKey + 'T00:00:00');
@@ -7122,88 +7165,15 @@
                             }
 
                             if (swapCandidate && swapDateKey) {
-                                const fromIdx = sortedSemiForPreview.indexOf(swapDateKey);
-                                const toIdx = semiIndex;
-                                const isBackwardPreview = fromIdx >= 0 && toIdx >= 0 && fromIdx < toIdx;
-
-                                if (isBackwardPreview) {
-                                    // Backward swap in preview: apply same shift as runSemiNormalSwapLogic
-                                    // currentPerson moves to swapDateKey, displaced person becomes next semi-normal after swapDateKey
-                                    const displacedPersonOriginal = previewSemiAssignments[swapDateKey]?.[groupNum] || swapCandidate;
-                                    let carry = currentPerson;
-                                    for (let i = fromIdx; i <= toIdx; i++) {
-                                        const dk = sortedSemiForPreview[i];
-                                        if (!previewSemiAssignments[dk]) previewSemiAssignments[dk] = {};
-                                        const prev = previewSemiAssignments[dk][groupNum] || null;
-                                        previewSemiAssignments[dk][groupNum] = carry;
-                                        carry = prev;
-                                        swappedSemiSet.add(`${dk}:${groupNum}`);
-                                    }
-                                    if (fromIdx + 1 < sortedSemiForPreview.length && displacedPersonOriginal) {
-                                        const nextSemiKey = sortedSemiForPreview[fromIdx + 1];
-                                        if (previewSemiAssignments[nextSemiKey]?.[groupNum] !== displacedPersonOriginal) {
-                                            if (!previewSemiAssignments[nextSemiKey]) previewSemiAssignments[nextSemiKey] = {};
-                                            previewSemiAssignments[nextSemiKey][groupNum] = displacedPersonOriginal;
-                                            swappedSemiSet.add(`${nextSemiKey}:${groupNum}`);
-                                        }
-                                    }
-                                } else {
-                                    // Forward swap: simple two-way swap
-                                    previewSemiAssignments[dateKey][groupNum] = swapCandidate;
-                                    previewSemiAssignments[swapDateKey][groupNum] = currentPerson;
-                                    swappedSemiSet.add(`${dateKey}:${groupNum}`);
-                                    swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
-                                }
+                                previewSemiAssignments[dateKey][groupNum] = swapCandidate;
+                                previewSemiAssignments[swapDateKey][groupNum] = currentPerson;
+                                swappedSemiSet.add(`${dateKey}:${groupNum}`);
+                                swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
                                 continue;
                             }
 
-                            // STEP 2: Try backward swap with previous semi-normal days in same month
-                            for (let j = semiIndex - 1; j >= 0; j--) {
-                                const candidateDateKey = sortedSemiForPreview[j];
-                                const candidateDate = new Date(candidateDateKey + 'T00:00:00');
-                                if (isNaN(candidateDate.getTime())) continue;
-                                if (candidateDate.getMonth() !== month || candidateDate.getFullYear() !== year) break;
-
-                                const candidatePerson = previewSemiAssignments[candidateDateKey]?.[groupNum];
-                                if (!candidatePerson) continue;
-                                if (swappedSemiSet.has(`${candidateDateKey}:${groupNum}`)) continue;
-
-                                if (isPersonMissingOnDate(candidatePerson, groupNum, date, 'semi')) continue;
-                                if (isPersonMissingOnDate(currentPerson, groupNum, candidateDate, 'semi')) continue;
-
-                                const candidateWouldConflict = hasSemiConsecutiveConflictForPerson(dateKey, candidatePerson, groupNum);
-                                const currentWouldConflict = hasSemiConsecutiveConflictForPerson(candidateDateKey, currentPerson, groupNum);
-                                if (!candidateWouldConflict && !currentWouldConflict) {
-                                    swapCandidate = candidatePerson;
-                                    swapDateKey = candidateDateKey;
-                                    break;
-                                }
-                            }
-
-                            if (swapCandidate && swapDateKey) {
-                                const fromIdx = sortedSemiForPreview.indexOf(swapDateKey);
-                                const toIdx = semiIndex;
-                                const displacedPersonOriginal = previewSemiAssignments[swapDateKey]?.[groupNum] || swapCandidate;
-                                let carry = currentPerson;
-                                for (let i = fromIdx; i <= toIdx; i++) {
-                                    const dk = sortedSemiForPreview[i];
-                                    if (!previewSemiAssignments[dk]) previewSemiAssignments[dk] = {};
-                                    const prev = previewSemiAssignments[dk][groupNum] || null;
-                                    previewSemiAssignments[dk][groupNum] = carry;
-                                    carry = prev;
-                                    swappedSemiSet.add(`${dk}:${groupNum}`);
-                                }
-                                if (fromIdx + 1 < sortedSemiForPreview.length && displacedPersonOriginal) {
-                                    const nextSemiKey = sortedSemiForPreview[fromIdx + 1];
-                                    if (previewSemiAssignments[nextSemiKey]?.[groupNum] !== displacedPersonOriginal) {
-                                        if (!previewSemiAssignments[nextSemiKey]) previewSemiAssignments[nextSemiKey] = {};
-                                        previewSemiAssignments[nextSemiKey][groupNum] = displacedPersonOriginal;
-                                        swappedSemiSet.add(`${nextSemiKey}:${groupNum}`);
-                                    }
-                                }
-                                continue;
-                            }
-
+                            const month = date.getMonth();
+                            const year = date.getFullYear();
                             const rotationDays = groupPeople.length;
                             const currentRotationPosition = groupPeople.indexOf(currentPerson);
                         }
@@ -7239,9 +7209,7 @@
                         }
                     }
                 }
-            } catch (e) {
-                console.error('Step 3 preview swap rendering failed:', e);
-            }
+            } catch (e) {}
         }
         function renderStep4_Normal() {
             const stepContent = document.getElementById('stepContent');
