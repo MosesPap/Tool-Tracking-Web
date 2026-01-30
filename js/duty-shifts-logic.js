@@ -3486,6 +3486,10 @@
                     if (base === comp) continue;
 
                     const reasonObj = getAssignmentReason(dateKey, groupNum, comp) || null;
+                    const otherKey = reasonObj?.type === 'swap'
+                        ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
+                        : null;
+                    if (reasonObj?.type === 'swap' && reasonObj.swapPairId != null && otherKey && dateKey > otherKey) continue;
                     const reasonText = reasonObj?.reason
                         ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
                         : '';
@@ -3502,17 +3506,17 @@
                             }).split('.').filter(Boolean)[0] || '')
                             : 'Αλλαγή');
 
-                    const otherKey = reasonObj?.type === 'swap'
-                        ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
-                        : null;
                     const swapDateStr = otherKey
                         ? new Date(otherKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
                         : '-';
+                    const otherDayName = otherKey ? getGreekDayName(new Date(otherKey + 'T00:00:00')) : '';
+                    const dateStrDisplay = (reasonObj?.type === 'swap' && otherKey) ? `${dayName} ${dateStr} ↔ ${otherDayName} ${swapDateStr}` : null;
 
                     rows.push({
                         dateKey,
                         dayName,
                         dateStr,
+                        dateStrDisplay,
                         groupNum,
                         service: getGroupName(groupNum),
                         skipped: base,
@@ -3530,8 +3534,9 @@
                 message += '<div class="table-responsive"><table class="table table-sm table-bordered">';
                 message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
                 rows.forEach(r => {
+                    const dateCol = r.dateStrDisplay != null ? r.dateStrDisplay : `${r.dayName} ${r.dateStr}`;
                     message += `<tr>
-                        <td>${r.dayName} ${r.dateStr}</td>
+                        <td>${dateCol}</td>
                         <td>${r.service}</td>
                         <td><strong>${r.skipped}</strong></td>
                         <td><strong>${r.replacement}</strong></td>
@@ -6385,7 +6390,7 @@
                         swappedSet.add(slotId);
                         swappedSet.add(`${dk2}:${groupNum}`);
                         semiSwapPairId++;
-                        storeAssignmentReason(dateKey, groupNum, other, 'skip', buildUnavailableReplacementReason({ skippedPersonName: person, replacementPersonName: other, dateObj, groupNum, dutyCategory: 'semi' }));
+                        storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey), person, semiSwapPairId);
                         storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dk2), other, semiSwapPairId);
                         swapped = true;
                         break;
@@ -6413,7 +6418,7 @@
                             swappedSet.add(slotId);
                             swappedSet.add(`${dk2}:${groupNum}`);
                             semiSwapPairId++;
-                            storeAssignmentReason(dateKey, groupNum, other, 'skip', buildUnavailableReplacementReason({ skippedPersonName: person, replacementPersonName: other, dateObj, groupNum, dutyCategory: 'semi' }));
+                            storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey), person, semiSwapPairId);
                             storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dk2), other, semiSwapPairId);
                             break;
                         }
