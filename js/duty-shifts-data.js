@@ -2826,7 +2826,12 @@
                 }
                 if (groupNumbersToProcess.length === 0) {
                     if (loadingAlert.parentNode) loadingAlert.remove();
-                    alert('Δεν υπάρχουν ομάδες με άτομα για να δημιουργηθεί το Excel αρχείο.');
+                    const infoTitle = document.getElementById('infoMessageModalTitleText');
+                    const infoBody = document.getElementById('infoMessageModalBody');
+                    if (infoTitle) infoTitle.textContent = 'Excel';
+                    if (infoBody) infoBody.textContent = 'Δεν υπάρχουν ομάδες με άτομα για να δημιουργηθεί το Excel αρχείο.';
+                    const infoModal = new bootstrap.Modal(document.getElementById('infoMessageModal'));
+                    infoModal.show();
                     return;
                 }
 
@@ -3254,14 +3259,25 @@
                     }
                 }
                 
-                alert(monthDirHandle
+                const successMsg = monthDirHandle
                     ? `Το Excel αρχείο (με ${groupNumbersToProcess.length} καρτέλες) αποθηκεύτηκε στον φάκελο "${monthFolderName}".`
                     : (zipFolder
                         ? `Το Excel αρχείο δημιουργήθηκε ως "${monthFolderName}.zip" (περιέχει φάκελο "${monthFolderName}").`
-                        : 'Το Excel αρχείο δημιουργήθηκε επιτυχώς (μία καρτέλα ανά ομάδα)!'));
+                        : 'Το Excel αρχείο δημιουργήθηκε επιτυχώς (μία καρτέλα ανά ομάδα)!');
+                const infoTitle = document.getElementById('infoMessageModalTitleText');
+                const infoBody = document.getElementById('infoMessageModalBody');
+                if (infoTitle) infoTitle.textContent = 'Δημιουργία Excel';
+                if (infoBody) infoBody.textContent = successMsg;
+                const infoModal = new bootstrap.Modal(document.getElementById('infoMessageModal'));
+                infoModal.show();
             } catch (error) {
                 console.error('Error generating Excel files:', error);
-                alert('Σφάλμα κατά τη δημιουργία του Excel αρχείου: ' + error.message);
+                const infoTitle = document.getElementById('infoMessageModalTitleText');
+                const infoBody = document.getElementById('infoMessageModalBody');
+                if (infoTitle) infoTitle.textContent = 'Σφάλμα';
+                if (infoBody) infoBody.textContent = 'Σφάλμα κατά τη δημιουργία του Excel αρχείου: ' + error.message;
+                const infoModal = new bootstrap.Modal(document.getElementById('infoMessageModal'));
+                infoModal.show();
                 // Remove loading message if still present
                 const loadingAlert = document.querySelector('.alert.position-fixed');
                 if (loadingAlert) {
