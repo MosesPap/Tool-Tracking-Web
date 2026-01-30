@@ -5869,187 +5869,129 @@
             modal.show();
         }
         function printRotationAndRankings() {
-            // Create a new window for printing
-            const printWindow = window.open('', '_blank', 'width=800,height=600');
-            
-            // Get all people for rankings
             const allPeople = getAllPeople();
             const sortedByRanking = [...allPeople].sort((a, b) => {
                 const rankA = rankings[a] || 9999;
                 const rankB = rankings[b] || 9999;
                 return rankA - rankB;
             });
-            
-            // Build HTML content
-            let html = `
-<!DOCTYPE html>
-<html lang="el">
-<head>
-    <meta charset="UTF-8">
-    <title>Σειρές Περιστροφής & Ιεραρχία</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            font-size: 12px;
-        }
-        h1 {
-            text-align: center;
-            color: #333;
-            margin-bottom: 30px;
-        }
-        h2 {
-            color: #555;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 5px;
-            margin-top: 30px;
-        }
-        h3 {
-            color: #666;
-            margin-top: 20px;
-            margin-bottom: 10px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #007bff;
-            color: white;
-            font-weight: bold;
-        }
-        tr:nth-child(even) {
-            background-color: #f2f2f2;
-        }
-        .group-section {
-            margin-bottom: 30px;
-            page-break-inside: avoid;
-        }
-        .list-section {
-            margin-left: 20px;
-            margin-bottom: 15px;
-        }
-        .list-item {
-            padding: 3px 0;
-        }
-        .ranking-number {
-            font-weight: bold;
-            color: #007bff;
-            margin-right: 10px;
-        }
-        @media print {
-            body {
-                padding: 10px;
-            }
-            .group-section {
-                page-break-inside: avoid;
-            }
-        }
-    </style>
-</head>
-<body>
-    <h1>Σειρές Περιστροφής & Ιεραρχία Υπηρεσιών</h1>
-    <p style="text-align: center; color: #666;">Ημερομηνία εκτύπωσης: ${new Date().toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-    
-    <h2>Σειρές Περιστροφής ανά Ομάδα</h2>
-`;
-            
-            // Add rotation lists for each group
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
-                const groupName = getGroupName(groupNum);
-                
-                html += `
-    <div class="group-section">
-        <h3>Ομάδα ${groupNum}: ${groupName}</h3>
-`;
-                
-                // List types with Greek names
-                const listTypes = [
-                    { key: 'special', name: 'Ειδικές Αργίες' },
-                    { key: 'weekend', name: 'Σαββατοκύριακα/Αργίες' },
-                    { key: 'semi', name: 'Ημιαργίες' },
-                    { key: 'normal', name: 'Καθημερινές' }
-                ];
-                
-                listTypes.forEach(listType => {
-                    const list = groupData[listType.key] || [];
-                    if (list.length > 0) {
-                        html += `
-        <div class="list-section">
-            <strong>${listType.name}:</strong>
-            <ol style="margin: 5px 0; padding-left: 25px;">
-`;
-                        list.forEach((person, index) => {
-                            html += `                <li class="list-item">${person}</li>\n`;
-                        });
-                        html += `            </ol>
-        </div>
-`;
-                    } else {
-                        html += `
-        <div class="list-section">
-            <strong>${listType.name}:</strong> <span style="color: #999;">(Κενή λίστα)</span>
-        </div>
-`;
-                    }
+            const listTypes = [
+                { key: 'special', name: 'Ειδικές Αργίες' },
+                { key: 'weekend', name: 'Σαββατοκύριακα/Αργίες' },
+                { key: 'semi', name: 'Ημιαργίες' },
+                { key: 'normal', name: 'Καθημερινές' }
+            ];
+
+            const { jsPDF } = window.jspdf || {};
+            if (typeof jsPDF !== 'function') {
+                // Fallback: open print window (no PDF library)
+                const printWindow = window.open('', '_blank', 'width=800,height=600');
+                let html = `<!DOCTYPE html><html lang="el"><head><meta charset="UTF-8"><title>Σειρές Περιστροφής & Ιεραρχία</title>
+<style>body{font-family:Arial,sans-serif;padding:20px;font-size:12px;} h1{text-align:center;color:#333;} h2{color:#555;border-bottom:2px solid #007bff;padding-bottom:5px;margin-top:30px;} h3{color:#666;margin-top:20px;} table{width:100%;border-collapse:collapse;} th,td{border:1px solid #ddd;padding:8px;} th{background:#007bff;color:white;} tr:nth-child(even){background:#f2f2f2;}</style></head><body>
+<h1>Σειρές Περιστροφής & Ιεραρχία Υπηρεσιών</h1><p style="text-align:center;color:#666;">${new Date().toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p><h2>Σειρές ανά Ομάδα</h2>`;
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
+                    const groupName = getGroupName(groupNum);
+                    html += `<h3>Ομάδα ${groupNum}: ${groupName}</h3>`;
+                    listTypes.forEach(lt => {
+                        const list = groupData[lt.key] || [];
+                        html += `<p><strong>${lt.name}:</strong> ${list.length ? list.join(', ') : '(Κενή λίστα)'}</p>`;
+                    });
+                }
+                html += `<h2>Ιεραρχία (Rankings)</h2><table><thead><tr><th>Κατάταξη</th><th>Όνομα</th><th>Ομάδα</th></tr></thead><tbody>`;
+                sortedByRanking.forEach(person => {
+                    const rank = rankings[person] != null ? rankings[person] : '-';
+                    const g = getPersonGroup(person);
+                    html += `<tr><td>${rank}</td><td>${person}</td><td>${g ? getGroupName(g) : '-'}</td></tr>`;
                 });
-                
-                html += `    </div>
-`;
+                html += '</tbody></table></body></html>';
+                printWindow.document.write(html);
+                printWindow.document.close();
+                printWindow.onload = () => setTimeout(() => printWindow.print(), 250);
+                return;
             }
-            
-            // Add rankings section
-            html += `
-    <h2>Ιεραρχία (Rankings)</h2>
-    <table>
-        <thead>
-            <tr>
-                <th style="width: 80px;">Κατάταξη</th>
-                <th>Όνομα</th>
-                <th>Ομάδα</th>
-            </tr>
-        </thead>
-        <tbody>
-`;
-            
-            sortedByRanking.forEach((person, index) => {
-                const rank = rankings[person] || null;
-                const personGroup = getPersonGroup(person);
-                const groupName = personGroup ? getGroupName(personGroup) : '-';
-                
-                html += `            <tr>
-                <td><span class="ranking-number">${rank !== null ? rank : '-'}</span></td>
-                <td>${person}</td>
-                <td>${groupName}</td>
-            </tr>
-`;
+
+            // Generate PDF: one page per duty type (all groups), then ranking page(s)
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const margin = 18;
+            const pageW = doc.internal.pageSize.getWidth();
+            const pageH = doc.internal.pageSize.getHeight();
+            const maxY = pageH - margin;
+            let y = margin;
+            const lineH = 6;
+            const titleH = 10;
+            const subH = 8;
+
+            function checkNewPage(need) {
+                if (y + need > maxY) {
+                    doc.addPage();
+                    y = margin;
+                }
+            }
+
+            doc.setFontSize(14);
+            doc.text('Σειρές Περιστροφής & Ιεραρχία Υπηρεσιών', pageW / 2, y, { align: 'center' });
+            y += titleH + 2;
+            doc.setFontSize(9);
+            doc.text('Ημερομηνία: ' + new Date().toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }), pageW / 2, y, { align: 'center' });
+            y += lineH + 8;
+
+            // One page (or more) per duty type: all 4 groups
+            listTypes.forEach((listType, listTypeIndex) => {
+                if (listTypeIndex > 0) {
+                    doc.addPage();
+                    y = margin;
+                }
+                doc.setFontSize(14);
+                doc.text(listType.name, margin, y);
+                y += titleH + 4;
+
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
+                    const groupName = getGroupName(groupNum);
+                    const list = groupData[listType.key] || [];
+                    checkNewPage(subH + lineH * (list.length || 1) + 4);
+                    doc.setFontSize(11);
+                    doc.setFont(undefined, 'bold');
+                    doc.text(`Ομάδα ${groupNum}: ${groupName}`, margin, y);
+                    y += subH;
+                    doc.setFont(undefined, 'normal');
+                    doc.setFontSize(10);
+                    if (list.length > 0) {
+                        list.forEach((person, idx) => {
+                            checkNewPage(lineH);
+                            doc.text(`${idx + 1}. ${person}`, margin + 5, y);
+                            y += lineH;
+                        });
+                    } else {
+                        doc.text('(Κενή λίστα)', margin + 5, y);
+                        y += lineH;
+                    }
+                    y += 4;
+                }
             });
-            
-            html += `        </tbody>
-    </table>
-    
-    <div style="margin-top: 40px; text-align: center; color: #666; font-size: 10px;">
-        <p>Αυτό το έγγραφο δημιουργήθηκε από το σύστημα Διαχείρισης Υπηρεσιών</p>
-    </div>
-</body>
-</html>
-`;
-            
-            // Write content and trigger print
-            printWindow.document.write(html);
-            printWindow.document.close();
-            
-            // Wait for content to load, then trigger print
-            printWindow.onload = function() {
-                setTimeout(() => {
-                    printWindow.print();
-                }, 250);
-            };
+
+            // Ranking page(s)
+            doc.addPage();
+            y = margin;
+            doc.setFontSize(14);
+            doc.text('Ιεραρχία (Rankings)', margin, y);
+            y += titleH + 4;
+
+            const tableData = sortedByRanking.map(person => {
+                const rank = rankings[person] != null ? String(rankings[person]) : '-';
+                const g = getPersonGroup(person);
+                return [rank, person, g ? getGroupName(g) : '-'];
+            });
+            doc.autoTable({
+                head: [['Κατάταξη', 'Όνομα', 'Ομάδα']],
+                body: tableData,
+                startY: y,
+                margin: { left: margin },
+                theme: 'grid',
+                headStyles: { fillColor: [0, 123, 255], textColor: 255 },
+                styles: { fontSize: 9 }
+            });
+
+            doc.save('Σειρές_Περιστροφής_Ιεραρχία.pdf');
         }
