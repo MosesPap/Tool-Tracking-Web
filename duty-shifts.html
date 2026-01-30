@@ -302,6 +302,17 @@
             background: radial-gradient(1200px 800px at 20% 10%, rgba(47,107,255,0.35), rgba(0,0,0,0.55));
         }
 
+        /* Info and confirm modals always on top of other modals (e.g. Διαχείριση Περιόδων Απουσίας) */
+        #infoMessageModal.modal,
+        #confirmModal.modal {
+            z-index: 1070 !important;
+        }
+        /* When info/confirm is shown, ensure its backdrop is above other modals (Bootstrap appends backdrops to body) */
+        body:has(#infoMessageModal.show) .modal-backdrop:last-of-type,
+        body:has(#confirmModal.show) .modal-backdrop:last-of-type {
+            z-index: 1065 !important;
+        }
+
         /* 3D modal shell */
         .modal-dialog.modal-superwide .modal-content {
             border-radius: 18px;
