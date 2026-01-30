@@ -5518,20 +5518,21 @@
             modal.show();
         }
 
-        // Print rotation order lists and rankings
+        // Print rotation order lists and rankings: one page per duty type (all 4 groups), then hierarchy
         function printRotationAndRankings() {
-            // Create a new window for printing
             const printWindow = window.open('', '_blank', 'width=800,height=600');
-            
-            // Get all people for rankings
             const allPeople = getAllPeople();
             const sortedByRanking = [...allPeople].sort((a, b) => {
                 const rankA = rankings[a] || 9999;
                 const rankB = rankings[b] || 9999;
                 return rankA - rankB;
             });
-            
-            // Build HTML content
+            const listTypes = [
+                { key: 'special', name: 'Ειδικές Αργίες' },
+                { key: 'weekend', name: 'Σαββατοκύριακα/Αργίες' },
+                { key: 'semi', name: 'Ημιαργίες' },
+                { key: 'normal', name: 'Καθημερινές' }
+            ];
             let html = `
 <!DOCTYPE html>
 <html lang="el">
@@ -5539,142 +5540,79 @@
     <meta charset="UTF-8">
     <title>Σειρές Περιστροφής & Ιεραρχία</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            font-size: 12px;
-        }
-        h1 {
-            text-align: center;
-            color: #333;
-            margin-bottom: 30px;
-        }
-        h2 {
-            color: #555;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 5px;
-            margin-top: 30px;
-        }
-        h3 {
-            color: #666;
-            margin-top: 20px;
-            margin-bottom: 10px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #007bff;
-            color: white;
-            font-weight: bold;
-        }
-        tr:nth-child(even) {
-            background-color: #f2f2f2;
-        }
-        .group-section {
-            margin-bottom: 30px;
-            page-break-inside: avoid;
-        }
-        .list-section {
-            margin-left: 20px;
-            margin-bottom: 15px;
-        }
-        .list-item {
-            padding: 3px 0;
-        }
-        .ranking-number {
-            font-weight: bold;
-            color: #007bff;
-            margin-right: 10px;
-        }
+        body { font-family: Arial, sans-serif; padding: 20px; font-size: 12px; }
+        h1 { text-align: center; color: #333; margin-bottom: 10px; }
+        h2 { color: #555; border-bottom: 2px solid #007bff; padding-bottom: 5px; margin-top: 0; margin-bottom: 15px; }
+        h3 { color: #666; margin-top: 0; margin-bottom: 8px; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #007bff; color: white; font-weight: bold; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        .print-page { page-break-after: always; page-break-inside: avoid; }
+        .print-page:last-of-type { page-break-after: auto; }
+        .groups-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 30px; }
+        .group-section { page-break-inside: avoid; }
+        .group-section ol { margin: 5px 0; padding-left: 25px; }
+        .list-item { padding: 2px 0; }
+        .ranking-number { font-weight: bold; color: #007bff; margin-right: 10px; }
+        .empty-list { color: #999; font-style: italic; }
         @media print {
-            body {
-                padding: 10px;
-            }
-            .group-section {
-                page-break-inside: avoid;
-            }
+            body { padding: 10px; }
+            .print-page { page-break-after: always; }
+            .print-page:last-of-type { page-break-after: auto; }
         }
     </style>
 </head>
 <body>
     <h1>Σειρές Περιστροφής & Ιεραρχία Υπηρεσιών</h1>
-    <p style="text-align: center; color: #666;">Ημερομηνία εκτύπωσης: ${new Date().toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-    
-    <h2>Σειρές Περιστροφής ανά Ομάδα</h2>
+    <p style="text-align: center; color: #666; margin-bottom: 25px;">Ημερομηνία εκτύπωσης: ${new Date().toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
 `;
-            
-            // Add rotation lists for each group
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
-                const groupName = getGroupName(groupNum);
-                
+            listTypes.forEach(listType => {
                 html += `
-    <div class="group-section">
-        <h3>Ομάδα ${groupNum}: ${groupName}</h3>
+    <div class="print-page">
+        <h2>${listType.name}</h2>
+        <div class="groups-grid">
 `;
-                
-                // List types with Greek names
-                const listTypes = [
-                    { key: 'special', name: 'Ειδικές Αργίες' },
-                    { key: 'weekend', name: 'Σαββατοκύριακα/Αργίες' },
-                    { key: 'semi', name: 'Ημιαργίες' },
-                    { key: 'normal', name: 'Καθημερινές' }
-                ];
-                
-                listTypes.forEach(listType => {
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
+                    const groupName = getGroupName(groupNum);
                     const list = groupData[listType.key] || [];
+                    html += `
+        <div class="group-section">
+            <h3>Ομάδα ${groupNum}: ${groupName}</h3>
+`;
                     if (list.length > 0) {
-                        html += `
-        <div class="list-section">
-            <strong>${listType.name}:</strong>
-            <ol style="margin: 5px 0; padding-left: 25px;">
-`;
-                        list.forEach((person, index) => {
-                            html += `                <li class="list-item">${person}</li>\n`;
-                        });
-                        html += `            </ol>
-        </div>
-`;
+                        html += `            <ol>`;
+                        list.forEach((person) => { html += `<li class="list-item">${person}</li>`; });
+                        html += `</ol>`;
                     } else {
-                        html += `
-        <div class="list-section">
-            <strong>${listType.name}:</strong> <span style="color: #999;">(Κενή λίστα)</span>
-        </div>
-`;
+                        html += `            <span class="empty-list">(Κενή λίστα)</span>`;
                     }
-                });
-                
-                html += `    </div>
+                    html += `
+        </div>`;
+                }
+                html += `
+        </div>
+    </div>
 `;
-            }
-            
-            // Add rankings section
+            });
             html += `
-    <h2>Ιεραρχία (Rankings)</h2>
-    <table>
-        <thead>
-            <tr>
-                <th style="width: 80px;">Κατάταξη</th>
-                <th>Όνομα</th>
-                <th>Ομάδα</th>
-            </tr>
-        </thead>
-        <tbody>
+    <div class="print-page">
+        <h2>Ιεραρχία (Rankings)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 80px;">Κατάταξη</th>
+                    <th>Όνομα</th>
+                    <th>Ομάδα</th>
+                </tr>
+            </thead>
+            <tbody>
 `;
-            
-            sortedByRanking.forEach((person, index) => {
+            sortedByRanking.forEach((person) => {
                 const rank = rankings[person] || null;
                 const personGroup = getPersonGroup(person);
                 const groupName = personGroup ? getGroupName(personGroup) : '-';
-                
                 html += `            <tr>
                 <td><span class="ranking-number">${rank !== null ? rank : '-'}</span></td>
                 <td>${person}</td>
@@ -5682,25 +5620,16 @@
             </tr>
 `;
             });
-            
-            html += `        </tbody>
-    </table>
-    
-    <div style="margin-top: 40px; text-align: center; color: #666; font-size: 10px;">
-        <p>Αυτό το έγγραφο δημιουργήθηκε από το σύστημα Διαχείρισης Υπηρεσιών</p>
+            html += `            </tbody>
+        </table>
+        <div style="margin-top: 25px; text-align: center; color: #666; font-size: 10px;">Αυτό το έγγραφο δημιουργήθηκε από το σύστημα Διαχείρισης Υπηρεσιών</div>
     </div>
 </body>
 </html>
 `;
-            
-            // Write content and trigger print
             printWindow.document.write(html);
             printWindow.document.close();
-            
-            // Wait for content to load, then trigger print
             printWindow.onload = function() {
-                setTimeout(() => {
-                    printWindow.print();
-                }, 250);
+                setTimeout(() => { printWindow.print(); }, 250);
             };
         }
