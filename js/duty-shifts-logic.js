@@ -3489,9 +3489,10 @@
                     const reasonText = reasonObj?.reason
                         ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
                         : '';
+                    const isBaseDisabledOrMissing = isPersonDisabledForDuty(base, groupNum, 'semi') || isPersonMissingOnDate(base, groupNum, dateObj, 'semi');
                     const briefReason = reasonText
                         ? reasonText.split('.').filter(Boolean)[0]
-                        : ((isPersonDisabledForDuty(base, groupNum, 'semi') || isPersonMissingOnDate(base, groupNum, dateObj, 'semi'))
+                        : (isBaseDisabledOrMissing
                             ? (buildUnavailableReplacementReason({
                                 skippedPersonName: base,
                                 replacementPersonName: comp,
@@ -5138,7 +5139,7 @@
                     if (!base || !comp) continue;
                     if (base === comp) continue;
 
-                    const reasonObj = assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null;
+                    const reasonObj = getAssignmentReason(dateKey, groupNum, comp) || null;
                     
                     // IMPORTANT: Skip entries where the replacement has a 'shift' reason
                     // These are people who were shifted forward due to reinsertion, not direct replacements
@@ -6462,21 +6463,7 @@
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const basePerson = baseline[dateKey]?.[groupNum] || '-';
                     const finalPerson = finalAssignments[dateKey]?.[groupNum] || '-';
-                    const swap = swapInfo[dateKey]?.[groupNum];
-                    const reasonObj = finalPerson ? getAssignmentReason(dateKey, groupNum, finalPerson) : null;
-                    const displayReason = reasonObj?.reason
-                        ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
-                        : '';
-                    const reasonFirstSentence = displayReason ? displayReason.split('.').filter(Boolean)[0] : '';
-                    let cell = '';
-                    if (basePerson !== finalPerson) {
-                        cell = '<div class="small text-muted">Βασική: ' + basePerson + '</div><div><strong>' + finalPerson + '</strong></div>';
-                        if (reasonFirstSentence) cell += '<div class="small text-primary">' + reasonFirstSentence + '.</div>';
-                        else if (swap) cell += '<div class="small text-primary">↔ ανταλλαγή με ' + swap.otherDateStr + '</div>';
-                    } else {
-                        cell = '<div><strong>' + (basePerson || '-') + '</strong></div>';
-                    }
-                    html += '<td>' + cell + '</td>';
+                    html += '<td>' + buildBaselineComputedCellHtml(basePerson, finalPerson) + '</td>';
                 }
                 html += '</tr>';
             }
