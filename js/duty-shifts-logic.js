@@ -9361,21 +9361,28 @@
             saveData();
         }
         function removeMissingPeriod(index) {
-            if (!confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την περίοδο απουσίας;')) {
-                return;
-            }
-            
-            const groupData = groups[currentMissingPeriodGroup] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
-            if (groupData.missingPeriods && groupData.missingPeriods[currentMissingPeriodPerson]) {
-                groupData.missingPeriods[currentMissingPeriodPerson].splice(index, 1);
-                if (groupData.missingPeriods[currentMissingPeriodPerson].length === 0) {
-                    delete groupData.missingPeriods[currentMissingPeriodPerson];
+            const doRemove = function () {
+                const groupData = groups[currentMissingPeriodGroup] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
+                if (groupData.missingPeriods && groupData.missingPeriods[currentMissingPeriodPerson]) {
+                    groupData.missingPeriods[currentMissingPeriodPerson].splice(index, 1);
+                    if (groupData.missingPeriods[currentMissingPeriodPerson].length === 0) {
+                        delete groupData.missingPeriods[currentMissingPeriodPerson];
+                    }
                 }
+                saveData();
+                renderMissingPeriodsList();
+                renderGroups();
+            };
+            if (typeof showConfirmModal === 'function') {
+                showConfirmModal({
+                    title: 'Επιβεβαίωση',
+                    message: 'Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την περίοδο απουσίας;',
+                    onConfirm: doRemove
+                });
+            } else {
+                if (!confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την περίοδο απουσίας;')) return;
+                doRemove();
             }
-            
-            saveData();
-            renderMissingPeriodsList();
-            renderGroups();
         }
         function toggleListCollapse(listId, chevronId) {
             const listElement = document.getElementById(listId);

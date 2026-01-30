@@ -2,6 +2,32 @@
         // DUTY-SHIFTS-UI.JS - User Interface & Rendering
         // ============================================================================
 
+        // Centered confirm modal (replaces browser confirm for absence-period removal etc.)
+        let _confirmModalOkWired = false;
+        function showConfirmModal(options) {
+            const titleEl = document.getElementById('confirmModalTitleText');
+            const bodyEl = document.getElementById('confirmModalBody');
+            const modalEl = document.getElementById('confirmModal');
+            const okBtn = document.getElementById('confirmModalOkButton');
+            if (!titleEl || !bodyEl || !modalEl || !okBtn) return;
+            if (options.title != null) titleEl.textContent = options.title;
+            if (options.message != null) bodyEl.textContent = options.message;
+            window.__confirmModalOnConfirm = options.onConfirm || null;
+            if (!_confirmModalOkWired) {
+                _confirmModalOkWired = true;
+                okBtn.addEventListener('click', function () {
+                    if (typeof window.__confirmModalOnConfirm === 'function') {
+                        window.__confirmModalOnConfirm();
+                        window.__confirmModalOnConfirm = null;
+                    }
+                    const m = bootstrap.Modal.getInstance(modalEl);
+                    if (m) m.hide();
+                });
+            }
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
         function renderAutoAddRankingsPicker() {
             const body = document.getElementById('autoAddRankPickerBody');
             const search = document.getElementById('autoAddRankPickerSearch');
@@ -5344,21 +5370,22 @@
             saveData();
         }
         function removeMissingPeriod(index) {
-            if (!confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την περίοδο απουσίας;')) {
-                return;
-            }
-            
-            const groupData = groups[currentMissingPeriodGroup] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
-            if (groupData.missingPeriods && groupData.missingPeriods[currentMissingPeriodPerson]) {
-                groupData.missingPeriods[currentMissingPeriodPerson].splice(index, 1);
-                if (groupData.missingPeriods[currentMissingPeriodPerson].length === 0) {
-                    delete groupData.missingPeriods[currentMissingPeriodPerson];
+            showConfirmModal({
+                title: 'Επιβεβαίωση',
+                message: 'Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή την περίοδο απουσίας;',
+                onConfirm: function () {
+                    const groupData = groups[currentMissingPeriodGroup] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {} };
+                    if (groupData.missingPeriods && groupData.missingPeriods[currentMissingPeriodPerson]) {
+                        groupData.missingPeriods[currentMissingPeriodPerson].splice(index, 1);
+                        if (groupData.missingPeriods[currentMissingPeriodPerson].length === 0) {
+                            delete groupData.missingPeriods[currentMissingPeriodPerson];
+                        }
+                    }
+                    saveData();
+                    renderMissingPeriodsList();
+                    renderGroups();
                 }
-            }
-            
-            saveData();
-            renderMissingPeriodsList();
-            renderGroups();
+            });
         }
         function toggleListCollapse(listId, chevronId) {
             const listElement = document.getElementById(listId);
