@@ -3512,7 +3512,7 @@
                     const reasonText = reasonObj?.reason
                         ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
                         : '';
-                    const briefReason = reasonText
+                    let briefReason = reasonText
                         ? reasonText.split('.').filter(Boolean)[0]
                         : (isBaseDisabledOrMissing
                             ? (buildUnavailableReplacementReason({
@@ -3523,6 +3523,13 @@
                                 dutyCategory: 'semi'
                             }).split('.').filter(Boolean)[0] || '')
                             : 'Αλλαγή');
+                    // Ensure "ανατέθηκε την [date]" shows the date the baseline was assigned to (this row's dateKey)
+                    if (briefReason && briefReason.includes('είχε απουσία') && briefReason.includes('και ανατέθηκε')) {
+                        const assignedPart = formatGreekDayDate(dateKey);
+                        const assignedArt = getGreekDayAccusativeArticle(new Date(dateKey + 'T00:00:00'));
+                        const correctAssignedPhrase = assignedArt + ' ' + assignedPart.dayName + ' ' + assignedPart.dateStr;
+                        briefReason = briefReason.replace(/και ανατέθηκε\s+(?:την|το)\s+.+?\s+\d{1,2}\/\d{1,2}\/\d{4}/, 'και ανατέθηκε ' + correctAssignedPhrase);
+                    }
 
                     const swapDateStr = otherKey
                         ? new Date(otherKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
