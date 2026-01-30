@@ -845,6 +845,13 @@
             // NOTE: keep "γιατι" spelling to match user preference.
             return `Έγινε η αλλαγή γιατι ο/η ${conflictedPersonName} είχε σύγκρουση ${conflictArt} ${conflict.dayName} ${conflict.dateStr}, και ανατέθηκε ${assignedArt} ${assigned.dayName} ${assigned.dateStr}.`;
         }
+        function buildSemiMissingSwapReasonGreek(conflictedPersonName, conflictDateKey, newAssignmentDateKey) {
+            const conflict = formatGreekDayDate(conflictDateKey);
+            const assigned = formatGreekDayDate(newAssignmentDateKey);
+            const conflictArt = getGreekDayAccusativeArticle(new Date(conflictDateKey + 'T00:00:00'));
+            const assignedArt = getGreekDayAccusativeArticle(new Date(newAssignmentDateKey + 'T00:00:00'));
+            return `Έγινε η αλλαγή γιατι ο/η ${conflictedPersonName} είχε απουσία ${conflictArt} ${conflict.dayName} ${conflict.dateStr}, και ανατέθηκε ${assignedArt} ${assigned.dayName} ${assigned.dateStr}.`;
+        }
         function buildSkipReasonGreek({ skippedPersonName, replacementPersonName, dateKey, monthKey = null }) {
             const d = formatGreekDayDate(dateKey);
             const dayArt = getGreekDayAccusativeArticle(new Date(dateKey + 'T00:00:00'));
@@ -3478,7 +3485,7 @@
                     if (!base || !comp) continue;
                     if (base === comp) continue;
 
-                    const reasonObj = assignmentReasons?.[dateKey]?.[groupNum]?.[comp] || null;
+                    const reasonObj = getAssignmentReason(dateKey, groupNum, comp) || null;
                     const reasonText = reasonObj?.reason
                         ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
                         : '';
@@ -6271,9 +6278,8 @@
                         swapInfo[dk2][groupNum] = { otherDateKey: dateKey, otherDateStr: dateStr };
                         swappedSet.add(`${dateKey}:${groupNum}`); swappedSet.add(`${dk2}:${groupNum}`);
                         semiSwapPairId++;
-                        const reasonText = 'Ανταλλαγή ημιαργίας λόγω σύγκρουσης γειτονικής ημέρας (αργία/ΣΚ). Αλλαγή με ' + otherStr + '.';
-                        storeAssignmentReason(dateKey, groupNum, other, 'swap', reasonText, person, semiSwapPairId);
-                        storeAssignmentReason(dk2, groupNum, person, 'swap', 'Ανταλλαγή ημιαργίας λόγω σύγκρουσης γειτονικής ημέρας (αργία/ΣΚ). Αλλαγή με ' + dateStr + '.', other, semiSwapPairId);
+                        storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSwapReasonGreek({ conflictedPersonName: person, conflictDateKey: dateKey, newAssignmentDateKey: dateKey }), person, semiSwapPairId);
+                        storeAssignmentReason(dk2, groupNum, person, 'swap', buildSwapReasonGreek({ conflictedPersonName: person, conflictDateKey: dateKey, newAssignmentDateKey: dk2 }), other, semiSwapPairId);
                         swapped = true;
                         break;
                     }
@@ -6296,9 +6302,8 @@
                         swapInfo[dk2][groupNum] = { otherDateKey: dateKey, otherDateStr: dateStr };
                         swappedSet.add(`${dateKey}:${groupNum}`); swappedSet.add(`${dk2}:${groupNum}`);
                         semiSwapPairId++;
-                        const reasonText = 'Ανταλλαγή ημιαργίας λόγω σύγκρουσης γειτονικής ημέρας (αργία/ΣΚ). Αλλαγή με ' + otherStr + '.';
-                        storeAssignmentReason(dateKey, groupNum, other, 'swap', reasonText, person, semiSwapPairId);
-                        storeAssignmentReason(dk2, groupNum, person, 'swap', 'Ανταλλαγή ημιαργίας λόγω σύγκρουσης γειτονικής ημέρας (αργία/ΣΚ). Αλλαγή με ' + dateStr + '.', other, semiSwapPairId);
+                        storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSwapReasonGreek({ conflictedPersonName: person, conflictDateKey: dateKey, newAssignmentDateKey: dateKey }), person, semiSwapPairId);
+                        storeAssignmentReason(dk2, groupNum, person, 'swap', buildSwapReasonGreek({ conflictedPersonName: person, conflictDateKey: dateKey, newAssignmentDateKey: dk2 }), other, semiSwapPairId);
                         break;
                     }
                 }
@@ -6368,9 +6373,9 @@
                         swappedSet.add(slotId);
                         swappedSet.add(`${dk2}:${groupNum}`);
                         semiSwapPairId++;
-                        const reasonText = 'Ανταλλαγή ημιαργίας λόγω απουσίας. Από ' + dateStr + ' (κατά τη διάρκεια απουσίας) σε ' + otherStr + '.';
-                        storeAssignmentReason(dateKey, groupNum, other, 'swap', reasonText, person, semiSwapPairId);
-                        storeAssignmentReason(dk2, groupNum, person, 'swap', 'Ανταλλαγή ημιαργίας λόγω απουσίας. Από ' + dateStr + ' σε αυτή την ημέρα.', other, semiSwapPairId);
+                        const dateKeyDateObj = new Date(dateKey + 'T00:00:00');
+                        storeAssignmentReason(dateKey, groupNum, other, 'skip', buildUnavailableReplacementReason({ skippedPersonName: person, replacementPersonName: other, dateObj: dateKeyDateObj, groupNum, dutyCategory: 'semi' }));
+                        storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dk2), other, semiSwapPairId);
                         swapped = true;
                         break;
                     }
@@ -6398,9 +6403,9 @@
                             swappedSet.add(slotId);
                             swappedSet.add(`${dk2}:${groupNum}`);
                             semiSwapPairId++;
-                            const reasonText = 'Ανταλλαγή ημιαργίας λόγω απουσίας. Από ' + dateStr + ' (κατά τη διάρκεια απουσίας) σε ' + otherStr + '.';
-                            storeAssignmentReason(dateKey, groupNum, other, 'swap', reasonText, person, semiSwapPairId);
-                            storeAssignmentReason(dk2, groupNum, person, 'swap', 'Ανταλλαγή ημιαργίας λόγω απουσίας. Από ' + dateStr + ' σε αυτή την ημέρα.', other, semiSwapPairId);
+                            const dateKeyDateObj = new Date(dateKey + 'T00:00:00');
+                            storeAssignmentReason(dateKey, groupNum, other, 'skip', buildUnavailableReplacementReason({ skippedPersonName: person, replacementPersonName: other, dateObj: dateKeyDateObj, groupNum, dutyCategory: 'semi' }));
+                            storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dk2), other, semiSwapPairId);
                             break;
                         }
                     }
@@ -6458,12 +6463,16 @@
                     const basePerson = baseline[dateKey]?.[groupNum] || '-';
                     const finalPerson = finalAssignments[dateKey]?.[groupNum] || '-';
                     const swap = swapInfo[dateKey]?.[groupNum];
+                    const reasonObj = finalPerson ? getAssignmentReason(dateKey, groupNum, finalPerson) : null;
+                    const displayReason = reasonObj?.reason
+                        ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
+                        : '';
+                    const reasonFirstSentence = displayReason ? displayReason.split('.').filter(Boolean)[0] : '';
                     let cell = '';
-                    if (swap) {
-                        const swapLabel = swap.missingPeriod ? '↔ ανταλλαγή λόγω απουσίας με ' : '↔ ανταλλαγή με ';
-                        cell = '<div class="small text-muted">Βασική: ' + basePerson + '</div><div><strong>' + finalPerson + '</strong></div><div class="small text-primary">' + swapLabel + swap.otherDateStr + '</div>';
-                    } else if (basePerson !== finalPerson) {
+                    if (basePerson !== finalPerson) {
                         cell = '<div class="small text-muted">Βασική: ' + basePerson + '</div><div><strong>' + finalPerson + '</strong></div>';
+                        if (reasonFirstSentence) cell += '<div class="small text-primary">' + reasonFirstSentence + '.</div>';
+                        else if (swap) cell += '<div class="small text-primary">↔ ανταλλαγή με ' + swap.otherDateStr + '</div>';
                     } else {
                         cell = '<div><strong>' + (basePerson || '-') + '</strong></div>';
                     }
