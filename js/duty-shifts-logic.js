@@ -6181,13 +6181,43 @@
                 return;
             }
 
+            // Precompute per-dateKey metadata and month indices (avoid repeated Date/getDayType/filter in loops)
+            const semiMeta = {}; // dateKey -> { date, monthKey, keyBefore, keyAfter, typeBefore, typeAfter, monthKeyBefore, monthKeyAfter, dateStr, dayName }
+            const monthKeyToIndices = {}; // monthKey -> number[] (indices in sortedSemi)
+            for (let idx = 0; idx < sortedSemi.length; idx++) {
+                const dateKey = sortedSemi[idx];
+                const date = new Date(dateKey + 'T00:00:00');
+                if (isNaN(date.getTime())) continue;
+                const monthKey = getMonthKeyFromDate(date);
+                const dayBefore = new Date(date);
+                dayBefore.setDate(dayBefore.getDate() - 1);
+                const dayAfter = new Date(date);
+                dayAfter.setDate(dayAfter.getDate() + 1);
+                const keyBefore = formatDateKey(dayBefore);
+                const keyAfter = formatDateKey(dayAfter);
+                if (!monthKeyToIndices[monthKey]) monthKeyToIndices[monthKey] = [];
+                monthKeyToIndices[monthKey].push(idx);
+                semiMeta[dateKey] = {
+                    date,
+                    monthKey,
+                    keyBefore,
+                    keyAfter,
+                    typeBefore: getDayType(dayBefore),
+                    typeAfter: getDayType(dayAfter),
+                    monthKeyBefore: `${dayBefore.getFullYear()}-${dayBefore.getMonth()}`,
+                    monthKeyAfter: `${dayAfter.getFullYear()}-${dayAfter.getMonth()}`,
+                    dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                    dayName: getGreekDayName(date)
+                };
+            }
+
             // 1) Build baseline by rotation order (per group)
             const baseline = {}; // dateKey -> { groupNum -> person }
             const globalSemiPos = {}; // groupNum -> index (continues across semi days)
             for (const dateKey of sortedSemi) {
-                const date = new Date(dateKey + 'T00:00:00');
-                if (isNaN(date.getTime())) continue;
-                const monthKey = getMonthKeyFromDate(date);
+                const meta = semiMeta[dateKey];
+                if (!meta) continue;
+                const { date, monthKey } = meta;
                 if (!baseline[dateKey]) baseline[dateKey] = {};
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const groupData = groups[groupNum] || { semi: [] };
@@ -6210,36 +6240,16 @@
                 }
             }
 
-            // 2) Save baseline to Firebase
-            try {
-                if (typeof window !== 'undefined' && window.db && window.auth?.currentUser) {
-                    const db = window.db;
-                    const user = window.auth.currentUser;
-                    const formattedBaseline = formatGroupAssignmentsToStringMap(baseline);
-                    const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
-                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineSemiAssignments', organizedBaseline);
-                    Object.assign(rotationBaselineSemiAssignments, formattedBaseline);
-                }
-            } catch (e) { console.error('Save baseline semi:', e); }
+            // 2) Defer Firebase saves until after all sync work (see step 4 block)
 
-            // 3) Conflict check: person on semi has weekend or special on day before/after
+            // 3) Conflict check: person on semi has weekend or special on day before/after (uses precomputed semiMeta)
             const hasConflict = (semiDateKey, person, groupNum) => {
-                const d = new Date(semiDateKey + 'T00:00:00');
-                if (isNaN(d.getTime())) return false;
-                const dayBefore = new Date(d); dayBefore.setDate(dayBefore.getDate() - 1);
-                const dayAfter = new Date(d); dayAfter.setDate(dayAfter.getDate() + 1);
-                const keyBefore = formatDateKey(dayBefore);
-                const keyAfter = formatDateKey(dayAfter);
-                if (getDayType(dayBefore) === 'weekend-holiday' && simulatedWeekendAssignments[keyBefore]?.[groupNum] === person) return true;
-                if (getDayType(dayBefore) === 'special-holiday') {
-                    const mk = `${dayBefore.getFullYear()}-${dayBefore.getMonth()}`;
-                    if (simulatedSpecialAssignments[mk]?.[groupNum]?.has(person)) return true;
-                }
-                if (getDayType(dayAfter) === 'weekend-holiday' && simulatedWeekendAssignments[keyAfter]?.[groupNum] === person) return true;
-                if (getDayType(dayAfter) === 'special-holiday') {
-                    const mk = `${dayAfter.getFullYear()}-${dayAfter.getMonth()}`;
-                    if (simulatedSpecialAssignments[mk]?.[groupNum]?.has(person)) return true;
-                }
+                const m = semiMeta[semiDateKey];
+                if (!m) return false;
+                if (m.typeBefore === 'weekend-holiday' && simulatedWeekendAssignments[m.keyBefore]?.[groupNum] === person) return true;
+                if (m.typeBefore === 'special-holiday' && simulatedSpecialAssignments[m.monthKeyBefore]?.[groupNum]?.has(person)) return true;
+                if (m.typeAfter === 'weekend-holiday' && simulatedWeekendAssignments[m.keyAfter]?.[groupNum] === person) return true;
+                if (m.typeAfter === 'special-holiday' && simulatedSpecialAssignments[m.monthKeyAfter]?.[groupNum]?.has(person)) return true;
                 return false;
             };
 
@@ -6251,28 +6261,31 @@
             const swappedSet = new Set(); // 'dateKey:groupNum' already swapped (skip when iterating)
             let semiSwapPairId = 0; // for assignmentReasons so results modal can show swap pairs
 
+            const semiIndicesByMonth = monthKeyToIndices;
             for (let i = 0; i < sortedSemi.length; i++) {
                 const dateKey = sortedSemi[i];
-                const date = new Date(dateKey + 'T00:00:00');
-                const monthKey = getMonthKeyFromDate(date);
-                const semiInMonth = sortedSemi.filter(dk => getMonthKeyFromDate(new Date(dk + 'T00:00:00')) === monthKey);
+                const meta = semiMeta[dateKey];
+                if (!meta) continue;
+                const { monthKey } = meta;
+                const indicesInMonth = semiIndicesByMonth[monthKey] || [];
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     if (swappedSet.has(`${dateKey}:${groupNum}`)) continue;
                     const person = finalAssignments[dateKey]?.[groupNum];
                     if (!person || !hasConflict(dateKey, person, groupNum)) continue;
-                    // Try forward: later semi days in same month
                     let swapped = false;
-                    for (let j = i + 1; j < sortedSemi.length; j++) {
+                    for (let k = 0; k < indicesInMonth.length; k++) {
+                        const j = indicesInMonth[k];
+                        if (j <= i) continue;
                         const dk2 = sortedSemi[j];
-                        if (getMonthKeyFromDate(new Date(dk2 + 'T00:00:00')) !== monthKey) break;
                         if (swappedSet.has(`${dk2}:${groupNum}`)) continue;
                         const other = finalAssignments[dk2]?.[groupNum];
                         if (!other || other === person) continue;
                         if (hasConflict(dk2, other, groupNum)) continue;
                         finalAssignments[dateKey][groupNum] = other;
                         finalAssignments[dk2][groupNum] = person;
-                        const otherStr = new Date(dk2 + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                        const dateStr = new Date(dateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        const m2 = semiMeta[dk2];
+                        const otherStr = m2 ? m2.dateStr : new Date(dk2 + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        const dateStr = meta.dateStr;
                         if (!swapInfo[dateKey]) swapInfo[dateKey] = {};
                         swapInfo[dateKey][groupNum] = { otherDateKey: dk2, otherDateStr: otherStr };
                         if (!swapInfo[dk2]) swapInfo[dk2] = {};
@@ -6285,18 +6298,19 @@
                         break;
                     }
                     if (swapped) continue;
-                    // Try backward: earlier semi days in same month
-                    for (let j = i - 1; j >= 0; j--) {
+                    for (let k = indicesInMonth.length - 1; k >= 0; k--) {
+                        const j = indicesInMonth[k];
+                        if (j >= i) continue;
                         const dk2 = sortedSemi[j];
-                        if (getMonthKeyFromDate(new Date(dk2 + 'T00:00:00')) !== monthKey) break;
                         if (swappedSet.has(`${dk2}:${groupNum}`)) continue;
                         const other = finalAssignments[dk2]?.[groupNum];
                         if (!other || other === person) continue;
                         if (hasConflict(dk2, other, groupNum)) continue;
                         finalAssignments[dateKey][groupNum] = other;
                         finalAssignments[dk2][groupNum] = person;
-                        const otherStr = new Date(dk2 + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                        const dateStr = new Date(dateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        const m2 = semiMeta[dk2];
+                        const otherStr = m2 ? m2.dateStr : new Date(dk2 + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        const dateStr = meta.dateStr;
                         if (!swapInfo[dateKey]) swapInfo[dateKey] = {};
                         swapInfo[dateKey][groupNum] = { otherDateKey: dk2, otherDateStr: otherStr };
                         if (!swapInfo[dk2]) swapInfo[dk2] = {};
@@ -6313,10 +6327,10 @@
             // 3b) Missing-period swap: person assigned to semi on a day they're missing -> swap with another semi in same month (before or after missing period)
             for (let i = 0; i < sortedSemi.length; i++) {
                 const dateKey = sortedSemi[i];
-                const dateObj = new Date(dateKey + 'T00:00:00');
-                if (isNaN(dateObj.getTime())) continue;
-                const monthKey = getMonthKeyFromDate(dateObj);
-                const semiInMonth = sortedSemi.filter(dk => getMonthKeyFromDate(new Date(dk + 'T00:00:00')) === monthKey);
+                const meta = semiMeta[dateKey];
+                if (!meta) continue;
+                const { date: dateObj, monthKey } = meta;
+                const indicesInMonth = semiIndicesByMonth[monthKey] || [];
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const slotId = `${dateKey}:${groupNum}`;
                     if (swappedSet.has(slotId)) continue;
@@ -6329,23 +6343,21 @@
                         const end = new Date(p.end + 'T00:00:00');
                         return dateObj >= start && dateObj <= end;
                     });
-                    // Prefer: first semi after period end, then last semi before period start
                     const periodEnd = periodContaining ? new Date(periodContaining.end + 'T00:00:00') : null;
                     const periodStart = periodContaining ? new Date(periodContaining.start + 'T00:00:00') : null;
                     let candidateIndices = [];
                     if (periodEnd) {
-                        const firstAfter = semiInMonth.findIndex(dk => new Date(dk + 'T00:00:00') > periodEnd);
-                        if (firstAfter >= 0) for (let k = firstAfter; k < semiInMonth.length; k++) candidateIndices.push(sortedSemi.indexOf(semiInMonth[k]));
+                        const firstAfter = indicesInMonth.findIndex(j => semiMeta[sortedSemi[j]]?.date > periodEnd);
+                        if (firstAfter >= 0) candidateIndices.push(...indicesInMonth.slice(firstAfter));
                     }
                     if (periodStart) {
-                        const lastBefore = semiInMonth.map((dk, idx) => ({ dk, idx })).filter(({ dk }) => new Date(dk + 'T00:00:00') < periodStart).pop();
-                        if (lastBefore) for (let k = lastBefore.idx; k >= 0; k--) candidateIndices.push(sortedSemi.indexOf(semiInMonth[k]));
+                        const lastBeforeIdx = indicesInMonth.map((j, idx) => ({ j, idx })).filter(({ j }) => semiMeta[sortedSemi[j]]?.date < periodStart).pop()?.idx;
+                        if (lastBeforeIdx !== undefined) candidateIndices.push(...indicesInMonth.slice(0, lastBeforeIdx + 1));
                     }
                     if (candidateIndices.length === 0) {
-                        for (let k = 0; k < semiInMonth.length; k++) {
-                            const dk = semiInMonth[k];
-                            if (dk === dateKey) continue;
-                            candidateIndices.push(sortedSemi.indexOf(dk));
+                        for (const j of indicesInMonth) {
+                            if (sortedSemi[j] === dateKey) continue;
+                            candidateIndices.push(j);
                         }
                     }
                     candidateIndices = [...new Set(candidateIndices)];
@@ -6354,19 +6366,18 @@
                         if (j < 0 || j >= sortedSemi.length) continue;
                         const dk2 = sortedSemi[j];
                         if (dk2 === dateKey) continue;
-                        if (getMonthKeyFromDate(new Date(dk2 + 'T00:00:00')) !== monthKey) continue;
+                        const meta2 = semiMeta[dk2];
+                        if (!meta2 || meta2.monthKey !== monthKey) continue;
                         const other = finalAssignments[dk2]?.[groupNum];
                         if (!other || other === person) continue;
-                        const dateKeyObj = new Date(dateKey + 'T00:00:00');
-                        const dk2Obj = new Date(dk2 + 'T00:00:00');
-                        if (isPersonMissingOnDate(other, groupNum, dateKeyObj, 'semi')) continue;
-                        if (isPersonMissingOnDate(person, groupNum, dk2Obj, 'semi')) continue;
+                        if (isPersonMissingOnDate(other, groupNum, dateObj, 'semi')) continue;
+                        if (isPersonMissingOnDate(person, groupNum, meta2.date, 'semi')) continue;
                         if (hasConflict(dateKey, other, groupNum)) continue;
                         if (hasConflict(dk2, person, groupNum)) continue;
                         finalAssignments[dateKey][groupNum] = other;
                         finalAssignments[dk2][groupNum] = person;
-                        const otherStr = new Date(dk2 + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                        const dateStr = new Date(dateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        const otherStr = meta2.dateStr;
+                        const dateStr = meta.dateStr;
                         if (!swapInfo[dateKey]) swapInfo[dateKey] = {};
                         swapInfo[dateKey][groupNum] = { otherDateKey: dk2, otherDateStr: otherStr, missingPeriod: true };
                         if (!swapInfo[dk2]) swapInfo[dk2] = {};
@@ -6374,29 +6385,27 @@
                         swappedSet.add(slotId);
                         swappedSet.add(`${dk2}:${groupNum}`);
                         semiSwapPairId++;
-                        const dateKeyDateObj = new Date(dateKey + 'T00:00:00');
-                        storeAssignmentReason(dateKey, groupNum, other, 'skip', buildUnavailableReplacementReason({ skippedPersonName: person, replacementPersonName: other, dateObj: dateKeyDateObj, groupNum, dutyCategory: 'semi' }));
+                        storeAssignmentReason(dateKey, groupNum, other, 'skip', buildUnavailableReplacementReason({ skippedPersonName: person, replacementPersonName: other, dateObj, groupNum, dutyCategory: 'semi' }));
                         storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dk2), other, semiSwapPairId);
                         swapped = true;
                         break;
                     }
                     if (!swapped) {
-                        for (let j = 0; j < sortedSemi.length; j++) {
+                        for (const j of indicesInMonth) {
                             const dk2 = sortedSemi[j];
                             if (dk2 === dateKey) continue;
-                            if (getMonthKeyFromDate(new Date(dk2 + 'T00:00:00')) !== monthKey) continue;
+                            const meta2 = semiMeta[dk2];
+                            if (!meta2) continue;
                             const other = finalAssignments[dk2]?.[groupNum];
                             if (!other || other === person) continue;
-                            const dateKeyObj = new Date(dateKey + 'T00:00:00');
-                            const dk2Obj = new Date(dk2 + 'T00:00:00');
-                            if (isPersonMissingOnDate(other, groupNum, dateKeyObj, 'semi')) continue;
-                            if (isPersonMissingOnDate(person, groupNum, dk2Obj, 'semi')) continue;
+                            if (isPersonMissingOnDate(other, groupNum, dateObj, 'semi')) continue;
+                            if (isPersonMissingOnDate(person, groupNum, meta2.date, 'semi')) continue;
                             if (hasConflict(dateKey, other, groupNum)) continue;
                             if (hasConflict(dk2, person, groupNum)) continue;
                             finalAssignments[dateKey][groupNum] = other;
                             finalAssignments[dk2][groupNum] = person;
-                            const otherStr = new Date(dk2 + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                            const dateStr = new Date(dateKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                            const otherStr = meta2.dateStr;
+                            const dateStr = meta.dateStr;
                             if (!swapInfo[dateKey]) swapInfo[dateKey] = {};
                             swapInfo[dateKey][groupNum] = { otherDateKey: dk2, otherDateStr: otherStr, missingPeriod: true };
                             if (!swapInfo[dk2]) swapInfo[dk2] = {};
@@ -6404,8 +6413,7 @@
                             swappedSet.add(slotId);
                             swappedSet.add(`${dk2}:${groupNum}`);
                             semiSwapPairId++;
-                            const dateKeyDateObj = new Date(dateKey + 'T00:00:00');
-                            storeAssignmentReason(dateKey, groupNum, other, 'skip', buildUnavailableReplacementReason({ skippedPersonName: person, replacementPersonName: other, dateObj: dateKeyDateObj, groupNum, dutyCategory: 'semi' }));
+                            storeAssignmentReason(dateKey, groupNum, other, 'skip', buildUnavailableReplacementReason({ skippedPersonName: person, replacementPersonName: other, dateObj, groupNum, dutyCategory: 'semi' }));
                             storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dk2), other, semiSwapPairId);
                             break;
                         }
@@ -6416,50 +6424,56 @@
             // 4) Last rotation positions: use final assignments (after swaps) per month
             const lastSemiRotationPositionsByMonth = {};
             for (const dateKey of sortedSemi) {
-                const d = new Date(dateKey + 'T00:00:00');
-                if (isNaN(d.getTime())) continue;
-                const monthKey = getMonthKeyFromDate(d);
-                if (!lastSemiRotationPositionsByMonth[monthKey]) lastSemiRotationPositionsByMonth[monthKey] = {};
+                const m = semiMeta[dateKey];
+                if (!m) continue;
+                if (!lastSemiRotationPositionsByMonth[m.monthKey]) lastSemiRotationPositionsByMonth[m.monthKey] = {};
                 const g = finalAssignments[dateKey];
-                if (g) for (let groupNum = 1; groupNum <= 4; groupNum++) if (g[groupNum]) lastSemiRotationPositionsByMonth[monthKey][groupNum] = g[groupNum];
+                if (g) for (let groupNum = 1; groupNum <= 4; groupNum++) if (g[groupNum]) lastSemiRotationPositionsByMonth[m.monthKey][groupNum] = g[groupNum];
             }
 
             try {
                 if (typeof window !== 'undefined' && window.db && window.auth?.currentUser) {
                     const db = window.db;
                     const user = window.auth.currentUser;
+                    const formattedBaseline = formatGroupAssignmentsToStringMap(baseline);
+                    const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
                     const formattedFinal = formatGroupAssignmentsToStringMap(finalAssignments);
                     const organizedFinal = organizeAssignmentsByMonth(formattedFinal);
-                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'semiNormalAssignments', organizedFinal);
+                    // Save baseline and final in parallel to reduce total wait
+                    await Promise.all([
+                        mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineSemiAssignments', organizedBaseline),
+                        (async () => {
+                            await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'semiNormalAssignments', organizedFinal);
+                            for (const monthKey in lastSemiRotationPositionsByMonth) {
+                                const gmap = lastSemiRotationPositionsByMonth[monthKey];
+                                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                                    if (gmap[groupNum] !== undefined) setLastRotationPersonForMonth('semi', monthKey, groupNum, gmap[groupNum]);
+                                }
+                            }
+                            const sanitized = sanitizeForFirestore(lastRotationPositions);
+                            await db.collection('dutyShifts').doc('lastRotationPositions').set({ ...sanitized, lastUpdated: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: user.uid });
+                        })()
+                    ]);
+                    Object.assign(rotationBaselineSemiAssignments, formattedBaseline);
                     Object.assign(semiNormalAssignments, formattedFinal);
-                    for (const monthKey in lastSemiRotationPositionsByMonth) {
-                        const gmap = lastSemiRotationPositionsByMonth[monthKey];
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            if (gmap[groupNum] !== undefined) setLastRotationPersonForMonth('semi', monthKey, groupNum, gmap[groupNum]);
-                        }
-                    }
-                    const sanitized = sanitizeForFirestore(lastRotationPositions);
-                    await db.collection('dutyShifts').doc('lastRotationPositions').set({ ...sanitized, lastUpdated: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: user.uid });
                 }
-            } catch (e) { console.error('Save final semi:', e); }
+            } catch (e) { console.error('Save semi:', e); }
 
             calculationSteps.tempSemiAssignments = finalAssignments;
             calculationSteps.tempSemiBaselineAssignments = baseline;
             calculationSteps.finalSemiAssignments = finalAssignments;
             calculationSteps.lastSemiRotationPositionsByMonth = lastSemiRotationPositionsByMonth;
 
-            // 5) Build table: baseline vs final, show swap on both affected days
+            // 5) Build table: baseline vs final (use precomputed dateStr/dayName from semiMeta)
             const periodLabel = (startDate && endDate) ? `${startDate.toLocaleDateString('el-GR')} – ${endDate.toLocaleDateString('el-GR')}` : '';
             let html = '<div class="step-content"><h6 class="mb-3"><i class="fas fa-calendar-alt me-2"></i>Περίοδος: ' + periodLabel + '</h6>';
             html += '<div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr><th>Ημερομηνία</th><th>Ημέρα</th>';
             for (let g = 1; g <= 4; g++) html += '<th>' + (getGroupName(g) || 'Ομάδα ' + g) + '</th>';
             html += '</tr></thead><tbody>';
             for (const dateKey of sortedSemi) {
-                const date = new Date(dateKey + 'T00:00:00');
-                if (isNaN(date.getTime())) continue;
-                const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                const dayName = getGreekDayName(date);
-                html += '<tr><td><strong>' + dateStr + '</strong></td><td>' + dayName + '</td>';
+                const m = semiMeta[dateKey];
+                if (!m) continue;
+                html += '<tr><td><strong>' + m.dateStr + '</strong></td><td>' + m.dayName + '</td>';
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const basePerson = baseline[dateKey]?.[groupNum] || '-';
                     const finalPerson = finalAssignments[dateKey]?.[groupNum] || '-';
