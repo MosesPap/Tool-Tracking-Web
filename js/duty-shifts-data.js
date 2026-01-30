@@ -5558,8 +5558,8 @@
         .empty-list { color: #999; font-style: italic; }
         @page { margin: 1.5cm; }
         @media print {
-            body { padding: 10px; margin: 0; }
-            .print-page { page-break-after: always; }
+            body { padding: 1.5cm; margin: 0; }
+            .print-page { page-break-after: always; padding-top: 1.5cm; }
             .print-page:last-of-type { page-break-after: auto; }
         }
     </style>
