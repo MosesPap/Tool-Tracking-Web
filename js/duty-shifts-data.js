@@ -2676,7 +2676,7 @@
                 previewContent.innerHTML = `
                     <div class="alert alert-warning">
                         <i class="fas fa-exclamation-triangle me-2"></i>
-                        Δεν υπάρχουν ομάδες με άτομα για να δημιουργηθούν Excel αρχεία.
+                        Δεν υπάρχουν ομάδες με άτομα για να δημιουργηθεί το Excel αρχείο.
                     </div>
                 `;
                 if (generateBtn) {
@@ -2709,7 +2709,7 @@
                 const loadingAlert = document.createElement('div');
                 loadingAlert.className = 'alert alert-info position-fixed top-50 start-50 translate-middle';
                 loadingAlert.style.zIndex = '9999';
-                loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Δημιουργία Excel αρχείων...';
+                loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Δημιουργία Excel αρχείου...';
                 document.body.appendChild(loadingAlert);
                 
                 // Check if ExcelJS is available, otherwise fall back to SheetJS
@@ -2732,11 +2732,14 @@
                         .replace(/^_+|_+$/g, '');
                 };
 
-                const buildExcelFilename = (groupName, monthName, year) => {
+                const buildExcelFilename = (monthName, year) => {
                     const prefix = 'ΥΠΗΡΕΣΙΑ';
-                    const safeGroup = sanitizeFilenameComponent(groupName);
                     const safeMonth = sanitizeFilenameComponent(monthName);
-                    return `${prefix}_${safeGroup}_${safeMonth}_${year}.xlsx`;
+                    return `${prefix}_${safeMonth}_${year}.xlsx`;
+                };
+                const safeSheetName = (name, maxLen = 31) => {
+                    const s = (name ?? '').toString().replace(/[\\/*?:\[\]]/g, '_').trim();
+                    return s.slice(0, maxLen) || 'Sheet';
                 };
 
                 const getGreekMonthAbbrev = (date) => {
@@ -2804,20 +2807,25 @@
                     }
                 };
                 
-                // Generate Excel file for each group
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupName = getGroupName(groupNum);
-                    const groupData = groups[groupNum];
-                    
-                    // Skip if group has no people
-                    if (!groupData || (!groupData.special?.length && !groupData.weekend?.length && !groupData.semi?.length && !groupData.normal?.length)) {
-                        continue;
+                const groupNumbersToProcess = [];
+                for (let g = 1; g <= 4; g++) {
+                    const gd = groups[g];
+                    if (gd && (gd.special?.length || gd.weekend?.length || gd.semi?.length || gd.normal?.length)) {
+                        groupNumbersToProcess.push(g);
                     }
-                    
-                    if (useExcelJS) {
-                        // Use ExcelJS for better styling support
-                        const workbook = new ExcelJS.Workbook();
-                        const worksheet = workbook.addWorksheet('Υπηρεσίες');
+                }
+                if (groupNumbersToProcess.length === 0) {
+                    if (loadingAlert.parentNode) loadingAlert.remove();
+                    alert('Δεν υπάρχουν ομάδες με άτομα για να δημιουργηθεί το Excel αρχείο.');
+                    return;
+                }
+
+                if (useExcelJS) {
+                    const workbook = new ExcelJS.Workbook();
+                    for (const groupNum of groupNumbersToProcess) {
+                        const groupName = getGroupName(groupNum);
+                        const groupData = groups[groupNum];
+                        const worksheet = workbook.addWorksheet(safeSheetName(groupName));
                         
                         // Helper function to format date as "10 ΔΕΚ 2026"
                         const formatDateGreekAbbr = (date) => {
@@ -3076,94 +3084,59 @@
                         writeCategoryBlock('ΗΜΙΑΡΓΙΕΣ', semiFill, rotationInfo.next.semi);
                         writeCategoryBlock('ΑΡΓΙΕΣ', weekendFill, rotationInfo.next.weekend);
                         writeCategoryBlock('ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', specialFill, rotationInfo.next.special);
-                        
-                        // Generate file name (keep Greek)
-                        const fileName = buildExcelFilename(groupName, monthName, year);
-                        
-                        // Write file
-                        const buffer = await workbook.xlsx.writeBuffer();
-                        const saved = await saveBytesToMonthFolder(fileName, buffer);
-                        if (!saved) {
-                            if (zipFolder) zipFolder.file(fileName, buffer);
-                            else downloadBytes(fileName, buffer);
-                        }
-                    } else {
-                        // Fallback to SheetJS (limited styling)
-                        const wb = XLSX.utils.book_new();
+                    }
+                    const fileName = buildExcelFilename(monthName, year);
+                    const buffer = await workbook.xlsx.writeBuffer();
+                    const saved = await saveBytesToMonthFolder(fileName, buffer);
+                    if (!saved) {
+                        if (zipFolder) zipFolder.file(fileName, buffer);
+                        else downloadBytes(fileName, buffer);
+                    }
+                } else {
+                    const wb = XLSX.utils.book_new();
+                    const formatDateGreekAbbrSheet = (date) => {
+                        const day = date.getDate();
+                        const monthAbbr = ['ΙΑΝ', 'ΦΕΒ', 'ΜΑΡ', 'ΑΠΡ', 'ΜΑΪ', 'ΙΟΥΝ', 'ΙΟΥΛ', 'ΑΥΓ', 'ΣΕΠ', 'ΟΚΤ', 'ΝΟΕ', 'ΔΕΚ'];
+                        return `${day} ${monthAbbr[date.getMonth()]} ${date.getFullYear()}`;
+                    };
+                    for (const groupNum of groupNumbersToProcess) {
+                        const groupName = getGroupName(groupNum);
+                        const groupData = groups[groupNum];
                         const data = [];
                         const rowDayTypes = [];
-                        
-                        // Helper function to format date as "10 ΔΕΚ 2026"
-                        const formatDateGreekAbbr = (date) => {
-                            const day = date.getDate();
-                            const monthAbbr = ['ΙΑΝ', 'ΦΕΒ', 'ΜΑΡ', 'ΑΠΡ', 'ΜΑΪ', 'ΙΟΥΝ', 'ΙΟΥΛ', 'ΑΥΓ', 'ΣΕΠ', 'ΟΚΤ', 'ΝΟΕ', 'ΔΕΚ'];
-                            const month = monthAbbr[date.getMonth()];
-                            const year = date.getFullYear();
-                            return `${day} ${month} ${year}`;
-                        };
-                        
                         const today = new Date();
-                        const formattedDate = formatDateGreekAbbr(today);
-                        
-                        // Row 1: I1 cell with header information
-                        const row1 = ['', '', '', '', '', '', '', '', `55 ΣΜ. ΜΑΧΗΣ\nΜΣΑ\nΤΜ. ΠΡΟΣΩΠΙΚΟΥ\nΤΙΜΗ, ${formattedDate}`];
-                        data.push(row1);
+                        const formattedDate = formatDateGreekAbbrSheet(today);
+                        data.push(['', '', '', '', '', '', '', '', `55 ΣΜ. ΜΑΧΗΣ\nΜΣΑ\nΤΜ. ΠΡΟΣΩΠΙΚΟΥ\nΤΙΜΗ, ${formattedDate}`]);
                         rowDayTypes.push(null);
-                        
-                        // Row 2: Title merged A2:I2
                         data.push([`ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`]);
                         rowDayTypes.push(null);
-                        
-                        // Row 3: Empty
                         data.push([]);
                         rowDayTypes.push(null);
-                        
-                        // Row 4: Header row
                         data.push(['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΑΛΛΑΓΕΣ']);
                         rowDayTypes.push(null);
-                        
                         for (let day = 1; day <= daysInMonth; day++) {
                             const date = new Date(year, month, day);
                             const dayKey = formatDateKey(date);
                             const dayType = getDayType(date);
-                            const dayName = getGreekDayNameUppercase(date); // Use uppercase
-                            
+                            const dayName = getGreekDayNameUppercase(date);
                             const assignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
                             const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
-                            
                             const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
-                            // Add extra columns so we can place the right-side table in H (columns E-G are empty)
                             data.push([dateStr, dayName, personName, '', '', '', '', '']);
                             rowDayTypes.push(dayType);
                         }
-                        
-                        // Add blank row before signature cells
                         data.push(['', '', '', '', '', '', '', '']);
                         rowDayTypes.push(null);
-                        
-                        // Add signature cells under the duty list
-                        const lastDataRowIdx = data.length - 1; // Last row index of duty data (blank row)
-                        // Column B: Signature cells
+                        const lastDataRowIdx = data.length - 1;
                         data.push(['', 'Ο', '', '', '', '', '', '']);
                         data.push(['', 'ΣΥΝΤΑΞΑΣ', '', '', '', '', '', '']);
-                        // Column H: Signature cells
                         const sigRow1Idx = data.length - 2;
                         const sigRow2Idx = data.length - 1;
                         data[sigRow1Idx][7] = 'ΕΘ-ΘΗ';
                         data[sigRow2Idx][7] = 'Ο';
                         data.push(['', '', '', '', '', '', '', 'ΔΚΤΗΣ']);
                         rowDayTypes.push(null, null, null);
-
-                        // Add "next on rotation" table on the RIGHT of the main duty list (H, moved from I)
-                        const rotationInfo = getNextTwoRotationPeopleForCurrentMonth({
-                            year,
-                            month,
-                            daysInMonth,
-                            groupNum,
-                            groupData,
-                            dutyAssignments
-                        });
-                        // We will write values into column I
+                        const rotationInfo = getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments });
                         const rightRows = [
                             { row: 5, text: 'ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ', kind: 'title' },
                             { row: 7, text: 'ΚΑΘΗΜΕΡΙΝΕΣ', kind: 'normalHeader' },
@@ -3179,44 +3152,23 @@
                             { row: 20, text: rotationInfo.next.special[0] || '', kind: 'special' },
                             { row: 21, text: rotationInfo.next.special[1] || '', kind: 'special' }
                         ];
-                        
                         const ws = XLSX.utils.aoa_to_sheet(data);
-                        // Column widths: A14, B17, C57, D56.5, H48, I (auto)
-                        ws['!cols'] = [
-                            { wch: 14 }, // A
-                            { wch: 17 }, // B
-                            { wch: 57 }, // C
-                            { wch: 56.5 },  // D ΑΛΛΑΓΕΣ
-                            { wch: 10 }, // E (empty)
-                            { wch: 10 }, // F (empty)
-                            { wch: 10 }, // G (empty)
-                            { wch: 48 },  // H right table
-                            { wch: 25 }  // I header info
-                        ];
+                        ws['!cols'] = [{ wch: 14 }, { wch: 17 }, { wch: 57 }, { wch: 56.5 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 48 }, { wch: 25 }];
                         if (!ws['!merges']) ws['!merges'] = [];
-                        // Title merge A2:I2 (row 1, columns 0-8)
                         ws['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: 8 } });
-
-                        // Row heights (30) for the whole produced sheet
                         ws['!rows'] = Array.from({ length: data.length }, () => ({ hpt: 30 }));
-                        
-                        // Style I1 cell (row 1, column I)
                         const i1Cell = 'I1';
                         if (!ws[i1Cell]) ws[i1Cell] = { t: 's', v: data[0][8] || '' };
                         if (!ws[i1Cell].s) ws[i1Cell].s = {};
                         ws[i1Cell].s.font = { name: 'Arial', bold: true, sz: 12, color: { rgb: '000000' } };
                         ws[i1Cell].s.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
-                        
-                        // Style title row (row 2)
                         const titleCell = 'A2';
                         if (!ws[titleCell]) ws[titleCell] = { t: 's', v: data[1][0] || '' };
                         if (!ws[titleCell].s) ws[titleCell].s = {};
                         ws[titleCell].s.font = { name: 'Arial', bold: true, sz: 16, color: { rgb: 'FFFFFF' } };
                         ws[titleCell].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
                         ws[titleCell].s.alignment = { horizontal: 'center', vertical: 'center' };
-                        
-                        // Style header row (row 4)
-                        const headerRow = 3; // 0-indexed, so row 4 is index 3
+                        const headerRow = 3;
                         ['A', 'B', 'C', 'D'].forEach((col, idx) => {
                             const cellRef = col + (headerRow + 1);
                             if (!ws[cellRef]) ws[cellRef] = { t: 's', v: data[headerRow][idx] || '' };
@@ -3225,17 +3177,11 @@
                             ws[cellRef].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
                             ws[cellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
                         });
-
-                        // Write and style the right-side table (SheetJS styling is best-effort)
-                        const dayTypeToRgb = (dayType) => {
-                            const c = getDayTypeColor(dayType);
-                            return c.map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
-                        };
+                        const dayTypeToRgb = (dayType) => getDayTypeColor(dayType).map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
                         const normalRgb = dayTypeToRgb('normal-day');
                         const semiRgb = dayTypeToRgb('semi-normal-day');
                         const weekendRgb = dayTypeToRgb('weekend-holiday');
-                        const specialRgb = 'FF00FF'; // vivid magenta like screenshot
-
+                        const specialRgb = 'FF00FF';
                         const styleCell = (addr, { bold = false, center = false, fillRgb = null } = {}) => {
                             if (!ws[addr]) ws[addr] = { t: 's', v: '' };
                             if (!ws[addr].s) ws[addr].s = {};
@@ -3243,56 +3189,39 @@
                             ws[addr].s.alignment = { horizontal: center ? 'center' : 'left', vertical: 'center' };
                             if (fillRgb) ws[addr].s.fill = { fgColor: { rgb: fillRgb }, patternType: 'solid' };
                         };
-
                         rightRows.forEach(rr => {
-                            const excelRow = rr.row + 1; // 1-based
-                            const hAddr = 'H' + excelRow; // Changed from I to H
+                            const hAddr = 'H' + (rr.row + 1);
                             if (!ws[hAddr]) ws[hAddr] = { t: 's', v: rr.text || '' };
                             else ws[hAddr].v = rr.text || '';
-
                             const kind = rr.kind || '';
-                            if (kind === 'title') {
-                                styleCell(hAddr, { bold: true, center: true });
-                            } else if (kind.startsWith('normal')) {
-                                styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: normalRgb });
-                            } else if (kind.startsWith('semi')) {
-                                styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: semiRgb });
-                            } else if (kind.startsWith('weekend')) {
-                                styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: weekendRgb });
-                            } else if (kind.startsWith('special')) {
-                                styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: specialRgb });
-                            }
+                            if (kind === 'title') styleCell(hAddr, { bold: true, center: true });
+                            else if (kind.startsWith('normal')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: normalRgb });
+                            else if (kind.startsWith('semi')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: semiRgb });
+                            else if (kind.startsWith('weekend')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: weekendRgb });
+                            else if (kind.startsWith('special')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: specialRgb });
                         });
-                        
-                        // Apply colors and fonts to data rows
                         for (let rowIdx = 4; rowIdx < rowDayTypes.length; rowIdx++) {
                             const dayType = rowDayTypes[rowIdx];
                             if (!dayType) continue;
-                            
-                            const color = getDayTypeColor(dayType);
-                            const hexColor = color.map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase();
+                            const hexColor = dayTypeToRgb(dayType);
                             const excelRow = rowIdx + 1;
-                            
                             ['A', 'B', 'C', 'D'].forEach((col, colIdx) => {
                                 const cellRef = col + excelRow;
-                                if (!ws[cellRef]) {
-                                    ws[cellRef] = { t: 's', v: data[rowIdx] ? (data[rowIdx][colIdx] || '') : '' };
-                                }
+                                if (!ws[cellRef]) ws[cellRef] = { t: 's', v: data[rowIdx] ? (data[rowIdx][colIdx] || '') : '' };
                                 if (!ws[cellRef].s) ws[cellRef].s = {};
                                 ws[cellRef].s.fill = { fgColor: { rgb: hexColor }, patternType: 'solid' };
                                 ws[cellRef].s.font = { name: 'Arial', sz: 14 };
                                 ws[cellRef].s.alignment = { horizontal: (colIdx === 0 || colIdx === 1) ? 'center' : 'left', vertical: 'center' };
                             });
                         }
-                        
-                        XLSX.utils.book_append_sheet(wb, ws, 'Υπηρεσίες');
-                        const fileName = buildExcelFilename(groupName, monthName, year);
-                        const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-                        const saved = await saveBytesToMonthFolder(fileName, out);
-                        if (!saved) {
-                            if (zipFolder) zipFolder.file(fileName, out);
-                            else downloadBytes(fileName, out);
-                        }
+                        XLSX.utils.book_append_sheet(wb, ws, safeSheetName(groupName));
+                    }
+                    const fileName = buildExcelFilename(monthName, year);
+                    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                    const saved = await saveBytesToMonthFolder(fileName, out);
+                    if (!saved) {
+                        if (zipFolder) zipFolder.file(fileName, out);
+                        else downloadBytes(fileName, out);
                     }
                 }
 
@@ -3316,13 +3245,13 @@
                 }
                 
                 alert(monthDirHandle
-                    ? `Τα Excel αρχεία αποθηκεύτηκαν στον φάκελο "${monthFolderName}".`
+                    ? `Το Excel αρχείο (με ${groupNumbersToProcess.length} καρτέλες) αποθηκεύτηκε στον φάκελο "${monthFolderName}".`
                     : (zipFolder
-                        ? `Τα Excel αρχεία δημιουργήθηκαν ως "${monthFolderName}.zip" (περιέχει φάκελο "${monthFolderName}").`
-                        : 'Τα Excel αρχεία δημιουργήθηκαν επιτυχώς!'));
+                        ? `Το Excel αρχείο δημιουργήθηκε ως "${monthFolderName}.zip" (περιέχει φάκελο "${monthFolderName}").`
+                        : 'Το Excel αρχείο δημιουργήθηκε επιτυχώς (μία καρτέλα ανά ομάδα)!'));
             } catch (error) {
                 console.error('Error generating Excel files:', error);
-                alert('Σφάλμα κατά τη δημιουργία των Excel αρχείων: ' + error.message);
+                alert('Σφάλμα κατά τη δημιουργία του Excel αρχείου: ' + error.message);
                 // Remove loading message if still present
                 const loadingAlert = document.querySelector('.alert.position-fixed');
                 if (loadingAlert) {
