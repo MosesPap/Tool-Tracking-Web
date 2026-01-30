@@ -6344,7 +6344,34 @@
                         semiSwapPairId++;
                         storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSwapReasonGreek({ conflictedPersonName: person, conflictDateKey: dateKey, newAssignmentDateKey: dateKey }), person, semiSwapPairId);
                         storeAssignmentReason(dk2, groupNum, person, 'swap', buildSwapReasonGreek({ conflictedPersonName: person, conflictDateKey: dateKey, newAssignmentDateKey: dk2 }), other, semiSwapPairId);
+                        swapped = true;
                         break;
+                    }
+                    // Cross-month swap as last resort when no same-month swap found
+                    if (!swapped) {
+                        for (let j = 0; j < sortedSemi.length; j++) {
+                            if (j === i) continue;
+                            const dk2 = sortedSemi[j];
+                            const m2 = semiMeta[dk2];
+                            if (m2 && m2.monthKey === monthKey) continue;
+                            if (swappedSet.has(`${dk2}:${groupNum}`)) continue;
+                            const other = finalAssignments[dk2]?.[groupNum];
+                            if (!other || other === person) continue;
+                            if (hasConflict(dk2, other, groupNum)) continue;
+                            finalAssignments[dateKey][groupNum] = other;
+                            finalAssignments[dk2][groupNum] = person;
+                            const otherStr = m2 ? m2.dateStr : new Date(dk2 + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                            const dateStr = meta.dateStr;
+                            if (!swapInfo[dateKey]) swapInfo[dateKey] = {};
+                            swapInfo[dateKey][groupNum] = { otherDateKey: dk2, otherDateStr: otherStr };
+                            if (!swapInfo[dk2]) swapInfo[dk2] = {};
+                            swapInfo[dk2][groupNum] = { otherDateKey: dateKey, otherDateStr: dateStr };
+                            swappedSet.add(`${dateKey}:${groupNum}`); swappedSet.add(`${dk2}:${groupNum}`);
+                            semiSwapPairId++;
+                            storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSwapReasonGreek({ conflictedPersonName: person, conflictDateKey: dateKey, newAssignmentDateKey: dateKey }), person, semiSwapPairId);
+                            storeAssignmentReason(dk2, groupNum, person, 'swap', buildSwapReasonGreek({ conflictedPersonName: person, conflictDateKey: dateKey, newAssignmentDateKey: dk2 }), other, semiSwapPairId);
+                            break;
+                        }
                     }
                 }
             }
@@ -6423,6 +6450,37 @@
                             if (dk2 === dateKey) continue;
                             const meta2 = semiMeta[dk2];
                             if (!meta2) continue;
+                            const other = finalAssignments[dk2]?.[groupNum];
+                            if (!other || other === person) continue;
+                            if (isPersonMissingOnDate(other, groupNum, dateObj, 'semi')) continue;
+                            if (isPersonMissingOnDate(person, groupNum, meta2.date, 'semi')) continue;
+                            if (hasConflict(dateKey, other, groupNum)) continue;
+                            if (hasConflict(dk2, person, groupNum)) continue;
+                            finalAssignments[dateKey][groupNum] = other;
+                            finalAssignments[dk2][groupNum] = person;
+                            const otherStr = meta2.dateStr;
+                            const dateStr = meta.dateStr;
+                            if (!swapInfo[dateKey]) swapInfo[dateKey] = {};
+                            swapInfo[dateKey][groupNum] = { otherDateKey: dk2, otherDateStr: otherStr, missingPeriod: true };
+                            if (!swapInfo[dk2]) swapInfo[dk2] = {};
+                            swapInfo[dk2][groupNum] = { otherDateKey: dateKey, otherDateStr: dateStr, missingPeriod: true };
+                            swappedSet.add(slotId);
+                            swappedSet.add(`${dk2}:${groupNum}`);
+                            semiSwapPairId++;
+                            storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dk2), person, semiSwapPairId);
+                            storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dk2), other, semiSwapPairId);
+                            swapped = true;
+                            break;
+                        }
+                    }
+                    // Cross-month swap as last resort when no same-month swap found
+                    if (!swapped) {
+                        for (let j = 0; j < sortedSemi.length; j++) {
+                            const dk2 = sortedSemi[j];
+                            if (dk2 === dateKey) continue;
+                            const meta2 = semiMeta[dk2];
+                            if (!meta2 || meta2.monthKey === monthKey) continue;
+                            if (swappedSet.has(`${dk2}:${groupNum}`)) continue;
                             const other = finalAssignments[dk2]?.[groupNum];
                             if (!other || other === person) continue;
                             if (isPersonMissingOnDate(other, groupNum, dateObj, 'semi')) continue;
