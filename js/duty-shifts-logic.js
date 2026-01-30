@@ -845,12 +845,14 @@
             // NOTE: keep "γιατι" spelling to match user preference.
             return `Έγινε η αλλαγή γιατι ο/η ${conflictedPersonName} είχε σύγκρουση ${conflictArt} ${conflict.dayName} ${conflict.dateStr}, και ανατέθηκε ${assignedArt} ${assigned.dayName} ${assigned.dateStr}.`;
         }
-        function buildSemiMissingSwapReasonGreek(conflictedPersonName, conflictDateKey, newAssignmentDateKey) {
+        function buildSemiMissingSwapReasonGreek(conflictedPersonName, conflictDateKey, newAssignmentDateKey, reasonShort = 'Κώλυμα/Απουσία') {
             const conflict = formatGreekDayDate(conflictDateKey);
             const assigned = formatGreekDayDate(newAssignmentDateKey);
             const conflictArt = getGreekDayAccusativeArticle(new Date(conflictDateKey + 'T00:00:00'));
             const assignedArt = getGreekDayAccusativeArticle(new Date(newAssignmentDateKey + 'T00:00:00'));
-            return `Έγινε η αλλαγή γιατι ο/η ${conflictedPersonName} είχε απουσία ${conflictArt} ${conflict.dayName} ${conflict.dateStr}, και ανατέθηκε ${assignedArt} ${assigned.dayName} ${assigned.dateStr}.`;
+            // Same verb as normal: "ήταν" for Απενεργοποιημένος, "είχε" for specific reason or Κώλυμα/Απουσία
+            const verb = reasonShort === 'Απενεργοποιημένος' ? 'ήταν' : 'είχε';
+            return `Έγινε η αλλαγή γιατι ο/η ${conflictedPersonName} ${verb} ${reasonShort} ${conflictArt} ${conflict.dayName} ${conflict.dateStr}, και ανατέθηκε ${assignedArt} ${assigned.dayName} ${assigned.dateStr}.`;
         }
         function buildSkipReasonGreek({ skippedPersonName, replacementPersonName, dateKey, monthKey = null }) {
             const d = formatGreekDayDate(dateKey);
@@ -6425,8 +6427,9 @@
                         swappedSet.add(slotId);
                         swappedSet.add(`${dk2}:${groupNum}`);
                         semiSwapPairId++;
-                        storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey), person, semiSwapPairId);
-                        storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey), other, semiSwapPairId);
+                        const semiReasonShort = getUnavailableReasonShort(person, groupNum, dateObj, 'semi');
+                        storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey, semiReasonShort), person, semiSwapPairId);
+                        storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey, semiReasonShort), other, semiSwapPairId);
                         swapped = true;
                         break;
                     }
@@ -6453,8 +6456,9 @@
                             swappedSet.add(slotId);
                             swappedSet.add(`${dk2}:${groupNum}`);
                             semiSwapPairId++;
-                            storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey), person, semiSwapPairId);
-                            storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey), other, semiSwapPairId);
+                            const semiReasonShortFallback = getUnavailableReasonShort(person, groupNum, dateObj, 'semi');
+                            storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey, semiReasonShortFallback), person, semiSwapPairId);
+                            storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey, semiReasonShortFallback), other, semiSwapPairId);
                             break;
                         }
                     }
