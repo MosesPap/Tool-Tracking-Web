@@ -5958,7 +5958,7 @@
 
             const wrap = document.createElement('div');
             wrap.className = 'pdf-root';
-            wrap.style.cssText = 'position:absolute;left:-9999px;top:0;width:210mm;font-family:Arial,Helvetica,sans-serif;padding:18px;font-size:11px;color:#333;';
+            wrap.style.cssText = 'position:fixed;top:0;left:0;width:210mm;min-height:297mm;background:#fff;font-family:Arial,Helvetica,sans-serif;padding:18px;font-size:11px;color:#333;z-index:10000;pointer-events:none;overflow:visible;box-shadow:0 0 0 1px #eee;';
             wrap.innerHTML = `<style>${css}</style>${body}`;
             document.body.appendChild(wrap);
 
@@ -5966,13 +5966,20 @@
                 margin: 10,
                 filename: 'Σειρές_Περιστροφής_Ιεραρχία.pdf',
                 image: { type: 'jpeg', quality: 1 },
-                html2canvas: { scale: 2, useCORS: true },
+                html2canvas: { scale: 2, useCORS: true, logging: false, allowTaint: true },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                 pagebreak: { mode: ['css', 'legacy'], before: '.pdf-page' }
             };
-            html2pdf().set(opt).from(wrap).save().then(() => {
-                wrap.remove();
-            }).catch(() => {
-                wrap.remove();
+            const run = () => {
+                html2pdf().set(opt).from(wrap).save().then(() => {
+                    wrap.remove();
+                }).catch(() => {
+                    wrap.remove();
+                });
+            };
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    setTimeout(run, 200);
+                });
             });
         }
