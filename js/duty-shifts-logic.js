@@ -845,14 +845,12 @@
             // NOTE: keep "γιατι" spelling to match user preference.
             return `Έγινε η αλλαγή γιατι ο/η ${conflictedPersonName} είχε σύγκρουση ${conflictArt} ${conflict.dayName} ${conflict.dateStr}, και ανατέθηκε ${assignedArt} ${assigned.dayName} ${assigned.dateStr}.`;
         }
-        function buildSemiMissingSwapReasonGreek(conflictedPersonName, conflictDateKey, newAssignmentDateKey, reasonShort = 'Κώλυμα/Απουσία') {
+        function buildSemiMissingSwapReasonGreek(conflictedPersonName, conflictDateKey, newAssignmentDateKey) {
             const conflict = formatGreekDayDate(conflictDateKey);
             const assigned = formatGreekDayDate(newAssignmentDateKey);
             const conflictArt = getGreekDayAccusativeArticle(new Date(conflictDateKey + 'T00:00:00'));
             const assignedArt = getGreekDayAccusativeArticle(new Date(newAssignmentDateKey + 'T00:00:00'));
-            // Same verb as normal: "ήταν" for Απενεργοποιημένος, "είχε" for specific reason or Κώλυμα/Απουσία
-            const verb = reasonShort === 'Απενεργοποιημένος' ? 'ήταν' : 'είχε';
-            return `Έγινε η αλλαγή γιατι ο/η ${conflictedPersonName} ${verb} ${reasonShort} ${conflictArt} ${conflict.dayName} ${conflict.dateStr}, και ανατέθηκε ${assignedArt} ${assigned.dayName} ${assigned.dateStr}.`;
+            return `Έγινε η αλλαγή γιατι ο/η ${conflictedPersonName} είχε απουσία ${conflictArt} ${conflict.dayName} ${conflict.dateStr}, και ανατέθηκε ${assignedArt} ${assigned.dayName} ${assigned.dateStr}.`;
         }
         function buildSkipReasonGreek({ skippedPersonName, replacementPersonName, dateKey, monthKey = null }) {
             const d = formatGreekDayDate(dateKey);
@@ -3488,71 +3486,57 @@
                     if (base === comp) continue;
 
                     const reasonObj = getAssignmentReason(dateKey, groupNum, comp) || null;
-
-                    // IMPORTANT: Skip entries where the replacement has a 'shift' reason
-                    // These are people who were shifted forward due to reinsertion, not direct replacements
-                    // Only show direct replacements ('skip') and actual swaps ('swap')
-                    if (reasonObj && reasonObj.type === 'shift') {
-                        continue; // Skip this entry - person was shifted forward, not a direct replacement
-                    }
-
-                    // Also skip if this is a cascading shift: if the replacement doesn't have a 'skip' or 'swap' reason,
-                    // and the baseline person was disabled/missing, then this person was shifted forward, not a direct replacement
+                    if (reasonObj && reasonObj.type === 'shift') continue;
                     const isBaseDisabledOrMissing = isPersonDisabledForDuty(base, groupNum, 'semi') || isPersonMissingOnDate(base, groupNum, dateObj, 'semi');
+                    // Same as normal: skip only if cascading shift (no reason and base missing/disabled => direct replacement has 'skip' on another row)
                     if (!reasonObj && isBaseDisabledOrMissing) {
-                        // This is a cascading shift - the baseline person was skipped, and this person moved forward
-                        // Skip this entry - only show the direct replacement (who has a 'skip' reason)
                         continue;
                     }
-
-                    // Also skip if baseline person has a 'skip' reason on a previous date (they were replaced, causing cascading shifts)
-                    // Check if baseline person was replaced on any previous date in this month
                     if (!reasonObj && !isBaseDisabledOrMissing) {
                         const monthKey = `${dateObj.getFullYear()}-${dateObj.getMonth()}`;
                         let baselineWasReplaced = false;
                         for (const dk in assignmentReasons) {
-                            if (dk >= dateKey) break; // Only check previous dates
+                            if (dk >= dateKey) break;
                             const dkDate = new Date(dk + 'T00:00:00');
                             const dkMonthKey = `${dkDate.getFullYear()}-${dkDate.getMonth()}`;
-                            if (dkMonthKey !== monthKey) continue; // Only same month
+                            if (dkMonthKey !== monthKey) continue;
                             const dkReason = assignmentReasons[dk]?.[groupNum]?.[base];
                             if (dkReason && dkReason.type === 'skip') {
                                 baselineWasReplaced = true;
                                 break;
                             }
                         }
-                        if (baselineWasReplaced) {
-                            // Baseline person was replaced earlier, causing this shift - skip it
-                            continue;
-                        }
+                        if (baselineWasReplaced) continue;
                     }
-
-                    const reasonText = reasonObj?.reason
-                        ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
-                        : '';
-                    const briefReason = reasonText
-                        ? reasonText.split('.').filter(Boolean)[0]
-                        : (isBaseDisabledOrMissing
-                            ? (buildUnavailableReplacementReason({
-                                skippedPersonName: base,
-                                replacementPersonName: comp,
-                                dateObj,
-                                groupNum,
-                                dutyCategory: 'semi'
-                            }).split('.').filter(Boolean)[0] || '')
-                            : 'Αλλαγή');
-
                     const otherKey = reasonObj?.type === 'swap'
                         ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
                         : null;
+                    if (reasonObj?.type === 'swap' && reasonObj.swapPairId != null && otherKey && dateKey > otherKey) continue;
+                    const reasonText = reasonObj?.reason
+                        ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
+                        : '';
+                    // Same logic as normal: when missing or disabled use "Αντικατέστησε ..." sentence (buildUnavailableReplacementReason)
+                    let briefReason = isBaseDisabledOrMissing
+                        ? (buildUnavailableReplacementReason({
+                            skippedPersonName: base,
+                            replacementPersonName: comp,
+                            dateObj,
+                            groupNum,
+                            dutyCategory: 'semi'
+                        }).split('.').filter(Boolean)[0] || '')
+                        : (reasonText ? reasonText.split('.').filter(Boolean)[0] : 'Αλλαγή');
+
                     const swapDateStr = otherKey
                         ? new Date(otherKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
                         : '-';
+                    const otherDayName = otherKey ? getGreekDayName(new Date(otherKey + 'T00:00:00')) : '';
+                    const dateStrDisplay = (reasonObj?.type === 'swap' && otherKey) ? `${dayName} ${dateStr} ↔ ${otherDayName} ${swapDateStr}` : null;
 
                     rows.push({
                         dateKey,
                         dayName,
                         dateStr,
+                        dateStrDisplay,
                         groupNum,
                         service: getGroupName(groupNum),
                         skipped: base,
@@ -3570,8 +3554,9 @@
                 message += '<div class="table-responsive"><table class="table table-sm table-bordered">';
                 message += '<thead><tr><th>Ημερομηνία</th><th>Υπηρεσία</th><th>Παραλείφθηκε</th><th>Αντικαταστάθηκε από</th><th>Ημερομηνία Αλλαγής</th><th>Λόγος</th></tr></thead><tbody>';
                 rows.forEach(r => {
+                    const dateCol = r.dateStrDisplay != null ? r.dateStrDisplay : `${r.dayName} ${r.dateStr}`;
                     message += `<tr>
-                        <td>${r.dayName} ${r.dateStr}</td>
+                        <td>${dateCol}</td>
                         <td>${r.service}</td>
                         <td><strong>${r.skipped}</strong></td>
                         <td><strong>${r.replacement}</strong></td>
@@ -6427,9 +6412,8 @@
                         swappedSet.add(slotId);
                         swappedSet.add(`${dk2}:${groupNum}`);
                         semiSwapPairId++;
-                        const semiReasonShort = getUnavailableReasonShort(person, groupNum, dateObj, 'semi');
-                        storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey, semiReasonShort), person, semiSwapPairId);
-                        storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dk2, semiReasonShort), other, semiSwapPairId);
+                        storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey), person, semiSwapPairId);
+                        storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey), other, semiSwapPairId);
                         swapped = true;
                         break;
                     }
@@ -6456,9 +6440,8 @@
                             swappedSet.add(slotId);
                             swappedSet.add(`${dk2}:${groupNum}`);
                             semiSwapPairId++;
-                            const semiReasonShortFallback = getUnavailableReasonShort(person, groupNum, dateObj, 'semi');
-                            storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey, semiReasonShortFallback), person, semiSwapPairId);
-                            storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dk2, semiReasonShortFallback), other, semiSwapPairId);
+                            storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey), person, semiSwapPairId);
+                            storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey), other, semiSwapPairId);
                             break;
                         }
                     }
