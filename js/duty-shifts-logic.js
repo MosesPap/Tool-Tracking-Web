@@ -6357,7 +6357,9 @@
                     }
                     if (periodStart) {
                         const lastBeforeIdx = indicesInMonth.map((j, idx) => ({ j, idx })).filter(({ j }) => semiMeta[sortedSemi[j]]?.date < periodStart).pop()?.idx;
-                        if (lastBeforeIdx !== undefined) candidateIndices.push(...indicesInMonth.slice(0, lastBeforeIdx + 1));
+                        if (lastBeforeIdx !== undefined) {
+                            for (let k = lastBeforeIdx; k >= 0; k--) candidateIndices.push(indicesInMonth[k]);
+                        }
                     }
                     if (candidateIndices.length === 0) {
                         for (const j of indicesInMonth) {
