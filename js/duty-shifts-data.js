@@ -1628,10 +1628,20 @@
                 updateStatistics();
 
                 if (loadingAlert && loadingAlert.parentNode) loadingAlert.parentNode.removeChild(loadingAlert);
-                alert('Ο καθαρισμός ολοκληρώθηκε.');
+                const infoTitle = document.getElementById('infoMessageModalTitleText');
+                const infoBody = document.getElementById('infoMessageModalBody');
+                if (infoTitle) infoTitle.textContent = 'Καθαρισμός Firebase';
+                if (infoBody) infoBody.textContent = 'Ο καθαρισμός ολοκληρώθηκε.';
+                const infoModal = new bootstrap.Modal(document.getElementById('infoMessageModal'));
+                infoModal.show();
             } catch (error) {
                 console.error('Error clearing dutyShifts docs:', error);
-                alert('Σφάλμα κατά τον καθαρισμό: ' + error.message);
+                const infoTitle = document.getElementById('infoMessageModalTitleText');
+                const infoBody = document.getElementById('infoMessageModalBody');
+                if (infoTitle) infoTitle.textContent = 'Σφάλμα';
+                if (infoBody) infoBody.textContent = 'Σφάλμα κατά τον καθαρισμό: ' + error.message;
+                const infoModal = new bootstrap.Modal(document.getElementById('infoMessageModal'));
+                infoModal.show();
             }
         }
 
