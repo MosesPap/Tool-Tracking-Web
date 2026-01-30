@@ -3486,6 +3486,25 @@
                     if (base === comp) continue;
 
                     const reasonObj = getAssignmentReason(dateKey, groupNum, comp) || null;
+                    if (reasonObj && reasonObj.type === 'shift') continue;
+                    const isBaseDisabledOrMissing = isPersonDisabledForDuty(base, groupNum, 'semi') || isPersonMissingOnDate(base, groupNum, dateObj, 'semi');
+                    if (!reasonObj && isBaseDisabledOrMissing) continue;
+                    if (!reasonObj && !isBaseDisabledOrMissing) {
+                        const monthKey = `${dateObj.getFullYear()}-${dateObj.getMonth()}`;
+                        let baselineWasReplaced = false;
+                        for (const dk in assignmentReasons) {
+                            if (dk >= dateKey) break;
+                            const dkDate = new Date(dk + 'T00:00:00');
+                            const dkMonthKey = `${dkDate.getFullYear()}-${dkDate.getMonth()}`;
+                            if (dkMonthKey !== monthKey) continue;
+                            const dkReason = assignmentReasons[dk]?.[groupNum]?.[base];
+                            if (dkReason && dkReason.type === 'skip') {
+                                baselineWasReplaced = true;
+                                break;
+                            }
+                        }
+                        if (baselineWasReplaced) continue;
+                    }
                     const otherKey = reasonObj?.type === 'swap'
                         ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
                         : null;
@@ -3493,7 +3512,6 @@
                     const reasonText = reasonObj?.reason
                         ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
                         : '';
-                    const isBaseDisabledOrMissing = isPersonDisabledForDuty(base, groupNum, 'semi') || isPersonMissingOnDate(base, groupNum, dateObj, 'semi');
                     const briefReason = reasonText
                         ? reasonText.split('.').filter(Boolean)[0]
                         : (isBaseDisabledOrMissing
