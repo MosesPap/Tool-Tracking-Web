@@ -5556,8 +5556,9 @@
         .list-item { padding: 2px 0; }
         .ranking-number { font-weight: bold; color: #007bff; margin-right: 10px; }
         .empty-list { color: #999; font-style: italic; }
+        @page { margin: 1.5cm; }
         @media print {
-            body { padding: 10px; }
+            body { padding: 10px; margin: 0; }
             .print-page { page-break-after: always; }
             .print-page:last-of-type { page-break-after: auto; }
         }
