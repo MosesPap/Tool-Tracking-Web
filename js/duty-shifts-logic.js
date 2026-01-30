@@ -6429,7 +6429,7 @@
                         semiSwapPairId++;
                         const semiReasonShort = getUnavailableReasonShort(person, groupNum, dateObj, 'semi');
                         storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey, semiReasonShort), person, semiSwapPairId);
-                        storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey, semiReasonShort), other, semiSwapPairId);
+                        storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dk2, semiReasonShort), other, semiSwapPairId);
                         swapped = true;
                         break;
                     }
@@ -6458,7 +6458,7 @@
                             semiSwapPairId++;
                             const semiReasonShortFallback = getUnavailableReasonShort(person, groupNum, dateObj, 'semi');
                             storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey, semiReasonShortFallback), person, semiSwapPairId);
-                            storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey, semiReasonShortFallback), other, semiSwapPairId);
+                            storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dk2, semiReasonShortFallback), other, semiSwapPairId);
                             break;
                         }
                     }
