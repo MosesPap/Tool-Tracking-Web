@@ -3523,10 +3523,12 @@
             return d;
         }
         function previousMonth() {
+            currentDate.setDate(1);
             currentDate.setMonth(currentDate.getMonth() - 1);
             renderCalendar();
         }
         function nextMonth() {
+            currentDate.setDate(1);
             currentDate.setMonth(currentDate.getMonth() + 1);
             renderCalendar();
         }

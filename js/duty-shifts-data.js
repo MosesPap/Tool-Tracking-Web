@@ -531,7 +531,7 @@
         // Format: { "2026-02-05": { "1": "Person A", "2": "Person B", ... }, ... }
         // This ensures N-day rotation counts from the intended day, not the actual assignment day
         let intendedAssignments = {};
-        let currentDate = new Date();
+        let currentDate = (() => { const d = new Date(); d.setDate(1); return d; })();
         let currentGroup = null;
         // Manual assignment feature removed; keep dayDetails selection state elsewhere if needed.
         
