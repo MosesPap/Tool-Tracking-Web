@@ -6411,7 +6411,7 @@
                         swappedSet.add(`${dk2}:${groupNum}`);
                         semiSwapPairId++;
                         storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey), person, semiSwapPairId);
-                        storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dk2), other, semiSwapPairId);
+                        storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey), other, semiSwapPairId);
                         swapped = true;
                         break;
                     }
@@ -6439,7 +6439,7 @@
                             swappedSet.add(`${dk2}:${groupNum}`);
                             semiSwapPairId++;
                             storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey), person, semiSwapPairId);
-                            storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dk2), other, semiSwapPairId);
+                            storeAssignmentReason(dk2, groupNum, person, 'swap', buildSemiMissingSwapReasonGreek(person, dateKey, dateKey), other, semiSwapPairId);
                             break;
                         }
                     }
