@@ -4195,6 +4195,78 @@
                         const prevMonthEndKey = formatDateKey(prevMonthEnd);
                         const periodEndsInPrevMonth = (pEnd) => pEnd >= prevMonthStartKey && pEnd <= prevMonthEndKey;
 
+                        // Process deferred return-from-missing: assign 3 normal days after return in current calculated month.
+                        const deferredList = calculationSteps.deferredReturnFromMissing || [];
+                        calculationSteps.deferredReturnFromMissing = deferredList.filter((entry) => {
+                            if (entry.returnKey < calcStartKey || entry.returnKey > calcEndKey) return true;
+                            const personName = entry.personName, groupNum = entry.groupNum, returnKey = entry.returnKey, pEndKey = entry.pEndKey;
+                            let track = entry.track;
+                            if (!track) {
+                                const thirdNorm = findThirdNormalOnOrAfter(sortedNormal, returnKey);
+                                if (!thirdNorm) return true;
+                                track = getTrackFromDow(dateKeyToDate(thirdNorm).getDay());
+                            }
+                            if (!track) return true;
+                            const groupPeopleForReturn = (groups?.[groupNum]?.normal || []);
+                            for (const dk of sortedNormal) {
+                                if (dk < calcStartKey || dk > calcEndKey) continue;
+                                const curAssigned = updatedAssignments?.[dk]?.[groupNum] || null;
+                                if (!curAssigned || normName(curAssigned) !== normName(personName)) continue;
+                                const dateObj = dateKeyToDate(dk);
+                                const idxP = indexOfPersonInList(groupPeopleForReturn, personName);
+                                const replacement = idxP >= 0 ? pickNextEligibleIgnoringConflicts(groupPeopleForReturn, idxP, groupNum, dateObj) : null;
+                                if (!replacement) continue;
+                                if (!updatedAssignments[dk]) updatedAssignments[dk] = {};
+                                updatedAssignments[dk][groupNum] = replacement;
+                                storeAssignmentReason(dk, groupNum, replacement, 'shift', '', personName, null, { returnFromMissing: true, clearedEarlyReturnAssignment: true, targetKey: null, missingEnd: pEndKey, preClearedForReinsertion: true });
+                            }
+                            const thirdNormalKey = findThirdNormalOnOrAfter(sortedNormal, returnKey);
+                            if (!thirdNormalKey) return true;
+                            let targetKey = findFirstMatchingTrackOnOrAfter(sortedNormal, thirdNormalKey, track);
+                            const tryDeferred = (candidateKey) => {
+                                if (!candidateKey) return false;
+                                if (!canAssignPersonToNormalDay(candidateKey, personName, groupNum, updatedAssignments, globalNormalRotationPosition, simulatedSpecialAssignments, simulatedWeekendAssignments, simulatedSemiAssignments, { allowConsecutiveConflicts: true })) return false;
+                                const groupPeople = (groups?.[groupNum]?.normal || []);
+                                const chainOk = canShiftInsertFromDate(sortedNormal, candidateKey, groupNum, personName, groupPeople, updatedAssignments, globalNormalRotationPosition, simulatedSpecialAssignments, simulatedWeekendAssignments, simulatedSemiAssignments);
+                                return chainOk.ok;
+                            };
+                            while (targetKey) {
+                                if (targetKey > calcEndKey) break;
+                                if (tryDeferred(targetKey)) break;
+                                const nextThreshold = addDaysToDateKey(targetKey, 1);
+                                targetKey = nextThreshold ? findFirstMatchingTrackOnOrAfter(sortedNormal, nextThreshold, track) : null;
+                            }
+                            if (!targetKey) return true;
+                            const groupPeopleFinal = (groups?.[groupNum]?.normal || []);
+                            const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
+                            if (!ins.ok) return true;
+                            try {
+                                for (const dk of sortedNormal) {
+                                    if (dk < returnKey) continue;
+                                    if (dk >= targetKey) break;
+                                    const curAssigned = updatedAssignments?.[dk]?.[groupNum] || null;
+                                    if (!curAssigned || normName(curAssigned) !== normName(personName)) continue;
+                                    const dateObj = dateKeyToDate(dk);
+                                    const idxP = indexOfPersonInList(groupPeopleFinal, personName);
+                                    const replacement = idxP >= 0 ? pickNextEligibleIgnoringConflicts(groupPeopleFinal, idxP, groupNum, dateObj) : null;
+                                    if (!replacement) continue;
+                                    updatedAssignments[dk][groupNum] = replacement;
+                                    storeAssignmentReason(dk, groupNum, replacement, 'shift', '', personName, null, { returnFromMissing: true, clearedEarlyReturnAssignment: true, targetKey, missingEnd: pEndKey });
+                                }
+                            } catch (_) {}
+                            storeAssignmentReason(targetKey, groupNum, personName, 'skip', `Επέστρεψε από απουσία και επανεντάχθηκε στις καθημερινές μετά από 3 καθημερινές ημέρες (λογική ${track === 1 ? 'Δευτέρα/Τετάρτη' : 'Τρίτη/Πέμπτη'}).`, ins.originalAtTarget || null, null, { returnFromMissing: true, insertedByShift: true, missingEnd: pEndKey, fromDeferred: true });
+                            try {
+                                const chain = Array.isArray(ins.changes) ? ins.changes : [];
+                                for (const ch of chain) {
+                                    if (!ch || !ch.dateKey || ch.dateKey === targetKey) continue;
+                                    const newP = ch.newPerson;
+                                    if (!newP) continue;
+                                    storeAssignmentReason(ch.dateKey, groupNum, newP, 'shift', '', ch.prevPerson || null, null, { returnFromMissing: true, shiftedByReturnFromMissing: true, anchorDateKey: targetKey, missingEnd: pEndKey });
+                                }
+                            } catch (_) {}
+                            return false; // remove from deferred
+                        });
+
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
                             const g = groups?.[groupNum];
                             const missingMap = g?.missingPeriods || {};
@@ -4238,33 +4310,15 @@
 
                                     const pEndDate = dateKeyToDate(pEndKey);
                                     if (isNaN(pEndDate.getTime())) continue;
-                                    const monthStartKey = formatDateKey(new Date(pEndDate.getFullYear(), pEndDate.getMonth(), 1));
 
-                                    // Find first missed baseline normal duty date in scan window.
+                                    // Find first missed baseline normal duty in CALCULATED MONTH only (missing period ∩ calc range).
+                                    const overlapStartKey = maxDateKey(pStartKey, calcStartKey);
+                                    const overlapEndKey = minDateKey(pEndKey, calcEndKey);
                                     let firstMissedKey = null;
-                                    if (pEndKey >= calcStartKey) {
-                                        // Period end is within calculated range: scan sortedNormal within missing window.
-                                        const scanStartKey = maxDateKey(maxDateKey(monthStartKey, pStartKey), calcStartKey);
-                                        const scanEndKey = minDateKey(pEndKey, calcEndKey);
-                                        if (scanStartKey && scanEndKey && scanStartKey <= scanEndKey) {
-                                            for (const dk of sortedNormal) {
-                                                if (dk < scanStartKey) continue;
-                                                if (dk > scanEndKey) break;
-                                                const baselinePerson =
-                                                    baselineNormalByDate?.[dk]?.[groupNum] ||
-                                                    parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
-                                                    null;
-                                                if (baselinePerson === personName) {
-                                                    firstMissedKey = dk;
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        // Period end is before calc start (previous month): scan each day in period for baseline.
-                                        for (let d = new Date(pStartKey + 'T00:00:00'); d <= pEndDate; d.setDate(d.getDate() + 1)) {
-                                            const dk = formatDateKey(d);
-                                            if (getDayType(d) !== 'normal') continue;
+                                    if (overlapStartKey && overlapEndKey && overlapStartKey <= overlapEndKey) {
+                                        for (const dk of sortedNormal) {
+                                            if (dk < overlapStartKey) continue;
+                                            if (dk > overlapEndKey) break;
                                             const baselinePerson =
                                                 baselineNormalByDate?.[dk]?.[groupNum] ||
                                                 parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
@@ -4280,14 +4334,21 @@
                                     fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logFm,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
                                     console.log('[DEBUG returnFromMissing]', _logFm);
                                     // #endregion
-                                    if (!firstMissedKey) continue;
-
-                                    const track = getTrackFromDow(dateKeyToDate(firstMissedKey).getDay());
-                                    if (!track) continue;
-
                                     // Return day is end+1
                                     const returnKey = addDaysToDateKey(pEndKey, 1);
                                     if (!returnKey) continue;
+
+                                    // If no baseline duty in calculated month during missing period, defer to next month if return is next month.
+                                    if (!firstMissedKey) {
+                                        if (returnKey > calcEndKey) {
+                                            calculationSteps.deferredReturnFromMissing = calculationSteps.deferredReturnFromMissing || [];
+                                            calculationSteps.deferredReturnFromMissing.push({ personName, groupNum, pEndKey, returnKey });
+                                        }
+                                        continue;
+                                    }
+
+                                    const track = getTrackFromDow(dateKeyToDate(firstMissedKey).getDay());
+                                    if (!track) continue;
 
                                     // Pre-clear: remove the returning person from any normal-day slot in the calculation range
                                     // so that feasibility checks (canAssignPersonToNormalDay / canShiftInsertFromDate) do not
@@ -4316,16 +4377,14 @@
                                         );
                                     }
 
-                                    // Count 3 normal days starting at returnKey (on-or-after), then find nearest track day on/after that.
-                                    const thirdNormalKey = findThirdNormalOnOrAfter(sortedNormal, returnKey);
-                                    if (!thirdNormalKey) continue;
+                                    // Same month = CALCULATED month (not return month). Forward only possible when return is in calc month.
+                                    const sameMonthStartKey = calcStartKey;
+                                    const sameMonthEndKey = calcEndKey;
+                                    const returnInCalcMonth = (returnKey >= calcStartKey && returnKey <= calcEndKey);
 
-                                    // Same month as return (for backward/forward "in same month").
+                                    // Count 3 normal days starting at returnKey (on-or-after), then find nearest track day on/after that (used for forward and for deferred).
+                                    const thirdNormalKey = findThirdNormalOnOrAfter(sortedNormal, returnKey);
                                     const returnDate = dateKeyToDate(returnKey);
-                                    const sameMonthStart = new Date(returnDate.getFullYear(), returnDate.getMonth(), 1);
-                                    const sameMonthEnd = new Date(returnDate.getFullYear(), returnDate.getMonth() + 1, 0);
-                                    const sameMonthStartKey = formatDateKey(sameMonthStart);
-                                    const sameMonthEndKey = formatDateKey(sameMonthEnd);
 
                                     const tryTargetKey = (candidateKey) => {
                                         if (!candidateKey) return false;
@@ -4374,43 +4433,41 @@
                                         return chainOk.ok;
                                     };
 
-                                    // 1) Backward swap in same month: try track days in same month that are before thirdNormalKey (latest first).
                                     let targetKey = null;
-                                    const backwardCandidates = [];
-                                    for (const dk of sortedNormal) {
-                                        if (dk < sameMonthStartKey || dk > sameMonthEndKey) continue;
-                                        if (dk >= thirdNormalKey) continue;
-                                        if (!trackMatches(dk, track)) continue;
-                                        backwardCandidates.push(dk);
-                                    }
-                                    backwardCandidates.sort((a, b) => (b > a ? 1 : (a > b ? -1 : 0))); // descending: latest first
-                                    for (const candidate of backwardCandidates) {
-                                        if (tryTargetKey(candidate)) {
-                                            targetKey = candidate;
-                                            break;
+
+                                    // 1) Forward in same month: only when return is in calculated month (otherwise impossible).
+                                    if (returnInCalcMonth && thirdNormalKey) {
+                                        targetKey = findFirstMatchingTrackOnOrAfter(sortedNormal, thirdNormalKey, track);
+                                        while (targetKey) {
+                                            if (targetKey > sameMonthEndKey) break;
+                                            if (tryTargetKey(targetKey)) break;
+                                            const nextThreshold = addDaysToDateKey(targetKey, 1);
+                                            targetKey = nextThreshold ? findFirstMatchingTrackOnOrAfter(sortedNormal, nextThreshold, track) : null;
                                         }
                                     }
 
-                                    // 2) Forward swap in same month: if no backward slot worked, try from third normal day onward (same as before).
+                                    // 2) Backward swap in same month: use absence START (pStartKey) as reference – track days in calc month before pStartKey (latest first).
                                     if (!targetKey) {
-                                        targetKey = findFirstMatchingTrackOnOrAfter(sortedNormal, thirdNormalKey, track);
-                                        while (targetKey) {
-                                            if (targetKey > sameMonthEndKey) break; // stay in same month for forward attempt
-                                            if (tryTargetKey(targetKey)) break;
-                                            const nextThreshold = addDaysToDateKey(targetKey, 1);
-                                            targetKey = nextThreshold ? findFirstMatchingTrackOnOrAfter(sortedNormal, nextThreshold, track) : null;
+                                        const backwardCandidates = [];
+                                        for (const dk of sortedNormal) {
+                                            if (dk < sameMonthStartKey || dk > sameMonthEndKey) continue;
+                                            if (dk >= pStartKey) continue; // only before absence start
+                                            if (!trackMatches(dk, track)) continue;
+                                            backwardCandidates.push(dk);
+                                        }
+                                        backwardCandidates.sort((a, b) => (b > a ? 1 : (a > b ? -1 : 0)));
+                                        for (const candidate of backwardCandidates) {
+                                            if (tryTargetKey(candidate)) {
+                                                targetKey = candidate;
+                                                break;
+                                            }
                                         }
                                     }
 
-                                    // 3) Fallback: if backward/forward in same month failed and absence ended so that return is at start of next month,
-                                    //    assign 3 normal days after return (search forward without same-month limit).
-                                    if (!targetKey && returnDate.getDate() === 1) {
-                                        targetKey = findFirstMatchingTrackOnOrAfter(sortedNormal, thirdNormalKey, track);
-                                        while (targetKey) {
-                                            if (tryTargetKey(targetKey)) break;
-                                            const nextThreshold = addDaysToDateKey(targetKey, 1);
-                                            targetKey = nextThreshold ? findFirstMatchingTrackOnOrAfter(sortedNormal, nextThreshold, track) : null;
-                                        }
+                                    // 3) If no slot in calculated month and return is next month: defer to next month calculation.
+                                    if (!targetKey && returnKey > calcEndKey) {
+                                        calculationSteps.deferredReturnFromMissing = calculationSteps.deferredReturnFromMissing || [];
+                                        calculationSteps.deferredReturnFromMissing.push({ personName, groupNum, pEndKey, returnKey, track });
                                     }
 
                                     // #region agent log
