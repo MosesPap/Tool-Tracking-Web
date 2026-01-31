@@ -3325,12 +3325,6 @@
                                     const c = swapColors[(isNaN(pid) ? 0 : pid) % swapColors.length];
                                     swapStyle = `border: 2px solid ${c.border}; background-color: ${c.bg};`;
                                 }
-                                // Show return-from-missing (skip or shift) as swap in cell so the associated cell is visible
-                                if (r && (r.type === 'skip' || r.type === 'shift') && r.meta && (r.meta.returnFromMissing || r.meta.insertedByShift || r.meta.shiftedByReturnFromMissing)) {
-                                    isSwap = true;
-                                    const c = swapColors[7]; // fixed index for return-from-missing so all related cells match
-                                    swapStyle = `border: 2px solid ${c.border}; background-color: ${c.bg};`;
-                                }
                                 if (r && r.type === 'skip') {
                                     underline = true;
                                 } else if (r && r.type === 'shift') {

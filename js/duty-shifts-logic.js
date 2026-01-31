@@ -5345,7 +5345,48 @@
                 console.error('[STEP 4] Error running normal swap logic:', error);
             }
         }
+        function updateStep4TableWithFinalAssignments(finalAssignments) {
+            const stepContent = document.getElementById('stepContent');
+            if (!stepContent) return;
+            const tableBody = stepContent.querySelector('tbody');
+            if (!tableBody) return;
+            const dayTypeLists = calculationSteps.dayTypeLists || { normal: [], semi: [], special: [], weekend: [] };
+            const normalDays = dayTypeLists.normal || [];
+            const sortedNormal = [...normalDays].sort();
+            if (sortedNormal.length === 0) return;
+            const baseline = calculationSteps.tempNormalBaselineAssignments || {};
+            const startDate = calculationSteps.startDate;
+            for (let normalIndex = 0; normalIndex < sortedNormal.length; normalIndex++) {
+                const dateKey = sortedNormal[normalIndex];
+                const row = tableBody.rows[normalIndex];
+                if (!row || row.cells.length < 6) continue;
+                const date = new Date(dateKey + 'T00:00:00');
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const groupData = groups?.[groupNum] || { normal: [] };
+                    const groupPeople = groupData.normal || [];
+                    const assignedPerson = finalAssignments?.[dateKey]?.[groupNum];
+                    let daysCountInfo = '';
+                    let lastDutyInfo = '';
+                    if (assignedPerson && groupPeople.length) {
+                        const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'normal', dayTypeLists, startDate);
+                        const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'normal', groupPeople.length);
+                        lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
+                        if (daysSince !== null && daysSince !== Infinity) {
+                            daysCountInfo = ` <span class="text-info">${daysSince}/${groupPeople.length} ημέρες</span>`;
+                        } else if (daysSince === Infinity) {
+                            daysCountInfo = ' <span class="text-success">πρώτη φορά</span>';
+                        }
+                    }
+                    const baselinePerson = baseline?.[dateKey]?.[groupNum] || null;
+                    const cellHtml = buildBaselineComputedCellHtml(baselinePerson, assignedPerson, daysCountInfo, lastDutyInfo);
+                    const cellIndex = 1 + groupNum;
+                    if (row.cells[cellIndex]) row.cells[cellIndex].innerHTML = cellHtml;
+                }
+            }
+        }
+
         function showNormalSwapResults(swappedPeople, updatedAssignments) {
+            updateStep4TableWithFinalAssignments(updatedAssignments);
             const findSwapOtherDateKey = (swapPairIdRaw, groupNum, currentDateKey) => {
                 if (swapPairIdRaw === null || swapPairIdRaw === undefined) return null;
                 const swapPairId = typeof swapPairIdRaw === 'number' ? swapPairIdRaw : parseInt(swapPairIdRaw);
