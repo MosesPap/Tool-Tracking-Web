@@ -4434,6 +4434,7 @@
                                     };
 
                                     let targetKey = null;
+                                    let isBackwardAssignment = false;
 
                                     // 1) Forward in same month: only when return is in calculated month (otherwise impossible).
                                     if (returnInCalcMonth && thirdNormalKey) {
@@ -4446,12 +4447,14 @@
                                         }
                                     }
 
-                                    // 2) Backward swap in same month: use absence START (pStartKey) as reference – track days in calc month before pStartKey (latest first).
+                                    // 2) Backward swap in same month: use absence START (pStartKey) as reference – track days in calc month before pStartKey (latest first), avoiding the day before absence start.
+                                    const dayBeforeStartKey = addDaysToDateKey(pStartKey, -1);
                                     if (!targetKey) {
                                         const backwardCandidates = [];
                                         for (const dk of sortedNormal) {
                                             if (dk < sameMonthStartKey || dk > sameMonthEndKey) continue;
                                             if (dk >= pStartKey) continue; // only before absence start
+                                            if (dk === dayBeforeStartKey) continue; // avoid one day before missing start
                                             if (!trackMatches(dk, track)) continue;
                                             backwardCandidates.push(dk);
                                         }
@@ -4459,6 +4462,7 @@
                                         for (const candidate of backwardCandidates) {
                                             if (tryTargetKey(candidate)) {
                                                 targetKey = candidate;
+                                                isBackwardAssignment = true;
                                                 break;
                                             }
                                         }
@@ -4520,15 +4524,24 @@
                                         }
                                     } catch (_) {}
 
+                                    const formatDDMMYYYY = (dateKey) => {
+                                        const d = dateKeyToDate(dateKey);
+                                        return (d.getDate() < 10 ? '0' : '') + d.getDate() + '/' + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1) + '/' + d.getFullYear();
+                                    };
+                                    const missingRangeStr = formatDDMMYYYY(pStartKey) + ' - ' + formatDDMMYYYY(pEndKey);
+                                    const reasonOfMissing = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
+                                    const assignmentReasonText = isBackwardAssignment
+                                        ? `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${missingRangeStr}) λόγω ${reasonOfMissing}`
+                                        : `Επέστρεψε από απουσία και επανεντάχθηκε στις καθημερινές μετά από 3 καθημερινές ημέρες (λογική ${track === 1 ? 'Δευτέρα/Τετάρτη' : 'Τρίτη/Πέμπτη'}).`;
                                     storeAssignmentReason(
                                         targetKey,
                                         groupNum,
                                         personName,
                                         'skip',
-                                        `Επέστρεψε από απουσία και επανεντάχθηκε στις καθημερινές μετά από 3 καθημερινές ημέρες (λογική ${track === 1 ? 'Δευτέρα/Τετάρτη' : 'Τρίτη/Πέμπτη'}).`,
+                                        assignmentReasonText,
                                         ins.originalAtTarget || null,
                                         null,
-                                        { returnFromMissing: true, insertedByShift: true, missingEnd: pEndKey }
+                                        { returnFromMissing: true, insertedByShift: true, missingEnd: pEndKey, isBackwardAssignment }
                                     );
 
                                     // IMPORTANT: Do NOT underline / do NOT treat as swap the people that got pushed forward.
