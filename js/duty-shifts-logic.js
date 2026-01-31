@@ -4206,11 +4206,29 @@
                                     if (!pStartKey || !pEndKey) continue;
                                     const endInRange = (pEndKey >= calcStartKey && pEndKey <= calcEndKey);
                                     const endInPrevMonth = periodEndsInPrevMonth(pEndKey);
-                                    if (!endInRange && !endInPrevMonth) continue;
-
+                                    // #region agent log
+                                    if (!endInRange && !endInPrevMonth) {
+                                        const _log = {location:'returnFromMissing:range',message:'period skipped: end not in range',data:{groupNum,personName,pStartKey,pEndKey,calcStartKey,calcEndKey,endInRange,endInPrevMonth},hypothesisId:'H1'};
+                                        fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._log,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                        console.log('[DEBUG returnFromMissing]', _log);
+                                        continue;
+                                    }
+                                    // #endregion
                                     const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
-                                    if (processed.has(dedupeKey)) continue;
+                                    if (processed.has(dedupeKey)) {
+                                        // #region agent log
+                                        const _log = {location:'returnFromMissing:dedupe',message:'period skipped: dedupe',data:{groupNum,personName,pEndKey,dedupeKey},hypothesisId:'H1'};
+                                        fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._log,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                        console.log('[DEBUG returnFromMissing]', _log);
+                                        // #endregion
+                                        continue;
+                                    }
                                     processed.add(dedupeKey);
+                                    // #region agent log
+                                    const _logAcc = {location:'returnFromMissing:accepted',message:'period accepted for reinsertion',data:{groupNum,personName,pStartKey,pEndKey,calcStartKey,calcEndKey},hypothesisId:'H1'};
+                                    fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logAcc,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                    console.log('[DEBUG returnFromMissing]', _logAcc);
+                                    // #endregion
 
                                     const pEndDate = dateKeyToDate(pEndKey);
                                     if (isNaN(pEndDate.getTime())) continue;
@@ -4251,6 +4269,11 @@
                                             }
                                         }
                                     }
+                                    // #region agent log
+                                    const _logFm = {location:'returnFromMissing:firstMissed',message:'firstMissedKey result',data:{groupNum,personName,pEndKey,firstMissedKey:firstMissedKey||null},hypothesisId:'H2'};
+                                    fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logFm,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                    console.log('[DEBUG returnFromMissing]', _logFm);
+                                    // #endregion
                                     if (!firstMissedKey) continue;
 
                                     const track = getTrackFromDow(dateKeyToDate(firstMissedKey).getDay());
@@ -4300,6 +4323,13 @@
 
                                     const tryTargetKey = (candidateKey) => {
                                         if (!candidateKey) return false;
+                                        // #region agent log
+                                        const dateObjForCandidate = dateKeyToDate(candidateKey);
+                                        const isMissingOnCandidate = typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(personName, groupNum, dateObjForCandidate, 'normal');
+                                        const _logTc = {location:'tryTargetKey:check',message:'tryTargetKey candidate',data:{candidateKey,personName,groupNum,isMissingOnCandidate},hypothesisId:'H3,H4'};
+                                        fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logTc,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                        console.log('[DEBUG returnFromMissing]', _logTc);
+                                        // #endregion
                                         const okReturning = canAssignPersonToNormalDay(
                                             candidateKey,
                                             personName,
@@ -4311,6 +4341,11 @@
                                             simulatedSemiAssignments,
                                             { allowConsecutiveConflicts: true }
                                         );
+                                        // #region agent log
+                                        const _logOk = {location:'tryTargetKey:okReturning',message:'canAssignPersonToNormalDay result',data:{candidateKey,personName,okReturning},hypothesisId:'H3,H4'};
+                                        fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logOk,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                        console.log('[DEBUG returnFromMissing]', _logOk);
+                                        // #endregion
                                         if (!okReturning) return false;
                                         const groupPeople = (groups?.[groupNum]?.normal || []);
                                         const chainOk = canShiftInsertFromDate(
@@ -4325,6 +4360,11 @@
                                             simulatedWeekendAssignments,
                                             simulatedSemiAssignments
                                         );
+                                        // #region agent log
+                                        const _logCh = {location:'tryTargetKey:chainOk',message:'canShiftInsertFromDate result',data:{candidateKey,personName,chainOk:chainOk.ok,reason:chainOk.reason||null,dateKey:chainOk.dateKey||null,person:chainOk.person||null},hypothesisId:'H3'};
+                                        fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logCh,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                        console.log('[DEBUG returnFromMissing]', _logCh);
+                                        // #endregion
                                         return chainOk.ok;
                                     };
 
@@ -4367,11 +4407,23 @@
                                         }
                                     }
 
+                                    // #region agent log
+                                    if (!targetKey) {
+                                        const _logNt = {location:'returnFromMissing:noTarget',message:'no feasible targetKey after all phases',data:{groupNum,personName,returnKey,thirdNormalKey,sameMonthEndKey},hypothesisId:'H3'};
+                                        fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logNt,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                        console.log('[DEBUG returnFromMissing]', _logNt);
+                                    }
+                                    // #endregion
                                     if (!targetKey) continue;
 
                                     // Apply shift insertion (follow rotation): everyone moves to the next normal day.
                                     const groupPeopleFinal = (groups?.[groupNum]?.normal || []);
                                     const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
+                                    // #region agent log
+                                    const _logAp = {location:'returnFromMissing:apply',message:'applyShiftInsertFromDate result',data:{groupNum,personName,targetKey,insOk:ins.ok},hypothesisId:'H5'};
+                                    fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logAp,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                    console.log('[DEBUG returnFromMissing]', _logAp);
+                                    // #endregion
                                     if (!ins.ok) continue;
 
                                     // IMPORTANT: Enforce "after 3 normal days" by preventing any earlier normal-day assignment
