@@ -4206,9 +4206,12 @@
                                     if (!pStartKey || !pEndKey) continue;
                                     const endInRange = (pEndKey >= calcStartKey && pEndKey <= calcEndKey);
                                     const endInPrevMonth = periodEndsInPrevMonth(pEndKey);
+                                    // Also accept when return day (day after period end) falls in calculation range
+                                    const returnKeyForRange = addDaysToDateKey(pEndKey, 1);
+                                    const returnInRange = returnKeyForRange && returnKeyForRange >= calcStartKey && returnKeyForRange <= calcEndKey;
                                     // #region agent log
-                                    if (!endInRange && !endInPrevMonth) {
-                                        const _log = {location:'returnFromMissing:range',message:'period skipped: end not in range',data:{groupNum,personName,pStartKey,pEndKey,calcStartKey,calcEndKey,endInRange,endInPrevMonth},hypothesisId:'H1'};
+                                    if (!endInRange && !endInPrevMonth && !returnInRange) {
+                                        const _log = {location:'returnFromMissing:range',message:'period skipped: end not in range',data:{groupNum,personName,pStartKey,pEndKey,calcStartKey,calcEndKey,endInRange,endInPrevMonth,returnKeyForRange,returnInRange},hypothesisId:'H1'};
                                         fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._log,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
                                         console.log('[DEBUG returnFromMissing]', _log);
                                         continue;
@@ -7849,6 +7852,8 @@
                     if (startDate && endDate && Array.isArray(sortedNormal) && sortedNormal.length > 0) {
                         const calcStartKey = formatDateKey(startDate);
                         const calcEndKey = formatDateKey(endDate);
+                        const maxDateKey = (a, b) => (!a ? b : (!b ? a : (a > b ? a : b)));
+                        const minDateKey = (a, b) => (!a ? b : (!b ? a : (a < b ? a : b)));
                         const processedMissingReplacements = new Set(); // "g|person|periodEnd" to avoid duplicate processing
                         
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
