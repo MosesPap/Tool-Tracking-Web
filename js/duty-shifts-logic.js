@@ -6363,7 +6363,9 @@
                                 }
                             }
                             
-                            html += `<td>${buildBaselineComputedCellHtml(rotationPerson, displayPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                            // Use stored baseline (weekendRotationPersons) so when rotation person was disabled we show replacement only, not "Βασική Σειρά: disabled" + "Αντικατάσταση"
+                            const baselinePersonForDisplay = weekendRotationPersons[dateKey]?.[groupNum] ?? rotationPerson;
+                            html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplay, displayPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
                     
