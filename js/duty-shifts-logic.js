@@ -4188,6 +4188,12 @@
                         const calcStartKey = formatDateKey(calcStartDate);
                         const calcEndKey = formatDateKey(calcEndDate);
                         const processed = new Set(); // "g|person|periodEnd"
+                        // Allow periods that end in the month immediately before calc start (so return/reinsertion can fall in calculated month)
+                        const prevMonthStart = new Date(calcStartDate.getFullYear(), calcStartDate.getMonth() - 1, 1);
+                        const prevMonthEnd = new Date(calcStartDate.getFullYear(), calcStartDate.getMonth(), 0);
+                        const prevMonthStartKey = formatDateKey(prevMonthStart);
+                        const prevMonthEndKey = formatDateKey(prevMonthEnd);
+                        const periodEndsInPrevMonth = (pEnd) => pEnd >= prevMonthStartKey && pEnd <= prevMonthEndKey;
 
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
                             const g = groups?.[groupNum];
@@ -4198,7 +4204,9 @@
                                     const pStartKey = inputValueToDateKey(period?.start);
                                     const pEndKey = inputValueToDateKey(period?.end);
                                     if (!pStartKey || !pEndKey) continue;
-                                    if (pEndKey < calcStartKey || pEndKey > calcEndKey) continue; // only handle when the end is within the calculated range
+                                    const endInRange = (pEndKey >= calcStartKey && pEndKey <= calcEndKey);
+                                    const endInPrevMonth = periodEndsInPrevMonth(pEndKey);
+                                    if (!endInRange && !endInPrevMonth) continue;
 
                                     const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                                     if (processed.has(dedupeKey)) continue;
@@ -4208,24 +4216,39 @@
                                     if (isNaN(pEndDate.getTime())) continue;
                                     const monthStartKey = formatDateKey(new Date(pEndDate.getFullYear(), pEndDate.getMonth(), 1));
 
-                                    // Only scan within missing window and within calculated range, but starting from month-start as requested.
-                                    const scanStartKey = maxDateKey(maxDateKey(monthStartKey, pStartKey), calcStartKey);
-                                    const scanEndKey = minDateKey(pEndKey, calcEndKey);
-                                    if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
-
                                     // Find first missed baseline normal duty date in scan window.
                                     let firstMissedKey = null;
-                                    for (const dk of sortedNormal) {
-                                        if (dk < scanStartKey) continue;
-                                        if (dk > scanEndKey) break;
-                                        // Prefer in-memory baseline map from Step 4 preview; fall back to saved baseline doc if missing.
-                                        const baselinePerson =
-                                            baselineNormalByDate?.[dk]?.[groupNum] ||
-                                            parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
-                                            null;
-                                        if (baselinePerson === personName) {
-                                            firstMissedKey = dk;
-                                            break;
+                                    if (pEndKey >= calcStartKey) {
+                                        // Period end is within calculated range: scan sortedNormal within missing window.
+                                        const scanStartKey = maxDateKey(maxDateKey(monthStartKey, pStartKey), calcStartKey);
+                                        const scanEndKey = minDateKey(pEndKey, calcEndKey);
+                                        if (scanStartKey && scanEndKey && scanStartKey <= scanEndKey) {
+                                            for (const dk of sortedNormal) {
+                                                if (dk < scanStartKey) continue;
+                                                if (dk > scanEndKey) break;
+                                                const baselinePerson =
+                                                    baselineNormalByDate?.[dk]?.[groupNum] ||
+                                                    parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
+                                                    null;
+                                                if (baselinePerson === personName) {
+                                                    firstMissedKey = dk;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        // Period end is before calc start (previous month): scan each day in period for baseline.
+                                        for (let d = new Date(pStartKey + 'T00:00:00'); d <= pEndDate; d.setDate(d.getDate() + 1)) {
+                                            const dk = formatDateKey(d);
+                                            if (getDayType(d) !== 'normal') continue;
+                                            const baselinePerson =
+                                                baselineNormalByDate?.[dk]?.[groupNum] ||
+                                                parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
+                                                null;
+                                            if (baselinePerson === personName) {
+                                                firstMissedKey = dk;
+                                                break;
+                                            }
                                         }
                                     }
                                     if (!firstMissedKey) continue;
