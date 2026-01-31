@@ -2179,7 +2179,9 @@
                                 }
                             }
                             
-                            html += `<td>${buildBaselineComputedCellHtml(rotationPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                            // Use stored baseline (specialRotationPersons) so when rotation person was disabled we show replacement only, not "Βασική Σειρά: disabled" + "Αντικατάσταση"
+                            const baselinePersonForDisplay = specialRotationPersons[dateKey]?.[groupNum] ?? rotationPerson;
+                            html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplay, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
                     
@@ -7520,7 +7522,9 @@
                                 }
                             }
                             
-                            html += `<td>${buildBaselineComputedCellHtml(rotationPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                            // Use stored baseline (semiRotationPersons) so when rotation person was disabled we show replacement only, not "Βασική Σειρά: disabled" + "Αντικατάσταση"
+                            const baselinePersonForDisplay = semiRotationPersons[dateKey]?.[groupNum] ?? rotationPerson;
+                            html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplay, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                             }
                         }
                     }
@@ -8673,7 +8677,7 @@
                                 }
                             }
                             
-                            // Use original rotation person for baseline display (from normalRotationPersons)
+                            // Use stored baseline (normalRotationPersons) so when rotation person was disabled we show replacement only, not "Βασική Σειρά: disabled" + "Αντικατάσταση"
                             const baselinePersonForDisplay = normalRotationPersons[dateKey]?.[groupNum] || originalRotationPerson;
                             html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplay, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
