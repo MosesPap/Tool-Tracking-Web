@@ -4209,9 +4209,12 @@
                                     // Also accept when return day (day after period end) falls in calculation range
                                     const returnKeyForRange = addDaysToDateKey(pEndKey, 1);
                                     const returnInRange = returnKeyForRange && returnKeyForRange >= calcStartKey && returnKeyForRange <= calcEndKey;
+                                    // Also accept when period overlaps the calculation range at all (handles format/edge cases)
+                                    const periodOverlapsRange = (pStartKey <= calcEndKey && pEndKey >= calcStartKey);
+                                    const acceptPeriod = endInRange || endInPrevMonth || returnInRange || periodOverlapsRange;
                                     // #region agent log
-                                    if (!endInRange && !endInPrevMonth && !returnInRange) {
-                                        const _log = {location:'returnFromMissing:range',message:'period skipped: end not in range',data:{groupNum,personName,pStartKey,pEndKey,calcStartKey,calcEndKey,endInRange,endInPrevMonth,returnKeyForRange,returnInRange},hypothesisId:'H1'};
+                                    if (!acceptPeriod) {
+                                        const _log = {location:'returnFromMissing:range',message:'period skipped: end not in range',data:{groupNum,personName,pStartKey,pEndKey,calcStartKey,calcEndKey,endInRange,endInPrevMonth,returnKeyForRange,returnInRange,periodOverlapsRange},hypothesisId:'H1'};
                                         fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._log,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
                                         console.log('[DEBUG returnFromMissing]', _log);
                                         continue;
