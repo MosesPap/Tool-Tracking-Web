@@ -2071,11 +2071,11 @@
                             if (!specialRotationPersons[dateKey]) {
                                 specialRotationPersons[dateKey] = {};
                             }
-                            specialRotationPersons[dateKey][groupNum] = rotationPerson;
 
                             let assignedPerson = rotationPerson;
                             let wasReplaced = false;
                             let replacementIndex = null;
+                            let wasDisabledOnlySkippedSpecial = false;
                             // DISABLED: When rotation person is disabled, whole baseline shifts – skip them, no replacement line.
                             const isRotationPersonDisabledSpecial = rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'special');
                             if (isRotationPersonDisabledSpecial) {
@@ -2089,12 +2089,14 @@
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
                                     wasReplaced = true;
+                                    wasDisabledOnlySkippedSpecial = true;
                                     foundEligible = true;
-                                    specialRotationPersons[dateKey][groupNum] = candidate;
                                     break;
                                 }
                                 if (!foundEligible) assignedPerson = null;
                             }
+                            // Store baseline for UI: when disabled skip use assigned person so no swap line (same as normal; avoids next day showing as swap)
+                            specialRotationPersons[dateKey][groupNum] = wasDisabledOnlySkippedSpecial && assignedPerson ? assignedPerson : rotationPerson;
                             // MISSING (not disabled): show replacement and store reason.
                             if (!isRotationPersonDisabledSpecial && assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special')) {
                                 let foundReplacement = false;
@@ -7325,12 +7327,11 @@
                             if (!semiRotationPersons[dateKey]) {
                                 semiRotationPersons[dateKey] = {};
                             }
-                            semiRotationPersons[dateKey][groupNum] = rotationPerson;
                             
                             let assignedPerson = rotationPerson;
                             let wasReplaced = false;
                             let replacementIndex = null;
-                            
+                            let wasDisabledOnlySkippedSemi = false;
                             // DISABLED: When rotation person is disabled, whole baseline shifts – skip them, no replacement line. (Same treatment as special/weekend/normal.)
                             const isRotationPersonDisabledSemi = rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'semi');
                             if (isRotationPersonDisabledSemi) {
@@ -7354,12 +7355,14 @@
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
                                     wasReplaced = true;
+                                    wasDisabledOnlySkippedSemi = true;
                                     foundEligible = true;
-                                    semiRotationPersons[dateKey][groupNum] = candidate;
                                     break;
                                 }
                                 if (!foundEligible) assignedPerson = null;
                             }
+                            // Store baseline for UI: when disabled skip use assigned person so no swap line (same as normal; avoids next day showing as swap)
+                            semiRotationPersons[dateKey][groupNum] = wasDisabledOnlySkippedSemi && assignedPerson ? assignedPerson : rotationPerson;
                             // MISSING (not disabled): show replacement and store reason.
                             if (!isRotationPersonDisabledSemi && assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
                                 if (!assignedPeoplePreviewSemi[monthKey][groupNum]) {
@@ -8386,11 +8389,14 @@
                                 if (!foundEligible) assignedPerson = null;
                             }
                             
-                            // Store baseline for UI: for disabled-only skip we store the assigned (eligible) person so no replacement line; else original.
+                            // Store baseline for UI: for disabled-only skip use assigned person; when baseline was replaced in pre-processing (next day after disabled skip) use rotationPerson so we don't show as swap; else original.
                             if (!normalRotationPersons[dateKey]) {
                                 normalRotationPersons[dateKey] = {};
                             }
-                            normalRotationPersons[dateKey][groupNum] = wasDisabledOnlySkippedInBaseline ? (assignedPerson || originalRotationPerson) : originalRotationPerson;
+                            const baselineForDisplay = wasDisabledOnlySkippedInBaseline
+                                ? (assignedPerson || originalRotationPerson)
+                                : (wasReplacedFromBaseline ? rotationPerson : originalRotationPerson);
+                            normalRotationPersons[dateKey][groupNum] = baselineForDisplay;
                             
                             // CRITICAL: Check if the rotation person is MISSING (not disabled-only) – show replacement and store reason.
                             // Disabled-only is already handled above (no replacement reason).
