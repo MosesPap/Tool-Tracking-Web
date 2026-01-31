@@ -8200,19 +8200,6 @@
                             html += '<td class="text-muted">-</td>';
                         } else {
                             const rotationDays = groupPeople.length;
-                            // Helper: person has a missing period containing this date (used to distinguish disabled-only vs missing).
-                            const isInMissingPeriodOnDate = (person, gnum, d) => {
-                                const g = groups?.[gnum] || {};
-                                const periods = Array.isArray(g.missingPeriods?.[person]) ? g.missingPeriods[person] : [];
-                                if (periods.length === 0) return false;
-                                const checkDate = new Date(d);
-                                checkDate.setHours(0, 0, 0, 0);
-                                return periods.some(p => {
-                                    const start = new Date((p?.start || '') + 'T00:00:00');
-                                    const end = new Date((p?.end || '') + 'T00:00:00');
-                                    return !isNaN(start.getTime()) && !isNaN(end.getTime()) && checkDate >= start && checkDate <= end;
-                                });
-                            };
                             if (globalNormalRotationPosition[groupNum] === undefined) {
                                 // If start date is February 2026, always start from first person (position 0)
                                 const isFebruary2026 = calculationSteps.startDate && 
@@ -8310,12 +8297,11 @@
                                 assignedPeoplePreview[monthKey][groupNum] = {};
                             }
                             
-                            // DISABLED-ONLY: Skip disabled person in baseline (no replacement line); rotation continues from next person.
+                            // DISABLED: When the rotation person is disabled, the whole baseline shifts up – skip them, assign next eligible, no replacement line.
                             // For missing people we keep the replacement behaviour (baseline -> replacement + reason).
-                            // Use originalRotationPerson so we detect the slot as disabled even if baselineNormalByDate already replaced them.
                             let wasDisabledOnlySkippedInBaseline = false;
-                            const isDisabledOnly = originalRotationPerson && isPersonDisabledForDuty(originalRotationPerson, groupNum, 'normal') && !isInMissingPeriodOnDate(originalRotationPerson, groupNum, date);
-                            if (isDisabledOnly) {
+                            const isRotationPersonDisabled = originalRotationPerson && isPersonDisabledForDuty(originalRotationPerson, groupNum, 'normal');
+                            if (isRotationPersonDisabled) {
                                 let foundEligible = false;
                                 for (let offset = 1; offset <= rotationDays * 2 && !foundEligible; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
