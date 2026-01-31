@@ -8200,6 +8200,19 @@
                             html += '<td class="text-muted">-</td>';
                         } else {
                             const rotationDays = groupPeople.length;
+                            // Helper: person has a missing period containing this date (used to distinguish disabled-only vs missing).
+                            const isInMissingPeriodOnDate = (person, gnum, d) => {
+                                const g = groups?.[gnum] || {};
+                                const periods = Array.isArray(g.missingPeriods?.[person]) ? g.missingPeriods[person] : [];
+                                if (periods.length === 0) return false;
+                                const checkDate = new Date(d);
+                                checkDate.setHours(0, 0, 0, 0);
+                                return periods.some(p => {
+                                    const start = new Date((p?.start || '') + 'T00:00:00');
+                                    const end = new Date((p?.end || '') + 'T00:00:00');
+                                    return !isNaN(start.getTime()) && !isNaN(end.getTime()) && checkDate >= start && checkDate <= end;
+                                });
+                            };
                             if (globalNormalRotationPosition[groupNum] === undefined) {
                                 // If start date is February 2026, always start from first person (position 0)
                                 const isFebruary2026 = calculationSteps.startDate && 
@@ -8288,13 +8301,6 @@
                                 }
                             }
                             
-                            // Store ORIGINAL rotation person for baseline comparison (who SHOULD have been assigned according to pure rotation)
-                            // This is used for displaying baseline vs computed in the UI
-                            if (!normalRotationPersons[dateKey]) {
-                                normalRotationPersons[dateKey] = {};
-                            }
-                            normalRotationPersons[dateKey][groupNum] = originalRotationPerson;
-                            
                             // Use normal rotation
                             // Use rotationPerson (which may be a replacement from baselineNormalByDate if original was missing/disabled)
                             assignedPerson = rotationPerson;
@@ -8304,49 +8310,80 @@
                                 assignedPeoplePreview[monthKey][groupNum] = {};
                             }
                             
-                            // CRITICAL: Check if the rotation person is disabled/missing BEFORE any other logic.
-                            // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
+                            // DISABLED-ONLY: Skip disabled person in baseline (no replacement line); rotation continues from next person.
+                            // For missing people we keep the replacement behaviour (baseline -> replacement + reason).
+                            // Use originalRotationPerson so we detect the slot as disabled even if baselineNormalByDate already replaced them.
+                            let wasDisabledOnlySkippedInBaseline = false;
+                            const isDisabledOnly = originalRotationPerson && isPersonDisabledForDuty(originalRotationPerson, groupNum, 'normal') && !isInMissingPeriodOnDate(originalRotationPerson, groupNum, date);
+                            if (isDisabledOnly) {
+                                let foundEligible = false;
+                                for (let offset = 1; offset <= rotationDays * 2 && !foundEligible; offset++) {
+                                    const idx = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[idx];
+                                    if (!candidate) continue;
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
+                                    if (assignedPeoplePreview[monthKey][groupNum] && assignedPeoplePreview[monthKey][groupNum][candidate]) {
+                                        const lastAssignmentDateKey = assignedPeoplePreview[monthKey][groupNum][candidate];
+                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                        const currentDate = new Date(dateKey + 'T00:00:00');
+                                        const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+                                        if (daysDiff <= 5 && daysDiff > 0) continue;
+                                    }
+                                    assignedPerson = candidate;
+                                    foundEligible = true;
+                                    wasDisabledOnlySkippedInBaseline = true;
+                                    break;
+                                }
+                                if (!foundEligible) assignedPerson = null;
+                            }
+                            
+                            // Store baseline for UI: for disabled-only skip we store the assigned (eligible) person so no replacement line; else original.
+                            if (!normalRotationPersons[dateKey]) {
+                                normalRotationPersons[dateKey] = {};
+                            }
+                            normalRotationPersons[dateKey][groupNum] = wasDisabledOnlySkippedInBaseline ? (assignedPerson || originalRotationPerson) : originalRotationPerson;
+                            
+                            // CRITICAL: Check if the rotation person is MISSING (not disabled-only) – show replacement and store reason.
+                            // Disabled-only is already handled above (no replacement reason).
                             let wasDisabledPersonSkipped = false;
                             let replacementIndex = null;
-                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
-                                // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
-                                // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
-                                // IMPORTANT: Also check if replacement was already assigned recently (within 5 days) - prevent nearby duplicates
+                            if (!wasDisabledOnlySkippedInBaseline && assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
+                                // Simply skip missing person and find next person in rotation who is NOT disabled/missing
                                 let foundReplacement = false;
                                 for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
-                                    // Check if candidate was already assigned recently (within 5 days) - prevent nearby duplicates
                                     if (assignedPeoplePreview[monthKey][groupNum] && assignedPeoplePreview[monthKey][groupNum][candidate]) {
                                         const lastAssignmentDateKey = assignedPeoplePreview[monthKey][groupNum][candidate];
                                         const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
                                         const currentDate = new Date(dateKey + 'T00:00:00');
                                         const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
-                                        // Only prevent if assigned within 5 days (too close)
-                                        if (daysDiff <= 5 && daysDiff > 0) {
-                                            continue; // Too close, skip this candidate
-                                        }
-                                        // If daysDiff > 5, allow duplicate (far enough apart, even if they replaced someone before)
+                                        if (daysDiff <= 5 && daysDiff > 0) continue;
                                     }
-                                    
-                                    // Found eligible replacement
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
                                     foundReplacement = true;
                                     wasDisabledPersonSkipped = true;
-                                    // Don't store as "replacement" – rotation continues from next person; baseline will show assigned person only
+                                    storeAssignmentReason(
+                                        dateKey,
+                                        groupNum,
+                                        assignedPerson,
+                                        'skip',
+                                        buildUnavailableReplacementReason({
+                                            skippedPersonName: rotationPerson,
+                                            replacementPersonName: assignedPerson,
+                                            dateObj: date,
+                                            groupNum,
+                                            dutyCategory: 'normal'
+                                        }),
+                                        rotationPerson,
+                                        null
+                                    );
                                     break;
                                 }
-                                // If no replacement found after checking everyone twice (everyone disabled or already assigned), leave unassigned
-                                if (!foundReplacement) {
-                                    assignedPerson = null;
-                                }
-                            }
-                            // When disabled person was skipped: show assigned person as baseline (no "replacement" in UI); rotation continues from next index
-                            if (wasDisabledPersonSkipped && assignedPerson) {
-                                normalRotationPersons[dateKey][groupNum] = assignedPerson;
+                                if (!foundReplacement) assignedPerson = null;
                             }
                             
                             // If assigned person was already assigned recently (due to swap), skip to next person
@@ -8475,28 +8512,25 @@
                                     
                                     if (hasConflict) {
                                         // Person has conflict - STORE THEM so swap logic can process them
-                                        // The preview should show the exact rotation order (who would be assigned)
-                                        // even if they have a conflict. Swap logic will handle swapping them.
-                                        // DO NOT set to null - we need to know who has the conflict to swap them
-                                        // Advance rotation position: when disabled was skipped, consume their turn (advance by 1) so rotation continues from next person
-                                        if (wasDisabledPersonSkipped) {
+                                        // Advance rotation: disabled-only skip uses rotation+1; missing replacement uses replacementIndex+1; else assignedIndex+1
+                                        if (wasDisabledOnlySkippedInBaseline) {
                                             globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                        } else if (replacementIndex !== null) {
+                                        } else if (wasDisabledPersonSkipped && replacementIndex !== null) {
                                             globalNormalRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
                                         } else {
-                                            // No replacement - advance from assigned person's position
                                             const assignedIndex = groupPeople.indexOf(assignedPerson);
                                             if (assignedIndex !== -1) {
                                                 globalNormalRotationPosition[groupNum] = (assignedIndex + 1) % rotationDays;
                                             } else {
-                                                // Fallback: advance from rotation position
                                                 globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                             }
                                         }
                                     } else {
-                                        // No conflict - assign person and advance: when disabled was skipped, consume their turn (advance by 1)
-                                        if (wasDisabledPersonSkipped) {
+                                        // No conflict - advance rotation (disabled-only: rotation+1; missing replacement: replacementIndex+1; else assignedIndex+1)
+                                        if (wasDisabledOnlySkippedInBaseline) {
                                             globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                        } else if (wasDisabledPersonSkipped && replacementIndex !== null) {
+                                            globalNormalRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
                                         } else {
                                             const assignedIndex = groupPeople.indexOf(assignedPerson);
                                             if (assignedIndex !== -1) {
@@ -8531,7 +8565,8 @@
                             
                             // CRITICAL: If assigned person differs from baseline (rotationPerson), check if this is a cascading shift
                             // Store a 'shift' reason to prevent this from showing as a swap in results/calendar
-                            if (assignedPerson && assignedPerson !== rotationPerson) {
+                            // Skip when wasDisabledOnlySkippedInBaseline (no replacement line – rotation just continued from next person)
+                            if (!wasDisabledOnlySkippedInBaseline && assignedPerson && assignedPerson !== rotationPerson) {
                                 const currentReason = getAssignmentReason(dateKey, groupNum, assignedPerson);
                                 // Only store shift reason if there's no existing reason (skip/swap already handled)
                                 if (!currentReason) {
