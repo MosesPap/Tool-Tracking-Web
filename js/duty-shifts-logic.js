@@ -8336,27 +8336,17 @@
                                     replacementIndex = idx;
                                     foundReplacement = true;
                                     wasDisabledPersonSkipped = true;
-                                    storeAssignmentReason(
-                                        dateKey,
-                                        groupNum,
-                                        assignedPerson,
-                                        'skip',
-                                        buildUnavailableReplacementReason({
-                                            skippedPersonName: rotationPerson,
-                                            replacementPersonName: assignedPerson,
-                                            dateObj: date,
-                                            groupNum,
-                                            dutyCategory: 'normal'
-                                        }),
-                                        rotationPerson,
-                                        null
-                                    );
+                                    // Don't store as "replacement" – rotation continues from next person; baseline will show assigned person only
                                     break;
                                 }
                                 // If no replacement found after checking everyone twice (everyone disabled or already assigned), leave unassigned
                                 if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
+                            }
+                            // When disabled person was skipped: show assigned person as baseline (no "replacement" in UI); rotation continues from next index
+                            if (wasDisabledPersonSkipped && assignedPerson) {
+                                normalRotationPersons[dateKey][groupNum] = assignedPerson;
                             }
                             
                             // If assigned person was already assigned recently (due to swap), skip to next person
@@ -8488,9 +8478,10 @@
                                         // The preview should show the exact rotation order (who would be assigned)
                                         // even if they have a conflict. Swap logic will handle swapping them.
                                         // DO NOT set to null - we need to know who has the conflict to swap them
-                                        // Advance rotation position from ASSIGNED person's position (replacement if disabled person was skipped)
-                                        if (wasDisabledPersonSkipped && replacementIndex !== null) {
-                                            // Person was replaced - advance from replacement's position
+                                        // Advance rotation position: when disabled was skipped, consume their turn (advance by 1) so rotation continues from next person
+                                        if (wasDisabledPersonSkipped) {
+                                            globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                        } else if (replacementIndex !== null) {
                                             globalNormalRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
                                         } else {
                                             // No replacement - advance from assigned person's position
@@ -8503,17 +8494,14 @@
                                             }
                                         }
                                     } else {
-                                        // No conflict - assign person and advance rotation from ASSIGNED person's position (replacement if disabled person was skipped)
-                                        if (wasDisabledPersonSkipped && replacementIndex !== null) {
-                                            // Person was replaced - advance from replacement's position
-                                            globalNormalRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
+                                        // No conflict - assign person and advance: when disabled was skipped, consume their turn (advance by 1)
+                                        if (wasDisabledPersonSkipped) {
+                                            globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                         } else {
-                                            // No replacement - advance from assigned person's position
                                             const assignedIndex = groupPeople.indexOf(assignedPerson);
                                             if (assignedIndex !== -1) {
                                                 globalNormalRotationPosition[groupNum] = (assignedIndex + 1) % rotationDays;
                                             } else {
-                                                // Fallback: advance from rotation position
                                                 globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                             }
                                         }
