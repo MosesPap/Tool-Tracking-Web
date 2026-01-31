@@ -2084,6 +2084,7 @@
                                     const idx = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
+                                    if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
@@ -7323,15 +7324,40 @@
                             semiRotationPersons[dateKey][groupNum] = rotationPerson;
                             
                             let assignedPerson = rotationPerson;
-                            
-                            // CRITICAL: Check if the rotation person is disabled/missing BEFORE cross-month/pending swap logic.
-                            // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
                             let wasReplaced = false;
                             let replacementIndex = null;
-                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
-                                // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
-                                // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
-                                // IMPORTANT: Also check if replacement was already assigned recently (within 5 days) - prevent nearby duplicates
+                            
+                            // DISABLED: When rotation person is disabled, whole baseline shifts – skip them, no replacement line. (Same treatment as special/weekend/normal.)
+                            const isRotationPersonDisabledSemi = rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'semi');
+                            if (isRotationPersonDisabledSemi) {
+                                if (!assignedPeoplePreviewSemi[monthKey][groupNum]) {
+                                    assignedPeoplePreviewSemi[monthKey][groupNum] = {};
+                                }
+                                let foundEligible = false;
+                                for (let offset = 1; offset <= rotationDays * 2 && !foundEligible; offset++) {
+                                    const idx = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[idx];
+                                    if (!candidate) continue;
+                                    if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
+                                    if (assignedPeoplePreviewSemi[monthKey][groupNum] && assignedPeoplePreviewSemi[monthKey][groupNum][candidate]) {
+                                        const lastAssignmentDateKey = assignedPeoplePreviewSemi[monthKey][groupNum][candidate];
+                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                        const currentDate = new Date(dateKey + 'T00:00:00');
+                                        const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+                                        if (daysDiff <= 5 && daysDiff > 0) continue;
+                                    }
+                                    assignedPerson = candidate;
+                                    replacementIndex = idx;
+                                    wasReplaced = true;
+                                    foundEligible = true;
+                                    semiRotationPersons[dateKey][groupNum] = candidate;
+                                    break;
+                                }
+                                if (!foundEligible) assignedPerson = null;
+                            }
+                            // MISSING (not disabled): show replacement and store reason.
+                            if (!isRotationPersonDisabledSemi && assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
                                 if (!assignedPeoplePreviewSemi[monthKey][groupNum]) {
                                     assignedPeoplePreviewSemi[monthKey][groupNum] = {};
                                 }
@@ -7341,20 +7367,13 @@
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
-                                    // Check if candidate was already assigned recently (within 5 days) - prevent nearby duplicates
                                     if (assignedPeoplePreviewSemi[monthKey][groupNum] && assignedPeoplePreviewSemi[monthKey][groupNum][candidate]) {
                                         const lastAssignmentDateKey = assignedPeoplePreviewSemi[monthKey][groupNum][candidate];
                                         const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
                                         const currentDate = new Date(dateKey + 'T00:00:00');
                                         const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
-                                        // Only prevent if assigned within 5 days (too close)
-                                        if (daysDiff <= 5 && daysDiff > 0) {
-                                            continue; // Too close, skip this candidate
-                                        }
-                                        // If daysDiff > 5, allow duplicate (far enough apart, even if they replaced someone before)
+                                        if (daysDiff <= 5 && daysDiff > 0) continue;
                                     }
-                                    
-                                    // Found eligible replacement
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
                                     wasReplaced = true;
@@ -7376,10 +7395,7 @@
                                     );
                                     break;
                                 }
-                                // If no replacement found after checking everyone twice (everyone disabled or already assigned), leave unassigned
-                                if (!foundReplacement) {
-                                    assignedPerson = null;
-                                }
+                                if (!foundReplacement) assignedPerson = null;
                             }
                             
                             // Check if this day is a cross-month swap assignment (person swapped from previous month)
