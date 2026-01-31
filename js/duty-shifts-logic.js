@@ -4260,18 +4260,48 @@
                                     const returnKey = addDaysToDateKey(pEndKey, 1);
                                     if (!returnKey) continue;
 
+                                    // Pre-clear: remove the returning person from any normal-day slot in the calculation range
+                                    // so that feasibility checks (canAssignPersonToNormalDay / canShiftInsertFromDate) do not
+                                    // see them as already assigned (which can block finding a targetKey when rotation assigned
+                                    // them at end of month and duplicate/consecutive logic would otherwise prevent reinsertion).
+                                    const groupPeopleForReturn = (groups?.[groupNum]?.normal || []);
+                                    for (const dk of sortedNormal) {
+                                        if (dk < calcStartKey || dk > calcEndKey) continue;
+                                        const curAssigned = updatedAssignments?.[dk]?.[groupNum] || null;
+                                        if (!curAssigned || normName(curAssigned) !== normName(personName)) continue;
+                                        const dateObj = dateKeyToDate(dk);
+                                        const idxP = indexOfPersonInList(groupPeopleForReturn, personName);
+                                        const replacement = idxP >= 0 ? pickNextEligibleIgnoringConflicts(groupPeopleForReturn, idxP, groupNum, dateObj) : null;
+                                        if (!replacement) continue;
+                                        if (!updatedAssignments[dk]) updatedAssignments[dk] = {};
+                                        updatedAssignments[dk][groupNum] = replacement;
+                                        storeAssignmentReason(
+                                            dk,
+                                            groupNum,
+                                            replacement,
+                                            'shift',
+                                            '',
+                                            personName,
+                                            null,
+                                            { returnFromMissing: true, clearedEarlyReturnAssignment: true, targetKey: null, missingEnd: pEndKey, preClearedForReinsertion: true }
+                                        );
+                                    }
+
                                     // Count 3 normal days starting at returnKey (on-or-after), then find nearest track day on/after that.
                                     const thirdNormalKey = findThirdNormalOnOrAfter(sortedNormal, returnKey);
                                     if (!thirdNormalKey) continue;
-                                    let targetKey = findFirstMatchingTrackOnOrAfter(sortedNormal, thirdNormalKey, track);
-                                    if (!targetKey) continue;
 
-                                    // Find a feasible targetKey:
-                                    // - returning person must be assignable on targetKey
-                                    // - AND the whole shift-forward chain must be conflict-free for everyone displaced.
-                                    while (targetKey) {
+                                    // Same month as return (for backward/forward "in same month").
+                                    const returnDate = dateKeyToDate(returnKey);
+                                    const sameMonthStart = new Date(returnDate.getFullYear(), returnDate.getMonth(), 1);
+                                    const sameMonthEnd = new Date(returnDate.getFullYear(), returnDate.getMonth() + 1, 0);
+                                    const sameMonthStartKey = formatDateKey(sameMonthStart);
+                                    const sameMonthEndKey = formatDateKey(sameMonthEnd);
+
+                                    const tryTargetKey = (candidateKey) => {
+                                        if (!candidateKey) return false;
                                         const okReturning = canAssignPersonToNormalDay(
-                                            targetKey,
+                                            candidateKey,
                                             personName,
                                             groupNum,
                                             updatedAssignments,
@@ -4281,25 +4311,62 @@
                                             simulatedSemiAssignments,
                                             { allowConsecutiveConflicts: true }
                                         );
-                                        if (okReturning) {
-                                            const groupPeople = (groups?.[groupNum]?.normal || []);
-                                            const chainOk = canShiftInsertFromDate(
-                                                sortedNormal,
-                                                targetKey,
-                                                groupNum,
-                                                personName,
-                                                groupPeople,
-                                                updatedAssignments,
-                                                globalNormalRotationPosition,
-                                                simulatedSpecialAssignments,
-                                                simulatedWeekendAssignments,
-                                                simulatedSemiAssignments
-                                            );
-                                            if (chainOk.ok) break;
-                                        }
-                                        const nextThreshold = addDaysToDateKey(targetKey, 1);
-                                        targetKey = nextThreshold ? findFirstMatchingTrackOnOrAfter(sortedNormal, nextThreshold, track) : null;
+                                        if (!okReturning) return false;
+                                        const groupPeople = (groups?.[groupNum]?.normal || []);
+                                        const chainOk = canShiftInsertFromDate(
+                                            sortedNormal,
+                                            candidateKey,
+                                            groupNum,
+                                            personName,
+                                            groupPeople,
+                                            updatedAssignments,
+                                            globalNormalRotationPosition,
+                                            simulatedSpecialAssignments,
+                                            simulatedWeekendAssignments,
+                                            simulatedSemiAssignments
+                                        );
+                                        return chainOk.ok;
+                                    };
+
+                                    // 1) Backward swap in same month: try track days in same month that are before thirdNormalKey (latest first).
+                                    let targetKey = null;
+                                    const backwardCandidates = [];
+                                    for (const dk of sortedNormal) {
+                                        if (dk < sameMonthStartKey || dk > sameMonthEndKey) continue;
+                                        if (dk >= thirdNormalKey) continue;
+                                        if (!trackMatches(dk, track)) continue;
+                                        backwardCandidates.push(dk);
                                     }
+                                    backwardCandidates.sort((a, b) => (b > a ? 1 : (a > b ? -1 : 0))); // descending: latest first
+                                    for (const candidate of backwardCandidates) {
+                                        if (tryTargetKey(candidate)) {
+                                            targetKey = candidate;
+                                            break;
+                                        }
+                                    }
+
+                                    // 2) Forward swap in same month: if no backward slot worked, try from third normal day onward (same as before).
+                                    if (!targetKey) {
+                                        targetKey = findFirstMatchingTrackOnOrAfter(sortedNormal, thirdNormalKey, track);
+                                        while (targetKey) {
+                                            if (targetKey > sameMonthEndKey) break; // stay in same month for forward attempt
+                                            if (tryTargetKey(targetKey)) break;
+                                            const nextThreshold = addDaysToDateKey(targetKey, 1);
+                                            targetKey = nextThreshold ? findFirstMatchingTrackOnOrAfter(sortedNormal, nextThreshold, track) : null;
+                                        }
+                                    }
+
+                                    // 3) Fallback: if backward/forward in same month failed and absence ended so that return is at start of next month,
+                                    //    assign 3 normal days after return (search forward without same-month limit).
+                                    if (!targetKey && returnDate.getDate() === 1) {
+                                        targetKey = findFirstMatchingTrackOnOrAfter(sortedNormal, thirdNormalKey, track);
+                                        while (targetKey) {
+                                            if (tryTargetKey(targetKey)) break;
+                                            const nextThreshold = addDaysToDateKey(targetKey, 1);
+                                            targetKey = nextThreshold ? findFirstMatchingTrackOnOrAfter(sortedNormal, nextThreshold, track) : null;
+                                        }
+                                    }
+
                                     if (!targetKey) continue;
 
                                     // Apply shift insertion (follow rotation): everyone moves to the next normal day.
