@@ -8030,6 +8030,7 @@
                 // Replace them with the next available person and continue rotation from where it left off
                 try {
                     if (startDate && endDate && Array.isArray(sortedNormal) && sortedNormal.length > 0) {
+                        const dateKeyToDate = (dk) => new Date((dk || '') + 'T00:00:00');
                         const calcStartKey = formatDateKey(startDate);
                         const calcEndKey = formatDateKey(endDate);
                         const maxDateKey = (a, b) => (!a ? b : (!b ? a : (a > b ? a : b)));
