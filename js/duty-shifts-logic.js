@@ -5485,7 +5485,7 @@
                     const reasonText = reasonObj?.reason
                         ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
                         : '';
-                    const briefReason = reasonText
+                    let briefReason = reasonText
                         ? reasonText.split('.').filter(Boolean)[0]
                         : (isBaseDisabledOrMissing
                             ? (buildUnavailableReplacementReason({
@@ -5496,6 +5496,14 @@
                                 dutyCategory: 'normal'
                             }).split('.').filter(Boolean)[0] || '')
                             : 'Αλλαγή');
+
+                    // When replacement is due to missing person (not disabled), show backward or forward assignment
+                    const isMissingReinsertion = reasonObj?.meta?.returnFromMissing && reasonObj?.meta?.insertedByShift;
+                    if (isMissingReinsertion && reasonObj.meta && 'isBackwardAssignment' in reasonObj.meta) {
+                        briefReason += reasonObj.meta.isBackwardAssignment === true
+                            ? ' (Προσαρμογή: προς τα πίσω)'
+                            : ' (Προσαρμογή: προς τα εμπρός)';
+                    }
 
                     const otherKey = reasonObj?.type === 'swap'
                         ? findSwapOtherDateKey(reasonObj.swapPairId, groupNum, dateKey)
