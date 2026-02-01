@@ -8683,8 +8683,12 @@
                                 }
                             }
                             
-                            // Use stored baseline (normalRotationPersons) so when rotation person was disabled we show replacement only, not as swap
-                            const baselinePersonForDisplay = normalRotationPersons[dateKey]?.[groupNum] || originalRotationPerson;
+                            // Use stored baseline (normalRotationPersons) so when rotation person was disabled we show replacement only, not as swap.
+                            // If baseline differs from assigned and baseline person is disabled for normal, show only assigned (no Βασική Σειρά + Αντικατάσταση).
+                            let baselinePersonForDisplay = normalRotationPersons[dateKey]?.[groupNum] || originalRotationPerson;
+                            if (baselinePersonForDisplay !== assignedPerson && assignedPerson && isPersonDisabledForDuty(baselinePersonForDisplay, groupNum, 'normal')) {
+                                baselinePersonForDisplay = assignedPerson;
+                            }
                             html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplay, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
