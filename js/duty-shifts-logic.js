@@ -8448,6 +8448,7 @@
                             // If assigned person was already assigned recently (due to swap), skip to next person
                             // BUT: Skip this check if we just replaced a disabled person - swap logic will handle duplicates
                             // Check if assigned within 5 days (too close)
+                            let wasReplacedDueToFiveDayRule = false;
                             if (!wasDisabledPersonSkipped && assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal') && assignedPeoplePreview[monthKey][groupNum][assignedPerson]) {
                                 const lastAssignmentDateKey = assignedPeoplePreview[monthKey][groupNum][assignedPerson];
                                 const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
@@ -8477,6 +8478,7 @@
                                         // Found available person
                                         assignedPerson = candidate;
                                         foundReplacement = true;
+                                        wasReplacedDueToFiveDayRule = true;
                                     }
                                     
                                     // If still no replacement found after checking everyone twice, leave unassigned
@@ -8485,6 +8487,10 @@
                                         assignedPerson = null;
                                     }
                                 }
+                            }
+                            // When we replaced due to 5-day rule, update stored baseline so we show one line (assigned person only), not "Βασική Σειρά: B, Αντικατάσταση: C"
+                            if (wasReplacedDueToFiveDayRule && assignedPerson && normalRotationPersons[dateKey]) {
+                                normalRotationPersons[dateKey][groupNum] = assignedPerson;
                             }
                             
                             // Check if there's a pending swap for this position
