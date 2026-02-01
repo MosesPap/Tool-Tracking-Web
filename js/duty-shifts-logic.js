@@ -4303,7 +4303,7 @@
                                     // #region agent log
                                     if (!acceptPeriod) {
                                         const _log = {location:'returnFromMissing:range',message:'period skipped: end not in range',data:{groupNum,personName,pStartKey,pEndKey,calcStartKey,calcEndKey,endInRange,endInPrevMonth,returnKeyForRange,returnInRange,periodOverlapsRange},hypothesisId:'H1'};
-                                        fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._log,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                        // Debug ingest disabled to avoid ERR_CONNECTION_REFUSED when local server not running
                                         console.log('[DEBUG returnFromMissing]', _log);
                                         continue;
                                     }
@@ -4312,7 +4312,7 @@
                                     if (processed.has(dedupeKey)) {
                                         // #region agent log
                                         const _log = {location:'returnFromMissing:dedupe',message:'period skipped: dedupe',data:{groupNum,personName,pEndKey,dedupeKey},hypothesisId:'H1'};
-                                        fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._log,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                        // Debug ingest disabled to avoid ERR_CONNECTION_REFUSED when local server not running
                                         console.log('[DEBUG returnFromMissing]', _log);
                                         // #endregion
                                         continue;
@@ -4320,7 +4320,7 @@
                                     processed.add(dedupeKey);
                                     // #region agent log
                                     const _logAcc = {location:'returnFromMissing:accepted',message:'period accepted for reinsertion',data:{groupNum,personName,pStartKey,pEndKey,calcStartKey,calcEndKey},hypothesisId:'H1'};
-                                    fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logAcc,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                    // Debug ingest disabled to avoid ERR_CONNECTION_REFUSED when local server not running
                                     console.log('[DEBUG returnFromMissing]', _logAcc);
                                     // #endregion
 
@@ -4347,7 +4347,7 @@
                                     }
                                     // #region agent log
                                     const _logFm = {location:'returnFromMissing:firstMissed',message:'firstMissedKey result',data:{groupNum,personName,pEndKey,firstMissedKey:firstMissedKey||null},hypothesisId:'H2'};
-                                    fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logFm,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                    // Debug ingest disabled to avoid ERR_CONNECTION_REFUSED when local server not running
                                     console.log('[DEBUG returnFromMissing]', _logFm);
                                     // #endregion
                                     // Return day is end+1
@@ -4408,7 +4408,7 @@
                                         const dateObjForCandidate = dateKeyToDate(candidateKey);
                                         const isMissingOnCandidate = typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(personName, groupNum, dateObjForCandidate, 'normal');
                                         const _logTc = {location:'tryTargetKey:check',message:'tryTargetKey candidate',data:{candidateKey,personName,groupNum,isMissingOnCandidate},hypothesisId:'H3,H4'};
-                                        fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logTc,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                        // Debug ingest disabled to avoid ERR_CONNECTION_REFUSED when local server not running
                                         console.log('[DEBUG returnFromMissing]', _logTc);
                                         // #endregion
                                         const okReturning = canAssignPersonToNormalDay(
@@ -4424,7 +4424,7 @@
                                         );
                                         // #region agent log
                                         const _logOk = {location:'tryTargetKey:okReturning',message:'canAssignPersonToNormalDay result',data:{candidateKey,personName,okReturning},hypothesisId:'H3,H4'};
-                                        fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logOk,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                        // Debug ingest disabled to avoid ERR_CONNECTION_REFUSED when local server not running
                                         console.log('[DEBUG returnFromMissing]', _logOk);
                                         // #endregion
                                         if (!okReturning) return false;
@@ -4443,7 +4443,7 @@
                                         );
                                         // #region agent log
                                         const _logCh = {location:'tryTargetKey:chainOk',message:'canShiftInsertFromDate result',data:{candidateKey,personName,chainOk:chainOk.ok,reason:chainOk.reason||null,dateKey:chainOk.dateKey||null,person:chainOk.person||null},hypothesisId:'H3'};
-                                        fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logCh,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                        // Debug ingest disabled to avoid ERR_CONNECTION_REFUSED when local server not running
                                         console.log('[DEBUG returnFromMissing]', _logCh);
                                         // #endregion
                                         return chainOk.ok;
@@ -4493,7 +4493,7 @@
                                     // #region agent log
                                     if (!targetKey) {
                                         const _logNt = {location:'returnFromMissing:noTarget',message:'no feasible targetKey after all phases',data:{groupNum,personName,returnKey,thirdNormalKey,sameMonthEndKey},hypothesisId:'H3'};
-                                        fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logNt,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                        // Debug ingest disabled to avoid ERR_CONNECTION_REFUSED when local server not running
                                         console.log('[DEBUG returnFromMissing]', _logNt);
                                     }
                                     // #endregion
@@ -4504,7 +4504,7 @@
                                     const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
                                     // #region agent log
                                     const _logAp = {location:'returnFromMissing:apply',message:'applyShiftInsertFromDate result',data:{groupNum,personName,targetKey,insOk:ins.ok},hypothesisId:'H5'};
-                                    fetch('http://127.0.0.1:7242/ingest/4b92bcd7-f70f-4f0a-ba12-e910ec308eb1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({..._logAp,timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                    // Debug ingest disabled to avoid ERR_CONNECTION_REFUSED when local server not running
                                     console.log('[DEBUG returnFromMissing]', _logAp);
                                     // #endregion
                                     if (!ins.ok) continue;
@@ -5438,6 +5438,9 @@
                     const comp = computedByDate?.[dateKey]?.[groupNum] || null;
                     if (!base || !comp) continue;
                     if (base === comp) continue;
+
+                    // Never show a "change" row when the skipped person was disabled – we don't want disabled-skip as swap/replacement
+                    if (isPersonDisabledForDuty(base, groupNum, 'normal')) continue;
 
                     const reasonObj = getAssignmentReason(dateKey, groupNum, comp) || null;
                     
