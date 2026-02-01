@@ -6140,6 +6140,153 @@
                 // Only prevents duplicates if assigned within 5 days (too close)
                 const assignedPeoplePreviewWeekend = {}; // monthKey -> { groupNum -> { personName -> dateKey } }
                 
+                // Build baseline weekend (rotation-only) for return-from-missing check
+                const baselineWeekendByDate = {};
+                const baselineWeekendRotationPosition = {};
+                for (const dk of sortedWeekends) {
+                    const dt = new Date(dk + 'T00:00:00');
+                    for (let g = 1; g <= 4; g++) {
+                        const grp = groups[g] || { weekend: [] };
+                        const people = grp.weekend || [];
+                        if (people.length === 0) continue;
+                        const rotLen = people.length;
+                        if (baselineWeekendRotationPosition[g] === undefined) {
+                            const isFeb2026 = calculationSteps.startDate && calculationSteps.startDate.getFullYear() === 2026 && calculationSteps.startDate.getMonth() === 1;
+                            if (isFeb2026) baselineWeekendRotationPosition[g] = 0;
+                            else {
+                                const last = getLastRotationPersonForDate('weekend', dt, g);
+                                const idx = people.indexOf(last);
+                                if (last && idx >= 0) baselineWeekendRotationPosition[g] = (idx + 1) % rotLen;
+                                else baselineWeekendRotationPosition[g] = getRotationPosition(dt, 'weekend', g) % rotLen;
+                            }
+                        }
+                        const pos = baselineWeekendRotationPosition[g] % rotLen;
+                        if (!baselineWeekendByDate[dk]) baselineWeekendByDate[dk] = {};
+                        baselineWeekendByDate[dk][g] = people[pos];
+                        baselineWeekendRotationPosition[g] = (pos + 1) % rotLen;
+                    }
+                }
+                
+                // Return-from-missing for weekend: first weekend on or after (period end + 3 calendar days), or backward to last weekend before period start
+                const returnFromMissingWeekendTargets = {}; // dateKey -> { groupNum -> { personName, missingEnd, isBackwardAssignment } }
+                const calcStartKeyW = (startDate && !isNaN(new Date(startDate).getTime())) ? formatDateKey(new Date(startDate)) : null;
+                const calcEndKeyW = (endDate && !isNaN(new Date(endDate).getTime())) ? formatDateKey(new Date(endDate)) : null;
+                const addDaysW = (dk, days) => {
+                    if (!dk || typeof dk !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return null;
+                    const d = new Date(dk + 'T00:00:00');
+                    if (isNaN(d.getTime())) return null;
+                    d.setDate(d.getDate() + (days || 0));
+                    return formatDateKey(d);
+                };
+                const findFirstWeekendOnOrAfter = (sorted, thresholdKey) => {
+                    for (const wk of sorted) {
+                        if (wk >= thresholdKey) return wk;
+                    }
+                    return null;
+                };
+                const findLastWeekendBefore = (sorted, thresholdKey) => {
+                    let lastWk = null;
+                    for (const wk of sorted) {
+                        if (wk >= thresholdKey) break;
+                        lastWk = wk;
+                    }
+                    return lastWk;
+                };
+                const maxKeyW = (a, b) => (!a ? b : (!b ? a : (a > b ? a : b)));
+                const minKeyW = (a, b) => (!a ? b : (!b ? a : (a < b ? a : b)));
+                if (calcStartKeyW && calcEndKeyW && sortedWeekends.length > 0) {
+                    const processedWeekendReturn = new Set();
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        const g = groups[groupNum];
+                        const missingMap = g?.missingPeriods || {};
+                        const weekendList = g?.weekend || [];
+                        for (const personName of Object.keys(missingMap)) {
+                            if (!weekendList.includes(personName)) continue;
+                            const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
+                            for (const period of periods) {
+                                const pStartKey = inputValueToDateKey(period?.start);
+                                const pEndKey = inputValueToDateKey(period?.end);
+                                if (!pStartKey || !pEndKey) continue;
+                                const pEndDate = new Date(pEndKey + 'T00:00:00');
+                                const calcStartDateObj = calcStartKeyW ? new Date(calcStartKeyW + 'T00:00:00') : null;
+                                const prevMonthStart = calcStartDateObj ? new Date(calcStartDateObj.getFullYear(), calcStartDateObj.getMonth() - 1, 1) : null;
+                                const prevMonthStartKey = prevMonthStart ? formatDateKey(prevMonthStart) : null;
+                                const prevMonthEnd = calcStartDateObj ? new Date(calcStartDateObj.getFullYear(), calcStartDateObj.getMonth(), 0) : null;
+                                const prevMonthEndKey = prevMonthEnd ? formatDateKey(prevMonthEnd) : null;
+                                const periodEndsInRange = (pEndKey >= calcStartKeyW && pEndKey <= calcEndKeyW);
+                                const periodEndsInPrevMonth = (prevMonthStartKey && prevMonthEndKey && pEndKey >= prevMonthStartKey && pEndKey <= prevMonthEndKey);
+                                if (!periodEndsInRange && !periodEndsInPrevMonth) continue;
+                                const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
+                                if (processedWeekendReturn.has(dedupeKey)) continue;
+                                processedWeekendReturn.add(dedupeKey);
+                                const scanStartKey = periodEndsInPrevMonth ? maxKeyW(prevMonthStartKey, pStartKey) : maxKeyW(calcStartKeyW, pStartKey);
+                                const scanEndKey = periodEndsInPrevMonth ? pEndKey : minKeyW(pEndKey, calcEndKeyW);
+                                if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
+                                let hadMissedWeekend = false;
+                                if (periodEndsInRange) {
+                                    for (const wk of sortedWeekends) {
+                                        if (wk < scanStartKey) continue;
+                                        if (wk > scanEndKey) break;
+                                        if (baselineWeekendByDate[wk]?.[groupNum] === personName) {
+                                            hadMissedWeekend = true;
+                                            break;
+                                        }
+                                    }
+                                } else {
+                                    const periodStartDate = new Date(pStartKey + 'T00:00:00');
+                                    const periodEndDate = new Date(pEndKey + 'T00:00:00');
+                                    for (let checkDate = new Date(periodStartDate); checkDate <= periodEndDate; checkDate.setDate(checkDate.getDate() + 1)) {
+                                        const checkDateKey = formatDateKey(checkDate);
+                                        const dayType = getDayType(checkDate);
+                                        if (dayType === 'weekend-holiday') {
+                                            const rotationPos = getRotationPosition(checkDate, 'weekend', groupNum);
+                                            const groupPeopleForCheck = g?.weekend || [];
+                                            if (groupPeopleForCheck.length > 0) {
+                                                const expectedPerson = groupPeopleForCheck[rotationPos % groupPeopleForCheck.length];
+                                                if (expectedPerson === personName) {
+                                                    hadMissedWeekend = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                if (!hadMissedWeekend) continue;
+                                const dayAfterEnd = addDaysW(pEndKey, 1);
+                                if (!dayAfterEnd) continue;
+                                const thirdDayAfterEnd = addDaysW(pEndKey, 3);
+                                if (!thirdDayAfterEnd) continue;
+                                const returnMonthStart = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 1, 1);
+                                const returnMonthStartKey = formatDateKey(returnMonthStart);
+                                const returnMonthEnd = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 2, 0);
+                                const returnMonthEndKey = formatDateKey(returnMonthEnd);
+                                let hasWeekendInReturnMonth = false;
+                                for (const wk of sortedWeekends) {
+                                    if (wk >= returnMonthStartKey && wk <= returnMonthEndKey) {
+                                        hasWeekendInReturnMonth = true;
+                                        break;
+                                    }
+                                }
+                                let targetWeekendKey = null;
+                                let isBackwardAssignment = false;
+                                if (hasWeekendInReturnMonth) {
+                                    targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, thirdDayAfterEnd);
+                                    if (targetWeekendKey && targetWeekendKey < returnMonthStartKey) {
+                                        targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, returnMonthStartKey);
+                                    }
+                                }
+                                if (!targetWeekendKey) {
+                                    targetWeekendKey = findLastWeekendBefore(sortedWeekends, pStartKey);
+                                    isBackwardAssignment = true;
+                                }
+                                if (!targetWeekendKey || targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW) continue;
+                                if (!returnFromMissingWeekendTargets[targetWeekendKey]) returnFromMissingWeekendTargets[targetWeekendKey] = {};
+                                returnFromMissingWeekendTargets[targetWeekendKey][groupNum] = { personName, missingEnd: pEndKey, isBackwardAssignment };
+                            }
+                        }
+                    }
+                }
+                
                 sortedWeekends.forEach((dateKey, weekendIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -6182,6 +6329,27 @@
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
                         } else {
+                            // Return-from-missing: assign person to weekend after/before return
+                            const designatedWeekend = returnFromMissingWeekendTargets[dateKey]?.[groupNum];
+                            if (designatedWeekend && groupPeople.includes(designatedWeekend.personName) && !isPersonMissingOnDate(designatedWeekend.personName, groupNum, date, 'weekend')) {
+                                const assignedPerson = designatedWeekend.personName;
+                                const designatedIndex = groupPeople.indexOf(designatedWeekend.personName);
+                                if (globalWeekendRotationPosition[groupNum] === undefined) globalWeekendRotationPosition[groupNum] = 0;
+                                globalWeekendRotationPosition[groupNum] = (designatedIndex + 1) % groupPeople.length;
+                                const reasonText = designatedWeekend.isBackwardAssignment
+                                    ? 'Τοποθετήθηκε σε υπηρεσία (σαββατοκύριακο) γιατί θα απουσιάζει – προσαρμογή προς τα πίσω.'
+                                    : 'Επέστρεψε από απουσία – σαββατοκύριακο μετά από 3 ημερολογιακές ημέρες.';
+                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonText, null, null, { returnFromMissing: true, insertedByShift: true, missingEnd: designatedWeekend.missingEnd, isBackwardAssignment: designatedWeekend.isBackwardAssignment });
+                                if (!weekendRotationPersons[dateKey]) weekendRotationPersons[dateKey] = {};
+                                weekendRotationPersons[dateKey][groupNum] = assignedPerson;
+                                if (!assignedPeoplePreviewWeekend[monthKey][groupNum]) assignedPeoplePreviewWeekend[monthKey][groupNum] = {};
+                                assignedPeoplePreviewWeekend[monthKey][groupNum][assignedPerson] = dateKey;
+                                if (!simulatedWeekendAssignments[dateKey]) simulatedWeekendAssignments[dateKey] = {};
+                                simulatedWeekendAssignments[dateKey][groupNum] = assignedPerson;
+                                const lastDutyInfo = ''; const daysCountInfo = '';
+                                html += `<td>${buildBaselineComputedCellHtml(assignedPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                                continue;
+                            }
                             // Initialize skipped set for this group and month if needed
                             if (!skippedInMonth[monthKey][groupNum]) {
                                 skippedInMonth[monthKey][groupNum] = new Set();
