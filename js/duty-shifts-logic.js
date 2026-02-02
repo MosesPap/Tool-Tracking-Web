@@ -5643,6 +5643,52 @@
                     // Update local memory
                     Object.assign(normalDayAssignments, formattedAssignments);
                     
+                    // IMPORTANT: Update last normal rotation state from FINAL assignments (after return-from-missing and swap)
+                    // so that next time we build the preview we start from the correct person and rotation stays consistent
+                    const sortedDateKeys = Object.keys(updatedAssignments).sort();
+                    const lastNormalRotationPositionsFromFinal = {};
+                    const lastNormalRotationPositionsByMonthFromFinal = {};
+                    for (const dateKey of sortedDateKeys) {
+                        const d = new Date(dateKey + 'T00:00:00');
+                        if (isNaN(d.getTime())) continue;
+                        const monthKey = getMonthKeyFromDate(d);
+                        const groups = updatedAssignments[dateKey];
+                        if (!groups) continue;
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            const assignedPerson = groups[groupNum];
+                            if (assignedPerson) {
+                                lastNormalRotationPositionsFromFinal[groupNum] = assignedPerson;
+                                if (!lastNormalRotationPositionsByMonthFromFinal[monthKey]) lastNormalRotationPositionsByMonthFromFinal[monthKey] = {};
+                                lastNormalRotationPositionsByMonthFromFinal[monthKey][groupNum] = assignedPerson;
+                            }
+                        }
+                    }
+                    if (Object.keys(lastNormalRotationPositionsFromFinal).length > 0) {
+                        calculationSteps.lastNormalRotationPositions = lastNormalRotationPositionsFromFinal;
+                    }
+                    if (Object.keys(lastNormalRotationPositionsByMonthFromFinal).length > 0) {
+                        calculationSteps.lastNormalRotationPositionsByMonth = lastNormalRotationPositionsByMonthFromFinal;
+                        for (const monthKey in lastNormalRotationPositionsByMonthFromFinal) {
+                            const groupsForMonth = lastNormalRotationPositionsByMonthFromFinal[monthKey] || {};
+                            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                                if (groupsForMonth[groupNum] !== undefined) {
+                                    setLastRotationPersonForMonth('normal', monthKey, groupNum, groupsForMonth[groupNum]);
+                                }
+                            }
+                        }
+                        try {
+                            const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                            await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                                ...sanitizedPositions,
+                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                updatedBy: user.uid
+                            });
+                            console.log('Updated last rotation positions for normal (from final assignments after shift/swap) to Firestore');
+                        } catch (err) {
+                            console.error('Error saving lastRotationPositions after final normal save:', err);
+                        }
+                    }
+                    
                     // Save assignment reasons to Firestore
                     try {
                         if (Object.keys(assignmentReasons).length > 0) {
@@ -8276,15 +8322,17 @@
                                         const personIndex = groupPeople.indexOf(personName);
                                         if (personIndex < 0) continue; // Person not in rotation list
                                         
-                                        // For each baseline duty date, find the next available person in rotation
+                                        // For each baseline duty date, find the next available person in rotation.
+                                        // IMPORTANT: Advance "virtual" rotation across dates so we don't assign the same person on consecutive dates.
+                                        let lastReplacementIndex = personIndex;
                                         for (const dk of baselineDutiesToReplace) {
                                             const dateObj = dateKeyToDate(dk);
                                             if (isNaN(dateObj.getTime())) continue;
                                             
-                                            // Find next available person in rotation (starting from person after missing person)
+                                            // Find next available person in rotation (starting from person after last replacement)
                                             let replacementPerson = null;
                                             for (let offset = 1; offset <= groupPeople.length * 2; offset++) {
-                                                const idx = (personIndex + offset) % groupPeople.length;
+                                                const idx = (lastReplacementIndex + offset) % groupPeople.length;
                                                 const candidate = groupPeople[idx];
                                                 if (!candidate) continue;
                                                 
@@ -8305,6 +8353,7 @@
                                                     baselineNormalByDate[dk] = {};
                                                 }
                                                 baselineNormalByDate[dk][groupNum] = replacementPerson;
+                                                lastReplacementIndex = groupPeople.indexOf(replacementPerson);
                                                 
                                                 // Store assignment reason
                                                 storeAssignmentReason(
@@ -8369,15 +8418,17 @@
                                     const personIndex = groupPeople.indexOf(personName);
                                     if (personIndex < 0) continue; // Person not in rotation list
                                     
-                                    // For each baseline duty date, find the next available person in rotation
+                                    // For each baseline duty date, find the next available person in rotation.
+                                    // IMPORTANT: Advance "virtual" rotation across dates so we don't assign the same person on consecutive dates.
+                                    let lastReplacementIndex = personIndex;
                                     for (const dk of baselineDutiesToReplace) {
                                         const dateObj = dateKeyToDate(dk);
                                         if (isNaN(dateObj.getTime())) continue;
                                         
-                                        // Find next available person in rotation (starting from person after disabled person)
+                                        // Find next available person in rotation (starting from person after last replacement)
                                         let replacementPerson = null;
                                         for (let offset = 1; offset <= groupPeople.length * 2; offset++) {
-                                            const idx = (personIndex + offset) % groupPeople.length;
+                                            const idx = (lastReplacementIndex + offset) % groupPeople.length;
                                             const candidate = groupPeople[idx];
                                             if (!candidate) continue;
                                             
@@ -8398,6 +8449,7 @@
                                                 baselineNormalByDate[dk] = {};
                                             }
                                             baselineNormalByDate[dk][groupNum] = replacementPerson;
+                                            lastReplacementIndex = groupPeople.indexOf(replacementPerson);
                                             
                                             // Store assignment reason
                                             storeAssignmentReason(
