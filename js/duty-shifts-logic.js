@@ -4023,8 +4023,8 @@
                             }
                             desired = remaining.length > 0 ? remaining.shift() : carry;
                         }
-                        // Would assign the returning person again later: use next from remaining
-                        else if (desired && normName(desired) === normName(insertedPerson)) {
+                        // Would assign the returning person again later (not at target): use next from remaining so we don't duplicate them
+                        else if (dk !== startKey && desired && normName(desired) === normName(insertedPerson)) {
                             if (remaining === null) {
                                 remaining = [];
                                 for (let j = i + 1; j < sortedNormalKeys.length; j++) {
