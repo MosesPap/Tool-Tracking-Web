@@ -6894,25 +6894,24 @@
                                 }
                             }
                             if (!hadMissedSemi) continue;
-                            // Forward: 3 consecutive days (any day) after return day, then assign to first semi on or after the 4th day
-                            const fourthDayAfterEnd = addDaysToDateKeyRun(pEndKey, 4);
-                            if (!fourthDayAfterEnd) continue;
-                            const returnMonthStart = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 1, 1);
-                            const returnMonthStartKey = formatDateKey(returnMonthStart);
-                            const returnMonthEnd = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 2, 0);
-                            const returnMonthEndKey = formatDateKey(returnMonthEnd);
-                            let hasSemiInReturnMonth = false;
-                            for (const semiDk of sortedSemi) {
-                                if (semiDk >= returnMonthStartKey && semiDk <= returnMonthEndKey) { hasSemiInReturnMonth = true; break; }
-                            }
+                            // Forward: 3 consecutive days (any day) after return day, then assign to first appropriate semi-normal
+                            const thirdDayAfterEnd = addDaysToDateKeyRun(pEndKey, 3);
+                            if (!thirdDayAfterEnd) continue;
+                            // Backward: avoid assigning one day before missing period starts
+                            const dayBeforeStart = addDaysToDateKeyRun(pStartKey, -1);
                             let targetSemiKey = null;
-                            if (hasSemiInReturnMonth) {
-                                targetSemiKey = findFirstSemiOnOrAfterRun(sortedSemi, fourthDayAfterEnd);
-                                if (targetSemiKey && targetSemiKey < returnMonthStartKey) targetSemiKey = findFirstSemiOnOrAfterRun(sortedSemi, returnMonthStartKey);
+                            // Prefer forward: first semi on or after (return day + 3)
+                            const forwardTarget = findFirstSemiOnOrAfterRun(sortedSemi, thirdDayAfterEnd);
+                            if (forwardTarget && forwardTarget >= calcStartKey && forwardTarget <= calcEndKey) {
+                                targetSemiKey = forwardTarget;
                             } else {
-                                // Backward: avoid assigning one day before missing period starts – use last semi strictly before (period start - 1 day)
-                                const oneDayBeforeStart = addDaysToDateKeyRun(pStartKey, -1);
-                                targetSemiKey = oneDayBeforeStart ? findLastSemiBeforeRun(sortedSemi, oneDayBeforeStart) : findLastSemiBeforeRun(sortedSemi, pStartKey);
+                                // Backward: last semi before period start, but not the day before period start
+                                let backwardCandidate = findLastSemiBeforeRun(sortedSemi, pStartKey);
+                                if (backwardCandidate && dayBeforeStart && backwardCandidate === dayBeforeStart) {
+                                    const idx = sortedSemi.indexOf(backwardCandidate);
+                                    backwardCandidate = (idx > 0) ? sortedSemi[idx - 1] : null;
+                                }
+                                if (backwardCandidate && backwardCandidate >= calcStartKey && backwardCandidate <= calcEndKey) targetSemiKey = backwardCandidate;
                             }
                             if (!targetSemiKey || targetSemiKey < calcStartKey || targetSemiKey > calcEndKey) continue;
                             const formatDDMMYYYYSemiRun = (dk) => {
@@ -7492,42 +7491,26 @@
                                 }
                                 if (!hadMissedSemi) continue;
                                 
-                                // Forward: 3 consecutive days (any day) after return day, then assign to first semi on or after the 4th day
-                                const fourthDayAfterEnd = addDaysToDateKeyLocal(pEndKey, 4);
-                                if (!fourthDayAfterEnd) continue;
-                                
-                                // Determine the month after return (pEndDate was already declared above)
-                                const returnMonthStart = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 1, 1);
-                                const returnMonthStartKey = formatDateKey(returnMonthStart);
-                                const returnMonthEnd = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 2, 0);
-                                const returnMonthEndKey = formatDateKey(returnMonthEnd);
-                                
-                                // Check if there are any semi-normal days in the month after return
-                                let hasSemiInReturnMonth = false;
-                                for (const semiDk of sortedSemi) {
-                                    if (semiDk >= returnMonthStartKey && semiDk <= returnMonthEndKey) {
-                                        hasSemiInReturnMonth = true;
-                                        break;
-                                    }
-                                }
-                                
+                                // Forward: 3 consecutive days (any day) after return day, then assign to first appropriate semi-normal
+                                const thirdDayAfterEnd = addDaysToDateKeyLocal(pEndKey, 3);
+                                if (!thirdDayAfterEnd) continue;
+                                // Backward: avoid assigning one day before missing period starts
+                                const dayBeforeStart = addDaysToDateKeyLocal(pStartKey, -1);
                                 let targetSemiKey = null;
-                                
-                                if (hasSemiInReturnMonth) {
-                                    // There are semi days in the month after return - find the nearest semi on or after the 4th day after return
-                                    targetSemiKey = findFirstSemiOnOrAfter(sortedSemi, fourthDayAfterEnd);
-                                    // Ensure the target is in the return month or later (within calculation range)
-                                    if (targetSemiKey && targetSemiKey < returnMonthStartKey) {
-                                        // Target is before return month, find first semi in return month instead
-                                        targetSemiKey = findFirstSemiOnOrAfter(sortedSemi, returnMonthStartKey);
-                                    }
+                                // Prefer forward: first semi on or after (return day + 3)
+                                const forwardTarget = findFirstSemiOnOrAfter(sortedSemi, thirdDayAfterEnd);
+                                if (forwardTarget && forwardTarget >= calcStartKey && forwardTarget <= calcEndKey) {
+                                    targetSemiKey = forwardTarget;
                                 } else {
-                                    // Backward: avoid assigning one day before missing period starts – use last semi strictly before (period start - 1 day)
-                                    const oneDayBeforeStart = addDaysToDateKeyLocal(pStartKey, -1);
-                                    targetSemiKey = oneDayBeforeStart ? findLastSemiBefore(sortedSemi, oneDayBeforeStart) : findLastSemiBefore(sortedSemi, pStartKey);
+                                    // Backward: last semi before period start, but not the day before period start
+                                    let backwardCandidate = findLastSemiBefore(sortedSemi, pStartKey);
+                                    if (backwardCandidate && dayBeforeStart && backwardCandidate === dayBeforeStart) {
+                                        const idx = sortedSemi.indexOf(backwardCandidate);
+                                        backwardCandidate = (idx > 0) ? sortedSemi[idx - 1] : null;
+                                    }
+                                    if (backwardCandidate && backwardCandidate >= calcStartKey && backwardCandidate <= calcEndKey) targetSemiKey = backwardCandidate;
                                 }
                                 
-                                // Ensure target semi is within calculation range
                                 if (!targetSemiKey || targetSemiKey < calcStartKey || targetSemiKey > calcEndKey) continue;
                                 
                                 const formatDDMMYYYYSemi = (dk) => {
@@ -7719,7 +7702,7 @@
                                         const currentDate = new Date(dateKey + 'T00:00:00');
                                         const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
                                         if (daysDiff <= 5 && daysDiff > 0) continue;
-                                    }
+                                        }
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
                                     wasReplaced = true;
