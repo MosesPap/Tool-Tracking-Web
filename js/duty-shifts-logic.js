@@ -4546,9 +4546,7 @@
                                     };
                                     const missingRangeStr = formatDDMMYYYY(pStartKey) + ' - ' + formatDDMMYYYY(pEndKey);
                                     const reasonOfMissing = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
-                                    const assignmentReasonText = isBackwardAssignment
-                                        ? `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${missingRangeStr}) λόγω ${reasonOfMissing}`
-                                        : `Επέστρεψε από απουσία και επανεντάχθηκε στις καθημερινές μετά από 3 καθημερινές ημέρες (λογική ${track === 1 ? 'Δευτέρα/Τετάρτη' : 'Τρίτη/Πέμπτη'}).`;
+                                    const assignmentReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${missingRangeStr}) λόγω ${reasonOfMissing}`;
                                     storeAssignmentReason(
                                         targetKey,
                                         groupNum,
@@ -6280,8 +6278,14 @@
                                     isBackwardAssignment = true;
                                 }
                                 if (!targetWeekendKey || targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW) continue;
+                                const formatDDMMYYYYW = (dk) => {
+                                    const d = new Date(dk + 'T00:00:00');
+                                    return (d.getDate() < 10 ? '0' : '') + d.getDate() + '/' + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1) + '/' + d.getFullYear();
+                                };
+                                const missingRangeStrW = formatDDMMYYYYW(pStartKey) + ' - ' + formatDDMMYYYYW(pEndKey);
+                                const reasonOfMissingW = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
                                 if (!returnFromMissingWeekendTargets[targetWeekendKey]) returnFromMissingWeekendTargets[targetWeekendKey] = {};
-                                returnFromMissingWeekendTargets[targetWeekendKey][groupNum] = { personName, missingEnd: pEndKey, isBackwardAssignment };
+                                returnFromMissingWeekendTargets[targetWeekendKey][groupNum] = { personName, missingEnd: pEndKey, isBackwardAssignment, missingRangeStr: missingRangeStrW, reasonOfMissing: reasonOfMissingW };
                             }
                         }
                     }
@@ -6336,9 +6340,7 @@
                                 const designatedIndex = groupPeople.indexOf(designatedWeekend.personName);
                                 if (globalWeekendRotationPosition[groupNum] === undefined) globalWeekendRotationPosition[groupNum] = 0;
                                 globalWeekendRotationPosition[groupNum] = (designatedIndex + 1) % groupPeople.length;
-                                const reasonText = designatedWeekend.isBackwardAssignment
-                                    ? 'Τοποθετήθηκε σε υπηρεσία (σαββατοκύριακο) γιατί θα απουσιάζει – προσαρμογή προς τα πίσω.'
-                                    : 'Επέστρεψε από απουσία – σαββατοκύριακο μετά από 3 ημερολογιακές ημέρες.';
+                                const reasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designatedWeekend.missingRangeStr || ''}) λόγω ${designatedWeekend.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
                                 storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonText, null, null, { returnFromMissing: true, insertedByShift: true, missingEnd: designatedWeekend.missingEnd, isBackwardAssignment: designatedWeekend.isBackwardAssignment });
                                 if (!weekendRotationPersons[dateKey]) weekendRotationPersons[dateKey] = {};
                                 weekendRotationPersons[dateKey][groupNum] = assignedPerson;
@@ -7410,8 +7412,14 @@
                                 // Ensure target semi is within calculation range
                                 if (!targetSemiKey || targetSemiKey < calcStartKey || targetSemiKey > calcEndKey) continue;
                                 
+                                const formatDDMMYYYYSemi = (dk) => {
+                                    const d = new Date(dk + 'T00:00:00');
+                                    return (d.getDate() < 10 ? '0' : '') + d.getDate() + '/' + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1) + '/' + d.getFullYear();
+                                };
+                                const missingRangeStrSemi = formatDDMMYYYYSemi(pStartKey) + ' - ' + formatDDMMYYYYSemi(pEndKey);
+                                const reasonOfMissingSemi = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
                                 if (!returnFromMissingSemiTargets[targetSemiKey]) returnFromMissingSemiTargets[targetSemiKey] = {};
-                                returnFromMissingSemiTargets[targetSemiKey][groupNum] = { personName, missingEnd: pEndKey };
+                                returnFromMissingSemiTargets[targetSemiKey][groupNum] = { personName, missingEnd: pEndKey, missingRangeStr: missingRangeStrSemi, reasonOfMissing: reasonOfMissingSemi };
                             }
                         }
                     }
@@ -7452,7 +7460,8 @@
                                 const designatedIndex = groupPeople.indexOf(designated.personName);
                                 if (globalSemiRotationPosition[groupNum] === undefined) globalSemiRotationPosition[groupNum] = 0;
                                 globalSemiRotationPosition[groupNum] = (designatedIndex + 1) % rotationDays;
-                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', 'Επέστρεψε από απουσία – ημιάργια μετά από 3 ημερολογιακές ημέρες.', null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
+                                const semiReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designated.missingRangeStr || ''}) λόγω ${designated.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
+                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', semiReasonText, null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
                                 if (!assignedPeoplePreviewSemi[monthKey][groupNum]) assignedPeoplePreviewSemi[monthKey][groupNum] = new Set();
                                 assignedPeoplePreviewSemi[monthKey][groupNum].add(assignedPerson);
                                 if (!semiAssignments[dateKey]) semiAssignments[dateKey] = {};
