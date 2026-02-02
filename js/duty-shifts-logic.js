@@ -6383,9 +6383,11 @@
                             const designatedWeekend = returnFromMissingWeekendTargets[dateKey]?.[groupNum];
                             if (designatedWeekend && groupPeople.includes(designatedWeekend.personName) && !isPersonMissingOnDate(designatedWeekend.personName, groupNum, date, 'weekend')) {
                                 const assignedPerson = designatedWeekend.personName;
-                                const designatedIndex = groupPeople.indexOf(designatedWeekend.personName);
+                                // Rotation continues from the displaced (baseline) person, not from the returning person
+                                const displacedPerson = baselineWeekendByDate[dateKey]?.[groupNum];
+                                const originalIndex = displacedPerson != null ? groupPeople.indexOf(displacedPerson) : -1;
                                 if (globalWeekendRotationPosition[groupNum] === undefined) globalWeekendRotationPosition[groupNum] = 0;
-                                globalWeekendRotationPosition[groupNum] = (designatedIndex + 1) % groupPeople.length;
+                                globalWeekendRotationPosition[groupNum] = (originalIndex >= 0 ? (originalIndex + 1) : (groupPeople.indexOf(assignedPerson) + 1)) % groupPeople.length;
                                 const reasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designatedWeekend.missingRangeStr || ''}) λόγω ${designatedWeekend.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
                                 storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonText, null, null, { returnFromMissing: true, insertedByShift: true, missingEnd: designatedWeekend.missingEnd, isBackwardAssignment: designatedWeekend.isBackwardAssignment });
                                 if (!weekendRotationPersons[dateKey]) weekendRotationPersons[dateKey] = {};
@@ -7503,9 +7505,11 @@
                             const designated = returnFromMissingSemiTargets[dateKey]?.[groupNum];
                             if (designated && groupPeople.includes(designated.personName) && !isPersonMissingOnDate(designated.personName, groupNum, date, 'semi')) {
                                 const assignedPerson = designated.personName;
-                                const designatedIndex = groupPeople.indexOf(designated.personName);
+                                // Rotation continues from the displaced (baseline) person, not from the returning person
+                                const displacedPerson = baselineSemiByDate[dateKey]?.[groupNum];
+                                const originalIndex = displacedPerson != null ? groupPeople.indexOf(displacedPerson) : -1;
                                 if (globalSemiRotationPosition[groupNum] === undefined) globalSemiRotationPosition[groupNum] = 0;
-                                globalSemiRotationPosition[groupNum] = (designatedIndex + 1) % rotationDays;
+                                globalSemiRotationPosition[groupNum] = (originalIndex >= 0 ? (originalIndex + 1) : (groupPeople.indexOf(assignedPerson) + 1)) % rotationDays;
                                 const semiReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designated.missingRangeStr || ''}) λόγω ${designated.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
                                 storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', semiReasonText, null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
                                 if (!assignedPeoplePreviewSemi[monthKey][groupNum]) assignedPeoplePreviewSemi[monthKey][groupNum] = new Set();
