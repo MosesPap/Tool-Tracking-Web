@@ -4002,6 +4002,9 @@
                     if (idx < 0) return { ok: false, originalAtTarget: null };
                     const originalAtTarget = assignmentsByDate?.[startKey]?.[groupNum] || null;
                     const changes = []; // { dateKey, prevPerson, newPerson }
+                    // Built lazily when we first hit the returning person's slot: [original at i+1, i+2, ...]. Ensures we pull the right person (no duplicate).
+                    let remaining = null;
+                    const assignedInChain = new Set();
                     let carry = insertedPerson;
                     for (let i = idx; i < sortedNormalKeys.length; i++) {
                         const dk = sortedNormalKeys[i];
@@ -4009,19 +4012,31 @@
                         const dateObj = dateKeyToDate(dk);
 
                         let desired = carry;
-                        // When we hit the returning person's natural slot: don't put carry (would duplicate them). Put next in rotation after insertedPerson so rotation continues correctly.
+                        // At the returning person's natural slot: don't put carry (duplicate). Use next day's person from original.
                         if (dk !== startKey && cur && normName(cur) === normName(insertedPerson)) {
-                            const idxA = indexOfPersonInList(groupPeople, insertedPerson);
-                            desired = (idxA >= 0 && groupPeople.length > 0) ? groupPeople[(idxA + 1) % groupPeople.length] : carry;
-                            if (desired && isPersonMissingOnDate(desired, groupNum, dateObj, 'normal')) {
-                                const startIdx = indexOfPersonInList(groupPeople, desired);
-                                const replacement = startIdx >= 0 ? pickNextEligibleIgnoringConflicts(groupPeople, startIdx, groupNum, dateObj) : null;
-                                desired = replacement || desired;
+                            if (remaining === null) {
+                                remaining = [];
+                                for (let j = i + 1; j < sortedNormalKeys.length; j++) {
+                                    const p = assignmentsByDate?.[sortedNormalKeys[j]]?.[groupNum] || null;
+                                    if (p) remaining.push(p);
+                                }
                             }
-                            if (!assignmentsByDate[dk]) assignmentsByDate[dk] = {};
-                            assignmentsByDate[dk][groupNum] = desired;
-                            changes.push({ dateKey: dk, prevPerson: cur, newPerson: desired });
-                            return { ok: true, originalAtTarget, changes };
+                            desired = remaining.length > 0 ? remaining.shift() : carry;
+                        }
+                        // Would assign the returning person again later: use next from remaining
+                        else if (desired && normName(desired) === normName(insertedPerson)) {
+                            if (remaining === null) {
+                                remaining = [];
+                                for (let j = i + 1; j < sortedNormalKeys.length; j++) {
+                                    const p = assignmentsByDate?.[sortedNormalKeys[j]]?.[groupNum] || null;
+                                    if (p) remaining.push(p);
+                                }
+                            }
+                            desired = (remaining && remaining.length > 0) ? remaining.shift() : desired;
+                        }
+                        // Would assign someone we already placed in this chain: use next from remaining
+                        else if (desired && assignedInChain.has(normName(desired))) {
+                            desired = (remaining && remaining.length > 0) ? remaining.shift() : desired;
                         }
                         if (desired && isPersonMissingOnDate(desired, groupNum, dateObj, 'normal')) {
                             const startIdx = indexOfPersonInList(groupPeople, desired);
@@ -4032,6 +4047,7 @@
                         if (!assignmentsByDate[dk]) assignmentsByDate[dk] = {};
                         assignmentsByDate[dk][groupNum] = desired;
                         changes.push({ dateKey: dk, prevPerson: cur, newPerson: desired });
+                        if (desired) assignedInChain.add(normName(desired));
                         carry = cur;
                     }
                     return { ok: true, originalAtTarget, changes };
