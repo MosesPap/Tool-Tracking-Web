@@ -6894,9 +6894,9 @@
                                 }
                             }
                             if (!hadMissedSemi) continue;
-                            const dayAfterEnd = addDaysToDateKeyRun(pEndKey, 1);
-                            const thirdDayAfterEnd = addDaysToDateKeyRun(pEndKey, 3);
-                            if (!dayAfterEnd || !thirdDayAfterEnd) continue;
+                            // Forward: 3 consecutive days (any day) after return day, then assign to first semi on or after the 4th day
+                            const fourthDayAfterEnd = addDaysToDateKeyRun(pEndKey, 4);
+                            if (!fourthDayAfterEnd) continue;
                             const returnMonthStart = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 1, 1);
                             const returnMonthStartKey = formatDateKey(returnMonthStart);
                             const returnMonthEnd = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 2, 0);
@@ -6907,10 +6907,12 @@
                             }
                             let targetSemiKey = null;
                             if (hasSemiInReturnMonth) {
-                                targetSemiKey = findFirstSemiOnOrAfterRun(sortedSemi, thirdDayAfterEnd);
+                                targetSemiKey = findFirstSemiOnOrAfterRun(sortedSemi, fourthDayAfterEnd);
                                 if (targetSemiKey && targetSemiKey < returnMonthStartKey) targetSemiKey = findFirstSemiOnOrAfterRun(sortedSemi, returnMonthStartKey);
                             } else {
-                                targetSemiKey = findLastSemiBeforeRun(sortedSemi, pStartKey);
+                                // Backward: avoid assigning one day before missing period starts – use last semi strictly before (period start - 1 day)
+                                const oneDayBeforeStart = addDaysToDateKeyRun(pStartKey, -1);
+                                targetSemiKey = oneDayBeforeStart ? findLastSemiBeforeRun(sortedSemi, oneDayBeforeStart) : findLastSemiBeforeRun(sortedSemi, pStartKey);
                             }
                             if (!targetSemiKey || targetSemiKey < calcStartKey || targetSemiKey > calcEndKey) continue;
                             const formatDDMMYYYYSemiRun = (dk) => {
@@ -7490,13 +7492,9 @@
                                 }
                                 if (!hadMissedSemi) continue;
                                 
-                                // Count 3 calendar days from the end of missing period (included)
-                                // If missing period ends on 10/02/2026 (included), count: 11, 12, 13
-                                // So we start counting from pEndKey + 1, and after 3 days we get pEndKey + 3
-                                const dayAfterEnd = addDaysToDateKeyLocal(pEndKey, 1);
-                                if (!dayAfterEnd) continue;
-                                const thirdDayAfterEnd = addDaysToDateKeyLocal(pEndKey, 3);
-                                if (!thirdDayAfterEnd) continue;
+                                // Forward: 3 consecutive days (any day) after return day, then assign to first semi on or after the 4th day
+                                const fourthDayAfterEnd = addDaysToDateKeyLocal(pEndKey, 4);
+                                if (!fourthDayAfterEnd) continue;
                                 
                                 // Determine the month after return (pEndDate was already declared above)
                                 const returnMonthStart = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 1, 1);
@@ -7516,16 +7514,17 @@
                                 let targetSemiKey = null;
                                 
                                 if (hasSemiInReturnMonth) {
-                                    // There are semi days in the month after return - find the nearest semi after the third calendar day
-                                    targetSemiKey = findFirstSemiOnOrAfter(sortedSemi, thirdDayAfterEnd);
+                                    // There are semi days in the month after return - find the nearest semi on or after the 4th day after return
+                                    targetSemiKey = findFirstSemiOnOrAfter(sortedSemi, fourthDayAfterEnd);
                                     // Ensure the target is in the return month or later (within calculation range)
                                     if (targetSemiKey && targetSemiKey < returnMonthStartKey) {
                                         // Target is before return month, find first semi in return month instead
                                         targetSemiKey = findFirstSemiOnOrAfter(sortedSemi, returnMonthStartKey);
                                     }
                                 } else {
-                                    // No semi available in the month after return - try to find a semi before missing period begins
-                                    targetSemiKey = findLastSemiBefore(sortedSemi, pStartKey);
+                                    // Backward: avoid assigning one day before missing period starts – use last semi strictly before (period start - 1 day)
+                                    const oneDayBeforeStart = addDaysToDateKeyLocal(pStartKey, -1);
+                                    targetSemiKey = oneDayBeforeStart ? findLastSemiBefore(sortedSemi, oneDayBeforeStart) : findLastSemiBefore(sortedSemi, pStartKey);
                                 }
                                 
                                 // Ensure target semi is within calculation range
