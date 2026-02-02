@@ -6960,9 +6960,11 @@
                     }
                     const pos = globalSemiPos[groupNum] % rotationDays;
                     const person = groupPeople[pos];
+                    let nextPos = (pos + 1) % rotationDays; // default: next slot goes to person after current pos
                     // DISABLED: When rotation person is disabled, whole baseline shifts – store eligible person, no replacement line.
                     if (person && isPersonDisabledForDuty(person, groupNum, 'semi')) {
                         let eligiblePerson = null;
+                        let eligibleIndex = -1;
                         for (let offset = 1; offset <= rotationDays * 2; offset++) {
                             const idx = (pos + offset) % rotationDays;
                             const candidate = groupPeople[idx];
@@ -6970,12 +6972,15 @@
                             if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
                             eligiblePerson = candidate;
+                            eligibleIndex = idx;
                             break;
                         }
                         baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
+                        if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays; // next semi goes to person after the one we assigned
                     } else if (person && isPersonMissingOnDate(person, groupNum, date, 'semi')) {
-                        // MISSING: At the missing semi date assign the next person in rotation (no swap – same as weekend)
+                        // MISSING: At the missing semi date assign the next person in rotation; next semi must go to person AFTER them (no double assignment)
                         let eligiblePerson = null;
+                        let eligibleIndex = -1;
                         for (let offset = 1; offset <= rotationDays * 2; offset++) {
                             const idx = (pos + offset) % rotationDays;
                             const candidate = groupPeople[idx];
@@ -6983,13 +6988,15 @@
                             if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
                             eligiblePerson = candidate;
+                            eligibleIndex = idx;
                             break;
                         }
                         baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
+                        if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays; // next semi goes to person after the one we assigned
                     } else {
                         baseline[dateKey][groupNum] = person;
                     }
-                    globalSemiPos[groupNum] = (pos + 1) % rotationDays;
+                    globalSemiPos[groupNum] = nextPos;
                 }
             }
 
