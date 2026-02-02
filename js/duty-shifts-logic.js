@@ -6183,6 +6183,8 @@
                 // Structure: monthKey -> { groupNum -> { personName -> dateKey } }
                 // Only prevents duplicates if assigned within 5 days (too close)
                 const assignedPeoplePreviewWeekend = {}; // monthKey -> { groupNum -> { personName -> dateKey } }
+                // Track persons assigned via return-from-missing (backward/forward) so we don't assign them again when their turn comes
+                const assignedByReturnFromMissingWeekend = {}; // groupNum -> Set of person names
                 
                 // Build baseline weekend (rotation-only) for return-from-missing check
                 const baselineWeekendByDate = {};
@@ -6383,6 +6385,8 @@
                             const designatedWeekend = returnFromMissingWeekendTargets[dateKey]?.[groupNum];
                             if (designatedWeekend && groupPeople.includes(designatedWeekend.personName) && !isPersonMissingOnDate(designatedWeekend.personName, groupNum, date, 'weekend')) {
                                 const assignedPerson = designatedWeekend.personName;
+                                if (!assignedByReturnFromMissingWeekend[groupNum]) assignedByReturnFromMissingWeekend[groupNum] = new Set();
+                                assignedByReturnFromMissingWeekend[groupNum].add(assignedPerson);
                                 // Next slot goes to the displaced (baseline) person – set position to displaced person's index so we get F, A, B, C
                                 const displacedPerson = baselineWeekendByDate[dateKey]?.[groupNum];
                                 const originalIndex = displacedPerson != null ? groupPeople.indexOf(displacedPerson) : -1;
@@ -6452,8 +6456,37 @@
                             let wasReplaced = false;
                             let replacementIndex = null;
                             
+                            // Already assigned via return-from-missing (backward/forward): skip when their turn comes – they already had their duty
+                            const wasAssignedByReturnFromMissingWeekend = rotationPerson && assignedByReturnFromMissingWeekend[groupNum]?.has(rotationPerson);
+                            if (wasAssignedByReturnFromMissingWeekend) {
+                                if (!assignedPeoplePreviewWeekend[monthKey][groupNum]) assignedPeoplePreviewWeekend[monthKey][groupNum] = {};
+                                let foundEligible = false;
+                                for (let offset = 1; offset <= rotationDays * 2 && !foundEligible; offset++) {
+                                    const idx = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[idx];
+                                    if (!candidate) continue;
+                                    if (assignedByReturnFromMissingWeekend[groupNum]?.has(candidate)) continue;
+                                    if (isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                                    if (assignedPeoplePreviewWeekend[monthKey][groupNum][candidate]) {
+                                        const lastAssignmentDateKey = assignedPeoplePreviewWeekend[monthKey][groupNum][candidate];
+                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                        const currentDate = new Date(dateKey + 'T00:00:00');
+                                        const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+                                        if (daysDiff <= 5 && daysDiff > 0) continue;
+                                    }
+                                    assignedPerson = candidate;
+                                    replacementIndex = idx;
+                                    wasReplaced = true;
+                                    foundEligible = true;
+                                    weekendRotationPersons[dateKey][groupNum] = candidate;
+                                    globalWeekendRotationPosition[groupNum] = (idx + 1) % rotationDays;
+                                    break;
+                                }
+                                if (!foundEligible) assignedPerson = null;
+                            }
                             // DISABLED: When rotation person is disabled, whole baseline shifts – skip them, no replacement line.
-                            const isRotationPersonDisabledWeekend = rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'weekend');
+                            const isRotationPersonDisabledWeekend = !wasAssignedByReturnFromMissingWeekend && rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'weekend');
                             if (isRotationPersonDisabledWeekend) {
                                 if (!assignedPeoplePreviewWeekend[monthKey][groupNum]) {
                                     assignedPeoplePreviewWeekend[monthKey][groupNum] = {};
@@ -7264,6 +7297,8 @@
                 // Structure: monthKey -> { groupNum -> { personName -> dateKey } }
                 // Only prevents duplicates if assigned within 5 days (too close)
                 const assignedPeoplePreviewSemi = {}; // monthKey -> { groupNum -> { personName -> dateKey } }
+                // Track persons assigned via return-from-missing (backward/forward) so we don't assign them again when their turn comes
+                const assignedByReturnFromMissingSemi = {}; // groupNum -> Set of person names
                 
                 // Return-from-missing for semi-normal: count 3 calendar days after period end, then first semi after that.
                 // Only apply if the person had a semi-normal duty during the missing period that was replaced.
@@ -7505,6 +7540,8 @@
                             const designated = returnFromMissingSemiTargets[dateKey]?.[groupNum];
                             if (designated && groupPeople.includes(designated.personName) && !isPersonMissingOnDate(designated.personName, groupNum, date, 'semi')) {
                                 const assignedPerson = designated.personName;
+                                if (!assignedByReturnFromMissingSemi[groupNum]) assignedByReturnFromMissingSemi[groupNum] = new Set();
+                                assignedByReturnFromMissingSemi[groupNum].add(assignedPerson);
                                 // Next slot goes to the displaced (baseline) person – set position to displaced person's index so we get F, A, B, C
                                 const displacedPerson = baselineSemiByDate[dateKey]?.[groupNum];
                                 const originalIndex = displacedPerson != null ? groupPeople.indexOf(displacedPerson) : -1;
@@ -7570,8 +7607,37 @@
                             let wasReplaced = false;
                             let replacementIndex = null;
                             let wasDisabledOnlySkippedSemi = false;
+                            // Already assigned via return-from-missing (backward/forward): skip when their turn comes – they already had their duty
+                            const wasAssignedByReturnFromMissingSemi = rotationPerson && assignedByReturnFromMissingSemi[groupNum]?.has(rotationPerson);
+                            if (wasAssignedByReturnFromMissingSemi) {
+                                if (!assignedPeoplePreviewSemi[monthKey][groupNum]) assignedPeoplePreviewSemi[monthKey][groupNum] = new Set();
+                                let foundEligible = false;
+                                for (let offset = 1; offset <= rotationDays * 2 && !foundEligible; offset++) {
+                                    const idx = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[idx];
+                                    if (!candidate) continue;
+                                    if (assignedByReturnFromMissingSemi[groupNum]?.has(candidate)) continue;
+                                    if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
+                                    if (assignedPeoplePreviewSemi[monthKey][groupNum] && assignedPeoplePreviewSemi[monthKey][groupNum][candidate]) {
+                                        const lastAssignmentDateKey = assignedPeoplePreviewSemi[monthKey][groupNum][candidate];
+                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                        const currentDate = new Date(dateKey + 'T00:00:00');
+                                        const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+                                        if (daysDiff <= 5 && daysDiff > 0) continue;
+                                    }
+                                    assignedPerson = candidate;
+                                    replacementIndex = idx;
+                                    wasReplaced = true;
+                                    wasDisabledOnlySkippedSemi = true;
+                                    foundEligible = true;
+                                    globalSemiRotationPosition[groupNum] = (idx + 1) % rotationDays;
+                                    break;
+                                }
+                                if (!foundEligible) assignedPerson = null;
+                            }
                             // DISABLED: When rotation person is disabled, whole baseline shifts – skip them, no replacement line. (Same treatment as special/weekend/normal.)
-                            const isRotationPersonDisabledSemi = rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'semi');
+                            const isRotationPersonDisabledSemi = !wasAssignedByReturnFromMissingSemi && rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'semi');
                             if (isRotationPersonDisabledSemi) {
                                 if (!assignedPeoplePreviewSemi[monthKey][groupNum]) {
                                     assignedPeoplePreviewSemi[monthKey][groupNum] = {};
@@ -7600,7 +7666,7 @@
                                 if (!foundEligible) assignedPerson = null;
                             }
                             // Store baseline for UI: when disabled skip use assigned person so no swap line (same as normal; avoids next day showing as swap)
-                            semiRotationPersons[dateKey][groupNum] = wasDisabledOnlySkippedSemi && assignedPerson ? assignedPerson : rotationPerson;
+                            semiRotationPersons[dateKey][groupNum] = (wasDisabledOnlySkippedSemi && assignedPerson) ? assignedPerson : rotationPerson;
                             // MISSING (not disabled): show replacement and store reason.
                             if (!isRotationPersonDisabledSemi && assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
                                 if (!assignedPeoplePreviewSemi[monthKey][groupNum]) {
