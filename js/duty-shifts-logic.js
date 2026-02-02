@@ -4009,6 +4009,20 @@
                         const dateObj = dateKeyToDate(dk);
 
                         let desired = carry;
+                        // When we hit the returning person's natural slot: don't put carry (would duplicate them). Put next in rotation after insertedPerson so rotation continues correctly.
+                        if (dk !== startKey && cur && normName(cur) === normName(insertedPerson)) {
+                            const idxA = indexOfPersonInList(groupPeople, insertedPerson);
+                            desired = (idxA >= 0 && groupPeople.length > 0) ? groupPeople[(idxA + 1) % groupPeople.length] : carry;
+                            if (desired && isPersonMissingOnDate(desired, groupNum, dateObj, 'normal')) {
+                                const startIdx = indexOfPersonInList(groupPeople, desired);
+                                const replacement = startIdx >= 0 ? pickNextEligibleIgnoringConflicts(groupPeople, startIdx, groupNum, dateObj) : null;
+                                desired = replacement || desired;
+                            }
+                            if (!assignmentsByDate[dk]) assignmentsByDate[dk] = {};
+                            assignmentsByDate[dk][groupNum] = desired;
+                            changes.push({ dateKey: dk, prevPerson: cur, newPerson: desired });
+                            return { ok: true, originalAtTarget, changes };
+                        }
                         if (desired && isPersonMissingOnDate(desired, groupNum, dateObj, 'normal')) {
                             const startIdx = indexOfPersonInList(groupPeople, desired);
                             const replacement = startIdx >= 0 ? pickNextEligibleIgnoringConflicts(groupPeople, startIdx, groupNum, dateObj) : null;
@@ -4019,12 +4033,6 @@
                         assignmentsByDate[dk][groupNum] = desired;
                         changes.push({ dateKey: dk, prevPerson: cur, newPerson: desired });
                         carry = cur;
-
-                        // Stop the chain when we reach the returning person's next natural slot,
-                        // so they don't end up assigned twice within the calculated range.
-                        if (dk !== startKey && cur && normName(cur) === normName(insertedPerson)) {
-                            break;
-                        }
                     }
                     return { ok: true, originalAtTarget, changes };
                 };
