@@ -921,6 +921,24 @@
             // Backward compatible: try exact key first, then normalized key.
             return gmap[personName] || gmap[normalizePersonKey(personName)] || null;
         }
+        /** Find the other date in a swap pair (for rotation: the person on that date is the one who was swapped out of currentDateKey). */
+        function findSwapOtherDateKey(swapPairIdRaw, groupNum, currentDateKey) {
+            if (swapPairIdRaw === null || swapPairIdRaw === undefined) return null;
+            const swapPairId = typeof swapPairIdRaw === 'number' ? swapPairIdRaw : parseInt(swapPairIdRaw);
+            if (isNaN(swapPairId)) return null;
+            for (const dk in assignmentReasons) {
+                if (dk === currentDateKey) continue;
+                const gmap = assignmentReasons?.[dk]?.[groupNum];
+                if (!gmap) continue;
+                for (const pn in gmap) {
+                    const r = gmap[pn];
+                    const rid = r?.swapPairId;
+                    const nid = typeof rid === 'number' ? rid : parseInt(rid);
+                    if (!isNaN(nid) && nid === swapPairId) return dk;
+                }
+            }
+            return null;
+        }
         function hasDutyOnDay(dayKey, person, groupNum) {
             // Determine which document to check based on day type
             const date = new Date(dayKey + 'T00:00:00');
@@ -5379,23 +5397,6 @@
 
         function showNormalSwapResults(swappedPeople, updatedAssignments) {
             updateStep4TableWithFinalAssignments(updatedAssignments);
-            const findSwapOtherDateKey = (swapPairIdRaw, groupNum, currentDateKey) => {
-                if (swapPairIdRaw === null || swapPairIdRaw === undefined) return null;
-                const swapPairId = typeof swapPairIdRaw === 'number' ? swapPairIdRaw : parseInt(swapPairIdRaw);
-                if (isNaN(swapPairId)) return null;
-                for (const dk in assignmentReasons) {
-                    if (dk === currentDateKey) continue;
-                    const gmap = assignmentReasons?.[dk]?.[groupNum];
-                    if (!gmap) continue;
-                    for (const pn in gmap) {
-                        const r = gmap[pn];
-                        const rid = r?.swapPairId;
-                        const nid = typeof rid === 'number' ? rid : parseInt(rid);
-                        if (!isNaN(nid) && nid === swapPairId) return dk;
-                    }
-                }
-                return null;
-            };
 
             console.log('[STEP 4] showNormalSwapResults() called with', swappedPeople.length, 'swapped people');
             let message = '';
@@ -5637,7 +5638,9 @@
                     Object.assign(normalDayAssignments, formattedAssignments);
                     
                     // IMPORTANT: Update last normal rotation state from FINAL assignments (after return-from-missing and swap)
-                    // so that next time we build the preview we start from the correct person and rotation stays consistent
+                    // so that next time we build the preview we start from the correct person and rotation stays consistent.
+                    // When the person on a date got there by SWAP (conflict swap-in), use the SWAPPED-OUT person as "last"
+                    // so next month we continue from the next person after the swapped-out person in rotation (still checking conflicts/missing/disabled).
                     const sortedDateKeys = Object.keys(updatedAssignments).sort();
                     const lastNormalRotationPositionsFromFinal = {};
                     const lastNormalRotationPositionsByMonthFromFinal = {};
@@ -5649,11 +5652,19 @@
                         if (!groups) continue;
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
                             const assignedPerson = groups[groupNum];
-                            if (assignedPerson) {
-                                lastNormalRotationPositionsFromFinal[groupNum] = assignedPerson;
-                                if (!lastNormalRotationPositionsByMonthFromFinal[monthKey]) lastNormalRotationPositionsByMonthFromFinal[monthKey] = {};
-                                lastNormalRotationPositionsByMonthFromFinal[monthKey][groupNum] = assignedPerson;
+                            if (!assignedPerson) continue;
+                            let personForRotation = assignedPerson;
+                            const reason = getAssignmentReason(dateKey, groupNum, assignedPerson);
+                            if (reason && reason.type === 'swap' && reason.swapPairId != null) {
+                                const otherKey = findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey);
+                                const swappedOutPerson = otherKey ? (updatedAssignments[otherKey] || {})[groupNum] : null;
+                                if (swappedOutPerson) {
+                                    personForRotation = swappedOutPerson;
+                                }
                             }
+                            lastNormalRotationPositionsFromFinal[groupNum] = personForRotation;
+                            if (!lastNormalRotationPositionsByMonthFromFinal[monthKey]) lastNormalRotationPositionsByMonthFromFinal[monthKey] = {};
+                            lastNormalRotationPositionsByMonthFromFinal[monthKey][groupNum] = personForRotation;
                         }
                     }
                     if (Object.keys(lastNormalRotationPositionsFromFinal).length > 0) {
