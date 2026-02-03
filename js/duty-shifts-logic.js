@@ -4403,6 +4403,18 @@
                                     const returnKey = addDaysToDateKey(pEndKey, 1);
                                     if (!returnKey) continue;
 
+                                    // Already placed for this same missing period (pEndKey) in a previous month? Skip – do not re-assign in this month; they get duty again on their normal rotation turn.
+                                    let alreadyPlacedForThisPeriod = false;
+                                    for (const dk in assignmentReasons) {
+                                        if (dk >= returnKey) continue;
+                                        const reason = getAssignmentReason(dk, groupNum, personName);
+                                        if (reason && reason.meta?.returnFromMissing && reason.meta?.missingEnd === pEndKey) {
+                                            alreadyPlacedForThisPeriod = true;
+                                            break;
+                                        }
+                                    }
+                                    if (alreadyPlacedForThisPeriod) continue;
+
                                     // If no baseline duty in calculated month during missing period, defer to next month if return is next month.
                                     if (!firstMissedKey) {
                                         if (returnKey > calcEndKey) {
