@@ -5211,61 +5211,15 @@
                                     swapPairId: swapPairId
                                 });
                                 
-                                // If this is a BACKWARD swap inside the same month, do a forward SHIFT along the same track
-                                // so the displaced person is assigned on the EXACT next track day (not skipped).
-                                const isCrossMonthSwap = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
-                                const isBackwardWithinMonth = !isCrossMonthSwap && swapDayKey < dateKey;
-
                                 // Use the ACTUAL conflict neighbor day instead of the swap-execution day.
                                 const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, simulatedAssignments) || dateKey;
 
-                                if (isBackwardWithinMonth) {
-                                    // Determine track from the CURRENT normal day (Mon/Wed track or Tue/Thu track)
-                                    const curDow = new Date(dateKey + 'T00:00:00').getDay(); // 0..6
-                                    const track = (curDow === 1 || curDow === 3) ? 1 : ((curDow === 2 || curDow === 4) ? 2 : null);
-                                    const trackKeys = track
-                                        ? normalDays
-                                            .filter(dk => dk >= swapDayKey && dk <= dateKey)
-                                            .filter(dk => {
-                                                const d = new Date(dk + 'T00:00:00').getDay();
-                                                return track === 1 ? (d === 1 || d === 3) : (d === 2 || d === 4);
-                                            })
-                                            .sort()
-                                        : [swapDayKey, dateKey].sort();
-
-                                    const changes = []; // { dk, prevPerson, newPerson }
-                                    let carry = currentPerson;
-                                    for (const dk of trackKeys) {
-                                        if (!updatedAssignments[dk]) updatedAssignments[dk] = {};
-                                        const prev = updatedAssignments[dk][groupNum] || null;
-                                        updatedAssignments[dk][groupNum] = carry;
-                                        changes.push({ dk, prevPerson: prev, newPerson: carry });
-                                        carry = prev;
-                                    }
-
-                                    // Store "shift" reasons for all moved assignments (keeps UI explanations consistent).
-                                    const shiftMeta = { backwardShift: true, originDayKey: dateKey, swapDayKey, conflictDateKey: conflictNeighborKey };
-                                    for (const ch of changes) {
-                                        if (!ch.newPerson) continue;
-                                        // Mark as handled so later swap passes don't re-process and drop the displaced person.
-                                        swappedPeopleSet.add(`${ch.dk}:${groupNum}:${ch.newPerson}`);
-                                        storeAssignmentReason(
-                                            ch.dk,
-                                            groupNum,
-                                            ch.newPerson,
-                                            'shift',
-                                            `Μετακίνηση (οπισθοδρομική ανταλλαγή) λόγω σύγκρουσης γειτονικής υπηρεσίας (${conflictNeighborKey}).`,
-                                            ch.prevPerson || null,
-                                            swapPairId,
-                                            shiftMeta
-                                        );
-                                    }
-                                } else {
-                                    // Forward swap / cross-month swap keeps original behavior
-                                    // Perform the swap: conflicted person goes to swap date, swapped person goes to conflicted date
-                                    updatedAssignments[dateKey][groupNum] = swapCandidate;
-                                    updatedAssignments[swapDayKey][groupNum] = currentPerson;
-                                }
+                                // Always perform a simple two-slot swap: conflicted person goes to swap date, swap candidate goes to conflicted date.
+                                // (Previously a "backward shift" rotated the whole track and overwrote 24/02 and 26/02 with wrong assignments.)
+                                updatedAssignments[dateKey][groupNum] = swapCandidate;
+                                updatedAssignments[swapDayKey][groupNum] = currentPerson;
+                                console.log('[SWAP SAVE DEBUG] After two-slot swap:', dateKey, 'Group', groupNum, '->', swapCandidate, '|', swapDayKey, '->', currentPerson, '| updatedAssignments sample:', { [dateKey]: updatedAssignments[dateKey]?.[groupNum], [swapDayKey]: updatedAssignments[swapDayKey]?.[groupNum] });
+                                const isBackwardWithinMonth = false; // no track shift; swap only
                                 
                                 // Store assignment reasons for BOTH people involved in the swap with swap pair ID
                                 // Improved Greek reasons:
@@ -5331,8 +5285,9 @@
                     }
                 });
                 
-                // Store final assignments (after swap logic) for saving when OK is pressed
-                calculationSteps.finalNormalAssignments = updatedAssignments;
+                // Store final assignments (after swap logic) for saving when OK is pressed.
+                // Use a deep copy so nothing can mutate the saved state before the user clicks OK.
+                calculationSteps.finalNormalAssignments = JSON.parse(JSON.stringify(updatedAssignments));
 
                 // CRITICAL for multi-month ranges:
                 // The "executeCalculation()" flow persists assignments from calculationSteps.tempAssignments (or Firestore tempAssignments),
@@ -5343,12 +5298,12 @@
                             special: calculationSteps.tempAssignments?.special || calculationSteps.tempSpecialAssignments || {},
                             weekend: calculationSteps.tempAssignments?.weekend || calculationSteps.tempWeekendAssignments || {},
                             semi: calculationSteps.tempAssignments?.semi || calculationSteps.tempSemiAssignments || {},
-                            normal: updatedAssignments,
+                            normal: calculationSteps.finalNormalAssignments,
                             startDate: calculationSteps.startDate ? new Date(calculationSteps.startDate).toISOString() : null,
                             endDate: calculationSteps.endDate ? new Date(calculationSteps.endDate).toISOString() : null
                         };
                     } else {
-                        calculationSteps.tempAssignments.normal = updatedAssignments;
+                        calculationSteps.tempAssignments.normal = calculationSteps.finalNormalAssignments;
                     }
                     // Best-effort: persist updated temp assignments so range-save uses the correct final normal schedule.
                     if (typeof saveTempAssignmentsToFirestore === 'function') {
@@ -5375,8 +5330,8 @@
                 console.log('[STEP 4] Swap logic completed. Swapped people:', allSwappedPeople.length, '(Preview:', previewSwaps.length, ', Actual:', swappedPeople.length, ')');
                 console.log('[STEP 4] Calling showNormalSwapResults()');
                 
-                // Show popup with results (will save when OK is pressed)
-                showNormalSwapResults(allSwappedPeople, updatedAssignments);
+                // Show popup with results (will save when OK is pressed). Pass finalNormalAssignments so table and save use same frozen data.
+                showNormalSwapResults(allSwappedPeople, calculationSteps.finalNormalAssignments);
             } catch (error) {
                 console.error('[STEP 4] Error running normal swap logic:', error);
             }
@@ -5608,7 +5563,9 @@
                     okButton.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Αποθήκευση...`;
                     setStepFooterBusy(true);
                     try {
-                        await saveFinalNormalAssignments(updatedAssignments);
+                        // Always save from the frozen final state (set right after swap logic) so nothing can overwrite it
+                        const toSave = calculationSteps.finalNormalAssignments || updatedAssignments;
+                        await saveFinalNormalAssignments(toSave);
                         // Close the step-by-step calculation modal
                         const stepModal = bootstrap.Modal.getInstance(document.getElementById('stepByStepCalculationModal'));
                         if (stepModal) {
@@ -5642,6 +5599,12 @@
                 }
                 
                 if (Object.keys(updatedAssignments).length > 0) {
+                    // Debug: log what we're saving for swap-relevant dates (19 and 26 Feb 2026)
+                    const d19 = updatedAssignments['2026-02-19'];
+                    const d26 = updatedAssignments['2026-02-26'];
+                    if (d19 || d26) {
+                        console.log('[SAVE DEBUG] saveFinalNormalAssignments input for 2026-02-19:', d19, '2026-02-26:', d26);
+                    }
                     const formattedAssignments = {};
                     for (const dateKey in updatedAssignments) {
                         const groups = updatedAssignments[dateKey];
@@ -5655,7 +5618,9 @@
                             formattedAssignments[dateKey] = parts.join(', ');
                         }
                     }
-                    
+                    if (formattedAssignments['2026-02-19'] || formattedAssignments['2026-02-26']) {
+                        console.log('[SAVE DEBUG] formattedAssignments for 2026-02-19:', formattedAssignments['2026-02-19'], '2026-02-26:', formattedAssignments['2026-02-26']);
+                    }
                     const organizedNormal = organizeAssignmentsByMonth(formattedAssignments);
                     const sanitizedNormal = sanitizeForFirestore(organizedNormal);
                     
