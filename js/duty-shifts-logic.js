@@ -5066,11 +5066,20 @@
                                     console.log(`[SWAP LOGIC] Step 1b: Checking backward swap date ${prevSameDayKey} (calculated from ${dateKey}, current month: ${month})`);
                                     
                                     if (prevSameDay < date &&
-                                        prevSameDay.getMonth() === month && // MUST be in same month
-                                        prevSameDay.getFullYear() === year && // MUST be in same year
-                                        normalDays.includes(prevSameDayKey)) {
+                                        prevSameDay.getMonth() === month &&
+                                        prevSameDay.getFullYear() === year) {
                                         const prevSameDayType = getDayType(prevSameDay);
-                                        const swapCandidate = updatedAssignments[prevSameDayKey]?.[groupNum];
+                                        // Candidate: from updatedAssignments if in range, else from saved assignments (previous same day may be before calc range)
+                                        let swapCandidate = updatedAssignments[prevSameDayKey]?.[groupNum];
+                                        if (!swapCandidate && prevSameDayType === 'normal-day' && typeof getAssignmentForDate === 'function') {
+                                            const raw = getAssignmentForDate(prevSameDayKey);
+                                            swapCandidate = raw && typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                                                ? parseAssignedPersonForGroupFromAssignment(raw, groupNum)
+                                                : null;
+                                            if (swapCandidate) {
+                                                console.log(`[SWAP LOGIC] Step 1b: Using candidate ${swapCandidate} on ${prevSameDayKey} from saved assignments (date not in calc range)`);
+                                            }
+                                        }
                                         
                                         if (prevSameDayType === 'normal-day' && swapCandidate) {
                                             console.log(`[SWAP LOGIC] Step 1b: Found candidate ${swapCandidate} on ${prevSameDayKey} (previous same day, current assignment)`);
@@ -5080,13 +5089,28 @@
                                                 !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 swapDayKey = prevSameDayKey;
                                                 swapDayIndex = normalDays.indexOf(prevSameDayKey);
+                                                if (swapDayIndex < 0) swapDayIndex = -1; // date outside calc range is OK
                                                 swapFound = true;
                                                 console.log(`[SWAP LOGIC] ✓ Step 1b SUCCESS: Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${prevSameDayKey})`);
+                                                // If prevSameDayKey was not in updatedAssignments (outside calc range), populate it so the common swap block can write and we persist it on save
+                                                if (!updatedAssignments[prevSameDayKey]) {
+                                                    const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(prevSameDayKey) : null;
+                                                    const groupsPrev = raw && typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : {};
+                                                    updatedAssignments[prevSameDayKey] = { ...groupsPrev, [groupNum]: currentPerson };
+                                                } else {
+                                                    updatedAssignments[prevSameDayKey][groupNum] = currentPerson;
+                                                }
                                             } else {
                                                 console.log(`[SWAP LOGIC] ✗ Step 1b FAILED: Candidate ${swapCandidate} has conflict or is missing`);
                                             }
                                         } else {
-                                            console.log(`[SWAP LOGIC] ✗ Step 1b FAILED: No candidate found on ${prevSameDayKey} or not a normal day (type: ${prevSameDayType})`);
+                                            if (!normalDays.includes(prevSameDayKey) && prevSameDayType === 'normal-day') {
+                                                console.log(`[SWAP LOGIC] ✗ Step 1b FAILED: No candidate on ${prevSameDayKey} (saved assignment empty or not normal day)`);
+                                            } else if (!normalDays.includes(prevSameDayKey)) {
+                                                console.log(`[SWAP LOGIC] ✗ Step 1b FAILED: Previous same day ${prevSameDayKey} not a normal day (type: ${prevSameDayType}) or no assignment`);
+                                            } else {
+                                                console.log(`[SWAP LOGIC] ✗ Step 1b FAILED: No candidate found on ${prevSameDayKey} or not a normal day (type: ${prevSameDayType})`);
+                                            }
                                         }
                                     } else {
                                         const monthCheck = prevSameDay.getMonth() === month ? 'OK' : `FAIL (different month: ${prevSameDay.getMonth()} vs ${month})`;
