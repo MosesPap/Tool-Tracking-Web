@@ -4008,6 +4008,10 @@
                         const dk = sortedNormalKeys[j];
                         originalAssignments[dk] = assignmentsByDate?.[dk]?.[groupNum] || null;
                     }
+                    // #region agent log
+                    const sampleOrig = { '2026-02-17': originalAssignments['2026-02-17'], '2026-02-19': originalAssignments['2026-02-19'], '2026-02-24': originalAssignments['2026-02-24'], '2026-02-26': originalAssignments['2026-02-26'] };
+                    fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:applyShift',message:'Original snapshot',data:{startKey,insertedPerson,sampleOrig},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix'})}).catch(()=>{});
+                    // #endregion
                     let remaining = null;
                     const assignedInChain = new Set();
                     let carry = insertedPerson;
@@ -4020,10 +4024,17 @@
                         // At the returning person's natural slot: put carry (displaced person) so rotation order is preserved; next day will get original(dk) below.
                         if (dk !== startKey && cur && normName(cur) === normName(insertedPerson)) {
                             desired = carry;
+                            // #region agent log
+                            if (dk === '2026-02-17' || dk === '2026-02-19') fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:applyShift',message:'At inserted natural slot',data:{dk,desired:carry,cur},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix'})}).catch(()=>{});
+                            // #endregion
                         }
                         // Would assign the returning person again (past their natural slot): put the person who was originally on this day so rotation order is preserved.
                         else if (dk !== startKey && desired && normName(desired) === normName(insertedPerson)) {
-                            desired = originalAssignments[dk] || desired;
+                            const origAtDk = originalAssignments[dk] || null;
+                            desired = origAtDk || desired;
+                            // #region agent log
+                            if (dk === '2026-02-19' || dk === '2026-02-24' || dk === '2026-02-26') fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:applyShift',message:'Past slot use original',data:{dk,desiredAfter:desired,originalAtDk:origAtDk,carryWas:carry},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix'})}).catch(()=>{});
+                            // #endregion
                         }
                         // Would assign someone we already placed in this chain: use next from remaining
                         else if (desired && assignedInChain.has(normName(desired))) {
