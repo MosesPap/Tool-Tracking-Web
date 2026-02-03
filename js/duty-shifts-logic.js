@@ -4002,7 +4002,12 @@
                     if (idx < 0) return { ok: false, originalAtTarget: null };
                     const originalAtTarget = assignmentsByDate?.[startKey]?.[groupNum] || null;
                     const changes = []; // { dateKey, prevPerson, newPerson }
-                    // Built lazily when we first hit the returning person's slot: [original at i+1, i+2, ...]. Ensures we pull the right person (no duplicate).
+                    // Snapshot original assignments so we can preserve rotation order after the inserted person's natural slot (log evidence: 19/02 had wrong person when using "remaining" pull).
+                    const originalAssignments = {};
+                    for (let j = idx; j < sortedNormalKeys.length; j++) {
+                        const dk = sortedNormalKeys[j];
+                        originalAssignments[dk] = assignmentsByDate?.[dk]?.[groupNum] || null;
+                    }
                     let remaining = null;
                     const assignedInChain = new Set();
                     let carry = insertedPerson;
@@ -4012,30 +4017,23 @@
                         const dateObj = dateKeyToDate(dk);
 
                         let desired = carry;
-                        // At the returning person's natural slot: don't put carry (duplicate). Use next day's person from original.
+                        // At the returning person's natural slot: put carry (displaced person) so rotation order is preserved; next day will get original(dk) below.
                         if (dk !== startKey && cur && normName(cur) === normName(insertedPerson)) {
-                            if (remaining === null) {
-                                remaining = [];
-                                for (let j = i + 1; j < sortedNormalKeys.length; j++) {
-                                    const p = assignmentsByDate?.[sortedNormalKeys[j]]?.[groupNum] || null;
-                                    if (p) remaining.push(p);
-                                }
-                            }
-                            desired = remaining.length > 0 ? remaining.shift() : carry;
+                            desired = carry;
                         }
-                        // Would assign the returning person again later (not at target): use next from remaining so we don't duplicate them
+                        // Would assign the returning person again (past their natural slot): put the person who was originally on this day so rotation order is preserved.
                         else if (dk !== startKey && desired && normName(desired) === normName(insertedPerson)) {
-                            if (remaining === null) {
-                                remaining = [];
-                                for (let j = i + 1; j < sortedNormalKeys.length; j++) {
-                                    const p = assignmentsByDate?.[sortedNormalKeys[j]]?.[groupNum] || null;
-                                    if (p) remaining.push(p);
-                                }
-                            }
-                            desired = (remaining && remaining.length > 0) ? remaining.shift() : desired;
+                            desired = originalAssignments[dk] || desired;
                         }
                         // Would assign someone we already placed in this chain: use next from remaining
                         else if (desired && assignedInChain.has(normName(desired))) {
+                            if (remaining === null) {
+                                remaining = [];
+                                for (let j = i + 1; j < sortedNormalKeys.length; j++) {
+                                    const p = originalAssignments[sortedNormalKeys[j]] || null;
+                                    if (p) remaining.push(p);
+                                }
+                            }
                             desired = (remaining && remaining.length > 0) ? remaining.shift() : desired;
                         }
                         if (desired && isPersonMissingOnDate(desired, groupNum, dateObj, 'normal')) {
