@@ -4814,9 +4814,7 @@
                                             if (!updatedAssignments[prevSameDayKey]) {
                                                 const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(prevSameDayKey) : null;
                                                 const groupsPrev = raw && typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : {};
-                                                updatedAssignments[prevSameDayKey] = { ...groupsPrev, [groupNum]: currentPerson };
-                                            } else {
-                                                updatedAssignments[prevSameDayKey][groupNum] = currentPerson;
+                                                updatedAssignments[prevSameDayKey] = { ...groupsPrev };
                                             }
                                             break;
                                         }
@@ -4856,9 +4854,7 @@
                                             if (!updatedAssignments[prevAlternativeKey]) {
                                                 const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(prevAlternativeKey) : null;
                                                 const groupsPrev = raw && typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : {};
-                                                updatedAssignments[prevAlternativeKey] = { ...groupsPrev, [groupNum]: currentPerson };
-                                            } else {
-                                                updatedAssignments[prevAlternativeKey][groupNum] = currentPerson;
+                                                updatedAssignments[prevAlternativeKey] = { ...groupsPrev };
                                             }
                                             break;
                                         }
@@ -5035,12 +5031,11 @@
                                             if (swapDayIndex < 0) swapDayIndex = -1;
                                             swapFound = true;
                                             console.log(`[SWAP LOGIC] ✓ Step 1b SUCCESS: Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${prevSameDayKey})`);
+                                            // Only ensure swap-day entry exists with EXISTING assignment so common block reads correct swapCandidate; do NOT write currentPerson here (common block does both writes)
                                             if (!updatedAssignments[prevSameDayKey]) {
                                                 const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(prevSameDayKey) : null;
                                                 const groupsPrev = raw && typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : {};
-                                                updatedAssignments[prevSameDayKey] = { ...groupsPrev, [groupNum]: currentPerson };
-                                            } else {
-                                                updatedAssignments[prevSameDayKey][groupNum] = currentPerson;
+                                                updatedAssignments[prevSameDayKey] = { ...groupsPrev };
                                             }
                                             break;
                                         }
@@ -5080,9 +5075,7 @@
                                                 if (!updatedAssignments[sameWeekKey]) {
                                                     const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(sameWeekKey) : null;
                                                     const groupsPrev = raw && typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : {};
-                                                    updatedAssignments[sameWeekKey] = { ...groupsPrev, [groupNum]: currentPerson };
-                                                } else {
-                                                    updatedAssignments[sameWeekKey][groupNum] = currentPerson;
+                                                    updatedAssignments[sameWeekKey] = { ...groupsPrev };
                                                 }
                                             } else {
                                                 console.log(`[SWAP LOGIC] ✗ Step 2 FAILED: Candidate ${swapCandidate} has conflict or is missing or not normal day`);
@@ -5164,9 +5157,7 @@
                                             if (!updatedAssignments[prevAlternativeKey]) {
                                                 const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(prevAlternativeKey) : null;
                                                 const groupsPrev = raw && typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : {};
-                                                updatedAssignments[prevAlternativeKey] = { ...groupsPrev, [groupNum]: currentPerson };
-                                            } else {
-                                                updatedAssignments[prevAlternativeKey][groupNum] = currentPerson;
+                                                updatedAssignments[prevAlternativeKey] = { ...groupsPrev };
                                             }
                                             break;
                                         }
