@@ -5220,6 +5220,7 @@
                                 updatedAssignments[swapDayKey][groupNum] = currentPerson;
                                 console.log('[SWAP SAVE DEBUG] After two-slot swap:', dateKey, 'Group', groupNum, '->', swapCandidate, '|', swapDayKey, '->', currentPerson, '| updatedAssignments sample:', { [dateKey]: updatedAssignments[dateKey]?.[groupNum], [swapDayKey]: updatedAssignments[swapDayKey]?.[groupNum] });
                                 const isBackwardWithinMonth = false; // no track shift; swap only
+                                const isCrossMonthSwap = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
                                 
                                 // Store assignment reasons for BOTH people involved in the swap with swap pair ID
                                 // Improved Greek reasons:
