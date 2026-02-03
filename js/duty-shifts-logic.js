@@ -4649,9 +4649,6 @@
                         // Debug logging to help identify why conflicts aren't detected
                         if (hasConsecutiveConflict) {
                             console.log(`[SWAP DEBUG] Found conflict for ${currentPerson} on ${dateKey} (Group ${groupNum})`);
-                            // #region agent log
-                            fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:swapConflictEntry',message:'Conflict found',data:{dateKey,currentPerson,groupNum,assign_19:updatedAssignments['2026-03-19']?.[groupNum],assign_26:updatedAssignments['2026-03-26']?.[groupNum],assign_02apr:updatedAssignments['2026-04-02']?.[groupNum]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
-                            // #endregion
                         }
                         
                         // Declare swap variables in broader scope so they're accessible after the if block
@@ -4663,6 +4660,10 @@
                             const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                             const month = date.getMonth();
                             const year = date.getFullYear();
+                            
+                            // #region agent log
+                            fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:swap-entry',message:'Conflict swap entry',data:{dateKey,currentPerson,groupNum,dayOfWeek,dayName:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOfWeek]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+                            // #endregion
                             
                             // Get calculation range dates for validation
                             const calcStartDateRaw = calculationSteps.startDate || null;
@@ -4943,14 +4944,11 @@
                             // TUESDAY/THURSDAY - Separate logic block
                             else if (dayOfWeek === 2 || dayOfWeek === 4) {
                                 const alternativeDayOfWeek = dayOfWeek === 2 ? 4 : 2; // Tuesday ↔ Thursday
-                                const nextSameDay = new Date(year, month, date.getDate() + 7);
-                                const nextSameDayKey = formatDateKey(nextSameDay);
-                                const prevSameDayKeyForLog = formatDateKey(new Date(year, month, date.getDate() - 7));
-                                // #region agent log
-                                fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:swapTueThu',message:'TueThu steps order',data:{dateKey,currentPerson,nextSameDayKey,candidateNext:updatedAssignments[nextSameDayKey]?.[groupNum],prevSameDayKey:prevSameDayKeyForLog,candidatePrev:updatedAssignments[prevSameDayKeyForLog]?.[groupNum]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
-                                // #endregion
+                                
                                 console.log(`[SWAP LOGIC] TUESDAY/THURSDAY - Step 1a: Trying next same day (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek]}) - can be in same month or next month`);
                                 // TUESDAY/THURSDAY - Step 1a: Try next same day of week (can be in same month or next month)
+                                const nextSameDay = new Date(year, month, date.getDate() + 7);
+                                const nextSameDayKey = formatDateKey(nextSameDay);
                                 
                                 // Check if next same day is in the calculation range (same month or next month)
                                 if (normalDays.includes(nextSameDayKey) && updatedAssignments[nextSameDayKey]?.[groupNum]) {
@@ -5010,10 +5008,10 @@
                                             swapDayKey = nextSameDayKey;
                                             swapDayIndex = normalDays.indexOf(nextSameDayKey);
                                             swapFound = true;
-                                            // #region agent log
-                                            fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:swapStep1aSuccess',message:'Step 1a won',data:{dateKey,currentPerson,swapDayKey,swapCandidate,step:'1a'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
-                                            // #endregion
                                             console.log(`[SWAP LOGIC] ✓ Step 1a SUCCESS: Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${nextSameDayKey})`);
+                                            // #region agent log
+                                            fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:step1a',message:'Step 1a success',data:{dateKey,currentPerson,nextSameDayKey,swapCandidate,swapFound:true},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+                                            // #endregion
                                         } else {
                                             console.log(`[SWAP LOGIC] ✗ Step 1a FAILED: Candidate ${swapCandidate} has conflict or is missing`);
                                         }
@@ -5037,6 +5035,17 @@
                                     const prevSameDayKey = formatDateKey(prevSameDay);
                                     console.log(`[SWAP LOGIC] Step 1b: Checking backward swap date ${prevSameDayKey} (calculated from ${dateKey}, current month: ${month})`);
                                     
+                                    // #region agent log
+                                    const inNormalDays1b = normalDays.includes(prevSameDayKey);
+                                    const sameMonth1b = prevSameDay.getMonth() === month;
+                                    const swapCandidate1b = updatedAssignments[prevSameDayKey]?.[groupNum];
+                                    const prevSameDayType1b = getDayType(prevSameDay);
+                                    const isMissing1b = swapCandidate1b ? isPersonMissingOnDate(swapCandidate1b, groupNum, prevSameDay, 'normal') : true;
+                                    const hasConflictPrev1b = swapCandidate1b ? hasConsecutiveDuty(prevSameDayKey, swapCandidate1b, groupNum, simulatedAssignments) : true;
+                                    const hasConflictDate1b = swapCandidate1b ? hasConsecutiveDuty(dateKey, swapCandidate1b, groupNum, simulatedAssignments) : true;
+                                    fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:step1b',message:'Step 1b prev same day',data:{dateKey,currentPerson,prevSameDayKey,swapCandidate:swapCandidate1b,inNormalDays:inNormalDays1b,sameMonth:sameMonth1b,prevSameDayType:prevSameDayType1b,isMissing:isMissing1b,hasConflictPrev:hasConflictPrev1b,hasConflictDate:hasConflictDate1b},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
+                                    // #endregion
+                                    
                                     if (prevSameDay < date &&
                                         prevSameDay.getMonth() === month && // MUST be in same month
                                         prevSameDay.getFullYear() === year && // MUST be in same year
@@ -5053,17 +5062,8 @@
                                                 swapDayKey = prevSameDayKey;
                                                 swapDayIndex = normalDays.indexOf(prevSameDayKey);
                                                 swapFound = true;
-                                                // #region agent log
-                                                fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:swapStep1bSuccess',message:'Step 1b won',data:{dateKey,currentPerson,swapDayKey,swapCandidate,step:'1b'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
-                                                // #endregion
                                                 console.log(`[SWAP LOGIC] ✓ Step 1b SUCCESS: Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${prevSameDayKey})`);
                                             } else {
-                                                const miss = isPersonMissingOnDate(swapCandidate, groupNum, prevSameDay, 'normal');
-                                                const conf1 = hasConsecutiveDuty(prevSameDayKey, swapCandidate, groupNum, simulatedAssignments);
-                                                const conf2 = hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments);
-                                                // #region agent log
-                                                fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:swapStep1bFail',message:'Step 1b failed',data:{dateKey,prevSameDayKey,swapCandidate,missing:miss,conflictPrev:conf1,conflictDate:conf2},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-                                                // #endregion
                                                 console.log(`[SWAP LOGIC] ✗ Step 1b FAILED: Candidate ${swapCandidate} has conflict or is missing`);
                                             }
                                         } else {
@@ -5097,6 +5097,9 @@
                                                 swapDayIndex = normalDays.indexOf(sameWeekKey);
                                                 swapFound = true;
                                                 console.log(`[SWAP LOGIC] ✓ Step 2 SUCCESS: Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${sameWeekKey})`);
+                                                // #region agent log
+                                                fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:step2-tue-thu',message:'Step 2 same week success',data:{dateKey,currentPerson,sameWeekKey,swapCandidate,swapFound:true},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+                                                // #endregion
                                             } else {
                                                 console.log(`[SWAP LOGIC] ✗ Step 2 FAILED: Candidate ${swapCandidate} has conflict or is missing`);
                                             }
@@ -5200,9 +5203,11 @@
                             if (swapFound && swapDayKey) {
                                 // Get swap candidate - for cross-month swaps, it should already be stored in updatedAssignments
                                 const swapCandidate = updatedAssignments[swapDayKey]?.[groupNum];
+                                
                                 // #region agent log
-                                fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:swapPerform',message:'Performing swap',data:{dateKey,currentPerson,swapDayKey,swapCandidate,isBackward:swapDayKey<dateKey},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+                                fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:swap-performed',message:'Final swap performed',data:{conflictedDateKey:dateKey,currentPerson,swapDayKey,swapCandidate},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
                                 // #endregion
+                                
                                 if (!swapCandidate) {
                                     // If we can't find the candidate, skip this swap
                                     console.warn(`[SWAP WARNING] Could not find swap candidate for ${swapDayKey} (Group ${groupNum})`);
@@ -5254,9 +5259,6 @@
                                             })
                                             .sort()
                                         : [swapDayKey, dateKey].sort();
-                                    // #region agent log
-                                    const beforeShift = trackKeys.map(dk => ({ dk, p: updatedAssignments[dk]?.[groupNum] }));
-                                    // #endregion
 
                                     const changes = []; // { dk, prevPerson, newPerson }
                                     let carry = currentPerson;
@@ -5267,9 +5269,6 @@
                                         changes.push({ dk, prevPerson: prev, newPerson: carry });
                                         carry = prev;
                                     }
-                                    // #region agent log
-                                    fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:swapBackwardShift',message:'Backward shift',data:{dateKey,swapDayKey,trackKeys,beforeShift,afterShift:changes.map(c=>c.dk+':'+c.newPerson)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
-                                    // #endregion
 
                                     // Store "shift" reasons for all moved assignments (keeps UI explanations consistent).
                                     const shiftMeta = { backwardShift: true, originDayKey: dateKey, swapDayKey, conflictDateKey: conflictNeighborKey };
