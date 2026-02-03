@@ -4008,10 +4008,6 @@
                         const dk = sortedNormalKeys[j];
                         originalAssignments[dk] = assignmentsByDate?.[dk]?.[groupNum] || null;
                     }
-                    // #region agent log
-                    const sampleOrig = { '2026-02-17': originalAssignments['2026-02-17'], '2026-02-19': originalAssignments['2026-02-19'], '2026-02-24': originalAssignments['2026-02-24'], '2026-02-26': originalAssignments['2026-02-26'] };
-                    fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:applyShift',message:'Original snapshot',data:{startKey,insertedPerson,sampleOrig},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix'})}).catch(()=>{});
-                    // #endregion
                     let remaining = null;
                     const assignedInChain = new Set();
                     let carry = insertedPerson;
@@ -4024,19 +4020,12 @@
                         // At the returning person's natural slot: put carry (displaced person) so rotation order is preserved; next day will get original(dk) below.
                         if (dk !== startKey && cur && normName(cur) === normName(insertedPerson)) {
                             desired = carry;
-                            // #region agent log
-                            if (dk === '2026-02-17' || dk === '2026-02-19') fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:applyShift',message:'At inserted natural slot',data:{dk,desired:carry,cur},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix'})}).catch(()=>{});
-                            // #endregion
                         }
                         // Would assign the returning person again (past their natural slot): put the person who was originally on this day so rotation order is preserved.
                         else if (dk !== startKey && desired && normName(desired) === normName(insertedPerson)) {
-                            const origAtDk = originalAssignments[dk] || null;
-                            desired = origAtDk || desired;
-                            // #region agent log
-                            if (dk === '2026-02-19' || dk === '2026-02-24' || dk === '2026-02-26') fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:applyShift',message:'Past slot use original',data:{dk,desiredAfter:desired,originalAtDk:origAtDk,carryWas:carry},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix'})}).catch(()=>{});
-                            // #endregion
+                            desired = originalAssignments[dk] || desired;
                         }
-                        // Would assign someone we already placed in this chain: use next from remaining
+                        // Would assign someone we already placed in this chain: use next from remaining (preserves rotation: 19/02 gets Person 8 for swap with conflicted, 24/02 gets Person 7).
                         else if (desired && assignedInChain.has(normName(desired))) {
                             if (remaining === null) {
                                 remaining = [];
@@ -4670,10 +4659,6 @@
                             const month = date.getMonth();
                             const year = date.getFullYear();
                             
-                            // #region agent log
-                            fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:swap-entry',message:'Conflict swap entry',data:{dateKey,currentPerson,groupNum,dayOfWeek,dayName:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOfWeek]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
-                            // #endregion
-                            
                             // Get calculation range dates for validation
                             const calcStartDateRaw = calculationSteps.startDate || null;
                             const calcEndDateRaw = calculationSteps.endDate || null;
@@ -5018,9 +5003,6 @@
                                             swapDayIndex = normalDays.indexOf(nextSameDayKey);
                                             swapFound = true;
                                             console.log(`[SWAP LOGIC] ✓ Step 1a SUCCESS: Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${nextSameDayKey})`);
-                                            // #region agent log
-                                            fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:step1a',message:'Step 1a success',data:{dateKey,currentPerson,nextSameDayKey,swapCandidate,swapFound:true},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
-                                            // #endregion
                                         } else {
                                             console.log(`[SWAP LOGIC] ✗ Step 1a FAILED: Candidate ${swapCandidate} has conflict or is missing`);
                                         }
@@ -5043,17 +5025,6 @@
                                     // CRITICAL: Only allow backward swap if it's in the SAME MONTH
                                     const prevSameDayKey = formatDateKey(prevSameDay);
                                     console.log(`[SWAP LOGIC] Step 1b: Checking backward swap date ${prevSameDayKey} (calculated from ${dateKey}, current month: ${month})`);
-                                    
-                                    // #region agent log
-                                    const inNormalDays1b = normalDays.includes(prevSameDayKey);
-                                    const sameMonth1b = prevSameDay.getMonth() === month;
-                                    const swapCandidate1b = updatedAssignments[prevSameDayKey]?.[groupNum];
-                                    const prevSameDayType1b = getDayType(prevSameDay);
-                                    const isMissing1b = swapCandidate1b ? isPersonMissingOnDate(swapCandidate1b, groupNum, prevSameDay, 'normal') : true;
-                                    const hasConflictPrev1b = swapCandidate1b ? hasConsecutiveDuty(prevSameDayKey, swapCandidate1b, groupNum, simulatedAssignments) : true;
-                                    const hasConflictDate1b = swapCandidate1b ? hasConsecutiveDuty(dateKey, swapCandidate1b, groupNum, simulatedAssignments) : true;
-                                    fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:step1b',message:'Step 1b prev same day',data:{dateKey,currentPerson,prevSameDayKey,swapCandidate:swapCandidate1b,inNormalDays:inNormalDays1b,sameMonth:sameMonth1b,prevSameDayType:prevSameDayType1b,isMissing:isMissing1b,hasConflictPrev:hasConflictPrev1b,hasConflictDate:hasConflictDate1b},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
-                                    // #endregion
                                     
                                     if (prevSameDay < date &&
                                         prevSameDay.getMonth() === month && // MUST be in same month
@@ -5106,9 +5077,6 @@
                                                 swapDayIndex = normalDays.indexOf(sameWeekKey);
                                                 swapFound = true;
                                                 console.log(`[SWAP LOGIC] ✓ Step 2 SUCCESS: Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${sameWeekKey})`);
-                                                // #region agent log
-                                                fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:step2-tue-thu',message:'Step 2 same week success',data:{dateKey,currentPerson,sameWeekKey,swapCandidate,swapFound:true},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
-                                                // #endregion
                                             } else {
                                                 console.log(`[SWAP LOGIC] ✗ Step 2 FAILED: Candidate ${swapCandidate} has conflict or is missing`);
                                             }
@@ -5212,10 +5180,6 @@
                             if (swapFound && swapDayKey) {
                                 // Get swap candidate - for cross-month swaps, it should already be stored in updatedAssignments
                                 const swapCandidate = updatedAssignments[swapDayKey]?.[groupNum];
-                                
-                                // #region agent log
-                                fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:swap-performed',message:'Final swap performed',data:{conflictedDateKey:dateKey,currentPerson,swapDayKey,swapCandidate},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
-                                // #endregion
                                 
                                 if (!swapCandidate) {
                                     // If we can't find the candidate, skip this swap
