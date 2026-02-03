@@ -3286,18 +3286,13 @@
                                 }
                             }
                             
-                            // STEP 2: If forward swap failed, try BACKWARD swap with previous semi-normal days in SAME MONTH
+                            // STEP 2: If forward swap failed, try BACKWARD swap with previous semi-normal days (same as normal: allow cross-month within sortedSemi)
                             if (!swapCandidate || !swapDateKey) {
-                                console.log(`[SEMI SWAP LOGIC] Forward swap failed for ${currentPerson} on ${dateKey}, trying BACKWARD swap in same month`);
+                                console.log(`[SEMI SWAP LOGIC] Forward swap failed for ${currentPerson} on ${dateKey}, trying BACKWARD swap`);
                                 for (let j = semiIndex - 1; j >= 0; j--) {
                                     const candidateDateKey = sortedSemi[j];
                                     const candidateDate = new Date(candidateDateKey + 'T00:00:00');
                                     if (isNaN(candidateDate.getTime())) continue;
-
-                                    // Only try swaps within the same month
-                                    if (candidateDate.getMonth() !== month || candidateDate.getFullYear() !== year) {
-                                        break; // Stop if we've moved to previous month
-                                    }
 
                                     // Candidate is the person currently assigned on the previous semi-normal day
                                     const candidatePerson = updatedAssignments[candidateDateKey]?.[groupNum];
@@ -3338,18 +3333,6 @@
                                     swapPairId: swapPairId
                                 });
                                 
-                                // If this is a BACKWARD swap (swapDateKey earlier than dateKey in same month),
-                                // do a forward SHIFT across the intervening semi-normal days so that:
-                                // - currentPerson moves backward to swapDateKey
-                                // - the displaced person (swapCandidate) becomes the EXACT next semi-normal after swapDateKey
-                                // - everyone in between shifts forward by one semi slot (no one gets "skipped")
-                                const fromIndex = sortedSemi.indexOf(swapDateKey);
-                                const toIndex = sortedSemi.indexOf(dateKey);
-                                // Backward shift across the intervening semi days.
-                                // Allow across month boundaries too (as long as both keys exist in sortedSemi for this run),
-                                // so the displaced person is not lost in multi-month calculations.
-                                const isBackwardWithinMonth = fromIndex >= 0 && toIndex >= 0 && fromIndex < toIndex;
-
                                 // Use the ACTUAL conflict neighbor day (e.g. Fri) instead of the swap-execution day (e.g. Thu).
                                 const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, {
                                     special: simulatedSpecialAssignments,
@@ -3358,116 +3341,48 @@
                                     normal: null
                                 }) || dateKey;
 
-                                if (isBackwardWithinMonth) {
-                                    // Backward shift: currentPerson moves backward to swapDateKey,
-                                    // and everyone in between shifts forward by one slot.
-                                    // The displaced person (originally at swapDateKey) becomes the EXACT next semi-normal after swapDateKey.
-                                    const changes = []; // { dk, prevPerson, newPerson }
-                                    let carry = currentPerson;
-                                    
-                                    // Get the displaced person BEFORE the shift (the person originally at swapDateKey)
-                                    const displacedPersonOriginal = updatedAssignments[swapDateKey]?.[groupNum] || swapCandidate;
-                                    
-                                    // Perform the forward shift across all days from swapDateKey to dateKey (inclusive)
-                                    for (let i = fromIndex; i <= toIndex; i++) {
-                                        const dk = sortedSemi[i];
-                                        if (!updatedAssignments[dk]) updatedAssignments[dk] = {};
-                                        const prev = updatedAssignments[dk][groupNum] || null;
-                                        updatedAssignments[dk][groupNum] = carry;
-                                        changes.push({ dk, prevPerson: prev, newPerson: carry });
-                                        carry = prev; // This becomes the person for the next iteration
-                                        swappedSemiSet.add(`${dk}:${groupNum}`);
-                                    }
-                                    
-                                    // After the shift loop, verify the displaced person is correctly assigned
-                                    // The displaced person should be at fromIndex + 1 (the next semi-normal after swapDateKey)
-                                    // This verification ensures no one gets skipped
-                                    if (fromIndex + 1 < sortedSemi.length && displacedPersonOriginal) {
-                                        const nextSemiKey = sortedSemi[fromIndex + 1];
-                                        const assignedAtNext = updatedAssignments[nextSemiKey]?.[groupNum];
-                                        
-                                        // If the displaced person is not correctly assigned at the next semi-normal day,
-                                        // ensure they are assigned there (this handles edge cases where the shift might miss them)
-                                        if (assignedAtNext !== displacedPersonOriginal) {
-                                            if (!updatedAssignments[nextSemiKey]) updatedAssignments[nextSemiKey] = {};
-                                            // Only assign if that day doesn't already have someone (to avoid overwriting correct assignments)
-                                            if (!updatedAssignments[nextSemiKey][groupNum] || updatedAssignments[nextSemiKey][groupNum] !== displacedPersonOriginal) {
-                                                updatedAssignments[nextSemiKey][groupNum] = displacedPersonOriginal;
-                                                swappedSemiSet.add(`${nextSemiKey}:${groupNum}`);
-                                                // Store assignment reason for the displaced person
-                                                storeAssignmentReason(
-                                                    nextSemiKey,
-                                                    groupNum,
-                                                    displacedPersonOriginal,
-                                                    'shift',
-                                                    `Μετακίνηση (οπισθοδρομική ανταλλαγή) λόγω σύγκρουσης γειτονικής υπηρεσίας (${conflictNeighborKey}).`,
-                                                    null,
-                                                    swapPairId,
-                                                    { backwardShift: true, originDayKey: dateKey, swapDayKey: swapDateKey, conflictDateKey: conflictNeighborKey, displacedPerson: true }
-                                                );
-                                            }
-                                        }
-                                    }
+                                // Always perform a simple two-slot swap (same as normal duties): conflicted person goes to swap date, swap candidate goes to conflicted date.
+                                // (Previously backward used a "shift" across intervening semi days, which could overwrite correct assignments like the old normal logic.)
+                                updatedAssignments[dateKey][groupNum] = swapCandidate;
+                                updatedAssignments[swapDateKey][groupNum] = currentPerson;
 
-                                    // Store "shift" reasons for all moved assignments (keeps UI explanations consistent).
-                                    for (const ch of changes) {
-                                        if (!ch.newPerson) continue;
-                                        storeAssignmentReason(
-                                            ch.dk,
-                                            groupNum,
-                                            ch.newPerson,
-                                            'shift',
-                                            `Μετακίνηση (οπισθοδρομική ανταλλαγή) λόγω σύγκρουσης γειτονικής υπηρεσίας (${conflictNeighborKey}).`,
-                                            ch.prevPerson || null,
-                                            swapPairId,
-                                            { backwardShift: true, originDayKey: dateKey, swapDayKey: swapDateKey, conflictDateKey: conflictNeighborKey }
-                                        );
-                                    }
-                                } else {
-                                    // Forward swap (or cross-month) keeps original swap behavior
-                                    // Perform the swap: conflicted person goes to swap date, swapped person goes to conflicted date
-                                    updatedAssignments[dateKey][groupNum] = swapCandidate;
-                                    updatedAssignments[swapDateKey][groupNum] = currentPerson;
-
-                                    // Mark both days as swapped in this run to prevent re-swapping loops
-                                    swappedSemiSet.add(`${dateKey}:${groupNum}`);
-                                    swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
-                                    
-                                    // Store assignment reasons for both swapped people with swap pair ID
-                                    storeAssignmentReason(
-                                        dateKey,
-                                        groupNum,
-                                        swapCandidate,
-                                        'swap',
-                                        buildSwapReasonGreek({
-                                            changedWithName: currentPerson,
-                                            conflictedPersonName: currentPerson,
-                                            conflictDateKey: conflictNeighborKey,
-                                            newAssignmentDateKey: swapDateKey,
-                                            subjectName: swapCandidate
-                                        }),
-                                        currentPerson,
-                                        swapPairId
-                                    );
-                                    storeAssignmentReason(
-                                        swapDateKey,
-                                        groupNum,
-                                        currentPerson,
-                                        'swap',
-                                        buildSwapReasonGreek({
-                                            changedWithName: swapCandidate,
-                                            conflictedPersonName: currentPerson,
-                                            conflictDateKey: conflictNeighborKey,
-                                            newAssignmentDateKey: swapDateKey,
-                                            subjectName: currentPerson
-                                        }),
-                                        swapCandidate,
-                                        swapPairId
-                                    );
-                                }
+                                // Mark both days as swapped in this run to prevent re-swapping loops
+                                swappedSemiSet.add(`${dateKey}:${groupNum}`);
+                                swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
                                 
-                                // IMPORTANT: Stop processing this conflict - swap found, don't try cross-month swap
-                                // Break out of the loop to prevent unnecessary swaps
+                                // Store assignment reasons for both swapped people with swap pair ID
+                                storeAssignmentReason(
+                                    dateKey,
+                                    groupNum,
+                                    swapCandidate,
+                                    'swap',
+                                    buildSwapReasonGreek({
+                                        changedWithName: currentPerson,
+                                        conflictedPersonName: currentPerson,
+                                        conflictDateKey: conflictNeighborKey,
+                                        newAssignmentDateKey: swapDateKey,
+                                        subjectName: swapCandidate
+                                    }),
+                                    currentPerson,
+                                    swapPairId
+                                );
+                                storeAssignmentReason(
+                                    swapDateKey,
+                                    groupNum,
+                                    currentPerson,
+                                    'swap',
+                                    buildSwapReasonGreek({
+                                        changedWithName: swapCandidate,
+                                        conflictedPersonName: currentPerson,
+                                        conflictDateKey: conflictNeighborKey,
+                                        newAssignmentDateKey: swapDateKey,
+                                        subjectName: currentPerson
+                                    }),
+                                    swapCandidate,
+                                    swapPairId
+                                );
+                                
+                                // IMPORTANT: Stop processing this conflict - swap found
                                 break;
                             }
                         }
