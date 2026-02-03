@@ -5487,6 +5487,11 @@
                     const swapDateStr = otherKey
                         ? new Date(otherKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
                         : '-';
+                    // For swaps, "Skipped" must be the person who was actually swapped out of this date,
+                    // i.e. the person now on the other date (swap partner). Baseline can be wrong due to rotation/return-from-missing.
+                    const skippedPerson = (reasonObj?.type === 'swap' && otherKey && computedByDate?.[otherKey]?.[groupNum])
+                        ? computedByDate[otherKey][groupNum]
+                        : base;
 
                     rows.push({
                         dateKey,
@@ -5494,7 +5499,7 @@
                         dateStr,
                         groupNum,
                         service: getGroupName(groupNum),
-                        skipped: base,
+                        skipped: skippedPerson,
                         replacement: comp,
                         swapDateStr,
                         briefReason
