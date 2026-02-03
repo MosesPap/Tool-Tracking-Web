@@ -4252,10 +4252,19 @@
                         const periodEndsInPrevMonth = (pEnd) => pEnd >= prevMonthStartKey && pEnd <= prevMonthEndKey;
 
                         // Process deferred return-from-missing: assign 3 normal days after return in current calculated month.
+                        // If the person was already assigned (backward/forward) in a previous month for this same missing period, skip – don't re-assign in this month; they'll get their turn again in normal rotation.
                         const deferredList = calculationSteps.deferredReturnFromMissing || [];
                         calculationSteps.deferredReturnFromMissing = deferredList.filter((entry) => {
                             if (entry.returnKey < calcStartKey || entry.returnKey > calcEndKey) return true;
                             const personName = entry.personName, groupNum = entry.groupNum, returnKey = entry.returnKey, pEndKey = entry.pEndKey;
+                            // Already placed in a previous month for this same missing period (pEndKey)? Skip deferred – no re-assign here.
+                            for (const dk in assignmentReasons) {
+                                if (dk >= returnKey) continue;
+                                const reason = getAssignmentReason(dk, groupNum, personName);
+                                if (reason && reason.meta?.returnFromMissing && reason.meta?.missingEnd === pEndKey) {
+                                    return false; // remove from deferred – already assigned in a previous month
+                                }
+                            }
                             let track = entry.track;
                             if (!track) {
                                 const thirdNorm = findThirdNormalOnOrAfter(sortedNormal, returnKey);
