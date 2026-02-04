@@ -4332,6 +4332,7 @@
                             return false; // remove from deferred
                         });
 
+                        const usedReturnFromMissingTargets = new Set(); // "dateKey:groupNum" already used by a previous return-from-missing in this run
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
                             const g = groups?.[groupNum];
                             const missingMap = g?.missingPeriods || {};
@@ -4466,6 +4467,7 @@
 
                                     const tryTargetKey = (candidateKey) => {
                                         if (!candidateKey) return false;
+                                        if (usedReturnFromMissingTargets.has(`${candidateKey}:${groupNum}`)) return false;
                                         // #region agent log
                                         const dateObjForCandidate = dateKeyToDate(candidateKey);
                                         const isMissingOnCandidate = typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(personName, groupNum, dateObjForCandidate, 'normal');
@@ -4575,6 +4577,7 @@
                                     console.log('[DEBUG returnFromMissing]', _logAp);
                                     // #endregion
                                     if (!ins.ok) continue;
+                                    usedReturnFromMissingTargets.add(`${targetKey}:${groupNum}`);
 
                                     // IMPORTANT: Enforce "after 3 normal days" by preventing any earlier normal-day assignment
                                     // of the returning person between returnKey (inclusive) and targetKey (exclusive).
@@ -6292,6 +6295,23 @@
                                     isBackwardAssignment = true;
                                 }
                                 if (!targetWeekendKey || targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW) continue;
+                                // If this (date, group) is already taken by another return-from-missing, use next free weekend in range
+                                let weekendIdx = sortedWeekends.indexOf(targetWeekendKey);
+                                if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) {
+                                    for (let i = weekendIdx + 1; i < sortedWeekends.length; i++) {
+                                        const wk = sortedWeekends[i];
+                                        if (wk < calcStartKeyW || wk > calcEndKeyW) break;
+                                        if (!returnFromMissingWeekendTargets[wk]?.[groupNum]) { targetWeekendKey = wk; break; }
+                                    }
+                                    if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) {
+                                        for (let i = weekendIdx - 1; i >= 0; i--) {
+                                            const wk = sortedWeekends[i];
+                                            if (wk < calcStartKeyW || wk > calcEndKeyW) continue;
+                                            if (!returnFromMissingWeekendTargets[wk]?.[groupNum]) { targetWeekendKey = wk; break; }
+                                        }
+                                    }
+                                }
+                                if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) continue;
                                 const formatDDMMYYYYW = (dk) => {
                                     const d = new Date(dk + 'T00:00:00');
                                     return (d.getDate() < 10 ? '0' : '') + d.getDate() + '/' + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1) + '/' + d.getFullYear();
@@ -6889,6 +6909,22 @@
                                 if (backwardCandidate && backwardCandidate >= calcStartKey && backwardCandidate <= calcEndKey) targetSemiKey = backwardCandidate;
                             }
                             if (!targetSemiKey || targetSemiKey < calcStartKey || targetSemiKey > calcEndKey) continue;
+                            if (returnFromMissingSemiTargetsRun[targetSemiKey]?.[groupNum]) {
+                                const semiIdx = sortedSemi.indexOf(targetSemiKey);
+                                for (let i = semiIdx + 1; i < sortedSemi.length; i++) {
+                                    const dk = sortedSemi[i];
+                                    if (dk < calcStartKey || dk > calcEndKey) break;
+                                    if (!returnFromMissingSemiTargetsRun[dk]?.[groupNum]) { targetSemiKey = dk; break; }
+                                }
+                                if (returnFromMissingSemiTargetsRun[targetSemiKey]?.[groupNum]) {
+                                    for (let i = semiIdx - 1; i >= 0; i--) {
+                                        const dk = sortedSemi[i];
+                                        if (dk < calcStartKey || dk > calcEndKey) continue;
+                                        if (!returnFromMissingSemiTargetsRun[dk]?.[groupNum]) { targetSemiKey = dk; break; }
+                                    }
+                                }
+                            }
+                            if (returnFromMissingSemiTargetsRun[targetSemiKey]?.[groupNum]) continue;
                             const formatDDMMYYYYSemiRun = (dk) => {
                                 const d = new Date(dk + 'T00:00:00');
                                 return (d.getDate() < 10 ? '0' : '') + d.getDate() + '/' + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1) + '/' + d.getFullYear();
@@ -7495,7 +7531,22 @@
                                 }
                                 
                                 if (!targetSemiKey || targetSemiKey < calcStartKey || targetSemiKey > calcEndKey) continue;
-                                
+                                if (returnFromMissingSemiTargets[targetSemiKey]?.[groupNum]) {
+                                    const semiIdxLocal = sortedSemi.indexOf(targetSemiKey);
+                                    for (let i = semiIdxLocal + 1; i < sortedSemi.length; i++) {
+                                        const dk = sortedSemi[i];
+                                        if (dk < calcStartKey || dk > calcEndKey) break;
+                                        if (!returnFromMissingSemiTargets[dk]?.[groupNum]) { targetSemiKey = dk; break; }
+                                    }
+                                    if (returnFromMissingSemiTargets[targetSemiKey]?.[groupNum]) {
+                                        for (let i = semiIdxLocal - 1; i >= 0; i--) {
+                                            const dk = sortedSemi[i];
+                                            if (dk < calcStartKey || dk > calcEndKey) continue;
+                                            if (!returnFromMissingSemiTargets[dk]?.[groupNum]) { targetSemiKey = dk; break; }
+                                        }
+                                    }
+                                }
+                                if (returnFromMissingSemiTargets[targetSemiKey]?.[groupNum]) continue;
                                 const formatDDMMYYYYSemi = (dk) => {
                                     const d = new Date(dk + 'T00:00:00');
                                     return (d.getDate() < 10 ? '0' : '') + d.getDate() + '/' + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1) + '/' + d.getFullYear();
