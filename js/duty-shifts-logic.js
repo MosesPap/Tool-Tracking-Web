@@ -1984,6 +1984,8 @@
                 
                 // Sort special holidays by date
                 const sortedSpecial = [...specialHolidays].sort();
+                // Return-from-missing: persons replaced on a special date due to missing will be assigned on another special (same month first, else next)
+                const returnFromMissingSpecial = []; // { personName, groupNum, missedDateKey }
                 
                 // Store assignments and rotation positions for saving when Next is pressed
                 const tempSpecialAssignments = {}; // dateKey -> { groupNum -> personName }
@@ -2142,6 +2144,7 @@
                                             rotationPerson,
                                             null
                                         );
+                                        returnFromMissingSpecial.push({ personName: rotationPerson, groupNum, missedDateKey: dateKey });
                                         break;
                                     }
                                 }
@@ -2207,6 +2210,50 @@
                     
                     html += '</tr>';
                 });
+                
+                // Return-from-missing for special: assign each replaced (missing) person on another special – same month first, else next special
+                const usedReturnFromMissingSpecial = new Set();
+                for (const entry of returnFromMissingSpecial) {
+                    const { personName, groupNum, missedDateKey } = entry;
+                    const missedDate = new Date(missedDateKey + 'T00:00:00');
+                    const missedMonthKey = getMonthKeyFromDate(missedDate);
+                    let targetKey = null;
+                    const sameMonthSpecials = sortedSpecial.filter((dk) => {
+                        const d = new Date(dk + 'T00:00:00');
+                        return getMonthKeyFromDate(d) === missedMonthKey && dk !== missedDateKey;
+                    });
+                    for (const dk of sameMonthSpecials) {
+                        if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
+                        const dateObj = new Date(dk + 'T00:00:00');
+                        if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
+                        targetKey = dk;
+                        break;
+                    }
+                    if (!targetKey) {
+                        for (const dk of sortedSpecial) {
+                            if (dk <= missedDateKey) continue;
+                            if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
+                            const dateObj = new Date(dk + 'T00:00:00');
+                            if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
+                            targetKey = dk;
+                            break;
+                        }
+                    }
+                    if (!targetKey) continue;
+                    usedReturnFromMissingSpecial.add(`${targetKey}:${groupNum}`);
+                    const displacedPerson = tempSpecialAssignments[targetKey]?.[groupNum] || null;
+                    if (!tempSpecialAssignments[targetKey]) tempSpecialAssignments[targetKey] = {};
+                    tempSpecialAssignments[targetKey][groupNum] = personName;
+                    const reasonText = displacedPerson
+                        ? `Επέστρεψε από απουσία· αντικατέστησε προσωρινά ${displacedPerson} στην ημερομηνία αυτή.`
+                        : 'Επέστρεψε από απουσία.';
+                    storeAssignmentReason(targetKey, groupNum, personName, 'skip', reasonText, displacedPerson, null, { returnFromMissing: true, missingEnd: missedDateKey });
+                    const monthKeyT = getMonthKeyFromDate(new Date(targetKey + 'T00:00:00'));
+                    if (simulatedSpecialAssignmentsForConflict[monthKeyT]?.[groupNum]) {
+                        if (displacedPerson) simulatedSpecialAssignmentsForConflict[monthKeyT][groupNum].delete(displacedPerson);
+                        simulatedSpecialAssignmentsForConflict[monthKeyT][groupNum].add(personName);
+                    }
+                }
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempSpecialAssignments = tempSpecialAssignments;
@@ -2301,7 +2348,10 @@
                         if (base === comp) continue;
 
                         let reason = '';
-                        if (isPersonDisabledForDuty(base, groupNum, 'special') || isPersonMissingOnDate(base, groupNum, date, 'special')) {
+                        const compReason = getAssignmentReason(dateKey, groupNum, comp);
+                        if (compReason && compReason.meta && compReason.meta.returnFromMissing) {
+                            reason = (compReason.reason || 'Επέστρεψε από απουσία.').split('.').filter(Boolean)[0] || 'Επέστρεψε από απουσία';
+                        } else if (isPersonDisabledForDuty(base, groupNum, 'special') || isPersonMissingOnDate(base, groupNum, date, 'special')) {
                             // Keep the same style as other steps: show the first sentence (without "Ανατέθηκε...")
                             reason = buildUnavailableReplacementReason({
                                 skippedPersonName: base,
