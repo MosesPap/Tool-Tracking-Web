@@ -4377,6 +4377,7 @@
                                     if (isNaN(pEndDate.getTime())) continue;
 
                                     // Find first missed baseline normal duty in CALCULATED MONTH only (missing period ∩ calc range).
+                                    // Use normalized name comparison so storage format (e.g. with/without rank) doesn't skip assignment.
                                     const overlapStartKey = maxDateKey(pStartKey, calcStartKey);
                                     const overlapEndKey = minDateKey(pEndKey, calcEndKey);
                                     let firstMissedKey = null;
@@ -4388,7 +4389,7 @@
                                                 baselineNormalByDate?.[dk]?.[groupNum] ||
                                                 parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
                                                 null;
-                                            if (baselinePerson === personName) {
+                                            if (baselinePerson && normName(baselinePerson) === normName(personName)) {
                                                 firstMissedKey = dk;
                                                 break;
                                             }
@@ -6200,12 +6201,13 @@
                 const minKeyW = (a, b) => (!a ? b : (!b ? a : (a < b ? a : b)));
                 if (calcStartKeyW && calcEndKeyW && sortedWeekends.length > 0) {
                     const processedWeekendReturn = new Set();
+                    const normW = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const g = groups[groupNum];
                         const missingMap = g?.missingPeriods || {};
                         const weekendList = g?.weekend || [];
                         for (const personName of Object.keys(missingMap)) {
-                            if (!weekendList.includes(personName)) continue;
+                            if (!weekendList.some(p => normW(p) === normW(personName))) continue;
                             const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                             for (const period of periods) {
                                 const pStartKey = inputValueToDateKey(period?.start);
@@ -6231,7 +6233,8 @@
                                     for (const wk of sortedWeekends) {
                                         if (wk < scanStartKey) continue;
                                         if (wk > scanEndKey) break;
-                                        if (baselineWeekendByDate[wk]?.[groupNum] === personName) {
+                                        const base = baselineWeekendByDate[wk]?.[groupNum];
+                                        if (base && normW(base) === normW(personName)) {
                                             hadMissedWeekend = true;
                                             break;
                                         }
@@ -6247,7 +6250,7 @@
                                             const groupPeopleForCheck = g?.weekend || [];
                                             if (groupPeopleForCheck.length > 0) {
                                                 const expectedPerson = groupPeopleForCheck[rotationPos % groupPeopleForCheck.length];
-                                                if (expectedPerson === personName) {
+                                                if (expectedPerson && normW(expectedPerson) === normW(personName)) {
                                                     hadMissedWeekend = true;
                                                     break;
                                                 }
@@ -6339,10 +6342,12 @@
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
                         } else {
-                            // Return-from-missing: assign person to weekend after/before return
+                            // Return-from-missing: assign person to weekend after/before return (match by normalized name)
                             const designatedWeekend = returnFromMissingWeekendTargets[dateKey]?.[groupNum];
-                            if (designatedWeekend && groupPeople.includes(designatedWeekend.personName) && !isPersonMissingOnDate(designatedWeekend.personName, groupNum, date, 'weekend')) {
-                                const assignedPerson = designatedWeekend.personName;
+                            const normWeekend = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                            const matchingPerson = designatedWeekend && groupPeople.find(p => normWeekend(p) === normWeekend(designatedWeekend.personName));
+                            if (designatedWeekend && matchingPerson && !isPersonMissingOnDate(matchingPerson, groupNum, date, 'weekend')) {
+                                const assignedPerson = matchingPerson;
                                 if (!assignedByReturnFromMissingWeekend[groupNum]) assignedByReturnFromMissingWeekend[groupNum] = new Set();
                                 assignedByReturnFromMissingWeekend[groupNum].add(assignedPerson);
                                 // Next slot goes to the displaced (baseline) person – set position to displaced person's index so we get F, A, B, C
@@ -6802,12 +6807,13 @@
             const returnFromMissingSemiTargetsRun = {};
             if (calcStartKey && calcEndKey && sortedSemi.length > 0) {
                 const processedSemiReturnRun = new Set();
+                const normSemiRun = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const g = groups[groupNum];
                     const missingMap = g?.missingPeriods || {};
                     const semiList = g?.semi || [];
                     for (const personName of Object.keys(missingMap || {})) {
-                        if (!semiList.includes(personName)) continue;
+                        if (!semiList.some(p => normSemiRun(p) === normSemiRun(personName))) continue;
                         const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                         for (const period of periods) {
                             const pStartKey = inputValueToDateKey(period?.start);
@@ -6834,7 +6840,8 @@
                                 for (const dk of sortedSemi) {
                                     if (dk < scanStartKey) continue;
                                     if (dk > scanEndKey) break;
-                                    if (baselineSemiByDate[dk]?.[groupNum] === personName) { hadMissedSemi = true; break; }
+                                    const baseSemi = baselineSemiByDate[dk]?.[groupNum];
+                                    if (baseSemi && normSemiRun(baseSemi) === normSemiRun(personName)) { hadMissedSemi = true; break; }
                                 }
                             } else {
                                 const periodStartDate = new Date(pStartKey + 'T00:00:00');
@@ -6844,7 +6851,8 @@
                                     if (getDayType(checkDate) === 'semi-normal-day') {
                                         const rotationPos = getRotationPosition(checkDate, 'semi', groupNum);
                                         const groupPeopleForCheck = g?.semi || [];
-                                        if (groupPeopleForCheck.length > 0 && groupPeopleForCheck[rotationPos % groupPeopleForCheck.length] === personName) {
+                                        const expectedPerson = groupPeopleForCheck.length > 0 ? groupPeopleForCheck[rotationPos % groupPeopleForCheck.length] : null;
+                                        if (expectedPerson && normSemiRun(expectedPerson) === normSemiRun(personName)) {
                                             hadMissedSemi = true;
                                             break;
                                         }
@@ -6899,11 +6907,13 @@
                     if (groupPeople.length === 0) continue;
                     const rotationDays = groupPeople.length;
                     const designated = returnFromMissingSemiTargetsRun[dateKey]?.[groupNum];
-                    if (designated && groupPeople.includes(designated.personName) && !isPersonMissingOnDate(designated.personName, groupNum, date, 'semi')) {
-                        baseline[dateKey][groupNum] = designated.personName;
+                    const designatedInList = designated && groupPeople.find(p => normSemiRun(p) === normSemiRun(designated.personName));
+                    if (designated && designatedInList && !isPersonMissingOnDate(designated.personName, groupNum, date, 'semi')) {
+                        baseline[dateKey][groupNum] = designatedInList;
                         const displacedPerson = baselineSemiByDate[dateKey]?.[groupNum];
-                        const originalIndex = displacedPerson != null ? groupPeople.indexOf(displacedPerson) : -1;
-                        globalSemiPos[groupNum] = (originalIndex >= 0 ? originalIndex : (groupPeople.indexOf(designated.personName) + 1)) % rotationDays;
+                        const originalIndex = displacedPerson != null ? groupPeople.findIndex(p => normSemiRun(p) === normSemiRun(displacedPerson)) : -1;
+                        const designatedIndex = groupPeople.findIndex(p => normSemiRun(p) === normSemiRun(designated.personName));
+                        globalSemiPos[groupNum] = (originalIndex >= 0 ? originalIndex : (designatedIndex >= 0 ? designatedIndex + 1 : 0)) % rotationDays;
                         const semiReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designated.missingRangeStr || ''}) λόγω ${designated.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
                         storeAssignmentReason(dateKey, groupNum, designated.personName, 'skip', semiReasonText, null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
                         continue;
@@ -7353,12 +7363,13 @@
                 }
                 if (calcStartKey && calcEndKey && sortedSemi.length > 0) {
                     const processedSemiReturn = new Set();
+                    const normSemi = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const g = groups[groupNum];
                         const missingMap = g?.missingPeriods || {};
                         const semiList = g?.semi || [];
                         for (const personName of Object.keys(missingMap)) {
-                            if (!semiList.includes(personName)) continue;
+                            if (!semiList.some(p => normSemi(p) === normSemi(personName))) continue;
                             const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                             for (const period of periods) {
                                 const pStartKey = inputValueToDateKey(period?.start);
@@ -7407,7 +7418,8 @@
                                     for (const dk of sortedSemi) {
                                         if (dk < scanStartKey) continue;
                                         if (dk > scanEndKey) break;
-                                        if (baselineSemiByDate[dk]?.[groupNum] === personName) {
+                                        const baseSemi = baselineSemiByDate[dk]?.[groupNum];
+                                        if (baseSemi && normSemi(baseSemi) === normSemi(personName)) {
                                             hadMissedSemi = true;
                                             break;
                                         }
@@ -7439,7 +7451,7 @@
                                             const groupPeopleForCheck = g?.semi || [];
                                             if (groupPeopleForCheck.length > 0) {
                                                 const expectedPerson = groupPeopleForCheck[rotationPos % groupPeopleForCheck.length];
-                                                if (expectedPerson === personName) {
+                                                if (expectedPerson && normSemi(expectedPerson) === normSemi(personName)) {
                                                     hadMissedSemi = true;
                                                     break;
                                                 }
@@ -8345,27 +8357,28 @@
                                     const checkEndKey = minDateKey(pEndKey, calcEndKey);
                                     if (!checkStartKey || !checkEndKey || checkStartKey > checkEndKey) continue;
                                     
-                                    // Check rotationBaselineNormalAssignments for this person's normal duties during missing period
+                                    // Check rotationBaselineNormalAssignments for this person's normal duties during missing period.
+                                    // Use normalized name comparison so storage format doesn't skip replacement.
+                                    const normP = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                                     const baselineDutiesToReplace = [];
                                     for (const dk of sortedNormal) {
                                         if (dk < checkStartKey) continue;
                                         if (dk > checkEndKey) break;
                                         
-                                        // Check rotationBaseline to see if this person was scheduled for this date
                                         const baselinePerson = 
                                             baselineNormalByDate?.[dk]?.[groupNum] ||
                                             parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
                                             null;
                                         
-                                        if (baselinePerson === personName) {
+                                        if (baselinePerson && normP(baselinePerson) === normP(personName)) {
                                             baselineDutiesToReplace.push(dk);
                                         }
                                     }
                                     
                                     // If person has baseline duties during missing period, replace them
                                     if (baselineDutiesToReplace.length > 0) {
-                                        // Find the person's position in rotation
-                                        const personIndex = groupPeople.indexOf(personName);
+                                        // Find the person's position in rotation (by normalized name)
+                                        const personIndex = groupPeople.findIndex(p => normP(p) === normP(personName));
                                         if (personIndex < 0) continue; // Person not in rotation list
                                         
                                         // For each baseline duty date, find the next available person in rotation.
@@ -8436,19 +8449,19 @@
                                 
                                 if (!isDisabledForNormal) continue;
                                 
-                                // Check if person has baseline normal duties during calculation period
+                                // Check if person has baseline normal duties during calculation period. Use normalized name comparison.
+                                const normPDisabled = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                                 const baselineDutiesToReplace = [];
                                 for (const dk of sortedNormal) {
                                     if (dk < calcStartKey) continue;
                                     if (dk > calcEndKey) break;
                                     
-                                    // Check rotationBaseline to see if this person was scheduled for this date
                                     const baselinePerson = 
                                         baselineNormalByDate?.[dk]?.[groupNum] ||
                                         parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
                                         null;
                                     
-                                    if (baselinePerson === personName) {
+                                    if (baselinePerson && normPDisabled(baselinePerson) === normPDisabled(personName)) {
                                         // Check if person is still disabled on this date
                                         const dateObj = dateKeyToDate(dk);
                                         if (isNaN(dateObj.getTime())) continue;
@@ -8460,8 +8473,8 @@
                                 
                                 // If person has baseline duties while disabled, replace them
                                 if (baselineDutiesToReplace.length > 0) {
-                                    // Find the person's position in rotation
-                                    const personIndex = groupPeople.indexOf(personName);
+                                    // Find the person's position in rotation (by normalized name)
+                                    const personIndex = groupPeople.findIndex(p => normPDisabled(p) === normPDisabled(personName));
                                     if (personIndex < 0) continue; // Person not in rotation list
                                     
                                     // For each baseline duty date, find the next available person in rotation.
