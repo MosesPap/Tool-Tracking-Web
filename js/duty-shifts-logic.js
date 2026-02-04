@@ -4557,12 +4557,17 @@
                                         const _logNt = {location:'returnFromMissing:noTarget',message:'no feasible targetKey after all phases',data:{groupNum,personName,returnKey,thirdNormalKey,sameMonthEndKey},hypothesisId:'H3'};
                                         // Debug ingest disabled to avoid ERR_CONNECTION_REFUSED when local server not running
                                         console.log('[DEBUG returnFromMissing]', _logNt);
+                                        fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:returnFromMissing:noTarget',message:'normal return-from-missing no target',data:{groupNum,personName,returnKey},hypothesisId:'H2',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
                                     }
                                     // #endregion
                                     if (!targetKey) continue;
 
                                     // Apply shift insertion (follow rotation): everyone moves to the next normal day.
                                     const groupPeopleFinal = (groups?.[groupNum]?.normal || []);
+                                    const currentOccupantBeforeApply = updatedAssignments?.[targetKey]?.[groupNum] || null;
+                                    // #region agent log
+                                    fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:returnFromMissing:beforeApply',message:'normal return-from-missing before apply',data:{groupNum,personName,targetKey,currentOccupantBeforeApply},hypothesisId:'H1',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                    // #endregion
                                     const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
                                     // #region agent log
                                     const _logAp = {location:'returnFromMissing:apply',message:'applyShiftInsertFromDate result',data:{groupNum,personName,targetKey,insOk:ins.ok},hypothesisId:'H5'};
@@ -6294,6 +6299,10 @@
                                 const missingRangeStrW = formatDDMMYYYYW(pStartKey) + ' - ' + formatDDMMYYYYW(pEndKey);
                                 const reasonOfMissingW = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
                                 if (!returnFromMissingWeekendTargets[targetWeekendKey]) returnFromMissingWeekendTargets[targetWeekendKey] = {};
+                                const previousWeekendPerson = returnFromMissingWeekendTargets[targetWeekendKey][groupNum]?.personName || null;
+                                // #region agent log
+                                if (previousWeekendPerson) fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:weekend:overwrite',message:'weekend return-from-missing overwrite',data:{groupNum,personName,targetWeekendKey,previousWeekendPerson},hypothesisId:'H3',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                // #endregion
                                 returnFromMissingWeekendTargets[targetWeekendKey][groupNum] = { personName, missingEnd: pEndKey, isBackwardAssignment, missingRangeStr: missingRangeStrW, reasonOfMissing: reasonOfMissingW };
                             }
                         }
@@ -6887,6 +6896,10 @@
                             const missingRangeStrSemi = formatDDMMYYYYSemiRun(pStartKey) + ' - ' + formatDDMMYYYYSemiRun(pEndKey);
                             const reasonOfMissingSemi = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
                             if (!returnFromMissingSemiTargetsRun[targetSemiKey]) returnFromMissingSemiTargetsRun[targetSemiKey] = {};
+                            const previousSemiPerson = returnFromMissingSemiTargetsRun[targetSemiKey][groupNum]?.personName || null;
+                            // #region agent log
+                            if (previousSemiPerson) fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:semi:overwrite',message:'semi return-from-missing overwrite',data:{groupNum,personName,targetSemiKey,previousSemiPerson},hypothesisId:'H3',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                            // #endregion
                             returnFromMissingSemiTargetsRun[targetSemiKey][groupNum] = { personName, missingEnd: pEndKey, missingRangeStr: missingRangeStrSemi, reasonOfMissing: reasonOfMissingSemi };
                         }
                     }
@@ -7490,6 +7503,10 @@
                                 const missingRangeStrSemi = formatDDMMYYYYSemi(pStartKey) + ' - ' + formatDDMMYYYYSemi(pEndKey);
                                 const reasonOfMissingSemi = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
                                 if (!returnFromMissingSemiTargets[targetSemiKey]) returnFromMissingSemiTargets[targetSemiKey] = {};
+                                const previousSemiPerson2 = returnFromMissingSemiTargets[targetSemiKey][groupNum]?.personName || null;
+                                // #region agent log
+                                if (previousSemiPerson2) fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:semi2:overwrite',message:'semi return-from-missing overwrite (block2)',data:{groupNum,personName,targetSemiKey,previousSemiPerson2},hypothesisId:'H3',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                // #endregion
                                 returnFromMissingSemiTargets[targetSemiKey][groupNum] = { personName, missingEnd: pEndKey, missingRangeStr: missingRangeStrSemi, reasonOfMissing: reasonOfMissingSemi };
                             }
                         }
