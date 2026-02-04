@@ -2124,8 +2124,11 @@
                                     const idx = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
-                                    if (!isPersonMissingOnDate(candidate, groupNum, date, 'special')) {
-                                        assignedPerson = candidate;
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
+                                    // Do not use the same person to replace two missing people in this period
+                                    const alreadyAssignedOnAnotherSpecial = sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === candidate);
+                                    if (alreadyAssignedOnAnotherSpecial) continue;
+                                    assignedPerson = candidate;
                                         replacementIndex = idx;
                                         wasReplaced = true;
                                         foundReplacement = true;
@@ -2146,7 +2149,6 @@
                                         );
                                         returnFromMissingSpecial.push({ personName: rotationPerson, groupNum, missedDateKey: dateKey });
                                         break;
-                                    }
                                 }
                                 if (!foundReplacement) assignedPerson = null;
                             }
