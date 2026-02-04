@@ -6803,11 +6803,11 @@
             };
             const maxDateKeyRun = (a, b) => (!a ? b : (!b ? a : (a > b ? a : b)));
             const minDateKeyRun = (a, b) => (!a ? b : (!b ? a : (a < b ? a : b)));
+            const normSemiRun = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
 
             const returnFromMissingSemiTargetsRun = {};
             if (calcStartKey && calcEndKey && sortedSemi.length > 0) {
                 const processedSemiReturnRun = new Set();
-                const normSemiRun = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const g = groups[groupNum];
                     const missingMap = g?.missingPeriods || {};
