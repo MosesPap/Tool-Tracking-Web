@@ -4548,6 +4548,19 @@
                                         }
                                     }
 
+                                    // 2b) Fallback: if still no slot (e.g. first person took the only backward candidate), try any track day in the month that is not yet used by another return-from-missing.
+                                    if (!targetKey) {
+                                        for (const dk of sortedNormal) {
+                                            if (dk < sameMonthStartKey || dk > sameMonthEndKey) continue;
+                                            if (!trackMatches(dk, track)) continue;
+                                            if (tryTargetKey(dk)) {
+                                                targetKey = dk;
+                                                isBackwardAssignment = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+
                                     // 3) If no slot in calculated month and return is next month: defer to next month calculation.
                                     if (!targetKey && returnKey > calcEndKey) {
                                         calculationSteps.deferredReturnFromMissing = calculationSteps.deferredReturnFromMissing || [];
