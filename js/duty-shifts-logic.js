@@ -7012,6 +7012,7 @@
                     const person = finalAssignments[dateKey]?.[groupNum];
                     if (!person || !hasConflict(dateKey, person, groupNum)) continue;
                     let swapped = false;
+                    // STEP 1: Try forward swap with next semi-normal day(s) in SAME MONTH first
                     for (let k = 0; k < indicesInMonth.length; k++) {
                         const j = indicesInMonth[k];
                         if (j <= i) continue;
@@ -7037,6 +7038,7 @@
                         break;
                     }
                     if (swapped) continue;
+                    // STEP 2: If forward swap failed, try BACKWARD swap with previous semi-normal days in SAME MONTH
                     for (let k = indicesInMonth.length - 1; k >= 0; k--) {
                         const j = indicesInMonth[k];
                         if (j >= i) continue;
@@ -7964,13 +7966,17 @@
                             }
                             if (!hasConsecutiveConflict) continue;
 
-                            // Swap with next semi-normal day(s), validate both sides
+                            const month = date.getMonth();
+                            const year = date.getFullYear();
+
+                            // STEP 1: Try forward swap with next semi-normal day(s) in SAME MONTH first
                             let swapCandidate = null;
                             let swapDateKey = null;
                             for (let j = semiIndex + 1; j < sortedSemiForPreview.length; j++) {
                                 const candidateDateKey = sortedSemiForPreview[j];
                                 const candidateDate = new Date(candidateDateKey + 'T00:00:00');
                                 if (isNaN(candidateDate.getTime())) continue;
+                                if (candidateDate.getMonth() !== month || candidateDate.getFullYear() !== year) break;
 
                                 const candidatePerson = previewSemiAssignments[candidateDateKey]?.[groupNum];
                                 if (!candidatePerson) continue;
@@ -7988,6 +7994,31 @@
                                 }
                             }
 
+                            // STEP 2: If forward swap failed, try BACKWARD swap with previous semi-normal days in SAME MONTH
+                            if (!swapCandidate || !swapDateKey) {
+                                for (let j = semiIndex - 1; j >= 0; j--) {
+                                    const candidateDateKey = sortedSemiForPreview[j];
+                                    const candidateDate = new Date(candidateDateKey + 'T00:00:00');
+                                    if (isNaN(candidateDate.getTime())) continue;
+                                    if (candidateDate.getMonth() !== month || candidateDate.getFullYear() !== year) break;
+
+                                    const candidatePerson = previewSemiAssignments[candidateDateKey]?.[groupNum];
+                                    if (!candidatePerson) continue;
+                                    if (swappedSemiSet.has(`${candidateDateKey}:${groupNum}`)) continue;
+
+                                    if (isPersonMissingOnDate(candidatePerson, groupNum, date, 'semi')) continue;
+                                    if (isPersonMissingOnDate(currentPerson, groupNum, candidateDate, 'semi')) continue;
+
+                                    const candidateWouldConflict = hasSemiConsecutiveConflictForPerson(dateKey, candidatePerson, groupNum);
+                                    const currentWouldConflict = hasSemiConsecutiveConflictForPerson(candidateDateKey, currentPerson, groupNum);
+                                    if (!candidateWouldConflict && !currentWouldConflict) {
+                                        swapCandidate = candidatePerson;
+                                        swapDateKey = candidateDateKey;
+                                        break;
+                                    }
+                                }
+                            }
+
                             if (swapCandidate && swapDateKey) {
                                 previewSemiAssignments[dateKey][groupNum] = swapCandidate;
                                 previewSemiAssignments[swapDateKey][groupNum] = currentPerson;
@@ -7995,11 +8026,6 @@
                                 swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
                                 continue;
                             }
-
-                            const month = date.getMonth();
-                            const year = date.getFullYear();
-                            const rotationDays = groupPeople.length;
-                            const currentRotationPosition = groupPeople.indexOf(currentPerson);
                         }
                     }
 
