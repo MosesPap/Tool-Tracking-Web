@@ -2166,11 +2166,14 @@
                                 }
                                 simulatedSpecialAssignmentsForConflict[monthKeyForConflict][groupNum].add(assignedPerson);
                                 
-                                // Advance rotation position from the person ACTUALLY assigned (not the skipped person)
-                                // This ensures that when Person A is replaced by Person B, next special-duty assigns Person C, not Person B again
+                                // Advance rotation position: when disabled we advance from replacement; when missing we advance from missing person so next date we try the next person in list (and detect if they are missing too)
                                 if (wasReplaced && replacementIndex !== null) {
-                                    // Person was replaced - advance from replacement's position
-                                    globalSpecialRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
+                                    if (wasDisabledOnlySkippedSpecial) {
+                                        globalSpecialRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
+                                    } else {
+                                        // Replaced due to missing: advance from missing person's position so we try the next person in list on the next special date
+                                        globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                    }
                                 } else {
                                     // No replacement - advance from assigned person's position
                                     const assignedIndex = groupPeople.indexOf(assignedPerson);
