@@ -6815,13 +6815,23 @@
                             const reasonOfMissingSemi = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
                             if (!returnFromMissingSemiTargetsRun[targetSemiKey]) returnFromMissingSemiTargetsRun[targetSemiKey] = {};
                             returnFromMissingSemiTargetsRun[targetSemiKey][groupNum] = { personName, missingEnd: pEndKey, missingRangeStr: missingRangeStrSemi, reasonOfMissing: reasonOfMissingSemi };
-                            console.log('[SEMI RETURN-FROM-MISSING] Assigned target', targetSemiKey, 'Group', groupNum, '->', personName, '(forward:', !!forwardTarget, ')');
+                            try {
+                                console.log('[DEBUG returnFromMissingSemi][run] target selected', {
+                                    groupNum,
+                                    personName,
+                                    pStartKey,
+                                    pEndKey,
+                                    periodEndsInRange,
+                                    periodEndsInPrevMonth,
+                                    hadMissedSemi,
+                                    thirdDayAfterEnd,
+                                    targetSemiKey
+                                });
+                            } catch (_) {}
                         }
                     }
                 }
             }
-            const returnTargetCount = Object.keys(returnFromMissingSemiTargetsRun).reduce((s, dk) => s + Object.keys(returnFromMissingSemiTargetsRun[dk] || {}).length, 0);
-            console.log('[SEMI RETURN-FROM-MISSING] Total return-from-missing targets:', returnTargetCount, 'dates:', Object.keys(returnFromMissingSemiTargetsRun));
 
             // 1) Build baseline by rotation order (per group); at return-from-missing targets place returning person and continue rotation from displaced
             const baseline = {}; // dateKey -> { groupNum -> person }
@@ -6839,12 +6849,20 @@
                     const designated = returnFromMissingSemiTargetsRun[dateKey]?.[groupNum];
                     if (designated && groupPeople.includes(designated.personName) && !isPersonMissingOnDate(designated.personName, groupNum, date, 'semi')) {
                         baseline[dateKey][groupNum] = designated.personName;
-                        console.log('[SEMI RETURN-FROM-MISSING] Baseline applied:', dateKey, 'Group', groupNum, '->', designated.personName);
                         const displacedPerson = baselineSemiByDate[dateKey]?.[groupNum];
                         const originalIndex = displacedPerson != null ? groupPeople.indexOf(displacedPerson) : -1;
                         globalSemiPos[groupNum] = (originalIndex >= 0 ? originalIndex : (groupPeople.indexOf(designated.personName) + 1)) % rotationDays;
                         const semiReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designated.missingRangeStr || ''}) λόγω ${designated.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
                         storeAssignmentReason(dateKey, groupNum, designated.personName, 'skip', semiReasonText, null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
+                        try {
+                            console.log('[DEBUG returnFromMissingSemi][run] applied on date', {
+                                dateKey,
+                                groupNum,
+                                personName: designated.personName,
+                                displacedPerson: displacedPerson || null,
+                                nextRotationIndex: globalSemiPos[groupNum]
+                            });
+                        } catch (_) {}
                         continue;
                     }
                     if (globalSemiPos[groupNum] === undefined) {
@@ -6918,13 +6936,6 @@
             const swapInfo = {}; // dateKey -> { groupNum -> { otherDateKey, otherDateStr } }
             const swappedSet = new Set(); // 'dateKey:groupNum' already swapped (skip when iterating)
             let semiSwapPairId = 0; // for assignmentReasons so results modal can show swap pairs
-            // Slots where a return-from-missing person was placed: do not use as swap target (so missing people stay assigned backward/forward)
-            const returnFromMissingSlotSet = new Set();
-            for (const dk of Object.keys(returnFromMissingSemiTargetsRun)) {
-                for (const g in returnFromMissingSemiTargetsRun[dk] || {}) {
-                    returnFromMissingSlotSet.add(`${dk}:${g}`);
-                }
-            }
 
             const semiIndicesByMonth = monthKeyToIndices;
             for (let i = 0; i < sortedSemi.length; i++) {
@@ -6943,7 +6954,6 @@
                         if (j <= i) continue;
                         const dk2 = sortedSemi[j];
                         if (swappedSet.has(`${dk2}:${groupNum}`)) continue;
-                        if (returnFromMissingSlotSet.has(`${dk2}:${groupNum}`)) continue; // do not use return-from-missing slot as swap target
                         const other = finalAssignments[dk2]?.[groupNum];
                         if (!other || other === person) continue;
                         if (hasConflict(dk2, other, groupNum)) continue;
@@ -6969,7 +6979,6 @@
                         if (j >= i) continue;
                         const dk2 = sortedSemi[j];
                         if (swappedSet.has(`${dk2}:${groupNum}`)) continue;
-                        if (returnFromMissingSlotSet.has(`${dk2}:${groupNum}`)) continue; // do not use return-from-missing slot as swap target
                         const other = finalAssignments[dk2]?.[groupNum];
                         if (!other || other === person) continue;
                         if (hasConflict(dk2, other, groupNum)) continue;
@@ -6997,7 +7006,6 @@
                             const m2 = semiMeta[dk2];
                             if (m2 && m2.monthKey === monthKey) continue;
                             if (swappedSet.has(`${dk2}:${groupNum}`)) continue;
-                            if (returnFromMissingSlotSet.has(`${dk2}:${groupNum}`)) continue; // do not use return-from-missing slot as swap target
                             const other = finalAssignments[dk2]?.[groupNum];
                             if (!other || other === person) continue;
                             if (hasConflict(dk2, other, groupNum)) continue;
@@ -7428,6 +7436,19 @@
                                 const reasonOfMissingSemi = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
                                 if (!returnFromMissingSemiTargets[targetSemiKey]) returnFromMissingSemiTargets[targetSemiKey] = {};
                                 returnFromMissingSemiTargets[targetSemiKey][groupNum] = { personName, missingEnd: pEndKey, missingRangeStr: missingRangeStrSemi, reasonOfMissing: reasonOfMissingSemi };
+                                try {
+                                    console.log('[DEBUG returnFromMissingSemi][preview] target selected', {
+                                        groupNum,
+                                        personName,
+                                        pStartKey,
+                                        pEndKey,
+                                        periodEndsInRange,
+                                        periodEndsInPrevMonth,
+                                        hadMissedSemi,
+                                        thirdDayAfterEnd,
+                                        targetSemiKey
+                                    });
+                                } catch (_) {}
                             }
                         }
                     }
