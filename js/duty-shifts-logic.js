@@ -4814,7 +4814,9 @@
                                             if (!updatedAssignments[prevSameDayKey]) {
                                                 const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(prevSameDayKey) : null;
                                                 const groupsPrev = raw && typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : {};
-                                                updatedAssignments[prevSameDayKey] = { ...groupsPrev };
+                                                updatedAssignments[prevSameDayKey] = { ...groupsPrev, [groupNum]: currentPerson };
+                                            } else {
+                                                updatedAssignments[prevSameDayKey][groupNum] = currentPerson;
                                             }
                                             break;
                                         }
@@ -4854,7 +4856,9 @@
                                             if (!updatedAssignments[prevAlternativeKey]) {
                                                 const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(prevAlternativeKey) : null;
                                                 const groupsPrev = raw && typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : {};
-                                                updatedAssignments[prevAlternativeKey] = { ...groupsPrev };
+                                                updatedAssignments[prevAlternativeKey] = { ...groupsPrev, [groupNum]: currentPerson };
+                                            } else {
+                                                updatedAssignments[prevAlternativeKey][groupNum] = currentPerson;
                                             }
                                             break;
                                         }
@@ -5031,11 +5035,12 @@
                                             if (swapDayIndex < 0) swapDayIndex = -1;
                                             swapFound = true;
                                             console.log(`[SWAP LOGIC] ✓ Step 1b SUCCESS: Swapping ${currentPerson} with ${swapCandidate} (${dateKey} ↔ ${prevSameDayKey})`);
-                                            // Only ensure swap-day entry exists with EXISTING assignment so common block reads correct swapCandidate; do NOT write currentPerson here (common block does both writes)
                                             if (!updatedAssignments[prevSameDayKey]) {
                                                 const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(prevSameDayKey) : null;
                                                 const groupsPrev = raw && typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : {};
-                                                updatedAssignments[prevSameDayKey] = { ...groupsPrev };
+                                                updatedAssignments[prevSameDayKey] = { ...groupsPrev, [groupNum]: currentPerson };
+                                            } else {
+                                                updatedAssignments[prevSameDayKey][groupNum] = currentPerson;
                                             }
                                             break;
                                         }
@@ -5075,7 +5080,9 @@
                                                 if (!updatedAssignments[sameWeekKey]) {
                                                     const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(sameWeekKey) : null;
                                                     const groupsPrev = raw && typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : {};
-                                                    updatedAssignments[sameWeekKey] = { ...groupsPrev };
+                                                    updatedAssignments[sameWeekKey] = { ...groupsPrev, [groupNum]: currentPerson };
+                                                } else {
+                                                    updatedAssignments[sameWeekKey][groupNum] = currentPerson;
                                                 }
                                             } else {
                                                 console.log(`[SWAP LOGIC] ✗ Step 2 FAILED: Candidate ${swapCandidate} has conflict or is missing or not normal day`);
@@ -5157,7 +5164,9 @@
                                             if (!updatedAssignments[prevAlternativeKey]) {
                                                 const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(prevAlternativeKey) : null;
                                                 const groupsPrev = raw && typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : {};
-                                                updatedAssignments[prevAlternativeKey] = { ...groupsPrev };
+                                                updatedAssignments[prevAlternativeKey] = { ...groupsPrev, [groupNum]: currentPerson };
+                                            } else {
+                                                updatedAssignments[prevAlternativeKey][groupNum] = currentPerson;
                                             }
                                             break;
                                         }
@@ -7012,7 +7021,6 @@
                     const person = finalAssignments[dateKey]?.[groupNum];
                     if (!person || !hasConflict(dateKey, person, groupNum)) continue;
                     let swapped = false;
-                    // STEP 1: Try forward swap with next semi-normal day(s) in SAME MONTH first
                     for (let k = 0; k < indicesInMonth.length; k++) {
                         const j = indicesInMonth[k];
                         if (j <= i) continue;
@@ -7038,7 +7046,6 @@
                         break;
                     }
                     if (swapped) continue;
-                    // STEP 2: If forward swap failed, try BACKWARD swap with previous semi-normal days in SAME MONTH
                     for (let k = indicesInMonth.length - 1; k >= 0; k--) {
                         const j = indicesInMonth[k];
                         if (j >= i) continue;
@@ -7966,17 +7973,13 @@
                             }
                             if (!hasConsecutiveConflict) continue;
 
-                            const month = date.getMonth();
-                            const year = date.getFullYear();
-
-                            // STEP 1: Try forward swap with next semi-normal day(s) in SAME MONTH first
+                            // Swap with next semi-normal day(s), validate both sides
                             let swapCandidate = null;
                             let swapDateKey = null;
                             for (let j = semiIndex + 1; j < sortedSemiForPreview.length; j++) {
                                 const candidateDateKey = sortedSemiForPreview[j];
                                 const candidateDate = new Date(candidateDateKey + 'T00:00:00');
                                 if (isNaN(candidateDate.getTime())) continue;
-                                if (candidateDate.getMonth() !== month || candidateDate.getFullYear() !== year) break;
 
                                 const candidatePerson = previewSemiAssignments[candidateDateKey]?.[groupNum];
                                 if (!candidatePerson) continue;
@@ -7994,31 +7997,6 @@
                                 }
                             }
 
-                            // STEP 2: If forward swap failed, try BACKWARD swap with previous semi-normal days in SAME MONTH
-                            if (!swapCandidate || !swapDateKey) {
-                                for (let j = semiIndex - 1; j >= 0; j--) {
-                                    const candidateDateKey = sortedSemiForPreview[j];
-                                    const candidateDate = new Date(candidateDateKey + 'T00:00:00');
-                                    if (isNaN(candidateDate.getTime())) continue;
-                                    if (candidateDate.getMonth() !== month || candidateDate.getFullYear() !== year) break;
-
-                                    const candidatePerson = previewSemiAssignments[candidateDateKey]?.[groupNum];
-                                    if (!candidatePerson) continue;
-                                    if (swappedSemiSet.has(`${candidateDateKey}:${groupNum}`)) continue;
-
-                                    if (isPersonMissingOnDate(candidatePerson, groupNum, date, 'semi')) continue;
-                                    if (isPersonMissingOnDate(currentPerson, groupNum, candidateDate, 'semi')) continue;
-
-                                    const candidateWouldConflict = hasSemiConsecutiveConflictForPerson(dateKey, candidatePerson, groupNum);
-                                    const currentWouldConflict = hasSemiConsecutiveConflictForPerson(candidateDateKey, currentPerson, groupNum);
-                                    if (!candidateWouldConflict && !currentWouldConflict) {
-                                        swapCandidate = candidatePerson;
-                                        swapDateKey = candidateDateKey;
-                                        break;
-                                    }
-                                }
-                            }
-
                             if (swapCandidate && swapDateKey) {
                                 previewSemiAssignments[dateKey][groupNum] = swapCandidate;
                                 previewSemiAssignments[swapDateKey][groupNum] = currentPerson;
@@ -8026,6 +8004,11 @@
                                 swappedSemiSet.add(`${swapDateKey}:${groupNum}`);
                                 continue;
                             }
+
+                            const month = date.getMonth();
+                            const year = date.getFullYear();
+                            const rotationDays = groupPeople.length;
+                            const currentRotationPosition = groupPeople.indexOf(currentPerson);
                         }
                     }
 
