@@ -1987,43 +1987,6 @@
                 // Return-from-missing: persons replaced on a special date due to missing will be assigned on another special (same month first, else next)
                 const returnFromMissingSpecial = []; // { personName, groupNum, missedDateKey }
                 
-                // CRITICAL: Check for missing people from previous months' special duties
-                // Missing periods are stored in groups[groupNum].missingPeriods[personName] (Firestore: dutyShifts/groups)
-                // We check rotationBaselineSpecialAssignments to find who SHOULD have been assigned on previous special dates
-                if (sortedSpecial.length > 0) {
-                    const firstDateOfPeriod = sortedSpecial[0];
-                    console.log(`[RETURN-FROM-MISSING] Checking previous months for missing people. Current period starts: ${firstDateOfPeriod}`);
-                    
-                    // Check all baseline assignments from previous months
-                    for (const dateKey in rotationBaselineSpecialAssignments) {
-                        // Only check dates BEFORE the current period
-                        if (dateKey >= firstDateOfPeriod) continue;
-                        
-                        const baselineDate = new Date(dateKey + 'T00:00:00');
-                        if (isNaN(baselineDate.getTime())) continue;
-                        
-                        const baselineAssignment = rotationBaselineSpecialAssignments[dateKey];
-                        if (!baselineAssignment) continue;
-                        
-                        console.log(`[RETURN-FROM-MISSING] Checking previous date: ${dateKey}`);
-                        
-                        // Check each group
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            const baselinePerson = parseAssignedPersonForGroupFromAssignment(baselineAssignment, groupNum);
-                            if (!baselinePerson) continue;
-                            
-                            // Check if this baseline person was missing on that date
-                            if (isPersonMissingOnDate(baselinePerson, groupNum, baselineDate, 'special')) {
-                                // This person was missing on a previous special date - add them to return-from-missing
-                                returnFromMissingSpecial.push({ personName: baselinePerson, groupNum, missedDateKey: dateKey });
-                                console.log(`[RETURN-FROM-MISSING PREVIOUS] ✓ Found missing person ${baselinePerson} (Group ${groupNum}) from previous special date ${dateKey}, will assign in current period`);
-                            }
-                        }
-                    }
-                    
-                    console.log(`[RETURN-FROM-MISSING] Total missing people from previous months: ${returnFromMissingSpecial.length}`);
-                }
-                
                 // Store assignments and rotation positions for saving when Next is pressed
                 const tempSpecialAssignments = {}; // dateKey -> { groupNum -> personName }
                 // Track rotation persons (who SHOULD be assigned according to rotation, before missing/skip)
@@ -2054,8 +2017,20 @@
                             const seedDateKey = formatDateKey(seedDate);
                             const seedMonthKey = getMonthKeyFromDate(seedDate);
                             const prevMonthKey = getPreviousMonthKeyFromDate(seedDate);
+                            console.log(`[DEBUG ROTATION INIT] Group ${groupNum}: seedDate=${seedDateKey}, seedMonthKey=${seedMonthKey}, prevMonthKey=${prevMonthKey}`);
+                            console.log(`[DEBUG ROTATION INIT] lastRotationPositions.special[${prevMonthKey}][${groupNum}]=`, lastRotationPositions?.special?.[prevMonthKey]?.[groupNum] || 'NOT FOUND');
+                            console.log(`[DEBUG ROTATION INIT] rotationBaselineLastByType.special[${prevMonthKey}][${groupNum}]=`, rotationBaselineLastByType?.special?.[prevMonthKey]?.[groupNum] || 'NOT FOUND');
+                            console.log(`[DEBUG ROTATION INIT] Available months in rotationBaselineLastByType.special:`, Object.keys(rotationBaselineLastByType?.special || {}));
+                            console.log(`[DEBUG ROTATION INIT] Available months in lastRotationPositions.special:`, Object.keys(lastRotationPositions?.special || {}));
+                            // #region agent log
+                            fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:rotationInit',message:'special rotation init',data:{groupNum,seedDateKey,seedMonthKey,prevMonthKey,lastRotationPositionsSpecial:lastRotationPositions?.special?.[prevMonthKey]?.[groupNum]||null,rotationBaselineLastSpecial:rotationBaselineLastByType?.special?.[prevMonthKey]?.[groupNum]||null},hypothesisId:'H1',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                            // #endregion
                             const lastPersonName = getLastRotationPersonForDate('special', seedDate, groupNum);
                             const lastPersonIndex = groupPeople.indexOf(lastPersonName);
+                            console.log(`[DEBUG ROTATION INIT] getLastRotationPersonForDate returned: "${lastPersonName}", index in groupPeople: ${lastPersonIndex}, groupPeople.length=${groupPeople.length}`);
+                            // #region agent log
+                            fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:rotationInitResult',message:'getLastRotationPersonForDate result',data:{groupNum,lastPersonName,lastPersonIndex,groupPeopleLength:groupPeople.length,foundInList:lastPersonIndex>=0},hypothesisId:'H1',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                            // #endregion
                             if (lastPersonName && lastPersonIndex >= 0) {
                                 // Found last person - start from next person
                                 globalSpecialRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
@@ -2066,6 +2041,9 @@
                                     const firstDate = new Date(sortedSpecial[0] + 'T00:00:00');
                                     const daysSinceStart = getRotationPosition(firstDate, 'special', groupNum);
                                     globalSpecialRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                    // #region agent log
+                                    fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:rotationFallback',message:'rotation fallback to calculation',data:{groupNum,lastPersonName,firstDateKey:formatDateKey(firstDate),daysSinceStart,calculatedPosition:globalSpecialRotationPosition[groupNum]},hypothesisId:'H2',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                    // #endregion
                                     if (lastPersonName) {
                                         console.log(`[SPECIAL ROTATION] Last person ${lastPersonName} not found in group ${groupNum} list, using rotation calculation: position ${globalSpecialRotationPosition[groupNum]}`);
                                     }
@@ -2243,10 +2221,9 @@
                         const d = new Date(dk + 'T00:00:00');
                         return getMonthKeyFromDate(d) === missedMonthKey && dk !== missedDateKey;
                     });
+                    // Prefer same-month specials (excluding the missed date); do NOT skip if person is still "missing" on target date – this IS their make-up duty
                     for (const dk of sameMonthSpecials) {
                         if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
-                        const dateObj = new Date(dk + 'T00:00:00');
-                        if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
                         targetKey = dk;
                         break;
                     }
@@ -2254,8 +2231,6 @@
                         for (const dk of sortedSpecial) {
                             if (dk <= missedDateKey) continue;
                             if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
-                            const dateObj = new Date(dk + 'T00:00:00');
-                            if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
                             targetKey = dk;
                             break;
                         }
