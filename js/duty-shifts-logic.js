@@ -2221,9 +2221,11 @@
                         const d = new Date(dk + 'T00:00:00');
                         return getMonthKeyFromDate(d) === missedMonthKey && dk !== missedDateKey;
                     });
-                    // Prefer same-month specials (excluding the missed date); do NOT skip if person is still "missing" on target date – this IS their make-up duty
+                    // Prefer same-month specials (excluding the missed date). Only assign to a date when the person is NOT missing (they must be back).
                     for (const dk of sameMonthSpecials) {
                         if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
+                        const dateObj = new Date(dk + 'T00:00:00');
+                        if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
                         targetKey = dk;
                         break;
                     }
@@ -2231,6 +2233,8 @@
                         for (const dk of sortedSpecial) {
                             if (dk <= missedDateKey) continue;
                             if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
+                            const dateObj = new Date(dk + 'T00:00:00');
+                            if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
                             targetKey = dk;
                             break;
                         }
