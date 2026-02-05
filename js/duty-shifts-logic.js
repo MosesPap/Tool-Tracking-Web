@@ -2037,7 +2037,6 @@
                     }
                 }
                 
-                const rowData = {}; // dateKey -> { dateStr, holidayName, cells: { groupNum -> { baseline, computed, daysCountInfo, lastDutyInfo } } }
                 sortedSpecial.forEach((dateKey, specialIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -2070,15 +2069,14 @@
                         }
                     }
                     
-                    rowData[dateKey] = { dateStr, holidayName: holidayName || 'Ειδική Αργία', cells: {} };
-                    
+                    // (Table row HTML is built after return-from-missing and reassign-other-dates passes, so we show final assignments and baseline/replacement)
                     // Calculate who will be assigned for each group based on rotation order
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
                         const groupPeople = groupData.special || [];
                         
                         if (groupPeople.length === 0) {
-                            rowData[dateKey].cells[groupNum] = { baseline: null, computed: null, daysCountInfo: '', lastDutyInfo: '' };
+                            // no cell here – table built after passes
                         } else {
                                 const rotationDays = groupPeople.length;
                             // Use the global rotation position (initialized once per group)
@@ -2206,23 +2204,19 @@
                                 }
                             }
                             
-                            // Use stored baseline (specialRotationPersons) so when rotation person was disabled we show replacement only, not as swap
+                            // Baseline/replacement for display (table row built after passes)
                             const baselinePersonForDisplaySpecial = specialRotationPersons[dateKey]?.[groupNum] ?? rotationPerson;
-                            rowData[dateKey].cells[groupNum] = { baseline: baselinePersonForDisplaySpecial, computed: assignedPerson, daysCountInfo, lastDutyInfo };
+                            // store for later table build – not building html here
                         }
                     }
                 });
                 
-                // Return-from-missing for special: assign each replaced (missing) person on another special – same month first, else next special.
-                // After placing a returner on date T (displacing D), do not use any date after T in this period for another returner in the same group – the next date goes to the person after D (e.g. fifth in rotation).
+                // Return-from-missing for special: assign each replaced (missing) person on another special – same month first, else next special
                 const usedReturnFromMissingSpecial = new Set();
-                const latestReturnerDateByGroup = {}; // groupNum -> dateKey (latest date we used for a returner in this group)
-                const returnFromMissingDisplaced = {}; // dateKey -> { groupNum -> displacedPerson } for display (baseline = displaced, replacement = returner)
                 for (const entry of returnFromMissingSpecial) {
                     const { personName, groupNum, missedDateKey } = entry;
                     const missedDate = new Date(missedDateKey + 'T00:00:00');
                     const missedMonthKey = getMonthKeyFromDate(missedDate);
-                    const cutoffDateKey = latestReturnerDateByGroup[groupNum] || null; // do not use any date after this
                     let targetKey = null;
                     const sameMonthSpecials = sortedSpecial.filter((dk) => {
                         const d = new Date(dk + 'T00:00:00');
@@ -2230,7 +2224,6 @@
                     });
                     for (const dk of sameMonthSpecials) {
                         if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
-                        if (cutoffDateKey && dk > cutoffDateKey) continue; // next date after a returner goes to rotation (e.g. fifth), not another returner
                         const dateObj = new Date(dk + 'T00:00:00');
                         if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
                         targetKey = dk;
@@ -2240,7 +2233,6 @@
                         for (const dk of sortedSpecial) {
                             if (dk <= missedDateKey) continue;
                             if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
-                            if (cutoffDateKey && dk > cutoffDateKey) continue;
                             const dateObj = new Date(dk + 'T00:00:00');
                             if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
                             targetKey = dk;
@@ -2249,12 +2241,11 @@
                     }
                     if (!targetKey) continue;
                     usedReturnFromMissingSpecial.add(`${targetKey}:${groupNum}`);
-                    latestReturnerDateByGroup[groupNum] = targetKey;
                     const displacedPerson = tempSpecialAssignments[targetKey]?.[groupNum] || null;
-                    if (!returnFromMissingDisplaced[targetKey]) returnFromMissingDisplaced[targetKey] = {};
-                    returnFromMissingDisplaced[targetKey][groupNum] = displacedPerson;
                     if (!tempSpecialAssignments[targetKey]) tempSpecialAssignments[targetKey] = {};
                     tempSpecialAssignments[targetKey][groupNum] = personName;
+                    if (!specialRotationPersons[targetKey]) specialRotationPersons[targetKey] = {};
+                    specialRotationPersons[targetKey][groupNum] = displacedPerson; // baseline for display: who was there before (returner replaces them)
                     const reasonText = displacedPerson
                         ? `Επέστρεψε από απουσία· αντικατέστησε προσωρινά ${displacedPerson} στην ημερομηνία αυτή.`
                         : 'Επέστρεψε από απουσία.';
@@ -2266,30 +2257,85 @@
                     }
                 }
                 
-                // Update rowData for return-from-missing cells so we show baseline (displaced) and replacement (returner)
-                for (const targetKey in returnFromMissingDisplaced) {
-                    const groupMap = returnFromMissingDisplaced[targetKey];
-                    if (!rowData[targetKey] || !rowData[targetKey].cells) continue;
-                    for (const groupNum in groupMap) {
-                        const displacedPerson = groupMap[groupNum];
-                        if (rowData[targetKey].cells[groupNum]) {
-                            rowData[targetKey].cells[groupNum].baseline = displacedPerson;
-                            rowData[targetKey].cells[groupNum].computed = tempSpecialAssignments[targetKey]?.[groupNum] || null;
-                        }
+                // After return-from-missing: assign non-return dates to the next person(s) after the last returner (only when this group had returners)
+                const groupHasReturners = {};
+                for (const entry of returnFromMissingSpecial) {
+                    groupHasReturners[entry.groupNum] = true;
+                }
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    if (!groupHasReturners[groupNum]) continue;
+                    const groupPeople = groups[groupNum]?.special || [];
+                    const rotationDays = groupPeople.length;
+                    if (rotationDays === 0) continue;
+                    const otherDates = sortedSpecial.filter(dk => !usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`));
+                    let maxReturnerIndex = -1;
+                    for (const entry of returnFromMissingSpecial) {
+                        if (entry.groupNum !== groupNum) continue;
+                        const idx = groupPeople.indexOf(entry.personName);
+                        if (idx >= 0 && idx > maxReturnerIndex) maxReturnerIndex = idx;
+                    }
+                    const startPos = (maxReturnerIndex + 1) % rotationDays;
+                    otherDates.sort();
+                    for (let i = 0; i < otherDates.length; i++) {
+                        const dk = otherDates[i];
+                        const person = groupPeople[(startPos + i) % rotationDays];
+                        if (!person) continue;
+                        if (!tempSpecialAssignments[dk]) tempSpecialAssignments[dk] = {};
+                        tempSpecialAssignments[dk][groupNum] = person;
+                        if (!specialRotationPersons[dk]) specialRotationPersons[dk] = {};
+                        specialRotationPersons[dk][groupNum] = person; // same as assigned (no replacement line)
                     }
                 }
                 
-                // Build table body from rowData (so return-from-missing shows baseline + replacement)
+                // Build table rows from final assignments (so return-from-missing shows baseline + replacement, and "next after returners" is correct)
                 for (const dateKey of sortedSpecial) {
-                    const row = rowData[dateKey];
-                    if (!row) continue;
+                    const date = new Date(dateKey + 'T00:00:00');
+                    const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    let holidayName = '';
+                    const year = date.getFullYear();
+                    const month = date.getMonth() + 1;
+                    const day = date.getDate();
+                    for (const holidayDef of recurringSpecialHolidays) {
+                        if (holidayDef.type === 'fixed' && holidayDef.month === month && holidayDef.day === day) {
+                            holidayName = holidayDef.name;
+                            break;
+                        } else if (holidayDef.type === 'easter-relative') {
+                            const orthodoxHolidays = calculateOrthodoxHolidays(year);
+                            const easterDate = orthodoxHolidays.easterSunday;
+                            const holidayDate = new Date(easterDate);
+                            holidayDate.setDate(holidayDate.getDate() + (holidayDef.offset || 0));
+                            if (formatDateKey(holidayDate) === dateKey) {
+                                holidayName = holidayDef.name;
+                                break;
+                            }
+                        }
+                    }
                     html += '<tr>';
-                    html += `<td><strong>${row.dateStr}</strong></td>`;
-                    html += `<td>${row.holidayName}</td>`;
-                    for (let g = 1; g <= 4; g++) {
-                        const cell = row.cells[g];
-                        if (!cell) html += '<td class="text-muted">-</td>';
-                        else html += `<td>${buildBaselineComputedCellHtml(cell.baseline, cell.computed, cell.daysCountInfo, cell.lastDutyInfo)}</td>`;
+                    html += `<td><strong>${dateStr}</strong></td>`;
+                    html += `<td>${holidayName || 'Ειδική Αργία'}</td>`;
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        const groupData = groups[groupNum] || { special: [] };
+                        const groupPeople = groupData.special || [];
+                        if (groupPeople.length === 0) {
+                            html += '<td class="text-muted">-</td>';
+                        } else {
+                            const assignedPerson = tempSpecialAssignments[dateKey]?.[groupNum] || null;
+                            const baselinePerson = specialRotationPersons[dateKey]?.[groupNum] || null;
+                            let lastDutyInfo = '';
+                            let daysCountInfo = '';
+                            if (assignedPerson) {
+                                const rotationDays = groupPeople.length;
+                                const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'special', dayTypeLists, startDate);
+                                const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'special', groupPeople.length);
+                                lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
+                                if (daysSince !== null && daysSince !== Infinity) {
+                                    daysCountInfo = ` <span class="text-info">${daysSince}/${rotationDays} ημέρες</span>`;
+                                } else if (daysSince === Infinity) {
+                                    daysCountInfo = ' <span class="text-success">πρώτη φορά</span>';
+                                }
+                            }
+                            html += `<td>${buildBaselineComputedCellHtml(baselinePerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                        }
                     }
                     html += '</tr>';
                 }
