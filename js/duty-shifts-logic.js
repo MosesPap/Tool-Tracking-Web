@@ -2116,7 +2116,18 @@
                             specialRotationPersons[dateKey][groupNum] = wasDisabledOnlySkippedSpecial && assignedPerson ? assignedPerson : rotationPerson;
                             // MISSING or RETURNED FROM MISSING (not disabled): show replacement and store reason; returner gets placed on a special date later.
                             const isMissingOnDate = assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special');
-                            const isReturnedFromMissing = assignedPerson && typeof hasReturnedFromMissing === 'function' && hasReturnedFromMissing(rotationPerson, groupNum, date, sortedSpecial[0]);
+                            const groupDataForReturn = groups[groupNum] || { missingPeriods: {} };
+                            const periodsForReturn = groupDataForReturn.missingPeriods?.[rotationPerson] || [];
+                            const checkDateForReturn = new Date(date);
+                            checkDateForReturn.setHours(0, 0, 0, 0);
+                            const isReturnedFromMissing = assignedPerson && periodsForReturn.length > 0 && periodsForReturn.some(p => {
+                                const end = new Date((p && p.end ? p.end : p) + 'T00:00:00');
+                                end.setHours(0, 0, 0, 0);
+                                return end < checkDateForReturn;
+                            });
+                            if (groupNum === 1 && (dateKey === '2026-12-24' || dateKey === '2026-12-25') && rotationPerson) {
+                                console.log('[SPECIAL RETURNER CHECK g1]', JSON.stringify({ dateKey, rotationPerson, periodsCount: periodsForReturn.length, isReturnedFromMissing, isMissingOnDate }));
+                            }
                             if (!isRotationPersonDisabledSpecial && assignedPerson && (isMissingOnDate || isReturnedFromMissing)) {
                                 let foundReplacement = false;
                                 for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
