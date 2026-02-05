@@ -2246,6 +2246,7 @@
                     tempSpecialAssignments[targetKey][groupNum] = personName;
                     if (!specialRotationPersons[targetKey]) specialRotationPersons[targetKey] = {};
                     specialRotationPersons[targetKey][groupNum] = displacedPerson; // baseline for display: who was there before (returner replaces them)
+                    console.log('[SPECIAL RETURN-FROM-MISSING]', { groupNum, missedDateKey, targetKey, returner: personName, displacedPerson });
                     const reasonText = displacedPerson
                         ? `Επέστρεψε από απουσία· αντικατέστησε προσωρινά ${displacedPerson} στην ημερομηνία αυτή.`
                         : 'Επέστρεψε από απουσία.';
@@ -2270,10 +2271,18 @@
                     if (!lastTargetKey) continue;
                     const displacedPerson = specialRotationPersons[lastTargetKey]?.[groupNum] || null;
                     if (!displacedPerson) continue;
-                    const displacedIndex = groupPeople.indexOf(displacedPerson);
+                    // Case-insensitive/toneless match to avoid index misses due to accents/case
+                    const displacedIndex = groupPeople.findIndex(p => {
+                        if (p === displacedPerson) return true;
+                        if (typeof greekUpperNoTones === 'function') {
+                            return greekUpperNoTones(p) === greekUpperNoTones(displacedPerson);
+                        }
+                        return false;
+                    });
                     if (displacedIndex === -1) continue;
                     const nextRotationStart = (displacedIndex + 1) % rotationDays;
                     const remainingDates = sortedSpecial.filter(dk => dk > lastTargetKey);
+                    console.log('[SPECIAL CONTINUE FROM DISPLACED]', { groupNum, lastTargetKey, displacedPerson, displacedIndex, nextRotationStart, remainingDates });
                     remainingDates.forEach((dk, i) => {
                         const person = groupPeople[(nextRotationStart + i) % rotationDays];
                         if (!person) return;
@@ -2281,6 +2290,7 @@
                         tempSpecialAssignments[dk][groupNum] = person;
                         if (!specialRotationPersons[dk]) specialRotationPersons[dk] = {};
                         specialRotationPersons[dk][groupNum] = person;
+                        console.log('[SPECIAL CONTINUE ASSIGN]', { groupNum, dateKey: dk, person, slotIndex: (nextRotationStart + i) % rotationDays });
                     });
                 }
                 
@@ -2318,6 +2328,7 @@
                         } else {
                             const assignedPerson = tempSpecialAssignments[dateKey]?.[groupNum] || null;
                             const baselinePerson = specialRotationPersons[dateKey]?.[groupNum] || null;
+                            console.log('[SPECIAL TABLE CELL]', { dateKey, groupNum, baselinePerson, assignedPerson });
                             let lastDutyInfo = '';
                             let daysCountInfo = '';
                             if (assignedPerson) {
