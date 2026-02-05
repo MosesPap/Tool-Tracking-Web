@@ -2069,7 +2069,7 @@
                         }
                     }
                     
-                    // (Table row HTML is built after return-from-missing and reassign-other-dates passes, so we show final assignments and baseline/replacement)
+                    // (Table row HTML is built after return-from-missing and "continue from displaced" pass, so we show final assignments and baseline/replacement)
                     // Calculate who will be assigned for each group based on rotation order
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
@@ -2257,34 +2257,31 @@
                     }
                 }
                 
-                // After return-from-missing: assign non-return dates to the next person(s) after the last returner (only when this group had returners)
-                const groupHasReturners = {};
-                for (const entry of returnFromMissingSpecial) {
-                    groupHasReturners[entry.groupNum] = true;
-                }
+                // Continue rotation from last displaced person for dates AFTER the last return-from-missing target (so we don't re-use the person who already replaced)
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    if (!groupHasReturners[groupNum]) continue;
-                    const groupPeople = groups[groupNum]?.special || [];
+                    const groupData = groups[groupNum] || { special: [] };
+                    const groupPeople = groupData.special || [];
+                    if (groupPeople.length === 0) continue;
                     const rotationDays = groupPeople.length;
-                    if (rotationDays === 0) continue;
-                    const otherDates = sortedSpecial.filter(dk => !usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`));
-                    let maxReturnerIndex = -1;
-                    for (const entry of returnFromMissingSpecial) {
-                        if (entry.groupNum !== groupNum) continue;
-                        const idx = groupPeople.indexOf(entry.personName);
-                        if (idx >= 0 && idx > maxReturnerIndex) maxReturnerIndex = idx;
+                    let lastTargetKey = null;
+                    for (const dk of sortedSpecial) {
+                        if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) lastTargetKey = dk;
                     }
-                    const startPos = (maxReturnerIndex + 1) % rotationDays;
-                    otherDates.sort();
-                    for (let i = 0; i < otherDates.length; i++) {
-                        const dk = otherDates[i];
-                        const person = groupPeople[(startPos + i) % rotationDays];
-                        if (!person) continue;
+                    if (!lastTargetKey) continue;
+                    const displacedPerson = specialRotationPersons[lastTargetKey]?.[groupNum] || null;
+                    if (!displacedPerson) continue;
+                    const displacedIndex = groupPeople.indexOf(displacedPerson);
+                    if (displacedIndex === -1) continue;
+                    const nextRotationStart = (displacedIndex + 1) % rotationDays;
+                    const remainingDates = sortedSpecial.filter(dk => dk > lastTargetKey);
+                    remainingDates.forEach((dk, i) => {
+                        const person = groupPeople[(nextRotationStart + i) % rotationDays];
+                        if (!person) return;
                         if (!tempSpecialAssignments[dk]) tempSpecialAssignments[dk] = {};
                         tempSpecialAssignments[dk][groupNum] = person;
                         if (!specialRotationPersons[dk]) specialRotationPersons[dk] = {};
-                        specialRotationPersons[dk][groupNum] = person; // same as assigned (no replacement line)
-                    }
+                        specialRotationPersons[dk][groupNum] = person;
+                    });
                 }
                 
                 // Build table rows from final assignments (so return-from-missing shows baseline + replacement, and "next after returners" is correct)
