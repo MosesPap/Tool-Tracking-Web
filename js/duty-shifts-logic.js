@@ -2114,8 +2114,10 @@
                             }
                             // Store baseline for UI: when disabled skip use assigned person so no swap line (same as normal; avoids next day showing as swap)
                             specialRotationPersons[dateKey][groupNum] = wasDisabledOnlySkippedSpecial && assignedPerson ? assignedPerson : rotationPerson;
-                            // MISSING (not disabled): show replacement and store reason.
-                            if (!isRotationPersonDisabledSpecial && assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special')) {
+                            // MISSING or RETURNED FROM MISSING (not disabled): show replacement and store reason; returner gets placed on a special date later.
+                            const isMissingOnDate = assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special');
+                            const isReturnedFromMissing = assignedPerson && typeof hasReturnedFromMissing === 'function' && hasReturnedFromMissing(rotationPerson, groupNum, date, sortedSpecial[0]);
+                            if (!isRotationPersonDisabledSpecial && assignedPerson && (isMissingOnDate || isReturnedFromMissing)) {
                                 let foundReplacement = false;
                                 for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
@@ -2222,7 +2224,7 @@
                     let targetKey = null;
                     const sameMonthSpecials = sortedSpecial.filter((dk) => {
                         const d = new Date(dk + 'T00:00:00');
-                        return getMonthKeyFromDate(d) === missedMonthKey && dk !== missedDateKey;
+                        return getMonthKeyFromDate(d) === missedMonthKey;
                     });
                     for (const dk of sameMonthSpecials) {
                         if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
@@ -10001,6 +10003,22 @@
                 const start = new Date(period.start + 'T00:00:00');
                 const end = new Date(period.end + 'T00:00:00');
                 return checkDate >= start && checkDate <= end;
+            });
+        }
+        /** True if person is back on date but had a missing period that ended recently (so we treat them as "returning from missing" for specials). */
+        function hasReturnedFromMissing(person, groupNum, date, firstSpecialDateKey) {
+            const groupData = groups[groupNum] || { missingPeriods: {} };
+            const missingPeriods = groupData.missingPeriods?.[person] || [];
+            if (missingPeriods.length === 0) return false;
+            const checkDate = new Date(date);
+            checkDate.setHours(0, 0, 0, 0);
+            const cutoff = firstSpecialDateKey ? new Date(firstSpecialDateKey + 'T00:00:00') : new Date(0);
+            cutoff.setHours(0, 0, 0, 0);
+            cutoff.setDate(cutoff.getDate() - 60);
+            return missingPeriods.some(period => {
+                const end = new Date(period.end + 'T00:00:00');
+                end.setHours(0, 0, 0, 0);
+                return end < checkDate && end >= cutoff;
             });
         }
         function findNextEligiblePersonAfterMissing({
