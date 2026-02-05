@@ -2110,6 +2110,10 @@
                             let wasReplaced = false;
                             let replacementIndex = null;
                             let wasDisabledOnlySkippedSpecial = false;
+                            // #region agent log
+                            const alreadyOnAnotherSpecial = sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === rotationPerson);
+                            fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:specialRotation',message:'rotation person check',data:{dateKey,groupNum,rotationPerson,alreadyOnAnotherSpecial},hypothesisId:'H1',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                            // #endregion
                             // DISABLED: When rotation person is disabled, whole baseline shifts – skip them, no replacement line.
                             const isRotationPersonDisabledSpecial = rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'special');
                             if (isRotationPersonDisabledSpecial) {
@@ -2129,10 +2133,30 @@
                                 }
                                 if (!foundEligible) assignedPerson = null;
                             }
+                            // ALREADY ON ANOTHER SPECIAL: rotation person was replacement on a previous special in this period – skip them to avoid double assignment
+                            if (!isRotationPersonDisabledSpecial && rotationPerson && alreadyOnAnotherSpecial) {
+                                let foundEligible = false;
+                                for (let offset = 1; offset <= rotationDays * 2 && !foundEligible; offset++) {
+                                    const idx = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[idx];
+                                    if (!candidate) continue;
+                                    if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
+                                    const candidateAlreadyOnAnother = sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === candidate);
+                                    if (candidateAlreadyOnAnother) continue;
+                                    assignedPerson = candidate;
+                                    replacementIndex = idx;
+                                    wasReplaced = true;
+                                    wasDisabledOnlySkippedSpecial = true; // treat like skip for baseline display
+                                    foundEligible = true;
+                                    break;
+                                }
+                                if (!foundEligible) assignedPerson = null;
+                            }
                             // Store baseline for UI: when disabled skip use assigned person so no swap line (same as normal; avoids next day showing as swap)
                             specialRotationPersons[dateKey][groupNum] = wasDisabledOnlySkippedSpecial && assignedPerson ? assignedPerson : rotationPerson;
                             // MISSING (not disabled): show replacement and store reason.
-                            if (!isRotationPersonDisabledSpecial && assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special')) {
+                            if (!isRotationPersonDisabledSpecial && assignedPerson && !alreadyOnAnotherSpecial && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special')) {
                                 let foundReplacement = false;
                                 for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
@@ -2171,6 +2195,9 @@
                             
                             // Store assignment for saving
                             if (assignedPerson) {
+                                // #region agent log
+                                fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:specialAssigned',message:'assigned person',data:{dateKey,groupNum,assignedPerson,wasReplaced},hypothesisId:'H2',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                // #endregion
                                 if (!tempSpecialAssignments[dateKey]) {
                                     tempSpecialAssignments[dateKey] = {};
                                 }
