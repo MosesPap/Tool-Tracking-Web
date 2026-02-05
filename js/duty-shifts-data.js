@@ -368,6 +368,7 @@
 
         // Returns the last rotation person that should seed the rotation for the given date's month.
         // IMPORTANT: When calculating month M, we read from previous month (M-1), not M.
+        // If the immediate previous month doesn't exist, finds the most recent available month.
         function getLastRotationPersonForDate(dayType, date, groupNum) {
             const byType = lastRotationPositions?.[dayType] || {};
             const prevMonthKey = getPreviousMonthKeyFromDate(date);
@@ -386,10 +387,39 @@
             }
 
             // Baseline fallback: derive last rotation person from rotationBaseline docs (previous month)
-            const baselineMonth = rotationBaselineLastByType?.[dayType]?.[prevMonthKey];
+            let baselineMonth = rotationBaselineLastByType?.[dayType]?.[prevMonthKey];
             if (baselineMonth && baselineMonth[groupNum]) {
                 return baselineMonth[groupNum];
             }
+            
+            // If immediate previous month not found, find the most recent available month
+            const baselineByType = rotationBaselineLastByType?.[dayType];
+            if (baselineByType && typeof baselineByType === 'object') {
+                const availableMonths = Object.keys(baselineByType)
+                    .filter(k => isMonthKey(k))
+                    .sort((a, b) => {
+                        const [aYear, aMonth] = a.split('-').map(Number);
+                        const [bYear, bMonth] = b.split('-').map(Number);
+                        if (aYear !== bYear) return bYear - aYear;
+                        return bMonth - aMonth;
+                    });
+                
+                // Find the most recent month that is before or equal to prevMonthKey
+                // Since sorted descending, first match is the most recent
+                const [targetYear, targetMonth] = prevMonthKey.split('-').map(Number);
+                for (const monthKey of availableMonths) {
+                    const [year, month] = monthKey.split('-').map(Number);
+                    // Check if this month is before or equal to target month
+                    if (year < targetYear || (year === targetYear && month <= targetMonth)) {
+                        baselineMonth = baselineByType[monthKey];
+                        if (baselineMonth && baselineMonth[groupNum]) {
+                            console.log(`[ROTATION FALLBACK] Using most recent available month ${monthKey} (instead of ${prevMonthKey}) for group ${groupNum}, person: ${baselineMonth[groupNum]}`);
+                            return baselineMonth[groupNum];
+                        }
+                    }
+                }
+            }
+            
             return null;
         }
 
