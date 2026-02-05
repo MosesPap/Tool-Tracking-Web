@@ -2208,7 +2208,9 @@
                     }
                 });
                 
-                // Return-from-missing for special: assign each replaced (missing) person on another special – same month first, else next special
+                // Return-from-missing for special: assign returning people in the next special duty as a replacement to the baseline rotation.
+                // Each returning person takes the slot of the baseline (rotation) person on a target date; baseline is unchanged for display/continuation.
+                // Target: same month first, else next available special.
                 const usedReturnFromMissingSpecial = new Set();
                 for (const entry of returnFromMissingSpecial) {
                     const { personName, groupNum, missedDateKey } = entry;
