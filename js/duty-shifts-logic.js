@@ -2211,6 +2211,8 @@
                     }
                 });
                 
+                console.log('[SPECIAL] returnFromMissingSpecial count', returnFromMissingSpecial.length, JSON.stringify(returnFromMissingSpecial));
+                
                 // Return-from-missing for special: assign each replaced (missing) person on another special – same month first, else next special
                 const usedReturnFromMissingSpecial = new Set();
                 for (const entry of returnFromMissingSpecial) {
@@ -2270,16 +2272,22 @@
                     }
                     if (!lastTargetKey) continue;
                     const displacedPerson = specialRotationPersons[lastTargetKey]?.[groupNum] || null;
-                    if (!displacedPerson) continue;
-                    // Case-insensitive/toneless match to avoid index misses due to accents/case
-                    const displacedIndex = groupPeople.findIndex(p => {
-                        if (p === displacedPerson) return true;
-                        if (typeof greekUpperNoTones === 'function') {
-                            return greekUpperNoTones(p) === greekUpperNoTones(displacedPerson);
-                        }
-                        return false;
-                    });
-                    if (displacedIndex === -1) continue;
+                    if (!displacedPerson) {
+                        console.log('[SPECIAL CONTINUE SKIP] no displacedPerson', { groupNum, lastTargetKey });
+                        continue;
+                    }
+                    const norm = (s) => String(s || '').trim().toLowerCase();
+                    let displacedIndex = groupPeople.indexOf(displacedPerson);
+                    if (displacedIndex === -1 && typeof greekUpperNoTones === 'function') {
+                        displacedIndex = groupPeople.findIndex(p => greekUpperNoTones(p) === greekUpperNoTones(displacedPerson));
+                    }
+                    if (displacedIndex === -1) {
+                        displacedIndex = groupPeople.findIndex(p => norm(p) === norm(displacedPerson));
+                    }
+                    if (displacedIndex === -1) {
+                        console.log('[SPECIAL CONTINUE SKIP] displacedPerson not in group', { groupNum, lastTargetKey, displacedPerson, groupPeople: groupPeople.slice(0, 8) });
+                        continue;
+                    }
                     const nextRotationStart = (displacedIndex + 1) % rotationDays;
                     const remainingDates = sortedSpecial.filter(dk => dk > lastTargetKey);
                     console.log('[SPECIAL CONTINUE FROM DISPLACED]', { groupNum, lastTargetKey, displacedPerson, displacedIndex, nextRotationStart, remainingDates });
@@ -2328,7 +2336,9 @@
                         } else {
                             const assignedPerson = tempSpecialAssignments[dateKey]?.[groupNum] || null;
                             const baselinePerson = specialRotationPersons[dateKey]?.[groupNum] || null;
-                            console.log('[SPECIAL TABLE CELL]', { dateKey, groupNum, baselinePerson, assignedPerson });
+                            if (groupNum === 1) {
+                                console.log('[SPECIAL TABLE CELL g1]', JSON.stringify({ dateKey, baselinePerson, assignedPerson, showBoth: !!(baselinePerson && assignedPerson && baselinePerson !== assignedPerson) }));
+                            }
                             let lastDutyInfo = '';
                             let daysCountInfo = '';
                             if (assignedPerson) {
