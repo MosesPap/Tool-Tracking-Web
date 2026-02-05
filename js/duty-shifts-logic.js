@@ -2069,14 +2069,13 @@
                         }
                     }
                     
-                    // (Table row HTML is built after return-from-missing and "continue from displaced" pass, so we show final assignments and baseline/replacement)
-                    // Calculate who will be assigned for each group based on rotation order
+                    // Calculate who will be assigned for each group based on rotation order (no HTML yet – table built after return-from-missing)
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
                         const groupPeople = groupData.special || [];
                         
                         if (groupPeople.length === 0) {
-                            // no cell here – table built after passes
+                            html += '<td class="text-muted">-</td>';
                         } else {
                                 const rotationDays = groupPeople.length;
                             // Use the global rotation position (initialized once per group)
@@ -2114,21 +2113,8 @@
                             }
                             // Store baseline for UI: when disabled skip use assigned person so no swap line (same as normal; avoids next day showing as swap)
                             specialRotationPersons[dateKey][groupNum] = wasDisabledOnlySkippedSpecial && assignedPerson ? assignedPerson : rotationPerson;
-                            // MISSING or RETURNED FROM MISSING (not disabled): show replacement and store reason; returner gets placed on a special date later.
-                            const isMissingOnDate = assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special');
-                            const groupDataForReturn = groups[groupNum] || { missingPeriods: {} };
-                            const periodsForReturn = groupDataForReturn.missingPeriods?.[rotationPerson] || [];
-                            const checkDateForReturn = new Date(date);
-                            checkDateForReturn.setHours(0, 0, 0, 0);
-                            const isReturnedFromMissing = assignedPerson && periodsForReturn.length > 0 && periodsForReturn.some(p => {
-                                const end = new Date((p && p.end ? p.end : p) + 'T00:00:00');
-                                end.setHours(0, 0, 0, 0);
-                                return end < checkDateForReturn;
-                            });
-                            if (groupNum === 1 && (dateKey === '2026-12-24' || dateKey === '2026-12-25') && rotationPerson) {
-                                console.log('[SPECIAL RETURNER CHECK g1]', JSON.stringify({ dateKey, rotationPerson, periodsCount: periodsForReturn.length, isReturnedFromMissing, isMissingOnDate }));
-                            }
-                            if (!isRotationPersonDisabledSpecial && assignedPerson && (isMissingOnDate || isReturnedFromMissing)) {
+                            // MISSING (not disabled): show replacement and store reason.
+                            if (!isRotationPersonDisabledSpecial && assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special')) {
                                 let foundReplacement = false;
                                 for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
@@ -2200,31 +2186,9 @@
                                 // No person found, still advance rotation position
                                 globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                             }
-                            
-                            // Get last duty date and days since for display
-                            let lastDutyInfo = '';
-                            let daysCountInfo = '';
-                            if (assignedPerson) {
-                                const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'special', dayTypeLists, startDate);
-                                    const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'special', groupPeople.length);
-                                    lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
-                                
-                                // Show days counted in parentheses
-                                if (daysSince !== null && daysSince !== Infinity) {
-                                    daysCountInfo = ` <span class="text-info">${daysSince}/${rotationDays} ημέρες</span>`;
-                                } else if (daysSince === Infinity) {
-                                    daysCountInfo = ' <span class="text-success">πρώτη φορά</span>';
-                                }
-                            }
-                            
-                            // Baseline/replacement for display (table row built after passes)
-                            const baselinePersonForDisplaySpecial = specialRotationPersons[dateKey]?.[groupNum] ?? rotationPerson;
-                            // store for later table build – not building html here
                         }
                     }
                 });
-                
-                console.log('[SPECIAL] returnFromMissingSpecial count', returnFromMissingSpecial.length, JSON.stringify(returnFromMissingSpecial));
                 
                 // Return-from-missing for special: assign each replaced (missing) person on another special – same month first, else next special
                 const usedReturnFromMissingSpecial = new Set();
@@ -2235,7 +2199,7 @@
                     let targetKey = null;
                     const sameMonthSpecials = sortedSpecial.filter((dk) => {
                         const d = new Date(dk + 'T00:00:00');
-                        return getMonthKeyFromDate(d) === missedMonthKey;
+                        return getMonthKeyFromDate(d) === missedMonthKey && dk !== missedDateKey;
                     });
                     for (const dk of sameMonthSpecials) {
                         if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
@@ -2259,9 +2223,6 @@
                     const displacedPerson = tempSpecialAssignments[targetKey]?.[groupNum] || null;
                     if (!tempSpecialAssignments[targetKey]) tempSpecialAssignments[targetKey] = {};
                     tempSpecialAssignments[targetKey][groupNum] = personName;
-                    if (!specialRotationPersons[targetKey]) specialRotationPersons[targetKey] = {};
-                    specialRotationPersons[targetKey][groupNum] = displacedPerson; // baseline for display: who was there before (returner replaces them)
-                    console.log('[SPECIAL RETURN-FROM-MISSING]', { groupNum, missedDateKey, targetKey, returner: personName, displacedPerson });
                     const reasonText = displacedPerson
                         ? `Επέστρεψε από απουσία· αντικατέστησε προσωρινά ${displacedPerson} στην ημερομηνία αυτή.`
                         : 'Επέστρεψε από απουσία.';
@@ -2273,52 +2234,11 @@
                     }
                 }
                 
-                // Continue rotation from last displaced person for dates AFTER the last return-from-missing target (so we don't re-use the person who already replaced)
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupData = groups[groupNum] || { special: [] };
-                    const groupPeople = groupData.special || [];
-                    if (groupPeople.length === 0) continue;
-                    const rotationDays = groupPeople.length;
-                    let lastTargetKey = null;
-                    for (const dk of sortedSpecial) {
-                        if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) lastTargetKey = dk;
-                    }
-                    if (!lastTargetKey) continue;
-                    const displacedPerson = specialRotationPersons[lastTargetKey]?.[groupNum] || null;
-                    if (!displacedPerson) {
-                        console.log('[SPECIAL CONTINUE SKIP] no displacedPerson', { groupNum, lastTargetKey });
-                        continue;
-                    }
-                    const norm = (s) => String(s || '').trim().toLowerCase();
-                    let displacedIndex = groupPeople.indexOf(displacedPerson);
-                    if (displacedIndex === -1 && typeof greekUpperNoTones === 'function') {
-                        displacedIndex = groupPeople.findIndex(p => greekUpperNoTones(p) === greekUpperNoTones(displacedPerson));
-                    }
-                    if (displacedIndex === -1) {
-                        displacedIndex = groupPeople.findIndex(p => norm(p) === norm(displacedPerson));
-                    }
-                    if (displacedIndex === -1) {
-                        console.log('[SPECIAL CONTINUE SKIP] displacedPerson not in group', { groupNum, lastTargetKey, displacedPerson, groupPeople: groupPeople.slice(0, 8) });
-                        continue;
-                    }
-                    const nextRotationStart = (displacedIndex + 1) % rotationDays;
-                    const remainingDates = sortedSpecial.filter(dk => dk > lastTargetKey);
-                    console.log('[SPECIAL CONTINUE FROM DISPLACED]', { groupNum, lastTargetKey, displacedPerson, displacedIndex, nextRotationStart, remainingDates });
-                    remainingDates.forEach((dk, i) => {
-                        const person = groupPeople[(nextRotationStart + i) % rotationDays];
-                        if (!person) return;
-                        if (!tempSpecialAssignments[dk]) tempSpecialAssignments[dk] = {};
-                        tempSpecialAssignments[dk][groupNum] = person;
-                        if (!specialRotationPersons[dk]) specialRotationPersons[dk] = {};
-                        specialRotationPersons[dk][groupNum] = person;
-                        console.log('[SPECIAL CONTINUE ASSIGN]', { groupNum, dateKey: dk, person, slotIndex: (nextRotationStart + i) % rotationDays });
-                    });
-                }
-                
-                // Build table rows from final assignments (so return-from-missing shows baseline + replacement, and "next after returners" is correct)
+                // Build preview table after return-from-missing so we show baseline vs αντικατάσταση (including return-from-missing)
                 for (const dateKey of sortedSpecial) {
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    const dayName = getGreekDayName(date);
                     let holidayName = '';
                     const year = date.getFullYear();
                     const month = date.getMonth() + 1;
@@ -2347,15 +2267,12 @@
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
                         } else {
-                            const assignedPerson = tempSpecialAssignments[dateKey]?.[groupNum] || null;
-                            const baselinePerson = specialRotationPersons[dateKey]?.[groupNum] || null;
-                            if (groupNum === 1) {
-                                console.log('[SPECIAL TABLE CELL g1]', JSON.stringify({ dateKey, baselinePerson, assignedPerson, showBoth: !!(baselinePerson && assignedPerson && baselinePerson !== assignedPerson) }));
-                            }
+                            const rotationDays = groupPeople.length;
+                            const baselinePersonForDisplaySpecial = specialRotationPersons[dateKey]?.[groupNum] ?? null;
+                            const assignedPerson = tempSpecialAssignments[dateKey]?.[groupNum] ?? null;
                             let lastDutyInfo = '';
                             let daysCountInfo = '';
                             if (assignedPerson) {
-                                const rotationDays = groupPeople.length;
                                 const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'special', dayTypeLists, startDate);
                                 const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'special', groupPeople.length);
                                 lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
@@ -2365,7 +2282,7 @@
                                     daysCountInfo = ' <span class="text-success">πρώτη φορά</span>';
                                 }
                             }
-                            html += `<td>${buildBaselineComputedCellHtml(baselinePerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                            html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplaySpecial, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
                     html += '</tr>';
@@ -2373,43 +2290,42 @@
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempSpecialAssignments = tempSpecialAssignments;
-                // Store pure rotation baseline (before missing replacement) for saving to Firestore
+                // Store pure rotation baseline (rotation person per date) for saving to Firestore – so continuation uses baseline, not returner
                 calculationSteps.tempSpecialBaselineAssignments = specialRotationPersons;
 
                 // Store last rotation person for each group (overall, for end-of-range continuation)
-                // IMPORTANT: Use the ASSIGNED person (after replacement), not the rotation person
-                // This ensures that when Person A is replaced by Person B, next calculation starts from Person B's position
+                // Use BASELINE (rotation) person for the last date so that when return-from-missing placed A/B (displacing C/D), we continue from E next month
                 calculationSteps.lastSpecialRotationPositions = {};
                 for (let g = 1; g <= 4; g++) {
-                    let lastAssignedPerson = null;
+                    let lastBaselinePerson = null;
                     for (let i = sortedSpecial.length - 1; i >= 0; i--) {
                         const dateKey = sortedSpecial[i];
-                        if (tempSpecialAssignments[dateKey] && tempSpecialAssignments[dateKey][g]) {
-                            lastAssignedPerson = tempSpecialAssignments[dateKey][g];
+                        const baselinePerson = specialRotationPersons[dateKey]?.[g];
+                        if (baselinePerson) {
+                            lastBaselinePerson = baselinePerson;
                             break;
                         }
                     }
-                    if (lastAssignedPerson) {
-                        calculationSteps.lastSpecialRotationPositions[g] = lastAssignedPerson;
-                        console.log(`[SPECIAL ROTATION] Storing last assigned person ${lastAssignedPerson} for group ${g} (after replacement)`);
+                    if (lastBaselinePerson) {
+                        calculationSteps.lastSpecialRotationPositions[g] = lastBaselinePerson;
+                        console.log(`[SPECIAL ROTATION] Storing last baseline (rotation) person ${lastBaselinePerson} for group ${g} for continuation`);
                     }
                 }
 
-                // Store last rotation person per month (for correct recalculation of individual months)
-                // IMPORTANT: Use the ASSIGNED person (after replacement), not the rotation person
-                // This ensures that when Person A is replaced by Person B, next calculation starts from Person B's position
-                const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
-                for (const dateKey of sortedSpecial) {
+                // Store last rotation person per month: use BASELINE (rotation) for last date in month so continuation is correct when return-from-missing is used
+                const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> baselinePerson }
+                for (let i = sortedSpecial.length - 1; i >= 0; i--) {
+                    const dateKey = sortedSpecial[i];
                     const d = new Date(dateKey + 'T00:00:00');
                     const monthKey = getMonthKeyFromDate(d);
+                    if (!lastSpecialRotationPositionsByMonth[monthKey]) {
+                        lastSpecialRotationPositionsByMonth[monthKey] = {};
+                    }
                     for (let g = 1; g <= 4; g++) {
-                        // Use the assigned person (after replacement), not the rotation person
-                        const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
-                        if (assignedPerson) {
-                            if (!lastSpecialRotationPositionsByMonth[monthKey]) {
-                                lastSpecialRotationPositionsByMonth[monthKey] = {};
-                            }
-                            lastSpecialRotationPositionsByMonth[monthKey][g] = assignedPerson;
+                        if (lastSpecialRotationPositionsByMonth[monthKey][g] !== undefined) continue;
+                        const baselinePerson = specialRotationPersons[dateKey]?.[g];
+                        if (baselinePerson) {
+                            lastSpecialRotationPositionsByMonth[monthKey][g] = baselinePerson;
                         }
                     }
                 }
@@ -10014,22 +9930,6 @@
                 const start = new Date(period.start + 'T00:00:00');
                 const end = new Date(period.end + 'T00:00:00');
                 return checkDate >= start && checkDate <= end;
-            });
-        }
-        /** True if person is back on date but had a missing period that ended recently (so we treat them as "returning from missing" for specials). */
-        function hasReturnedFromMissing(person, groupNum, date, firstSpecialDateKey) {
-            const groupData = groups[groupNum] || { missingPeriods: {} };
-            const missingPeriods = groupData.missingPeriods?.[person] || [];
-            if (missingPeriods.length === 0) return false;
-            const checkDate = new Date(date);
-            checkDate.setHours(0, 0, 0, 0);
-            const cutoff = firstSpecialDateKey ? new Date(firstSpecialDateKey + 'T00:00:00') : new Date(0);
-            cutoff.setHours(0, 0, 0, 0);
-            cutoff.setDate(cutoff.getDate() - 60);
-            return missingPeriods.some(period => {
-                const end = new Date(period.end + 'T00:00:00');
-                end.setHours(0, 0, 0, 0);
-                return end < checkDate && end >= cutoff;
             });
         }
         function findNextEligiblePersonAfterMissing({
