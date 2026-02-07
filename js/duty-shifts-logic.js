@@ -2235,20 +2235,20 @@
                     }
                 });
                 
-                // Return-from-missing for special: assign returning people as replacement to the baseline rotation.
-                // 1) First: try same month, before or after the missed date (when person is not missing on target)
-                // 2) Else: try another special (even in another month) – when calculating that month, previous-months check adds them here
+                // Return-from-missing for special: assign returning people in the next special duty as a replacement to the baseline rotation.
+                // 1) First: try same month – before or after the missed date – on any other special day (person must not be missing on target date).
+                // 2) Else: try the next available special in any month (in current period; other months are handled when that month is calculated).
                 const usedReturnFromMissingSpecial = new Set();
                 for (const entry of returnFromMissingSpecial) {
                     const { personName, groupNum, missedDateKey } = entry;
                     const missedDate = new Date(missedDateKey + 'T00:00:00');
                     const missedMonthKey = getMonthKeyFromDate(missedDate);
                     let targetKey = null;
-                    // Same month: before or after the missed date (excluding the missed date itself)
                     const sameMonthSpecials = sortedSpecial.filter((dk) => {
                         const d = new Date(dk + 'T00:00:00');
                         return getMonthKeyFromDate(d) === missedMonthKey && dk !== missedDateKey;
                     });
+                    // Step 1: Same month – before or after the missed date. Only assign when the person is NOT missing on the target date.
                     for (const dk of sameMonthSpecials) {
                         if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
                         const dateObj = new Date(dk + 'T00:00:00');
@@ -2256,7 +2256,7 @@
                         targetKey = dk;
                         break;
                     }
-                    // Else: another special (later in period; when period spans months, includes other months; when calculating another month, previous-months check feeds this)
+                    // Step 2: Next available special in any month (current period). Other months are handled when that month is calculated (previous-months check).
                     if (!targetKey) {
                         for (const dk of sortedSpecial) {
                             if (dk <= missedDateKey) continue;
