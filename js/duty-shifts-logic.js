@@ -2236,8 +2236,8 @@
                 });
                 
                 // Return-from-missing for special: assign returning people in the next special duty as a replacement to the baseline rotation.
-                // 1) First: try same month – before or after the missed date – on any other special day (person must not be missing on target date).
-                // 2) Else: try the next available special in any month (in current period; other months are handled when that month is calculated).
+                // Each returning person takes the slot of the baseline (rotation) person on a target date; baseline is unchanged for display/continuation.
+                // Target: same month first, else next available special.
                 const usedReturnFromMissingSpecial = new Set();
                 for (const entry of returnFromMissingSpecial) {
                     const { personName, groupNum, missedDateKey } = entry;
@@ -2248,7 +2248,7 @@
                         const d = new Date(dk + 'T00:00:00');
                         return getMonthKeyFromDate(d) === missedMonthKey && dk !== missedDateKey;
                     });
-                    // Step 1: Same month – before or after the missed date. Only assign when the person is NOT missing on the target date.
+                    // Prefer same-month specials (excluding the missed date). Only assign to a date when the person is NOT missing (they must be back).
                     for (const dk of sameMonthSpecials) {
                         if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
                         const dateObj = new Date(dk + 'T00:00:00');
@@ -2256,7 +2256,6 @@
                         targetKey = dk;
                         break;
                     }
-                    // Step 2: Next available special in any month (current period). Other months are handled when that month is calculated (previous-months check).
                     if (!targetKey) {
                         for (const dk of sortedSpecial) {
                             if (dk <= missedDateKey) continue;
@@ -2280,6 +2279,20 @@
                     if (simulatedSpecialAssignmentsForConflict[monthKeyT]?.[groupNum]) {
                         if (displacedPerson) simulatedSpecialAssignmentsForConflict[monthKeyT][groupNum].delete(displacedPerson);
                         simulatedSpecialAssignmentsForConflict[monthKeyT][groupNum].add(personName);
+                    }
+                    // Same-month swap: displaced person takes the missed date (two-way swap)
+                    const targetMonthKey = getMonthKeyFromDate(new Date(targetKey + 'T00:00:00'));
+                    if (displacedPerson && targetMonthKey === missedMonthKey) {
+                        const prevOnMissed = tempSpecialAssignments[missedDateKey]?.[groupNum];
+                        const displacedOnMissedReason = `Εναλλαγή απουσίας· ανέλαβε ημερομηνία ${missedDateKey} αντί για ${personName}.`;
+                        if (!tempSpecialAssignments[missedDateKey]) tempSpecialAssignments[missedDateKey] = {};
+                        tempSpecialAssignments[missedDateKey][groupNum] = displacedPerson;
+                        storeAssignmentReason(missedDateKey, groupNum, displacedPerson, 'skip', displacedOnMissedReason, personName, null, { sameMonthSwap: true });
+                        const monthKeyM = getMonthKeyFromDate(new Date(missedDateKey + 'T00:00:00'));
+                        if (simulatedSpecialAssignmentsForConflict[monthKeyM]?.[groupNum]) {
+                            if (prevOnMissed && prevOnMissed !== displacedPerson) simulatedSpecialAssignmentsForConflict[monthKeyM][groupNum].delete(prevOnMissed);
+                            simulatedSpecialAssignmentsForConflict[monthKeyM][groupNum].add(displacedPerson);
+                        }
                     }
                 }
                 
