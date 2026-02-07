@@ -9961,7 +9961,17 @@
         function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return true;
-            const missingPeriods = groupData.missingPeriods?.[person] || [];
+            const mp = groupData.missingPeriods || {};
+            let missingPeriods = mp[person] || [];
+            if (missingPeriods.length === 0 && typeof normalizePersonKey === 'function') {
+                const targetNorm = normalizePersonKey(person);
+                for (const key of Object.keys(mp)) {
+                    if (normalizePersonKey(key) === targetNorm) {
+                        missingPeriods = mp[key] || [];
+                        break;
+                    }
+                }
+            }
             if (missingPeriods.length === 0) return false;
             
             const checkDate = new Date(date);
