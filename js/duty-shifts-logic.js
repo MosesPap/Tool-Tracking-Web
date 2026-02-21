@@ -2266,17 +2266,38 @@
                         : 'Επέστρεψε από απουσία.';
                     storeAssignmentReason(targetKey, groupNum, personName, 'skip', reasonText, displacedPerson, null, { returnFromMissing: true, missingEnd: missedDateKey });
 
-                    // Same-month swap: assign the BASELINE person for the target date to the missed date (strict: no one skipped from rotation)
+                    // Same-month swap: assign to missed date the baseline person for target, or next eligible in rotation if that person is also missing
                     if (isSameMonthSwap && baselinePersonForTarget) {
+                        const groupData = groups[groupNum] || { special: [] };
+                        const groupPeople = groupData.special || [];
+                        const missedDateObj = new Date(missedDateKey + 'T00:00:00');
+                        let personForMissedDate = null;
+                        const startIndex = groupPeople.indexOf(baselinePersonForTarget);
+                        const rotationDays = groupPeople.length;
+                        if (rotationDays > 0) {
+                            for (let offset = 0; offset <= rotationDays * 2; offset++) {
+                                const idx = startIndex >= 0 ? (startIndex + offset) % rotationDays : offset % rotationDays;
+                                const candidate = groupPeople[idx];
+                                if (!candidate) continue;
+                                if (candidate === personName) continue; // returner is taking target date
+                                if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
+                                if (isPersonMissingOnDate(candidate, groupNum, missedDateObj, 'special')) continue;
+                                personForMissedDate = candidate;
+                                break;
+                            }
+                        }
+                        if (!personForMissedDate) personForMissedDate = baselinePersonForTarget; // fallback
                         if (!tempSpecialAssignments[missedDateKey]) tempSpecialAssignments[missedDateKey] = {};
                         const previousOnMissed = tempSpecialAssignments[missedDateKey][groupNum] || null;
-                        tempSpecialAssignments[missedDateKey][groupNum] = baselinePersonForTarget;
-                        const swapReason = `Αντικατάσταση· ανταλλαγή ημερομηνίας με ${personName} (απουσία ${missedDateKey}).`;
-                        storeAssignmentReason(missedDateKey, groupNum, baselinePersonForTarget, 'skip', swapReason, previousOnMissed, null, { sameMonthSwap: true, swappedWith: personName });
+                        tempSpecialAssignments[missedDateKey][groupNum] = personForMissedDate;
+                        const swapReason = personForMissedDate === baselinePersonForTarget
+                            ? `Αντικατάσταση· ανταλλαγή ημερομηνίας με ${personName} (απουσία ${missedDateKey}).`
+                            : `Αντικατάσταση· ${baselinePersonForTarget} απουσία ${missedDateKey}, ανατέθηκε ο/η ${personForMissedDate}. Ανταλλαγή με ${personName}.`;
+                        storeAssignmentReason(missedDateKey, groupNum, personForMissedDate, 'skip', swapReason, previousOnMissed, null, { sameMonthSwap: true, swappedWith: personName });
                         const monthKeyMissed = getMonthKeyFromDate(missedDate);
                         if (simulatedSpecialAssignmentsForConflict[monthKeyMissed]?.[groupNum]) {
                             if (previousOnMissed) simulatedSpecialAssignmentsForConflict[monthKeyMissed][groupNum].delete(previousOnMissed);
-                            simulatedSpecialAssignmentsForConflict[monthKeyMissed][groupNum].add(baselinePersonForTarget);
+                            simulatedSpecialAssignmentsForConflict[monthKeyMissed][groupNum].add(personForMissedDate);
                         }
                     }
 
