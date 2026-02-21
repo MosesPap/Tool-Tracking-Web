@@ -366,6 +366,14 @@
             return typeof str === 'string' && /^\d{4}-\d{1,2}$/.test(str);
         }
 
+        /** Normalize month key to YYYY-MM (2-digit month) so 2026-4 becomes 2026-04. */
+        function normalizeMonthKey(str) {
+            if (typeof str !== 'string' || !isMonthKey(str)) return str;
+            const [y, m] = str.split('-').map(Number);
+            if (isNaN(y) || isNaN(m) || m < 1 || m > 12) return str;
+            return `${y}-${String(m).padStart(2, '0')}`;
+        }
+
         // Returns the last rotation person that should seed the rotation for the given date's month.
         // IMPORTANT: When calculating month M, we read from previous month (M-1), not M.
         // If the immediate previous month doesn't exist, finds the most recent available month.
@@ -965,7 +973,10 @@
                         const hasMonthKeys = keys.some(k => isMonthKey(k));
                         if (hasMonthKeys) {
                             const out = {};
-                            for (const mk of keys) out[mk] = convertArrayToObject(val[mk]);
+                            for (const mk of keys) {
+                                const normalizedKey = normalizeMonthKey(mk);
+                                out[normalizedKey] = convertArrayToObject(val[mk]);
+                            }
                             return out;
                         }
                         return convertArrayToObject(val);
@@ -1177,7 +1188,8 @@
                         if (hasMonthKeys) {
                             const out = {};
                             for (const mk of keys) {
-                                out[mk] = convertArrayToObject(val[mk]);
+                                const normalizedKey = normalizeMonthKey(mk);
+                                out[normalizedKey] = convertArrayToObject(val[mk]);
                             }
                             return out;
                         }
