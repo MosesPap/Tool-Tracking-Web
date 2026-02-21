@@ -2386,19 +2386,22 @@
                     }
                 }
 
-                // Store last rotation person per month: use ASSIGNED person on last date in month so lastRotationPositions matches specialHolidayAssignments and next month continues from who actually did the duty
+                // Store last rotation person per month: use the assignee with the MAX rotation index among all special dates in that month, so that when A,B were missing and C,D then A,B were assigned, we continue from E (not C again)
                 const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
-                for (let i = sortedSpecial.length - 1; i >= 0; i--) {
-                    const dateKey = sortedSpecial[i];
+                for (const dateKey of sortedSpecial) {
                     const d = new Date(dateKey + 'T00:00:00');
                     const monthKey = getMonthKeyFromDate(d);
-                    if (!lastSpecialRotationPositionsByMonth[monthKey]) {
-                        lastSpecialRotationPositionsByMonth[monthKey] = {};
-                    }
+                    if (!lastSpecialRotationPositionsByMonth[monthKey]) lastSpecialRotationPositionsByMonth[monthKey] = {};
                     for (let g = 1; g <= 4; g++) {
-                        if (lastSpecialRotationPositionsByMonth[monthKey][g] !== undefined) continue;
                         const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
-                        if (assignedPerson) {
+                        if (!assignedPerson) continue;
+                        const groupData = groups[g] || { special: [] };
+                        const groupPeople = groupData.special || [];
+                        const idx = groupPeople.indexOf(assignedPerson);
+                        if (idx === -1) continue;
+                        const current = lastSpecialRotationPositionsByMonth[monthKey][g];
+                        const currentIdx = current != null ? groupPeople.indexOf(current) : -1;
+                        if (currentIdx === -1 || idx > currentIdx) {
                             lastSpecialRotationPositionsByMonth[monthKey][g] = assignedPerson;
                         }
                     }
