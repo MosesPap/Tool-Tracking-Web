@@ -2141,8 +2141,8 @@
                                 }
                                 if (!foundEligible) assignedPerson = null;
                             }
-                            // Store baseline for UI: when disabled skip use assigned person so no swap line (same as normal; avoids next day showing as swap)
-                            specialRotationPersons[dateKey][groupNum] = wasDisabledOnlySkippedSpecial && assignedPerson ? assignedPerson : rotationPerson;
+                            // Store baseline for UI: strict baseline = rotation person. Only use assigned person for disabled-only skip (not for "already on another special").
+                            specialRotationPersons[dateKey][groupNum] = (wasDisabledOnlySkippedSpecial && !alreadyOnAnotherSpecial && assignedPerson) ? assignedPerson : rotationPerson;
                             // MISSING (not disabled): show replacement and store reason.
                             if (!isRotationPersonDisabledSpecial && assignedPerson && !alreadyOnAnotherSpecial && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special')) {
                                 let foundReplacement = false;
@@ -2256,6 +2256,8 @@
                     const displacedPerson = tempSpecialAssignments[targetKey]?.[groupNum] || null;
                     const targetMonthKey = getMonthKeyFromDate(new Date(targetKey + 'T00:00:00'));
                     const isSameMonthSwap = targetMonthKey === missedMonthKey;
+                    // Strict baseline: person who should take the missed date in a same-month swap is the BASELINE for the target date (next in rotation), not whoever was temporarily assigned
+                    const baselinePersonForTarget = specialRotationPersons[targetKey]?.[groupNum] || displacedPerson;
 
                     if (!tempSpecialAssignments[targetKey]) tempSpecialAssignments[targetKey] = {};
                     tempSpecialAssignments[targetKey][groupNum] = personName;
@@ -2264,17 +2266,17 @@
                         : 'Επέστρεψε από απουσία.';
                     storeAssignmentReason(targetKey, groupNum, personName, 'skip', reasonText, displacedPerson, null, { returnFromMissing: true, missingEnd: missedDateKey });
 
-                    // Same-month swap: assign the displaced person to the missed date so they trade dates
-                    if (isSameMonthSwap && displacedPerson) {
+                    // Same-month swap: assign the BASELINE person for the target date to the missed date (strict: no one skipped from rotation)
+                    if (isSameMonthSwap && baselinePersonForTarget) {
                         if (!tempSpecialAssignments[missedDateKey]) tempSpecialAssignments[missedDateKey] = {};
                         const previousOnMissed = tempSpecialAssignments[missedDateKey][groupNum] || null;
-                        tempSpecialAssignments[missedDateKey][groupNum] = displacedPerson;
+                        tempSpecialAssignments[missedDateKey][groupNum] = baselinePersonForTarget;
                         const swapReason = `Αντικατάσταση· ανταλλαγή ημερομηνίας με ${personName} (απουσία ${missedDateKey}).`;
-                        storeAssignmentReason(missedDateKey, groupNum, displacedPerson, 'skip', swapReason, previousOnMissed, null, { sameMonthSwap: true, swappedWith: personName });
+                        storeAssignmentReason(missedDateKey, groupNum, baselinePersonForTarget, 'skip', swapReason, previousOnMissed, null, { sameMonthSwap: true, swappedWith: personName });
                         const monthKeyMissed = getMonthKeyFromDate(missedDate);
                         if (simulatedSpecialAssignmentsForConflict[monthKeyMissed]?.[groupNum]) {
                             if (previousOnMissed) simulatedSpecialAssignmentsForConflict[monthKeyMissed][groupNum].delete(previousOnMissed);
-                            simulatedSpecialAssignmentsForConflict[monthKeyMissed][groupNum].add(displacedPerson);
+                            simulatedSpecialAssignmentsForConflict[monthKeyMissed][groupNum].add(baselinePersonForTarget);
                         }
                     }
 
