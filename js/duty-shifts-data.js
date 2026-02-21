@@ -45,7 +45,7 @@
         //
         // NEW (month-scoped) structure:
         // lastRotationPositions[dayType][monthKey][groupNum] = personName
-        // where monthKey = `${year}-${month}` with month 0-11 (same convention used elsewhere in this file).
+        // where monthKey = `${year}-${month}` with month 01-12 (e.g. 2026-04 for April).
         //
         // LEGACY (flat) structure is still supported for backward compatibility:
         // lastRotationPositions[dayType][groupNum] = personName
@@ -57,7 +57,7 @@
         };
 
         function getMonthKeyFromDate(date) {
-            return `${date.getFullYear()}-${date.getMonth()}`;
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         }
 
         function rebuildRotationBaselineLastByType() {
@@ -359,7 +359,7 @@
         function getPreviousMonthKeyFromDate(date) {
             const d = new Date(date.getFullYear(), date.getMonth(), 1);
             d.setMonth(d.getMonth() - 1);
-            return `${d.getFullYear()}-${d.getMonth()}`;
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         }
 
         function isMonthKey(str) {

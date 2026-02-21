@@ -888,7 +888,7 @@
 
                 // Determine if person has duty on neighbor day (simulated preferred)
                 if (simulatedAssignments) {
-                    const neighborMonthKey = `${neighborDate.getFullYear()}-${neighborDate.getMonth()}`;
+                    const neighborMonthKey = getMonthKeyFromDate(neighborDate);
                     if (neighborTypeCategory === 'special') {
                         return simulatedAssignments.special?.[neighborMonthKey]?.[groupNum]?.has(person) || false;
                     }
@@ -1005,7 +1005,7 @@
             let hasDutyBefore = false;
             if (simulatedAssignments) {
                 // Check simulated assignments first
-                const beforeMonthKey = `${dayBefore.getFullYear()}-${dayBefore.getMonth()}`;
+                const beforeMonthKey = getMonthKeyFromDate(dayBefore);
                 const beforeDayType = getDayType(dayBefore);
                 let beforeTypeCategory = 'normal';
                 if (beforeDayType === 'special-holiday') {
@@ -1057,7 +1057,7 @@
             let hasDutyAfter = false;
             if (simulatedAssignments) {
                 // Check simulated assignments first
-                const afterMonthKey = `${dayAfter.getFullYear()}-${dayAfter.getMonth()}`;
+                const afterMonthKey = getMonthKeyFromDate(dayAfter);
                 const afterDayType = getDayType(dayAfter);
                 let afterTypeCategory = 'normal';
                 if (afterDayType === 'special-holiday') {
@@ -2050,7 +2050,7 @@
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     const dayName = getGreekDayName(date);
-                    const monthKeyForConflict = `${date.getFullYear()}-${date.getMonth()}`;
+                    const monthKeyForConflict = getMonthKeyFromDate(date);
                     if (!simulatedSpecialAssignmentsForConflict[monthKeyForConflict]) {
                         simulatedSpecialAssignmentsForConflict[monthKeyForConflict] = {};
                     }
@@ -3336,7 +3336,7 @@
                             return simulatedWeekendAssignments[neighborKey]?.[groupNum] === person;
                         }
                         if (neighborType === 'special-holiday') {
-                            const neighborMonthKey = `${neighborDate.getFullYear()}-${neighborDate.getMonth()}`;
+                            const neighborMonthKey = getMonthKeyFromDate(neighborDate);
                             return simulatedSpecialAssignments[neighborMonthKey]?.[groupNum]?.has(person) || false;
                         }
                         return false;
@@ -3392,7 +3392,7 @@
                         if (beforeType === 'weekend-holiday' || beforeType === 'special-holiday') {
                             const personBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] || 
                                                (beforeType === 'special-holiday' ? 
-                                                (simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(currentPerson) ? currentPerson : null) : null);
+                                                (simulatedSpecialAssignments[getMonthKeyFromDate(dayBefore)]?.[groupNum]?.has(currentPerson) ? currentPerson : null) : null);
                             if (personBefore === currentPerson) {
                                 hasConsecutiveConflict = true;
                             }
@@ -3402,7 +3402,7 @@
                         if (!hasConsecutiveConflict && (afterType === 'weekend-holiday' || afterType === 'special-holiday')) {
                             const personAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] || 
                                                (afterType === 'special-holiday' ? 
-                                                (simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(currentPerson) ? currentPerson : null) : null);
+                                                (simulatedSpecialAssignments[getMonthKeyFromDate(dayAfter)]?.[groupNum]?.has(currentPerson) ? currentPerson : null) : null);
                             if (personAfter === currentPerson) {
                                 hasConsecutiveConflict = true;
                             }
@@ -3689,12 +3689,12 @@
                         continue;
                     }
                     if (!reasonObj && !isBaseDisabledOrMissing) {
-                        const monthKey = `${dateObj.getFullYear()}-${dateObj.getMonth()}`;
+                        const monthKey = getMonthKeyFromDate(dateObj);
                         let baselineWasReplaced = false;
                         for (const dk in assignmentReasons) {
                             if (dk >= dateKey) break;
                             const dkDate = new Date(dk + 'T00:00:00');
-                            const dkMonthKey = `${dkDate.getFullYear()}-${dkDate.getMonth()}`;
+                            const dkMonthKey = getMonthKeyFromDate(dkDate);
                             if (dkMonthKey !== monthKey) continue;
                             const dkReason = assignmentReasons[dk]?.[groupNum]?.[base];
                             if (dkReason && dkReason.type === 'skip') {
@@ -4938,7 +4938,7 @@
                                     let hasDutyBefore = false;
                                     let hasDutyAfter = false;
                                     if (simulatedAssignments) {
-                                        const beforeMonthKey = `${dayBefore.getFullYear()}-${dayBefore.getMonth()}`;
+                                        const beforeMonthKey = getMonthKeyFromDate(dayBefore);
                                         if (beforeType === 'special-holiday') {
                                             hasDutyBefore = simulatedAssignments.special?.[beforeMonthKey]?.[groupNum]?.has(currentPerson) || false;
                                         } else if (beforeType === 'semi-normal-day') {
@@ -4949,7 +4949,7 @@
                                             hasDutyBefore = simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum] === currentPerson;
                                         }
                                         
-                                        const afterMonthKey = `${dayAfter.getFullYear()}-${dayAfter.getMonth()}`;
+                                        const afterMonthKey = getMonthKeyFromDate(dayAfter);
                                         if (afterType === 'special-holiday') {
                                             hasDutyAfter = simulatedAssignments.special?.[afterMonthKey]?.[groupNum]?.has(currentPerson) || false;
                                         } else if (afterType === 'semi-normal-day') {
@@ -5116,7 +5116,7 @@
                                     let hasDutyBefore = false;
                                     let hasDutyAfter = false;
                                     if (simulatedAssignments) {
-                                        const beforeMonthKey = `${dayBefore.getFullYear()}-${dayBefore.getMonth()}`;
+                                        const beforeMonthKey = getMonthKeyFromDate(dayBefore);
                                         if (beforeType === 'special-holiday') {
                                             hasDutyBefore = simulatedAssignments.special?.[beforeMonthKey]?.[groupNum]?.has(currentPerson) || false;
                                         } else if (beforeType === 'semi-normal-day') {
@@ -5127,7 +5127,7 @@
                                             hasDutyBefore = simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum] === currentPerson;
                                         }
                                         
-                                        const afterMonthKey = `${dayAfter.getFullYear()}-${dayAfter.getMonth()}`;
+                                        const afterMonthKey = getMonthKeyFromDate(dayAfter);
                                         if (afterType === 'special-holiday') {
                                             hasDutyAfter = simulatedAssignments.special?.[afterMonthKey]?.[groupNum]?.has(currentPerson) || false;
                                         } else if (afterType === 'semi-normal-day') {
@@ -5573,12 +5573,12 @@
                     // Also skip if baseline person has a 'skip' reason on a previous date (they were replaced, causing cascading shifts)
                     // Check if baseline person was replaced on any previous date in this month
                     if (!reasonObj && !isBaseDisabledOrMissing) {
-                        const monthKey = `${dateObj.getFullYear()}-${dateObj.getMonth()}`;
+                        const monthKey = getMonthKeyFromDate(dateObj);
                         let baselineWasReplaced = false;
                         for (const dk in assignmentReasons) {
                             if (dk >= dateKey) break; // Only check previous dates
                             const dkDate = new Date(dk + 'T00:00:00');
-                            const dkMonthKey = `${dkDate.getFullYear()}-${dkDate.getMonth()}`;
+                            const dkMonthKey = getMonthKeyFromDate(dkDate);
                             if (dkMonthKey !== monthKey) continue; // Only same month
                             const dkReason = assignmentReasons[dk]?.[groupNum]?.[base];
                             if (dkReason && dkReason.type === 'skip') {
@@ -6887,7 +6887,7 @@
             (calculationSteps.tempSpecialAssignments && typeof calculationSteps.tempSpecialAssignments === 'object') && Object.keys(calculationSteps.tempSpecialAssignments).forEach(dateKey => {
                 const date = new Date(dateKey + 'T00:00:00');
                 if (isNaN(date.getTime())) return;
-                const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+                const monthKey = getMonthKeyFromDate(date);
                 if (!simulatedSpecialAssignments[monthKey]) simulatedSpecialAssignments[monthKey] = {};
                 const gmap = calculationSteps.tempSpecialAssignments[dateKey];
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -6900,7 +6900,7 @@
             (specialHolidays || []).forEach(dateKey => {
                 const date = new Date(dateKey + 'T00:00:00');
                 if (isNaN(date.getTime())) return;
-                const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+                const monthKey = getMonthKeyFromDate(date);
                 if (!simulatedSpecialAssignments[monthKey]) simulatedSpecialAssignments[monthKey] = {};
                 const gmap = extractGroupAssignmentsMap(specialHolidayAssignments?.[dateKey]);
                 if (!gmap) return;
@@ -6941,8 +6941,8 @@
                     keyAfter,
                     typeBefore: getDayType(dayBefore),
                     typeAfter: getDayType(dayAfter),
-                    monthKeyBefore: `${dayBefore.getFullYear()}-${dayBefore.getMonth()}`,
-                    monthKeyAfter: `${dayAfter.getFullYear()}-${dayAfter.getMonth()}`,
+                    monthKeyBefore: getMonthKeyFromDate(dayBefore),
+                    monthKeyAfter: getMonthKeyFromDate(dayAfter),
                     dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
                     dayName: getGreekDayName(date)
                 };
@@ -8127,7 +8127,7 @@
                                 return simulatedWeekendAssignments[neighborKey]?.[groupNum] === person;
                             }
                             if (neighborType === 'special-holiday') {
-                                const neighborMonthKey = `${neighborDate.getFullYear()}-${neighborDate.getMonth()}`;
+                                const neighborMonthKey = getMonthKeyFromDate(neighborDate);
                                 return simulatedSpecialAssignments[neighborMonthKey]?.[groupNum]?.has(person) || false;
                             }
                             return false;
@@ -8169,14 +8169,14 @@
                             if (beforeType === 'weekend-holiday' || beforeType === 'special-holiday') {
                                 const personBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] ||
                                     (beforeType === 'special-holiday'
-                                        ? (simulatedSpecialAssignments[`${dayBefore.getFullYear()}-${dayBefore.getMonth()}`]?.[groupNum]?.has(currentPerson) ? currentPerson : null)
+                                        ? (simulatedSpecialAssignments[getMonthKeyFromDate(dayBefore)]?.[groupNum]?.has(currentPerson) ? currentPerson : null)
                                         : null);
                                 if (personBefore === currentPerson) hasConsecutiveConflict = true;
                             }
                             if (!hasConsecutiveConflict && (afterType === 'weekend-holiday' || afterType === 'special-holiday')) {
                                 const personAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] ||
                                     (afterType === 'special-holiday'
-                                        ? (simulatedSpecialAssignments[`${dayAfter.getFullYear()}-${dayAfter.getMonth()}`]?.[groupNum]?.has(currentPerson) ? currentPerson : null)
+                                        ? (simulatedSpecialAssignments[getMonthKeyFromDate(dayAfter)]?.[groupNum]?.has(currentPerson) ? currentPerson : null)
                                         : null);
                                 if (personAfter === currentPerson) hasConsecutiveConflict = true;
                             }
@@ -9169,7 +9169,7 @@
                                         for (const prevDateKey of sortedNormal) {
                                             if (prevDateKey >= dateKey) break; // Only check previous dates
                                             const prevDate = new Date(prevDateKey + 'T00:00:00');
-                                            const prevMonthKeyCheck = `${prevDate.getFullYear()}-${prevDate.getMonth()}`;
+                                            const prevMonthKeyCheck = getMonthKeyFromDate(prevDate);
                                             if (prevMonthKeyCheck !== monthKey) continue; // Only same month
                                             
                                             // Check if previous day had a 'skip' reason (someone was replaced)
@@ -9327,7 +9327,7 @@
                                 let hasDutyBefore = false;
                                 let hasDutyAfter = false;
                                 if (simulatedAssignments) {
-                                    const beforeMonthKey = `${dayBefore.getFullYear()}-${dayBefore.getMonth()}`;
+                                    const beforeMonthKey = getMonthKeyFromDate(dayBefore);
                                     if (beforeType === 'special-holiday') {
                                         hasDutyBefore = simulatedAssignments.special?.[beforeMonthKey]?.[groupNum]?.has(currentPerson) || false;
                                     } else if (beforeType === 'semi-normal-day') {
@@ -9338,7 +9338,7 @@
                                         hasDutyBefore = simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum] === currentPerson;
                                     }
                                     
-                                    const afterMonthKey = `${dayAfter.getFullYear()}-${dayAfter.getMonth()}`;
+                                    const afterMonthKey = getMonthKeyFromDate(dayAfter);
                                     if (afterType === 'special-holiday') {
                                         hasDutyAfter = simulatedAssignments.special?.[afterMonthKey]?.[groupNum]?.has(currentPerson) || false;
                                     } else if (afterType === 'semi-normal-day') {
