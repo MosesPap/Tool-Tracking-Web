@@ -2630,12 +2630,18 @@
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
                             if (groupsForMonth[groupNum] !== undefined) {
                                 setLastRotationPersonForMonth('special', monthKey, groupNum, groupsForMonth[groupNum]);
+                                // #region agent log
+                                fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:setLastRotationPerson',message:'calling setLastRotationPersonForMonth',data:{dayType:'special',monthKey,groupNum,personName:groupsForMonth[groupNum]},hypothesisId:'H5',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                // #endregion
                             }
                         }
                     }
                     
                     // Save to Firestore
                     const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                    // #region agent log
+                    fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:saveToFirestore',message:'saving lastRotationPositions to Firestore',data:{lastRotationPositionsSpecial:lastRotationPositions?.special||null,lastSpecialRotationPositionsByMonth},hypothesisId:'H5',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                    // #endregion
                     await db.collection('dutyShifts').doc('lastRotationPositions').set({
                         ...sanitizedPositions,
                         lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),

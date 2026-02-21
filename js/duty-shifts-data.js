@@ -5093,14 +5093,9 @@
             }
         }
         
-        // Expose to window for onclick handlers
+        // Expose to window for onclick handlers (only functions defined in this file)
         if (typeof window !== 'undefined') {
             window.toggleListCollapse = toggleListCollapse;
-            window.filterPeopleSearch = filterPeopleSearch;
-            window.showPeopleSearchDropdown = showPeopleSearchDropdown;
-            window.hidePeopleSearchDropdown = hidePeopleSearchDropdown;
-            window.selectPersonFromSearch = selectPersonFromSearch;
-            window.handlePersonSearchKeydown = handlePersonSearchKeydown;
         }
 
         // Update statistics (title bar: Σύνολο Ατόμων, ΑΥΜ, ΔΤΑ, AW139, Επίγεια)

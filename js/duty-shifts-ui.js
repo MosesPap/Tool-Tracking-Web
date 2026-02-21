@@ -2000,6 +2000,14 @@
                 items[prevIndex].scrollIntoView({ block: 'nearest' });
             }
         }
+        // Expose person search functions to window for HTML handlers (data.js loads first and does not define these)
+        if (typeof window !== 'undefined') {
+            window.filterPeopleSearch = filterPeopleSearch;
+            window.showPeopleSearchDropdown = showPeopleSearchDropdown;
+            window.hidePeopleSearchDropdown = hidePeopleSearchDropdown;
+            window.selectPersonFromSearch = selectPersonFromSearch;
+            window.handlePersonSearchKeydown = handlePersonSearchKeydown;
+        }
         function openRankingsModal() {
             const allPeople = getAllPeople();
             const container = document.getElementById('rankingsListBody');
