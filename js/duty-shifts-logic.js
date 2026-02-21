@@ -2017,8 +2017,20 @@
                             const seedDateKey = formatDateKey(seedDate);
                             const seedMonthKey = getMonthKeyFromDate(seedDate);
                             const prevMonthKey = getPreviousMonthKeyFromDate(seedDate);
+                            console.log(`[DEBUG ROTATION INIT] Group ${groupNum}: seedDate=${seedDateKey}, seedMonthKey=${seedMonthKey}, prevMonthKey=${prevMonthKey}`);
+                            console.log(`[DEBUG ROTATION INIT] lastRotationPositions.special[${prevMonthKey}][${groupNum}]=`, lastRotationPositions?.special?.[prevMonthKey]?.[groupNum] || 'NOT FOUND');
+                            console.log(`[DEBUG ROTATION INIT] rotationBaselineLastByType.special[${prevMonthKey}][${groupNum}]=`, rotationBaselineLastByType?.special?.[prevMonthKey]?.[groupNum] || 'NOT FOUND');
+                            console.log(`[DEBUG ROTATION INIT] Available months in rotationBaselineLastByType.special:`, Object.keys(rotationBaselineLastByType?.special || {}));
+                            console.log(`[DEBUG ROTATION INIT] Available months in lastRotationPositions.special:`, Object.keys(lastRotationPositions?.special || {}));
+                            // #region agent log
+                            fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:rotationInit',message:'special rotation init',data:{groupNum,seedDateKey,seedMonthKey,prevMonthKey,lastRotationPositionsSpecial:lastRotationPositions?.special?.[prevMonthKey]?.[groupNum]||null,rotationBaselineLastSpecial:rotationBaselineLastByType?.special?.[prevMonthKey]?.[groupNum]||null},hypothesisId:'H1',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                            // #endregion
                             const lastPersonName = getLastRotationPersonForDate('special', seedDate, groupNum);
                             const lastPersonIndex = groupPeople.indexOf(lastPersonName);
+                            console.log(`[DEBUG ROTATION INIT] getLastRotationPersonForDate returned: "${lastPersonName}", index in groupPeople: ${lastPersonIndex}, groupPeople.length=${groupPeople.length}`);
+                            // #region agent log
+                            fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:rotationInitResult',message:'getLastRotationPersonForDate result',data:{groupNum,lastPersonName,lastPersonIndex,groupPeopleLength:groupPeople.length,foundInList:lastPersonIndex>=0},hypothesisId:'H1',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                            // #endregion
                             if (lastPersonName && lastPersonIndex >= 0) {
                                 // Found last person - start from next person
                                 globalSpecialRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
@@ -2029,6 +2041,9 @@
                                     const firstDate = new Date(sortedSpecial[0] + 'T00:00:00');
                                     const daysSinceStart = getRotationPosition(firstDate, 'special', groupNum);
                                     globalSpecialRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                    // #region agent log
+                                    fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:rotationFallback',message:'rotation fallback to calculation',data:{groupNum,lastPersonName,firstDateKey:formatDateKey(firstDate),daysSinceStart,calculatedPosition:globalSpecialRotationPosition[groupNum]},hypothesisId:'H2',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                    // #endregion
                                     if (lastPersonName) {
                                         console.log(`[SPECIAL ROTATION] Last person ${lastPersonName} not found in group ${groupNum} list, using rotation calculation: position ${globalSpecialRotationPosition[groupNum]}`);
                                     }
@@ -2095,7 +2110,10 @@
                             let wasReplaced = false;
                             let replacementIndex = null;
                             let wasDisabledOnlySkippedSpecial = false;
+                            // #region agent log
                             const alreadyOnAnotherSpecial = sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === rotationPerson);
+                            fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:specialRotation',message:'rotation person check',data:{dateKey,groupNum,rotationPerson,alreadyOnAnotherSpecial},hypothesisId:'H1',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                            // #endregion
                             // DISABLED: When rotation person is disabled, whole baseline shifts – skip them, no replacement line.
                             const isRotationPersonDisabledSpecial = rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'special');
                             if (isRotationPersonDisabledSpecial) {
@@ -2177,6 +2195,9 @@
                             
                             // Store assignment for saving
                             if (assignedPerson) {
+                                // #region agent log
+                                fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:specialAssigned',message:'assigned person',data:{dateKey,groupNum,assignedPerson,wasReplaced},hypothesisId:'H2',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                // #endregion
                                 if (!tempSpecialAssignments[dateKey]) {
                                     tempSpecialAssignments[dateKey] = {};
                                 }
@@ -2227,21 +2248,13 @@
                         const d = new Date(dk + 'T00:00:00');
                         return getMonthKeyFromDate(d) === missedMonthKey && dk !== missedDateKey;
                     });
-                    // Same month: pick first available slot (no restriction – achieve swap; make-up duty on next special in month).
+                    // Prefer same-month specials (excluding the missed date). Only assign to a date when the person is NOT missing (they must be back).
                     for (const dk of sameMonthSpecials) {
                         if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
                         const dateObj = new Date(dk + 'T00:00:00');
                         if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
                         targetKey = dk;
                         break;
-                    }
-                    // If no same-month slot where person is not missing, allow same-month make-up anyway (swap takes priority)
-                    if (!targetKey && sameMonthSpecials.length > 0) {
-                        for (const dk of sameMonthSpecials) {
-                            if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
-                            targetKey = dk;
-                            break;
-                        }
                     }
                     if (!targetKey) {
                         for (const dk of sortedSpecial) {
@@ -2256,30 +2269,34 @@
                     if (!targetKey) continue;
                     usedReturnFromMissingSpecial.add(`${targetKey}:${groupNum}`);
                     const displacedPerson = tempSpecialAssignments[targetKey]?.[groupNum] || null;
+                    const targetMonthKey = getMonthKeyFromDate(new Date(targetKey + 'T00:00:00'));
+                    const isSameMonthSwap = targetMonthKey === missedMonthKey;
+
                     if (!tempSpecialAssignments[targetKey]) tempSpecialAssignments[targetKey] = {};
                     tempSpecialAssignments[targetKey][groupNum] = personName;
                     const reasonText = displacedPerson
                         ? `Επέστρεψε από απουσία· αντικατέστησε προσωρινά ${displacedPerson} στην ημερομηνία αυτή.`
                         : 'Επέστρεψε από απουσία.';
                     storeAssignmentReason(targetKey, groupNum, personName, 'skip', reasonText, displacedPerson, null, { returnFromMissing: true, missingEnd: missedDateKey });
+
+                    // Same-month swap: assign the displaced person to the missed date so they trade dates
+                    if (isSameMonthSwap && displacedPerson) {
+                        if (!tempSpecialAssignments[missedDateKey]) tempSpecialAssignments[missedDateKey] = {};
+                        const previousOnMissed = tempSpecialAssignments[missedDateKey][groupNum] || null;
+                        tempSpecialAssignments[missedDateKey][groupNum] = displacedPerson;
+                        const swapReason = `Αντικατάσταση· ανταλλαγή ημερομηνίας με ${personName} (απουσία ${missedDateKey}).`;
+                        storeAssignmentReason(missedDateKey, groupNum, displacedPerson, 'skip', swapReason, previousOnMissed, null, { sameMonthSwap: true, swappedWith: personName });
+                        const monthKeyMissed = getMonthKeyFromDate(missedDate);
+                        if (simulatedSpecialAssignmentsForConflict[monthKeyMissed]?.[groupNum]) {
+                            if (previousOnMissed) simulatedSpecialAssignmentsForConflict[monthKeyMissed][groupNum].delete(previousOnMissed);
+                            simulatedSpecialAssignmentsForConflict[monthKeyMissed][groupNum].add(displacedPerson);
+                        }
+                    }
+
                     const monthKeyT = getMonthKeyFromDate(new Date(targetKey + 'T00:00:00'));
                     if (simulatedSpecialAssignmentsForConflict[monthKeyT]?.[groupNum]) {
                         if (displacedPerson) simulatedSpecialAssignmentsForConflict[monthKeyT][groupNum].delete(displacedPerson);
                         simulatedSpecialAssignmentsForConflict[monthKeyT][groupNum].add(personName);
-                    }
-                    // Same-month swap: displaced person takes the missed date (two-way swap)
-                    const targetMonthKey = getMonthKeyFromDate(new Date(targetKey + 'T00:00:00'));
-                    if (displacedPerson && targetMonthKey === missedMonthKey) {
-                        const prevOnMissed = tempSpecialAssignments[missedDateKey]?.[groupNum];
-                        const displacedOnMissedReason = `Εναλλαγή απουσίας· ανέλαβε ημερομηνία ${missedDateKey} αντί για ${personName}.`;
-                        if (!tempSpecialAssignments[missedDateKey]) tempSpecialAssignments[missedDateKey] = {};
-                        tempSpecialAssignments[missedDateKey][groupNum] = displacedPerson;
-                        storeAssignmentReason(missedDateKey, groupNum, displacedPerson, 'skip', displacedOnMissedReason, personName, null, { sameMonthSwap: true });
-                        const monthKeyM = getMonthKeyFromDate(new Date(missedDateKey + 'T00:00:00'));
-                        if (simulatedSpecialAssignmentsForConflict[monthKeyM]?.[groupNum]) {
-                            if (prevOnMissed && prevOnMissed !== displacedPerson) simulatedSpecialAssignmentsForConflict[monthKeyM][groupNum].delete(prevOnMissed);
-                            simulatedSpecialAssignmentsForConflict[monthKeyM][groupNum].add(displacedPerson);
-                        }
                     }
                 }
                 
@@ -2375,6 +2392,9 @@
                         const baselinePerson = specialRotationPersons[dateKey]?.[g];
                         if (baselinePerson) {
                             lastSpecialRotationPositionsByMonth[monthKey][g] = baselinePerson;
+                            // #region agent log
+                            fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:saveLastRotation',message:'saving last rotation person for month',data:{monthKey,groupNum:g,dateKey,baselinePerson,assignedPerson:tempSpecialAssignments[dateKey]?.[g]||null},hypothesisId:'H5',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                            // #endregion
                         }
                     }
                 }
@@ -2628,12 +2648,18 @@
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
                             if (groupsForMonth[groupNum] !== undefined) {
                                 setLastRotationPersonForMonth('special', monthKey, groupNum, groupsForMonth[groupNum]);
+                                // #region agent log
+                                fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:setLastRotationPerson',message:'calling setLastRotationPersonForMonth',data:{dayType:'special',monthKey,groupNum,personName:groupsForMonth[groupNum]},hypothesisId:'H5',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                                // #endregion
                             }
                         }
                     }
                     
                     // Save to Firestore
                     const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                    // #region agent log
+                    fetch('http://127.0.0.1:7243/ingest/9c1664f2-0b77-41ea-b88a-7c7ef737e197',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'duty-shifts-logic.js:saveToFirestore',message:'saving lastRotationPositions to Firestore',data:{lastRotationPositionsSpecial:lastRotationPositions?.special||null,lastSpecialRotationPositionsByMonth},hypothesisId:'H5',timestamp:Date.now(),sessionId:'debug-session'})}).catch(()=>{});
+                    // #endregion
                     await db.collection('dutyShifts').doc('lastRotationPositions').set({
                         ...sanitizedPositions,
                         lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
@@ -9969,17 +9995,7 @@
         function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return true;
-            const mp = groupData.missingPeriods || {};
-            let missingPeriods = mp[person] || [];
-            if (missingPeriods.length === 0 && typeof normalizePersonKey === 'function') {
-                const targetNorm = normalizePersonKey(person);
-                for (const key of Object.keys(mp)) {
-                    if (normalizePersonKey(key) === targetNorm) {
-                        missingPeriods = mp[key] || [];
-                        break;
-                    }
-                }
-            }
+            const missingPeriods = groupData.missingPeriods?.[person] || [];
             if (missingPeriods.length === 0) return false;
             
             const checkDate = new Date(date);
