@@ -2386,8 +2386,8 @@
                     }
                 }
 
-                // Store last rotation person per month: use BASELINE (rotation) for last date in month so continuation is correct when return-from-missing is used
-                const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> baselinePerson }
+                // Store last rotation person per month: use ASSIGNED person on last date in month so lastRotationPositions matches specialHolidayAssignments and next month continues from who actually did the duty
+                const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
                 for (let i = sortedSpecial.length - 1; i >= 0; i--) {
                     const dateKey = sortedSpecial[i];
                     const d = new Date(dateKey + 'T00:00:00');
@@ -2397,9 +2397,9 @@
                     }
                     for (let g = 1; g <= 4; g++) {
                         if (lastSpecialRotationPositionsByMonth[monthKey][g] !== undefined) continue;
-                        const baselinePerson = specialRotationPersons[dateKey]?.[g];
-                        if (baselinePerson) {
-                            lastSpecialRotationPositionsByMonth[monthKey][g] = baselinePerson;
+                        const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
+                        if (assignedPerson) {
+                            lastSpecialRotationPositionsByMonth[monthKey][g] = assignedPerson;
                         }
                     }
                 }
