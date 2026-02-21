@@ -2227,13 +2227,21 @@
                         const d = new Date(dk + 'T00:00:00');
                         return getMonthKeyFromDate(d) === missedMonthKey && dk !== missedDateKey;
                     });
-                    // Prefer same-month specials (excluding the missed date). Only assign to a date when the person is NOT missing (they must be back).
+                    // Same month: pick first available slot (no restriction – achieve swap; make-up duty on next special in month).
                     for (const dk of sameMonthSpecials) {
                         if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
                         const dateObj = new Date(dk + 'T00:00:00');
                         if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
                         targetKey = dk;
                         break;
+                    }
+                    // If no same-month slot where person is not missing, allow same-month make-up anyway (swap takes priority)
+                    if (!targetKey && sameMonthSpecials.length > 0) {
+                        for (const dk of sameMonthSpecials) {
+                            if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
+                            targetKey = dk;
+                            break;
+                        }
                     }
                     if (!targetKey) {
                         for (const dk of sortedSpecial) {
