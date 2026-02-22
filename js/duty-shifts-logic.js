@@ -2386,23 +2386,34 @@
                     }
                 }
 
-                // Store last rotation person per month: use the assignee with the MAX rotation index among all special dates in that month, so that when A,B were missing and C,D then A,B were assigned, we continue from E (not C again)
-                const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
+                // Store last rotation person per month: person who is LAST IN ROTATION ORDER among everyone who did a special that month (so next month we continue from the next person). Handles return-from-missing: if A,B missing and C,D assigned then A,B assigned on next date → all of A,B,C,D did duty → store D (last in order), next month start from E.
+                const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> personName }
+                const specialDatesByMonth = {}; // monthKey -> dateKey[]
                 for (const dateKey of sortedSpecial) {
                     const d = new Date(dateKey + 'T00:00:00');
                     const monthKey = getMonthKeyFromDate(d);
-                    if (!lastSpecialRotationPositionsByMonth[monthKey]) lastSpecialRotationPositionsByMonth[monthKey] = {};
+                    if (!specialDatesByMonth[monthKey]) specialDatesByMonth[monthKey] = [];
+                    specialDatesByMonth[monthKey].push(dateKey);
+                }
+                for (const monthKey of Object.keys(specialDatesByMonth)) {
+                    lastSpecialRotationPositionsByMonth[monthKey] = {};
                     for (let g = 1; g <= 4; g++) {
-                        const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
-                        if (!assignedPerson) continue;
                         const groupData = groups[g] || { special: [] };
                         const groupPeople = groupData.special || [];
-                        const idx = groupPeople.indexOf(assignedPerson);
-                        if (idx === -1) continue;
-                        const current = lastSpecialRotationPositionsByMonth[monthKey][g];
-                        const currentIdx = current != null ? groupPeople.indexOf(current) : -1;
-                        if (currentIdx === -1 || idx > currentIdx) {
-                            lastSpecialRotationPositionsByMonth[monthKey][g] = assignedPerson;
+                        if (groupPeople.length === 0) continue;
+                        let maxIndex = -1;
+                        let lastPersonInRotation = null;
+                        for (const dateKey of specialDatesByMonth[monthKey]) {
+                            const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
+                            if (!assignedPerson) continue;
+                            const idx = groupPeople.indexOf(assignedPerson);
+                            if (idx !== -1 && idx > maxIndex) {
+                                maxIndex = idx;
+                                lastPersonInRotation = assignedPerson;
+                            }
+                        }
+                        if (lastPersonInRotation != null) {
+                            lastSpecialRotationPositionsByMonth[monthKey][g] = lastPersonInRotation;
                         }
                     }
                 }
