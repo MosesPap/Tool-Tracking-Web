@@ -2386,7 +2386,7 @@
                     }
                 }
 
-                // Store last rotation person per month: person who is LAST IN ROTATION ORDER among everyone who did a special that month (so next month we continue from the next person). Handles return-from-missing: if A,B missing and C,D assigned then A,B assigned on next date → all of A,B,C,D did duty → store D (last in order), next month start from E.
+                // Store last rotation person per month: CUMULATIVE last in rotation order (so next month we continue from the next person). C and D in month 1, A and B return-from-missing in month 2 → store D for both months so next special assigns E.
                 const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> personName }
                 const specialDatesByMonth = {}; // monthKey -> dateKey[]
                 for (const dateKey of sortedSpecial) {
@@ -2395,25 +2395,41 @@
                     if (!specialDatesByMonth[monthKey]) specialDatesByMonth[monthKey] = [];
                     specialDatesByMonth[monthKey].push(dateKey);
                 }
-                for (const monthKey of Object.keys(specialDatesByMonth)) {
+                const sortedMonthKeys = Object.keys(specialDatesByMonth).sort();
+                const cumulativeLastIndexByGroup = {}; // groupNum -> maxIndex so far (across months processed)
+                // Seed from stored previous month when this run doesn't include it (e.g. run only Feb: then Jan's last was D, so Feb should store D)
+                if (sortedMonthKeys.length > 0) {
+                    const firstMonthDate = new Date(sortedMonthKeys[0] + '-01T00:00:00');
+                    const prevMonthKey = getPreviousMonthKeyFromDate(firstMonthDate);
+                    const storedPrev = lastRotationPositions?.special?.[prevMonthKey];
+                    if (storedPrev && typeof storedPrev === 'object') {
+                        for (let g = 1; g <= 4; g++) {
+                            const groupData = groups[g] || { special: [] };
+                            const groupPeople = groupData.special || [];
+                            const prevPerson = storedPrev[g];
+                            if (prevPerson && groupPeople.length > 0) {
+                                const idx = groupPeople.indexOf(prevPerson);
+                                if (idx !== -1) cumulativeLastIndexByGroup[g] = idx;
+                            }
+                        }
+                    }
+                }
+                for (const monthKey of sortedMonthKeys) {
                     lastSpecialRotationPositionsByMonth[monthKey] = {};
                     for (let g = 1; g <= 4; g++) {
                         const groupData = groups[g] || { special: [] };
                         const groupPeople = groupData.special || [];
                         if (groupPeople.length === 0) continue;
-                        let maxIndex = -1;
-                        let lastPersonInRotation = null;
+                        let monthMaxIndex = cumulativeLastIndexByGroup[g] ?? -1;
                         for (const dateKey of specialDatesByMonth[monthKey]) {
                             const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
                             if (!assignedPerson) continue;
                             const idx = groupPeople.indexOf(assignedPerson);
-                            if (idx !== -1 && idx > maxIndex) {
-                                maxIndex = idx;
-                                lastPersonInRotation = assignedPerson;
-                            }
+                            if (idx !== -1 && idx > monthMaxIndex) monthMaxIndex = idx;
                         }
-                        if (lastPersonInRotation != null) {
-                            lastSpecialRotationPositionsByMonth[monthKey][g] = lastPersonInRotation;
+                        if (monthMaxIndex >= 0) {
+                            cumulativeLastIndexByGroup[g] = monthMaxIndex;
+                            lastSpecialRotationPositionsByMonth[monthKey][g] = groupPeople[monthMaxIndex];
                         }
                     }
                 }
