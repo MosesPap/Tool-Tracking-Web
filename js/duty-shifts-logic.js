@@ -2012,32 +2012,24 @@
                             globalSpecialRotationPosition[groupNum] = 0;
                             console.log(`[SPECIAL ROTATION] Starting from first person (position 0) for group ${groupNum} - February 2026`);
                         } else {
-                            // Continue from last person assigned in previous month (month-scoped; falls back to legacy)
+                            // Continue from last BASELINE person in previous month (from rotationBaselineSpecialAssignments in Firestore).
+                            // So if A,B were baseline but missing, C,D were assigned, then A,B return-from-missing on next special:
+                            // baseline for month has A,B then C,D → last baseline is C,D → next month we continue from E.
                             const seedDate = sortedSpecial.length > 0 ? new Date(sortedSpecial[0] + 'T00:00:00') : new Date(startDate);
                             const seedDateKey = formatDateKey(seedDate);
                             const seedMonthKey = getMonthKeyFromDate(seedDate);
                             const prevMonthKey = getPreviousMonthKeyFromDate(seedDate);
-                            console.log(`[DEBUG ROTATION INIT] Group ${groupNum}: seedDate=${seedDateKey}, seedMonthKey=${seedMonthKey}, prevMonthKey=${prevMonthKey}`);
-                            console.log(`[DEBUG ROTATION INIT] lastRotationPositions.special[${prevMonthKey}][${groupNum}]=`, lastRotationPositions?.special?.[prevMonthKey]?.[groupNum] || 'NOT FOUND');
-                            console.log(`[DEBUG ROTATION INIT] rotationBaselineLastByType.special[${prevMonthKey}][${groupNum}]=`, rotationBaselineLastByType?.special?.[prevMonthKey]?.[groupNum] || 'NOT FOUND');
-                            console.log(`[DEBUG ROTATION INIT] Available months in rotationBaselineLastByType.special:`, Object.keys(rotationBaselineLastByType?.special || {}));
-                            console.log(`[DEBUG ROTATION INIT] Available months in lastRotationPositions.special:`, Object.keys(lastRotationPositions?.special || {}));
-                            const lastPersonName = getLastRotationPersonForDate('special', seedDate, groupNum);
+                            const lastBaselinePerson = rotationBaselineLastByType?.special?.[prevMonthKey]?.[groupNum] || null;
+                            const lastPersonName = lastBaselinePerson || getLastRotationPersonForDate('special', seedDate, groupNum);
                             const lastPersonIndex = groupPeople.indexOf(lastPersonName);
-                            console.log(`[DEBUG ROTATION INIT] getLastRotationPersonForDate returned: "${lastPersonName}", index in groupPeople: ${lastPersonIndex}, groupPeople.length=${groupPeople.length}`);
                             if (lastPersonName && lastPersonIndex >= 0) {
-                                // Found last person - start from next person
                                 globalSpecialRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
-                                console.log(`[SPECIAL ROTATION] Continuing from last person ${lastPersonName} (index ${lastPersonIndex}) for group ${groupNum}, starting at position ${globalSpecialRotationPosition[groupNum]}`);
+                                console.log(`[SPECIAL ROTATION] Continuing from last baseline person ${lastPersonName} (index ${lastPersonIndex}) for group ${groupNum}, starting at position ${globalSpecialRotationPosition[groupNum]}`);
                             } else {
-                                // Last person not found in list - use rotation calculation from first date
                                 if (sortedSpecial.length > 0) {
                                     const firstDate = new Date(sortedSpecial[0] + 'T00:00:00');
                                     const daysSinceStart = getRotationPosition(firstDate, 'special', groupNum);
                                     globalSpecialRotationPosition[groupNum] = daysSinceStart % rotationDays;
-                                    if (lastPersonName) {
-                                        console.log(`[SPECIAL ROTATION] Last person ${lastPersonName} not found in group ${groupNum} list, using rotation calculation: position ${globalSpecialRotationPosition[groupNum]}`);
-                                    }
                                 } else {
                                     globalSpecialRotationPosition[groupNum] = 0;
                                 }
@@ -2078,21 +2070,20 @@
                         }
                     }
                     
-                    // Calculate who will be assigned for each group based on rotation order (no HTML yet – table built after return-from-missing)
+                    // Calculate who will be assigned for each group based on rotation order (single global slot: 4 people per date, then advance by 4)
+                    const rotationDays = specialRotationListLength > 0 ? specialRotationListLength : 0;
+                    const rotationListForDate = specialRotationListLength > 0 ? group1SpecialList : [];
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
-                        const groupPeople = groupData.special || [];
+                        const groupPeople = groupData.special && groupData.special.length > 0 ? groupData.special : rotationListForDate;
                         
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
                         } else {
-                                const rotationDays = groupPeople.length;
-                            // Use the global rotation position (initialized once per group)
-                            let rotationPosition = globalSpecialRotationPosition[groupNum] % rotationDays;
-                            
-                            // IMPORTANT: Track the rotation person (who SHOULD be assigned according to rotation)
-                            // This is the person BEFORE any missing logic
-                            const rotationPerson = groupPeople[rotationPosition];
+                            const groupLen = groupPeople.length;
+                            // Use global slot index so this date uses the next 4 in line (e.g. A,B,C,D then next date E,F,G,H)
+                            const rotationPosition = rotationDays > 0 ? (specialRotationSlotIndex + groupNum - 1) % rotationDays : 0;
+                            const rotationPerson = rotationListForDate.length > 0 ? rotationListForDate[rotationPosition] : groupPeople[rotationPosition % groupLen];
                             if (!specialRotationPersons[dateKey]) {
                                 specialRotationPersons[dateKey] = {};
                             }
@@ -2106,9 +2097,11 @@
                             const isRotationPersonDisabledSpecial = rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'special');
                             if (isRotationPersonDisabledSpecial) {
                                 let foundEligible = false;
-                                for (let offset = 1; offset <= rotationDays * 2 && !foundEligible; offset++) {
-                                    const idx = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[idx];
+                                const searchList = rotationListForDate.length > 0 ? rotationListForDate : groupPeople;
+                                const searchLen = searchList.length;
+                                for (let offset = 1; offset <= searchLen * 2 && !foundEligible; offset++) {
+                                    const idx = (rotationPosition + offset) % searchLen;
+                                    const candidate = searchList[idx];
                                     if (!candidate) continue;
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
@@ -2124,9 +2117,11 @@
                             // ALREADY ON ANOTHER SPECIAL: rotation person was replacement on a previous special in this period – skip them to avoid double assignment
                             if (!isRotationPersonDisabledSpecial && rotationPerson && alreadyOnAnotherSpecial) {
                                 let foundEligible = false;
-                                for (let offset = 1; offset <= rotationDays * 2 && !foundEligible; offset++) {
-                                    const idx = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[idx];
+                                const searchListR = rotationListForDate.length > 0 ? rotationListForDate : groupPeople;
+                                const searchLenR = searchListR.length;
+                                for (let offset = 1; offset <= searchLenR * 2 && !foundEligible; offset++) {
+                                    const idx = (rotationPosition + offset) % searchLenR;
+                                    const candidate = searchListR[idx];
                                     if (!candidate) continue;
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
@@ -2146,9 +2141,11 @@
                             // MISSING (not disabled): show replacement and store reason.
                             if (!isRotationPersonDisabledSpecial && assignedPerson && !alreadyOnAnotherSpecial && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special')) {
                                 let foundReplacement = false;
-                                for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
-                                    const idx = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[idx];
+                                const searchListM = rotationListForDate.length > 0 ? rotationListForDate : groupPeople;
+                                const searchLenM = searchListM.length;
+                                for (let offset = 1; offset <= searchLenM * 2 && !foundReplacement; offset++) {
+                                    const idx = (rotationPosition + offset) % searchLenM;
+                                    const candidate = searchListM[idx];
                                     if (!candidate) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
                                     // Do not use the same person to replace two missing people in this period
@@ -2193,31 +2190,14 @@
                                     simulatedSpecialAssignmentsForConflict[monthKeyForConflict][groupNum] = new Set();
                                 }
                                 simulatedSpecialAssignmentsForConflict[monthKeyForConflict][groupNum].add(assignedPerson);
-                                
-                                // Advance rotation position: when disabled we advance from replacement; when missing we advance from missing person so next date we try the next person in list (and detect if they are missing too)
-                                if (wasReplaced && replacementIndex !== null) {
-                                    if (wasDisabledOnlySkippedSpecial) {
-                                        globalSpecialRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
-                                    } else {
-                                        // Replaced due to missing: advance from missing person's position so we try the next person in list on the next special date
-                                        globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                    }
-                                } else {
-                                    // No replacement - advance from assigned person's position
-                                    const assignedIndex = groupPeople.indexOf(assignedPerson);
-                                    if (assignedIndex !== -1) {
-                                        globalSpecialRotationPosition[groupNum] = (assignedIndex + 1) % rotationDays;
-                                    } else {
-                                        // Fallback: advance from rotation position
-                                        globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                    }
-                                }
+                                // No per-group advance: global slot advances by 4 once per date (below)
                             } else {
-                                // No person found, still advance rotation position
-                                globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                // No person found for this group; slot still consumed
                             }
                         }
                     }
+                    // Advance global slot by 4 after each date so next date uses the next 4 in baseline (e.g. after A,B,C,D we use E,F,G,H)
+                    if (specialRotationListLength > 0) specialRotationSlotIndex += 4;
                 });
                 
                 // Return-from-missing for special: assign returning people in the next special duty as a replacement to the baseline rotation.
@@ -2386,50 +2366,20 @@
                     }
                 }
 
-                // Store last rotation person per month: CUMULATIVE last in rotation order (so next month we continue from the next person). C and D in month 1, A and B return-from-missing in month 2 → store D for both months so next special assigns E.
-                const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> personName }
-                const specialDatesByMonth = {}; // monthKey -> dateKey[]
-                for (const dateKey of sortedSpecial) {
+                // Store last rotation person per month: use ASSIGNED person on last date in month so lastRotationPositions matches specialHolidayAssignments and next month continues from who actually did the duty
+                const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
+                for (let i = sortedSpecial.length - 1; i >= 0; i--) {
+                    const dateKey = sortedSpecial[i];
                     const d = new Date(dateKey + 'T00:00:00');
                     const monthKey = getMonthKeyFromDate(d);
-                    if (!specialDatesByMonth[monthKey]) specialDatesByMonth[monthKey] = [];
-                    specialDatesByMonth[monthKey].push(dateKey);
-                }
-                const sortedMonthKeys = Object.keys(specialDatesByMonth).sort();
-                const cumulativeLastIndexByGroup = {}; // groupNum -> maxIndex so far (across months processed)
-                // Seed from stored previous month when this run doesn't include it (e.g. run only Feb: then Jan's last was D, so Feb should store D)
-                if (sortedMonthKeys.length > 0) {
-                    const firstMonthDate = new Date(sortedMonthKeys[0] + '-01T00:00:00');
-                    const prevMonthKey = getPreviousMonthKeyFromDate(firstMonthDate);
-                    const storedPrev = lastRotationPositions?.special?.[prevMonthKey];
-                    if (storedPrev && typeof storedPrev === 'object') {
-                        for (let g = 1; g <= 4; g++) {
-                            const groupData = groups[g] || { special: [] };
-                            const groupPeople = groupData.special || [];
-                            const prevPerson = storedPrev[g];
-                            if (prevPerson && groupPeople.length > 0) {
-                                const idx = groupPeople.indexOf(prevPerson);
-                                if (idx !== -1) cumulativeLastIndexByGroup[g] = idx;
-                            }
-                        }
+                    if (!lastSpecialRotationPositionsByMonth[monthKey]) {
+                        lastSpecialRotationPositionsByMonth[monthKey] = {};
                     }
-                }
-                for (const monthKey of sortedMonthKeys) {
-                    lastSpecialRotationPositionsByMonth[monthKey] = {};
                     for (let g = 1; g <= 4; g++) {
-                        const groupData = groups[g] || { special: [] };
-                        const groupPeople = groupData.special || [];
-                        if (groupPeople.length === 0) continue;
-                        let monthMaxIndex = cumulativeLastIndexByGroup[g] ?? -1;
-                        for (const dateKey of specialDatesByMonth[monthKey]) {
-                            const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
-                            if (!assignedPerson) continue;
-                            const idx = groupPeople.indexOf(assignedPerson);
-                            if (idx !== -1 && idx > monthMaxIndex) monthMaxIndex = idx;
-                        }
-                        if (monthMaxIndex >= 0) {
-                            cumulativeLastIndexByGroup[g] = monthMaxIndex;
-                            lastSpecialRotationPositionsByMonth[monthKey][g] = groupPeople[monthMaxIndex];
+                        if (lastSpecialRotationPositionsByMonth[monthKey][g] !== undefined) continue;
+                        const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
+                        if (assignedPerson) {
+                            lastSpecialRotationPositionsByMonth[monthKey][g] = assignedPerson;
                         }
                     }
                 }
