@@ -2553,6 +2553,166 @@
             }
         }
 
+        // Convert month key (YYYY-MM) to month name (e.g., "December 2026") for matching Firestore month-organized keys
+        function getMonthNameFromMonthKey(monthKey) {
+            try {
+                const [year, month] = monthKey.split('-').map(Number);
+                if (!year || !month || month < 1 || month > 12) return null;
+                const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                    'July', 'August', 'September', 'October', 'November', 'December'];
+                return `${monthNames[month - 1]} ${year}`;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        // Delete for selected month(s) from rotation baselines, lastRotationPositions, and assignment docs (when not preserving existing).
+        async function deleteSelectedMonthsFromDutyDocs(db, user, monthKeys) {
+            if (!db || !user || !Array.isArray(monthKeys) || monthKeys.length === 0) return;
+            const monthKeyRegex = /^[A-Za-z]+\s+\d{4}$/;
+            const dateKeyRegex = /^\d{4}-\d{2}-\d{2}$/;
+            const monthNamesToDelete = new Set(monthKeys.map(mk => getMonthNameFromMonthKey(mk)).filter(Boolean));
+            const dutyShifts = db.collection('dutyShifts');
+
+            const monthOrganizedDocIds = [
+                'specialHolidayAssignments',
+                'weekendAssignments',
+                'semiNormalAssignments',
+                'normalDayAssignments',
+                'rotationBaselineSpecialAssignments',
+                'rotationBaselineWeekendAssignments',
+                'rotationBaselineSemiAssignments',
+                'rotationBaselineNormalAssignments'
+            ];
+
+            for (const docId of monthOrganizedDocIds) {
+                try {
+                    const docRef = dutyShifts.doc(docId);
+                    const snap = await docRef.get();
+                    if (!snap.exists) continue;
+                    const data = snap.data() || {};
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    delete data._migratedFrom;
+                    delete data._migrationDate;
+                    const normalized = {};
+                    for (const key in data) {
+                        const val = data[key];
+                        if (monthKeyRegex.test(key) && val && typeof val === 'object' && !Array.isArray(val)) {
+                            if (!monthNamesToDelete.has(key)) normalized[key] = { ...val };
+                            continue;
+                        }
+                        if (dateKeyRegex.test(key)) {
+                            const monthName = getMonthNameFromDateKey(key);
+                            if (monthName && !monthNamesToDelete.has(monthName)) {
+                                if (!normalized[monthName]) normalized[monthName] = {};
+                                normalized[monthName][key] = val;
+                            }
+                            continue;
+                        }
+                    }
+                    const sanitized = sanitizeForFirestore(normalized);
+                    await docRef.set({
+                        ...sanitized,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                } catch (err) {
+                    console.error(`Error deleting month(s) from ${docId}:`, err);
+                }
+            }
+
+            // assignmentReasons: stored by dateKey; remove all dateKeys that fall in selected months
+            try {
+                const docRef = dutyShifts.doc('assignmentReasons');
+                const snap = await docRef.get();
+                if (snap.exists) {
+                    const data = snap.data() || {};
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    const monthKeySet = new Set(monthKeys);
+                    const filtered = {};
+                    for (const key in data) {
+                        if (dateKeyRegex.test(key)) {
+                            const monthKey = key.substring(0, 7);
+                            if (monthKeySet.has(monthKey)) continue;
+                        }
+                        filtered[key] = data[key];
+                    }
+                    const sanitized = sanitizeForFirestore(filtered);
+                    await docRef.set({
+                        ...sanitized,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                }
+            } catch (err) {
+                console.error('Error deleting month(s) from assignmentReasons:', err);
+            }
+
+            // lastRotationPositions: structure is { normal: { [monthKey]: { [groupNum]: name } }, semi, weekend, special }
+            try {
+                const docRef = dutyShifts.doc('lastRotationPositions');
+                const snap = await docRef.get();
+                if (snap.exists) {
+                    const data = snap.data() || {};
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    const monthKeySet = new Set(monthKeys);
+                    const out = { normal: {}, semi: {}, weekend: {}, special: {} };
+                    for (const dayType of ['normal', 'semi', 'weekend', 'special']) {
+                        const byType = data[dayType];
+                        if (!byType || typeof byType !== 'object') continue;
+                        for (const k in byType) {
+                            if (monthKeySet.has(k)) continue;
+                            out[dayType][k] = byType[k];
+                        }
+                    }
+                    const sanitized = sanitizeForFirestore(out);
+                    await docRef.set({
+                        ...sanitized,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                }
+            } catch (err) {
+                console.error('Error deleting month(s) from lastRotationPositions:', err);
+            }
+        }
+
+        // Clear in-memory assignment/baseline/lastRotation for selected month(s) so calculation sees a clean slate.
+        function clearSelectedMonthsInMemory(monthKeys) {
+            if (!Array.isArray(monthKeys) || monthKeys.length === 0) return;
+            const prefixSet = new Set(monthKeys);
+            const dateKeyInRange = (dateKey) => {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return false;
+                const monthKey = dateKey.substring(0, 7);
+                return prefixSet.has(monthKey);
+            };
+            const purgeFrom = (obj) => {
+                if (!obj || typeof obj !== 'object') return;
+                for (const key of Object.keys(obj)) {
+                    if (dateKeyInRange(key)) delete obj[key];
+                }
+            };
+            purgeFrom(specialHolidayAssignments);
+            purgeFrom(weekendAssignments);
+            purgeFrom(semiNormalAssignments);
+            purgeFrom(normalDayAssignments);
+            purgeFrom(rotationBaselineSpecialAssignments);
+            purgeFrom(rotationBaselineWeekendAssignments);
+            purgeFrom(rotationBaselineSemiAssignments);
+            purgeFrom(rotationBaselineNormalAssignments);
+            purgeFrom(assignmentReasons);
+            for (const dayType of ['normal', 'semi', 'weekend', 'special']) {
+                const byType = lastRotationPositions[dayType];
+                if (byType && typeof byType === 'object') {
+                    for (const mk of monthKeys) delete byType[mk];
+                }
+            }
+            if (typeof rebuildRotationBaselineLastByType === 'function') rebuildRotationBaselineLastByType();
+        }
+
         // Organize assignments by month for Firestore storage
         function organizeAssignmentsByMonth(assignments) {
             const organized = {};

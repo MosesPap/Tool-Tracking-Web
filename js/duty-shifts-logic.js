@@ -1848,6 +1848,27 @@
                 calculationSteps.preserveExisting = preserveExisting;
                 calculationSteps.currentStep = 1;
                 
+                // Build month keys for the selected range (YYYY-MM)
+                const monthKeysForRange = [];
+                const d = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+                const rangeEndMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+                while (d <= rangeEndMonth) {
+                    monthKeysForRange.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                    d.setMonth(d.getMonth() + 1);
+                }
+                
+                // If not preserving existing: delete selected months from Firebase and in-memory so calculation starts fresh
+                if (!preserveExisting && monthKeysForRange.length > 0) {
+                    const db = window.db || (typeof firebase !== 'undefined' && firebase.firestore && firebase.firestore());
+                    const user = window.auth && window.auth.currentUser;
+                    if (db && user && typeof deleteSelectedMonthsFromDutyDocs === 'function') {
+                        await deleteSelectedMonthsFromDutyDocs(db, user, monthKeysForRange);
+                    }
+                    if (typeof clearSelectedMonthsInMemory === 'function') {
+                        clearSelectedMonthsInMemory(monthKeysForRange);
+                    }
+                }
+                
                 // Before Step 1 (special holidays): refresh baseline from Firebase so we continue from where it was left
                 if (typeof refreshSpecialBaselineFromFirebase === 'function') {
                     await refreshSpecialBaselineFromFirebase();
