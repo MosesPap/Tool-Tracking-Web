@@ -2991,98 +2991,123 @@
                     updatedAssignments[dateKey] = { ...groups };
                 }
                 
-                // Run skip logic
+                // Phase 1: Replacements only for special duty in same month (and cascade: already assigned this month)
                 sortedWeekends.forEach((dateKey) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const month = date.getMonth();
                     const year = date.getFullYear();
                     const monthKey = `${year}-${month}`;
-                    
-                    if (!skippedInMonth[monthKey]) {
-                        skippedInMonth[monthKey] = {};
-                    }
-                    if (!assignedWeekendInMonth[monthKey]) {
-                        assignedWeekendInMonth[monthKey] = {};
-                    }
-                    
+                    if (!skippedInMonth[monthKey]) skippedInMonth[monthKey] = {};
+                    if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const groupData = groups[groupNum] || { weekend: [] };
                         const groupPeople = groupData.weekend || [];
-                        
                         if (groupPeople.length === 0) continue;
-                        
-                        if (!skippedInMonth[monthKey][groupNum]) {
-                            skippedInMonth[monthKey][groupNum] = new Set();
-                        }
-                        if (!assignedWeekendInMonth[monthKey][groupNum]) {
-                            assignedWeekendInMonth[monthKey][groupNum] = new Set();
-                        }
-                        
+                        if (!skippedInMonth[monthKey][groupNum]) skippedInMonth[monthKey][groupNum] = new Set();
+                        if (!assignedWeekendInMonth[monthKey][groupNum]) assignedWeekendInMonth[monthKey][groupNum] = new Set();
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (!currentPerson) continue;
-                        
-                        // Check if person has special holiday in same month, or was already skipped, or already assigned a weekend this month (e.g. as replacement on previous weekend)
                         const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(currentPerson) || false;
-                        const wasSkipped = skippedInMonth[monthKey][groupNum].has(currentPerson);
                         const alreadyAssignedThisMonth = assignedWeekendInMonth[monthKey][groupNum].has(currentPerson);
-                        
-                        if (hasSpecialHoliday || wasSkipped || alreadyAssignedThisMonth) {
-                            if (hasSpecialHoliday || wasSkipped) skippedInMonth[monthKey][groupNum].add(currentPerson);
-                            
-                            // Find replacement: next eligible person not yet assigned a weekend this month
-                            const rotationDays = groupPeople.length;
-                            const currentIndex = groupPeople.indexOf(currentPerson);
-                            let replacementPerson = null;
-                            
-                            for (let offset = 1; offset < rotationDays; offset++) {
-                                const nextIndex = (currentIndex + offset) % rotationDays;
-                                const candidate = groupPeople[nextIndex];
-                                
-                                if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) {
-                                    continue;
-                                }
-                                
-                                const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
-                                const candidateWasSkipped = skippedInMonth[monthKey][groupNum].has(candidate);
-                                const candidateAlreadyAssigned = assignedWeekendInMonth[monthKey][groupNum].has(candidate);
-                                
-                                if (!candidateHasSpecial && !candidateWasSkipped && !candidateAlreadyAssigned) {
-                                    replacementPerson = candidate;
-                                    break;
-                                }
-                            }
-                            
-                            if (replacementPerson) {
-                                skippedPeople.push({
-                                    date: dateKey,
-                                    dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-                                    groupNum: groupNum,
-                                    skippedPerson: currentPerson,
-                                    replacementPerson: replacementPerson
-                                });
-                                
-                                // Update assignment
-                                updatedAssignments[dateKey][groupNum] = replacementPerson;
-
-                                // Store skip reason on the ASSIGNED person so it shows in calendar/modal
-                                // (calendar checks reasons by currently displayed person name)
-                                const monthReason = hasSpecialHoliday
-                                    ? 'ειδική αργία στον ίδιο μήνα'
-                                    : 'ήταν ήδη παραλειφθεί αυτόν τον μήνα';
-                                storeAssignmentReason(
-                                    dateKey,
-                                    groupNum,
-                                    replacementPerson,
-                                    'skip',
-                                    `Αντικατέστησε τον/την ${currentPerson} επειδή είχε ${monthReason} ${getGreekDayAccusativeArticle(date)} ${getGreekDayName(date)} ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ο/η ${replacementPerson}.`,
-                                    currentPerson,
-                                    null
-                                );
+                        if (!hasSpecialHoliday && !alreadyAssignedThisMonth) {
+                            assignedWeekendInMonth[monthKey][groupNum].add(currentPerson);
+                            continue;
+                        }
+                        if (hasSpecialHoliday) skippedInMonth[monthKey][groupNum].add(currentPerson);
+                        const rotationDays = groupPeople.length;
+                        const currentIndex = groupPeople.indexOf(currentPerson);
+                        let replacementPerson = null;
+                        for (let offset = 1; offset < rotationDays; offset++) {
+                            const nextIndex = (currentIndex + offset) % rotationDays;
+                            const candidate = groupPeople[nextIndex];
+                            if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                            const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
+                            const candidateAlreadyAssigned = assignedWeekendInMonth[monthKey][groupNum].has(candidate);
+                            if (!candidateHasSpecial && !candidateAlreadyAssigned) {
+                                replacementPerson = candidate;
+                                break;
                             }
                         }
-                        // Record who is assigned this weekend in this month so the next weekend gets the next eligible person (no double assignment)
+                        if (replacementPerson) {
+                            skippedPeople.push({
+                                date: dateKey,
+                                dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                groupNum: groupNum,
+                                skippedPerson: currentPerson,
+                                replacementPerson: replacementPerson
+                            });
+                            updatedAssignments[dateKey][groupNum] = replacementPerson;
+                            const monthReason = hasSpecialHoliday
+                                ? 'ειδική αργία στον ίδιο μήνα'
+                                : 'ήταν ήδη παραλειφθεί αυτόν τον μήνα';
+                            storeAssignmentReason(
+                                dateKey,
+                                groupNum,
+                                replacementPerson,
+                                'skip',
+                                `Αντικατέστησε τον/την ${currentPerson} επειδή είχε ${monthReason} ${getGreekDayAccusativeArticle(date)} ${getGreekDayName(date)} ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ο/η ${replacementPerson}.`,
+                                currentPerson,
+                                null
+                            );
+                        }
                         const assignedPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (assignedPerson) assignedWeekendInMonth[monthKey][groupNum].add(assignedPerson);
+                    }
+                });
+                // Phase 2: Swaps because person is missing on this date
+                sortedWeekends.forEach((dateKey) => {
+                    const date = new Date(dateKey + 'T00:00:00');
+                    const month = date.getMonth();
+                    const year = date.getFullYear();
+                    const monthKey = `${year}-${month}`;
+                    if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        const groupData = groups[groupNum] || { weekend: [] };
+                        const groupPeople = groupData.weekend || [];
+                        if (groupPeople.length === 0) continue;
+                        if (!assignedWeekendInMonth[monthKey][groupNum]) assignedWeekendInMonth[monthKey][groupNum] = new Set();
+                        const currentPerson = updatedAssignments[dateKey]?.[groupNum];
+                        if (!currentPerson) continue;
+                        if (!isPersonMissingOnDate(currentPerson, groupNum, date, 'weekend')) continue;
+                        const rotationDays = groupPeople.length;
+                        const currentIndex = groupPeople.indexOf(currentPerson);
+                        let swapPerson = null;
+                        for (let offset = 1; offset < rotationDays; offset++) {
+                            const nextIndex = (currentIndex + offset) % rotationDays;
+                            const candidate = groupPeople[nextIndex];
+                            if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                            const candidateAlreadyAssigned = assignedWeekendInMonth[monthKey][groupNum].has(candidate);
+                            if (!candidateAlreadyAssigned) {
+                                swapPerson = candidate;
+                                break;
+                            }
+                        }
+                        if (swapPerson) {
+                            skippedPeople.push({
+                                date: dateKey,
+                                dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                groupNum: groupNum,
+                                skippedPerson: currentPerson,
+                                replacementPerson: swapPerson
+                            });
+                            updatedAssignments[dateKey][groupNum] = swapPerson;
+                            storeAssignmentReason(
+                                dateKey,
+                                groupNum,
+                                swapPerson,
+                                'skip',
+                                buildUnavailableReplacementReason({
+                                    skippedPersonName: currentPerson,
+                                    replacementPersonName: swapPerson,
+                                    dateObj: date,
+                                    groupNum,
+                                    dutyCategory: 'weekend'
+                                }),
+                                currentPerson,
+                                null
+                            );
+                            assignedWeekendInMonth[monthKey][groupNum].add(swapPerson);
+                        }
                     }
                 });
                 
@@ -6742,74 +6767,71 @@
                                 }
                                 if (!foundEligible) assignedPerson = null;
                             }
-                            // MISSING (not disabled): show replacement and store reason.
-                            if (!isRotationPersonDisabledWeekend && assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
-                                if (!assignedPeoplePreviewWeekend[monthKey][groupNum]) {
-                                    assignedPeoplePreviewWeekend[monthKey][groupNum] = {};
-                                }
-                                let foundReplacement = false;
-                                for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
-                                    const idx = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[idx];
-                                    if (!candidate) continue;
-                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                                    if (assignedPeoplePreviewWeekend[monthKey][groupNum] && assignedPeoplePreviewWeekend[monthKey][groupNum][candidate]) {
-                                        const lastAssignmentDateKey = assignedPeoplePreviewWeekend[monthKey][groupNum][candidate];
-                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
-                                        const currentDate = new Date(dateKey + 'T00:00:00');
-                                        const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
-                                        if (daysDiff <= 5 && daysDiff > 0) continue;
+                            // Phase 1: Replacements only for special duty same month (and cascade: already assigned this month)
+                            if (assignedPerson) {
+                                const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(assignedPerson) || false;
+                                const alreadyAssignedThisMonthPreview = assignedWeekendInMonthPreview[monthKey][groupNum].has(assignedPerson);
+                                if (hasSpecialHoliday || alreadyAssignedThisMonthPreview) {
+                                    if (hasSpecialHoliday) skippedInMonth[monthKey][groupNum].add(assignedPerson);
+                                    const currentIndex = groupPeople.indexOf(assignedPerson);
+                                    let replacementPerson = null;
+                                    for (let offset = 1; offset < rotationDays; offset++) {
+                                        const nextIndex = (currentIndex + offset) % rotationDays;
+                                        const candidate = groupPeople[nextIndex];
+                                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                                        const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
+                                        const candidateAlreadyAssigned = assignedWeekendInMonthPreview[monthKey][groupNum].has(candidate);
+                                        if (!candidateHasSpecial && !candidateAlreadyAssigned) {
+                                            replacementPerson = candidate;
+                                            break;
+                                        }
                                     }
-                                    assignedPerson = candidate;
-                                    replacementIndex = idx;
-                                    wasReplaced = true;
-                                    foundReplacement = true;
+                                    if (replacementPerson) {
+                                        assignedPerson = replacementPerson;
+                                        wasReplaced = true;
+                                        replacementIndex = groupPeople.indexOf(replacementPerson);
+                                    }
+                                }
+                            }
+                            // Phase 2: Swaps because person is missing on this date
+                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
+                                const currentIndex = groupPeople.indexOf(assignedPerson);
+                                let swapPerson = null;
+                                for (let offset = 1; offset < rotationDays; offset++) {
+                                    const nextIndex = (currentIndex + offset) % rotationDays;
+                                    const candidate = groupPeople[nextIndex];
+                                    if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                                    const candidateAlreadyAssigned = assignedWeekendInMonthPreview[monthKey][groupNum].has(candidate);
+                                    if (!candidateAlreadyAssigned) {
+                                        swapPerson = candidate;
+                                        break;
+                                    }
+                                }
+                                if (swapPerson) {
                                     storeAssignmentReason(
                                         dateKey,
                                         groupNum,
-                                        assignedPerson,
+                                        swapPerson,
                                         'skip',
                                         buildUnavailableReplacementReason({
-                                            skippedPersonName: rotationPerson,
-                                            replacementPersonName: assignedPerson,
+                                            skippedPersonName: assignedPerson,
+                                            replacementPersonName: swapPerson,
                                             dateObj: date,
                                             groupNum,
                                             dutyCategory: 'weekend'
                                         }),
-                                        rotationPerson,
+                                        assignedPerson,
                                         null
                                     );
-                                    break;
+                                    assignedPerson = swapPerson;
+                                    wasReplaced = true;
+                                    replacementIndex = groupPeople.indexOf(swapPerson);
+                                } else {
+                                    assignedPerson = null;
                                 }
-                                if (!foundReplacement) assignedPerson = null;
                             }
 
-                            // PREVIEW DISPLAY: show the weekend skip changes (special holiday duty in same month),
-                            // using the same replacement rules as runWeekendSkipLogic().
-                            let displayPerson = assignedPerson;
-                            if (displayPerson) {
-                                const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(displayPerson) || false;
-                                const wasSkipped = skippedInMonth[monthKey][groupNum].has(displayPerson);
-                                const alreadyAssignedThisMonthPreview = assignedWeekendInMonthPreview[monthKey][groupNum].has(displayPerson);
-                                if (hasSpecialHoliday || wasSkipped || alreadyAssignedThisMonthPreview) {
-                                    if (hasSpecialHoliday || wasSkipped) skippedInMonth[monthKey][groupNum].add(displayPerson);
-                                    const currentIndex = groupPeople.indexOf(displayPerson);
-                                    let replacementPerson = null;
-                                for (let offset = 1; offset < rotationDays; offset++) {
-                                        const nextIndex = (currentIndex + offset) % rotationDays;
-                                    const candidate = groupPeople[nextIndex];
-                                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                                    const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
-                                    const candidateWasSkipped = skippedInMonth[monthKey][groupNum].has(candidate);
-                                    const candidateAlreadyAssigned = assignedWeekendInMonthPreview[monthKey][groupNum].has(candidate);
-                                    if (!candidateHasSpecial && !candidateWasSkipped && !candidateAlreadyAssigned) {
-                                            replacementPerson = candidate;
-                                        break;
-                                    }
-                                }
-                                    if (replacementPerson) displayPerson = replacementPerson;
-                                }
-                            }
+                            const displayPerson = assignedPerson;
                             
                             // Store assignment for saving
                             if (assignedPerson) {
