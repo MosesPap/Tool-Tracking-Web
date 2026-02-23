@@ -2196,70 +2196,59 @@
                                 }
                                 if (!foundEligible) assignedPerson = null;
                             }
-                            // Store baseline for UI: always use rotation person so we show Βασική Σειρά and Αντικατάσταση when replaced (missing or disabled), as in all other steps.
+                            // 1) Always keep baseline: rotation person is the reference for this date/group.
                             specialRotationPersons[dateKey][groupNum] = rotationPerson;
-                            // MISSING (not disabled): first try to assign a previous missing person who is not yet assigned; only then use next in rotation.
-                            if (!isRotationPersonDisabledSpecial && assignedPerson && !alreadyOnAnotherSpecial && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special')) {
+
+                            // 2) If baseline (rotation) person is missing on this date: fill slot with (a) unassigned previous-missing, or (b) next eligible in baseline. Keep record.
+                            const baselineIsMissingHere = !isRotationPersonDisabledSpecial && !alreadyOnAnotherSpecial && isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
+                            if (baselineIsMissingHere) {
                                 let foundReplacement = false;
-                                // First: check if there is a previous missing person (return-from-missing) not yet assigned – give them this slot.
-                                const keyAssigned = (p, g) => assignedReturnFromMissingInForEach.has(`${p}|${g}`);
-                                const alreadyOnAnySpecial = (p, g) => sortedSpecial.some(dk => tempSpecialAssignments[dk]?.[g] === p);
+                                const isUnassignedReturnFromMissing = (p, g) => !assignedReturnFromMissingInForEach.has(`${p}|${g}`) && !sortedSpecial.some(dk => tempSpecialAssignments[dk]?.[g] === p);
+
+                                // 2a) First: swap with a previous missing person (return-from-missing) who is not yet assigned in this period.
                                 for (const entry of returnFromMissingSpecial) {
                                     if (entry.groupNum !== groupNum) continue;
-                                    const prevMissing = entry.personName;
-                                    if (keyAssigned(prevMissing, groupNum)) continue;
-                                    if (alreadyOnAnySpecial(prevMissing, groupNum)) continue;
-                                    if (isPersonMissingOnDate(prevMissing, groupNum, date, 'special')) continue;
-                                    assignedPerson = prevMissing;
+                                    const prevMissingPerson = entry.personName;
+                                    if (!isUnassignedReturnFromMissing(prevMissingPerson, groupNum)) continue;
+                                    if (isPersonMissingOnDate(prevMissingPerson, groupNum, date, 'special')) continue;
+                                    assignedPerson = prevMissingPerson;
                                     wasReplaced = true;
                                     replacementIndex = rotationPosition;
                                     foundReplacement = true;
-                                    assignedReturnFromMissingInForEach.add(`${prevMissing}|${groupNum}`);
-                                    storeAssignmentReason(
-                                        dateKey,
-                                        groupNum,
-                                        assignedPerson,
-                                        'skip',
-                                        `Επέστρεψε από απουσία· η θέση του/της ${rotationPerson} (απουσία) δόθηκε στον/στην ${assignedPerson}.`,
-                                        rotationPerson,
-                                        null
-                                    );
+                                    assignedReturnFromMissingInForEach.add(`${prevMissingPerson}|${groupNum}`);
+                                    const reasonReturn = `Βασική σειρά: ${rotationPerson} (απουσία). Αντικατάσταση: ${assignedPerson} (επέστρεψε από απουσία).`;
+                                    storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonReturn, rotationPerson, null, {
+                                        baselinePerson: rotationPerson,
+                                        replacementType: 'return-from-missing',
+                                        missedDateKey: dateKey,
+                                        assignedReturnFromMissing: true
+                                    });
                                     returnFromMissingSpecial.push({ personName: rotationPerson, groupNum, missedDateKey: dateKey });
                                     if (!reservedReturnFromMissingByGroup[groupNum]) reservedReturnFromMissingByGroup[groupNum] = new Set();
                                     reservedReturnFromMissingByGroup[groupNum].add(rotationPerson);
                                     break;
                                 }
-                                // Else: use next eligible person in baseline (rotation).
+
+                                // 2b) If all previous missing are already assigned: replace with next eligible person from baseline (rotation).
                                 if (!foundReplacement) {
-                                    const searchListM = groupPeople;
-                                    const searchLenM = searchListM.length;
-                                    for (let offset = 1; offset <= searchLenM * 2 && !foundReplacement; offset++) {
-                                        const idx = (rotationPosition + offset) % searchLenM;
-                                        const candidate = searchListM[idx];
+                                    for (let offset = 1; offset <= groupPeople.length * 2; offset++) {
+                                        const idx = (rotationPosition + offset) % groupPeople.length;
+                                        const candidate = groupPeople[idx];
                                         if (!candidate) continue;
                                         if (reservedReturnFromMissingByGroup[groupNum]?.has(candidate)) continue;
+                                        if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
                                         if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
-                                        const alreadyAssignedOnAnotherSpecial = sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === candidate);
-                                        if (alreadyAssignedOnAnotherSpecial) continue;
+                                        if (sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === candidate)) continue;
                                         assignedPerson = candidate;
                                         replacementIndex = idx;
                                         wasReplaced = true;
                                         foundReplacement = true;
-                                        storeAssignmentReason(
-                                            dateKey,
-                                            groupNum,
-                                            assignedPerson,
-                                            'skip',
-                                            buildUnavailableReplacementReason({
-                                                skippedPersonName: rotationPerson,
-                                                replacementPersonName: assignedPerson,
-                                                dateObj: date,
-                                                groupNum,
-                                                dutyCategory: 'special'
-                                            }),
-                                            rotationPerson,
-                                            null
-                                        );
+                                        const reasonNext = `Βασική σειρά: ${rotationPerson} (απουσία). Αντικατάσταση: ${assignedPerson} (επόμενος στη σειρά).`;
+                                        storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonNext, rotationPerson, null, {
+                                            baselinePerson: rotationPerson,
+                                            replacementType: 'next-in-baseline',
+                                            missedDateKey: dateKey
+                                        });
                                         returnFromMissingSpecial.push({ personName: rotationPerson, groupNum, missedDateKey: dateKey });
                                         if (!reservedReturnFromMissingByGroup[groupNum]) reservedReturnFromMissingByGroup[groupNum] = new Set();
                                         reservedReturnFromMissingByGroup[groupNum].add(rotationPerson);
