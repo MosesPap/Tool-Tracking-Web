@@ -2932,9 +2932,7 @@
                 
                 sortedSpecial.forEach((dateKey) => {
                     const date = new Date(dateKey + 'T00:00:00');
-                    const month = date.getMonth();
-                    const year = date.getFullYear();
-                    const monthKey = `${year}-${month}`;
+                    const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                     
                     if (!simulatedSpecialAssignments[monthKey]) {
                         simulatedSpecialAssignments[monthKey] = {};
@@ -2991,12 +2989,11 @@
                     updatedAssignments[dateKey] = { ...groups };
                 }
                 
-                // Phase 1: Replacements only for special duty in same month (and cascade: already assigned this month)
+                // Phase 1: Replacements only for special duty in same month (and cascade: already assigned this month).
+                // For each weekend date, if the rotation person has special duty in that month, assign the NEXT eligible person in the weekend list (same for all such cases).
                 sortedWeekends.forEach((dateKey) => {
                     const date = new Date(dateKey + 'T00:00:00');
-                    const month = date.getMonth();
-                    const year = date.getFullYear();
-                    const monthKey = `${year}-${month}`;
+                    const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                     if (!skippedInMonth[monthKey]) skippedInMonth[monthKey] = {};
                     if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -3015,12 +3012,16 @@
                         }
                         if (hasSpecialHoliday) skippedInMonth[monthKey][groupNum].add(currentPerson);
                         const rotationDays = groupPeople.length;
-                        const currentIndex = groupPeople.indexOf(currentPerson);
+                        let currentIndex = groupPeople.indexOf(currentPerson);
+                        if (currentIndex === -1) currentIndex = 0;
                         let replacementPerson = null;
+                        // Next eligible person in weekend list order: not special this month, not already assigned this month, not missing, not disabled
                         for (let offset = 1; offset < rotationDays; offset++) {
                             const nextIndex = (currentIndex + offset) % rotationDays;
                             const candidate = groupPeople[nextIndex];
-                            if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                            if (!candidate) continue;
+                            if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                            if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
                             const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
                             const candidateAlreadyAssigned = assignedWeekendInMonth[monthKey][groupNum].has(candidate);
                             if (!candidateHasSpecial && !candidateAlreadyAssigned) {
@@ -3057,9 +3058,7 @@
                 // Phase 2: Swaps because person is missing on this date
                 sortedWeekends.forEach((dateKey) => {
                     const date = new Date(dateKey + 'T00:00:00');
-                    const month = date.getMonth();
-                    const year = date.getFullYear();
-                    const monthKey = `${year}-${month}`;
+                    const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                     if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const groupData = groups[groupNum] || { weekend: [] };
@@ -3070,7 +3069,8 @@
                         if (!currentPerson) continue;
                         if (!isPersonMissingOnDate(currentPerson, groupNum, date, 'weekend')) continue;
                         const rotationDays = groupPeople.length;
-                        const currentIndex = groupPeople.indexOf(currentPerson);
+                        let currentIndex = groupPeople.indexOf(currentPerson);
+                        if (currentIndex === -1) currentIndex = 0;
                         let swapPerson = null;
                         for (let offset = 1; offset < rotationDays; offset++) {
                             const nextIndex = (currentIndex + offset) % rotationDays;
@@ -6333,10 +6333,7 @@
             // Load from saved special holiday assignments
             sortedSpecial.forEach((dateKey) => {
                 const date = new Date(dateKey + 'T00:00:00');
-                const month = date.getMonth();
-                const year = date.getFullYear();
-                const monthKey = `${year}-${month}`;
-                
+                const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                 if (!simulatedSpecialAssignments[monthKey]) {
                     simulatedSpecialAssignments[monthKey] = {};
                 }
@@ -6584,9 +6581,7 @@
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     const dayName = getGreekDayName(date);
-                    const month = date.getMonth();
-                    const year = date.getFullYear();
-                    const monthKey = `${year}-${month}`;
+                    const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                     
                     if (!assignedPeoplePreviewWeekend[monthKey]) {
                         assignedPeoplePreviewWeekend[monthKey] = {};
@@ -6773,12 +6768,14 @@
                                 const alreadyAssignedThisMonthPreview = assignedWeekendInMonthPreview[monthKey][groupNum].has(assignedPerson);
                                 if (hasSpecialHoliday || alreadyAssignedThisMonthPreview) {
                                     if (hasSpecialHoliday) skippedInMonth[monthKey][groupNum].add(assignedPerson);
-                                    const currentIndex = groupPeople.indexOf(assignedPerson);
+                                    let currentIndex = groupPeople.indexOf(assignedPerson);
+                                    if (currentIndex === -1) currentIndex = 0;
                                     let replacementPerson = null;
                                     for (let offset = 1; offset < rotationDays; offset++) {
                                         const nextIndex = (currentIndex + offset) % rotationDays;
                                         const candidate = groupPeople[nextIndex];
                                         if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                                        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
                                         const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
                                         const candidateAlreadyAssigned = assignedWeekendInMonthPreview[monthKey][groupNum].has(candidate);
                                         if (!candidateHasSpecial && !candidateAlreadyAssigned) {
@@ -6795,7 +6792,8 @@
                             }
                             // Phase 2: Swaps because person is missing on this date
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
-                                const currentIndex = groupPeople.indexOf(assignedPerson);
+                                let currentIndex = groupPeople.indexOf(assignedPerson);
+                                if (currentIndex === -1) currentIndex = 0;
                                 let swapPerson = null;
                                 for (let offset = 1; offset < rotationDays; offset++) {
                                     const nextIndex = (currentIndex + offset) % rotationDays;
