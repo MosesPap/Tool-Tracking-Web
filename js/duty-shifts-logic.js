@@ -2063,9 +2063,12 @@
                     }
                 }
 
-                // Pre-pass: add people who missed specials in previous months (outside current calculation range)
-                // so they get assigned when we calculate a later month (e.g. December).
+                // Pre-pass: add only people who missed specials in months BEFORE the current calculation range
+                // (not future months). So when calculating April we only consider missed specials before April;
+                // when calculating December we consider A/B who missed April, etc. Never reserve someone for
+                // a future missed period (e.g. F missing Dec/Jan must not affect April).
                 const sortedSpecialSet = new Set(sortedSpecial);
+                const firstDateKeyInRange = sortedSpecial.length > 0 ? sortedSpecial[0] : null;
                 const addedReturnFromPrevMonths = new Set();
                 const normPerson = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -2094,9 +2097,11 @@
                                 break;
                             }
                             if (!missedDateKey) continue;
+                            // Only count as return-from-missing if the missed special is BEFORE the current range (not a future month).
+                            if (firstDateKeyInRange && missedDateKey >= firstDateKeyInRange) continue;
                             addedReturnFromPrevMonths.add(dedupeKey);
                             returnFromMissingSpecial.push({ personName, groupNum, missedDateKey });
-                            console.log(`[SPECIAL RETURN-FROM-MISSING] ${personName} (group ${groupNum}) missed special ${missedDateKey} (previous month); will assign in current range`);
+                            console.log(`[SPECIAL RETURN-FROM-MISSING] ${personName} (group ${groupNum}) missed special ${missedDateKey} (before current range); will assign in current range`);
                             break;
                         }
                     }
