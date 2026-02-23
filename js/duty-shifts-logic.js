@@ -2203,7 +2203,22 @@
                             const baselineIsMissingHere = !isRotationPersonDisabledSpecial && !alreadyOnAnotherSpecial && isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
                             if (baselineIsMissingHere) {
                                 let foundReplacement = false;
-                                const isUnassignedReturnFromMissing = (p, g) => !assignedReturnFromMissingInForEach.has(`${p}|${g}`) && !sortedSpecial.some(dk => tempSpecialAssignments[dk]?.[g] === p);
+                                // Unassigned = not in this run (forEach or temp) AND not already assigned in saved data – don't use until their turn comes in baseline
+                                const isAlreadyAssignedInSaved = (p, g) => {
+                                    if (!specialHolidayAssignments || typeof parseAssignedPersonForGroupFromAssignment !== 'function') return false;
+                                    const normP = normalizePersonKey(p);
+                                    for (const dk of Object.keys(specialHolidayAssignments)) {
+                                        const assigned = parseAssignedPersonForGroupFromAssignment(specialHolidayAssignments[dk], g);
+                                        if (assigned && normalizePersonKey(assigned) === normP) return true;
+                                    }
+                                    return false;
+                                };
+                                const isUnassignedReturnFromMissing = (p, g) => {
+                                    if (assignedReturnFromMissingInForEach.has(`${p}|${g}`)) return false;
+                                    if (sortedSpecial.some(dk => tempSpecialAssignments[dk]?.[g] === p)) return false;
+                                    if (isAlreadyAssignedInSaved(p, g)) return false;
+                                    return true;
+                                };
                                 const pendingReturnFromMissingForGroup = new Set(returnFromMissingSpecial.filter(e => e.groupNum === groupNum).map(e => e.personName));
 
                                 // 2a) First: swap with a previous missing person (return-from-missing) who is not yet assigned – pick in baseline order (A then B).
@@ -2295,9 +2310,19 @@
                 // Each returning person takes the slot of the baseline (rotation) person on a target date; baseline is unchanged for display/continuation.
                 // Target: same month first, else next available special.
                 const usedReturnFromMissingSpecial = new Set();
+                const isAlreadyAssignedInSavedForLoop = (p, g) => {
+                    if (!specialHolidayAssignments || typeof parseAssignedPersonForGroupFromAssignment !== 'function') return false;
+                    const normP = normalizePersonKey(p);
+                    for (const dk of Object.keys(specialHolidayAssignments)) {
+                        const assigned = parseAssignedPersonForGroupFromAssignment(specialHolidayAssignments[dk], g);
+                        if (assigned && normalizePersonKey(assigned) === normP) return true;
+                    }
+                    return false;
+                };
                 for (const entry of returnFromMissingSpecial) {
                     const { personName, groupNum, missedDateKey } = entry;
                     if (assignedReturnFromMissingInForEach.has(`${personName}|${groupNum}`)) continue;
+                    if (isAlreadyAssignedInSavedForLoop(personName, groupNum)) continue;
                     const missedDate = new Date(missedDateKey + 'T00:00:00');
                     const missedMonthKey = getMonthKeyFromDate(missedDate);
                     let targetKey = null;
