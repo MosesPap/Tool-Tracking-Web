@@ -3055,7 +3055,8 @@
                         if (assignedPerson) assignedWeekendInMonth[monthKey][groupNum].add(assignedPerson);
                     }
                 });
-                // Phase 2: Swaps because person is missing on this date
+                // Phase 2: Swaps because person is missing on this date.
+                // Prefer swapping with another weekend in the same month: missing person gets the other date, other date's person gets this date.
                 sortedWeekends.forEach((dateKey) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -3071,6 +3072,62 @@
                         const rotationDays = groupPeople.length;
                         let currentIndex = groupPeople.indexOf(currentPerson);
                         if (currentIndex === -1) currentIndex = 0;
+
+                        // Try to swap with another weekend date in the same month
+                        let swapPartnerDateKey = null;
+                        let swapPartnerPerson = null;
+                        for (const otherDateKey of sortedWeekends) {
+                            if (otherDateKey === dateKey) continue;
+                            const otherDate = new Date(otherDateKey + 'T00:00:00');
+                            const otherMonthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(otherDate) : `${otherDate.getFullYear()}-${String(otherDate.getMonth() + 1).padStart(2, '0')}`;
+                            if (otherMonthKey !== monthKey) continue;
+                            const personOnOther = updatedAssignments[otherDateKey]?.[groupNum];
+                            if (!personOnOther || personOnOther === currentPerson) continue;
+                            if (isPersonMissingOnDate(personOnOther, groupNum, date, 'weekend')) continue;
+                            if (isPersonMissingOnDate(currentPerson, groupNum, otherDate, 'weekend')) continue;
+                            swapPartnerDateKey = otherDateKey;
+                            swapPartnerPerson = personOnOther;
+                            break;
+                        }
+
+                        if (swapPartnerDateKey !== null && swapPartnerPerson) {
+                            updatedAssignments[dateKey][groupNum] = swapPartnerPerson;
+                            updatedAssignments[swapPartnerDateKey][groupNum] = currentPerson;
+                            skippedPeople.push({
+                                date: dateKey,
+                                dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                                groupNum: groupNum,
+                                skippedPerson: currentPerson,
+                                replacementPerson: swapPartnerPerson
+                            });
+                            const swapPartnerDate = new Date(swapPartnerDateKey + 'T00:00:00');
+                            storeAssignmentReason(
+                                dateKey,
+                                groupNum,
+                                swapPartnerPerson,
+                                'skip',
+                                buildUnavailableReplacementReason({
+                                    skippedPersonName: currentPerson,
+                                    replacementPersonName: swapPartnerPerson,
+                                    dateObj: date,
+                                    groupNum,
+                                    dutyCategory: 'weekend'
+                                }),
+                                currentPerson,
+                                null
+                            );
+                            storeAssignmentReason(
+                                swapPartnerDateKey,
+                                groupNum,
+                                currentPerson,
+                                'skip',
+                                `Ανταλλαγή ημερομηνίας: απουσία ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ${swapPartnerDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}.`,
+                                swapPartnerPerson,
+                                null
+                            );
+                            continue;
+                        }
+
                         let swapPerson = null;
                         for (let offset = 1; offset < rotationDays; offset++) {
                             const nextIndex = (currentIndex + offset) % rotationDays;
