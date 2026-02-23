@@ -92,6 +92,15 @@
             box-shadow: inset 0 -1px 0 rgba(0,0,0,0.15);
         }
 
+        /* Calendar month title: clickable for Greek month picker */
+        #currentMonthYear.cursor-pointer {
+            cursor: pointer;
+            user-select: none;
+        }
+        #currentMonthYear.cursor-pointer:hover {
+            text-decoration: underline;
+        }
+
         /* =========================================================
            Visual upgrade (3D + modern colors) for calculation modals & popups
            - CSS ONLY (no logic/scroll changes)
@@ -1588,7 +1597,7 @@
                         <button class="btn btn-sm btn-outline-secondary" onclick="previousMonth()">
                             <i class="fas fa-chevron-left"></i>
                         </button>
-                        <h5 class="mb-0 mx-2" id="currentMonthYear"></h5>
+                        <h5 class="mb-0 mx-2 cursor-pointer" id="currentMonthYear" title="Κλικ για επιλογή μήνα" role="button" tabindex="0"></h5>
                         <button class="btn btn-sm btn-outline-secondary" onclick="nextMonth()">
                             <i class="fas fa-chevron-right"></i>
                         </button>
@@ -1616,6 +1625,28 @@
                     <button class="btn btn-sm btn-secondary" onclick="openMissingDisabledPeopleModal()">
                         <i class="fas fa-user-times me-1"></i>Απενεργοποιημένοι/Απουσιάζοντες
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Calendar month picker modal (Greek) -->
+        <div class="modal fade" id="calendarMonthPickerModal" tabindex="-1" aria-labelledby="calendarMonthPickerModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header py-2">
+                        <h5 class="modal-title" id="calendarMonthPickerModalLabel">Επιλογή μήνα</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Κλείσιμο"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3 d-flex align-items-center justify-content-center gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarMonthPickerPrevYear" aria-label="Προηγούμενο έτος"><i class="fas fa-chevron-left"></i></button>
+                            <span class="fw-bold" id="calendarMonthPickerYear" style="min-width: 4rem; text-align: center;">2026</span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarMonthPickerNextYear" aria-label="Επόμενο έτος"><i class="fas fa-chevron-right"></i></button>
+                        </div>
+                        <div class="row g-2" id="calendarMonthPickerMonths">
+                            <!-- 12 Greek months filled by JS -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

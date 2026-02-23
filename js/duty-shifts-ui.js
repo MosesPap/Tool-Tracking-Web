@@ -3154,6 +3154,8 @@
                 console.error('Calendar elements not found');
                 return;
             }
+
+            _attachCalendarMonthPickerClick();
             
             // NOTE: criticalAssignments are treated as history only and must not be injected into the calendar.
             
@@ -3566,6 +3568,78 @@
             currentDate.setMonth(currentDate.getMonth() + 1);
             renderCalendar();
         }
+
+        // Greek month names for calendar month picker (el-GR long)
+        const GREEK_MONTH_NAMES = (() => {
+            const names = [];
+            for (let m = 0; m < 12; m++) {
+                names.push(new Date(2024, m, 1).toLocaleDateString('el-GR', { month: 'long' }));
+            }
+            return names;
+        })();
+
+        let _calendarMonthPickerAttached = false;
+        function openCalendarMonthPicker() {
+            const modalEl = document.getElementById('calendarMonthPickerModal');
+            const yearEl = document.getElementById('calendarMonthPickerYear');
+            const monthsEl = document.getElementById('calendarMonthPickerMonths');
+            if (!modalEl || !yearEl || !monthsEl) return;
+
+            let pickerYear = currentDate.getFullYear();
+            function renderPickerMonths() {
+                yearEl.textContent = pickerYear;
+                monthsEl.innerHTML = '';
+                GREEK_MONTH_NAMES.forEach((name, index) => {
+                    const col = document.createElement('div');
+                    col.className = 'col-4';
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'btn btn-outline-primary w-100';
+                    btn.textContent = name;
+                    btn.dataset.month = String(index);
+                    btn.dataset.year = String(pickerYear);
+                    btn.addEventListener('click', () => {
+                        currentDate.setFullYear(pickerYear);
+                        currentDate.setMonth(index);
+                        currentDate.setDate(1);
+                        const m = bootstrap.Modal.getInstance(modalEl);
+                        if (m) m.hide();
+                        renderCalendar();
+                    });
+                    col.appendChild(btn);
+                    monthsEl.appendChild(col);
+                });
+            }
+
+            document.getElementById('calendarMonthPickerPrevYear').onclick = () => {
+                pickerYear--;
+                renderPickerMonths();
+            };
+            document.getElementById('calendarMonthPickerNextYear').onclick = () => {
+                pickerYear++;
+                renderPickerMonths();
+            };
+
+            pickerYear = currentDate.getFullYear();
+            renderPickerMonths();
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
+        function _attachCalendarMonthPickerClick() {
+            if (_calendarMonthPickerAttached) return;
+            const currentMonthYear = document.getElementById('currentMonthYear');
+            if (!currentMonthYear) return;
+            _calendarMonthPickerAttached = true;
+            currentMonthYear.addEventListener('click', openCalendarMonthPicker);
+            currentMonthYear.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openCalendarMonthPicker();
+                }
+            });
+        }
+
         function _removed_getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, currentMonth, currentYear, rotationDays, groupPeople, currentRotationPosition = null) {
             const date = new Date(dayKey + 'T00:00:00');
             
