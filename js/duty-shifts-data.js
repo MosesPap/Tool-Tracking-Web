@@ -1003,6 +1003,73 @@
             }
         }
 
+        // Refresh only special-holiday baseline and last rotation positions from Firebase.
+        // Call this before calculating special holiday duty for any month so we continue from where the baseline was left.
+        async function refreshSpecialBaselineFromFirebase() {
+            try {
+                if (!window.db) return;
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                if (!user) return;
+
+                const dutyShifts = db.collection('dutyShifts');
+                const [rotationBaselineSpecialDoc, lastRotationPositionsDoc] = await Promise.all([
+                    dutyShifts.doc('rotationBaselineSpecialAssignments').get(),
+                    dutyShifts.doc('lastRotationPositions').get()
+                ]);
+
+                const isMonthOrganizedDoc = (data) => Object.keys(data || {}).some(k => /^[A-Za-z]+\s+\d{4}$/.test(k) && typeof data[k] === 'object');
+
+                if (rotationBaselineSpecialDoc.exists) {
+                    const data = rotationBaselineSpecialDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    delete data._migratedFrom;
+                    delete data._migrationDate;
+                    rotationBaselineSpecialAssignments = isMonthOrganizedDoc(data) ? flattenAssignmentsByMonth(data) : (data || {});
+                } else {
+                    rotationBaselineSpecialAssignments = {};
+                }
+
+                if (lastRotationPositionsDoc.exists) {
+                    const data = lastRotationPositionsDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    const convertArrayToObject = (arr) => {
+                        if (Array.isArray(arr)) {
+                            const obj = {};
+                            arr.forEach((value, index) => {
+                                obj[index + 1] = value;
+                            });
+                            return obj;
+                        }
+                        return arr;
+                    };
+                    const normalizeRotationType = (val) => {
+                        if (!val || typeof val !== 'object') return {};
+                        if (Array.isArray(val)) return convertArrayToObject(val);
+                        const keys = Object.keys(val);
+                        const hasMonthKeys = keys.some(k => isMonthKey(k));
+                        if (hasMonthKeys) {
+                            const out = {};
+                            for (const mk of keys) out[mk] = convertArrayToObject(val[mk]);
+                            return out;
+                        }
+                        return convertArrayToObject(val);
+                    };
+                    if (data.special) {
+                        if (!lastRotationPositions.special) lastRotationPositions.special = {};
+                        lastRotationPositions.special = normalizeRotationType(data.special);
+                    }
+                }
+
+                rebuildRotationBaselineLastByType();
+                console.log('Refreshed special-holiday baseline and last rotation positions from Firebase');
+            } catch (error) {
+                console.error('Error refreshing special baseline from Firebase:', error);
+            }
+        }
+
         // Rebuild criticalAssignments from lastDuties
         // This ensures manually entered dates are always protected, even if criticalAssignments wasn't saved
         // IMPORTANT: This function only updates in-memory data. It does NOT save to Firebase.

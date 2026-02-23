@@ -1808,7 +1808,7 @@
             installFor('calculateStartMonth');
             installFor('calculateEndMonth');
         }
-        function calculateDutiesForSelectedMonths() {
+        async function calculateDutiesForSelectedMonths() {
             try {
                 const startMonthInput = document.getElementById('calculateStartMonth');
                 const endMonthInput = document.getElementById('calculateEndMonth');
@@ -1847,6 +1847,11 @@
                 calculationSteps.endDate = endDate;
                 calculationSteps.preserveExisting = preserveExisting;
                 calculationSteps.currentStep = 1;
+                
+                // Before Step 1 (special holidays): refresh baseline from Firebase so we continue from where it was left
+                if (typeof refreshSpecialBaselineFromFirebase === 'function') {
+                    await refreshSpecialBaselineFromFirebase();
+                }
                 
                 // Close month selection modal
                 const monthModal = bootstrap.Modal.getInstance(document.getElementById('calculateDutiesModal'));
