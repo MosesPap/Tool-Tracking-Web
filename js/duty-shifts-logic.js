@@ -2124,6 +2124,26 @@
                         }
                     }
                     
+                    // Helpers for return-from-missing vs displaced: need (p,g) check in scope for each date.
+                    const isAlreadyAssignedInSavedForDate = (p, g) => {
+                        if (!specialHolidayAssignments) return false;
+                        const normP = normalizePersonKey(p);
+                        for (const dk of Object.keys(specialHolidayAssignments)) {
+                            const raw = specialHolidayAssignments[dk];
+                            const assigned = (typeof extractGroupAssignmentsMap === 'function' && raw && typeof raw === 'object' && !Array.isArray(raw))
+                                ? (extractGroupAssignmentsMap(raw)[g] || null)
+                                : (typeof parseAssignedPersonForGroupFromAssignment === 'function' ? parseAssignedPersonForGroupFromAssignment(raw, g) : null);
+                            if (assigned && normalizePersonKey(assigned) === normP) return true;
+                        }
+                        return false;
+                    };
+                    const isUnassignedReturnFromMissingForDate = (p, g) => {
+                        if (assignedReturnFromMissingInForEach.has(`${p}|${g}`)) return false;
+                        if (sortedSpecial.some(dk => tempSpecialAssignments[dk]?.[g] === p)) return false;
+                        if (isAlreadyAssignedInSavedForDate(p, g)) return false;
+                        return true;
+                    };
+
                     // Calculate who will be assigned for each group based on rotation order (per-group position from globalSpecialRotationPosition)
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
@@ -2144,8 +2164,14 @@
                             let replacementIndex = null;
                             let wasDisabledOnlySkippedSpecial = false;
                             const displacedQueue = displacedByReturnFromMissing[groupNum] || [];
+                            const rotationPersonDisabled = rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'special');
+                            const alreadyOnAnotherSpecialRaw = sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === rotationPerson);
+                            const baselineWouldBeMissing = !rotationPersonDisabled && !alreadyOnAnotherSpecialRaw && isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
+                            const hasUnassignedReturnFromMissing = returnFromMissingSpecial.some(e => e.groupNum === groupNum && isUnassignedReturnFromMissingForDate(e.personName, groupNum) && !isPersonMissingOnDate(e.personName, groupNum, date, 'special'));
+                            // Displaced cascade: only use displaced when this slot is not fillable by a return-from-missing person (so we never skip a return-from-missing).
+                            const useDisplacedQueue = displacedQueue.length > 0 && (!baselineWouldBeMissing || !hasUnassignedReturnFromMissing);
                             // Displaced cascade: someone was replaced by a return-from-missing on a previous date – assign them to this date; current baseline goes to queue.
-                            if (displacedQueue.length > 0) {
+                            if (useDisplacedQueue) {
                                 const displacedPerson = displacedQueue.shift();
                                 assignedPerson = displacedPerson;
                                 wasReplaced = true;
@@ -2157,7 +2183,7 @@
                                     replacementType: 'displaced-cascade'
                                 });
                             }
-                            const alreadyOnAnotherSpecial = !wasReplaced && sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === rotationPerson);
+                            const alreadyOnAnotherSpecial = !wasReplaced && alreadyOnAnotherSpecialRaw;
                             // DISABLED: When rotation person is disabled, whole baseline shifts – skip them, no replacement line (only if we didn't already assign a displaced person).
                             const isRotationPersonDisabledSpecial = !wasReplaced && rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'special');
                             if (isRotationPersonDisabledSpecial) {
@@ -2210,32 +2236,20 @@
                             const baselineIsMissingHere = !wasReplaced && !isRotationPersonDisabledSpecial && !alreadyOnAnotherSpecial && isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
                             if (baselineIsMissingHere) {
                                 let foundReplacement = false;
-                                // Unassigned = not in this run (forEach or temp) AND not already assigned in saved data (from Firebase) – don't use until their turn comes in baseline
-                                const isAlreadyAssignedInSaved = (p, g) => {
-                                    if (!specialHolidayAssignments) return false;
-                                    const normP = normalizePersonKey(p);
-                                    for (const dk of Object.keys(specialHolidayAssignments)) {
-                                        const raw = specialHolidayAssignments[dk];
-                                        const assigned = (typeof extractGroupAssignmentsMap === 'function' && raw && typeof raw === 'object' && !Array.isArray(raw))
-                                            ? (extractGroupAssignmentsMap(raw)[g] || null)
-                                            : (typeof parseAssignedPersonForGroupFromAssignment === 'function' ? parseAssignedPersonForGroupFromAssignment(raw, g) : null);
-                                        if (assigned && normalizePersonKey(assigned) === normP) return true;
-                                    }
-                                    return false;
-                                };
-                                const isUnassignedReturnFromMissing = (p, g) => {
-                                    if (assignedReturnFromMissingInForEach.has(`${p}|${g}`)) return false;
-                                    if (sortedSpecial.some(dk => tempSpecialAssignments[dk]?.[g] === p)) return false;
-                                    if (isAlreadyAssignedInSaved(p, g)) return false;
-                                    return true;
-                                };
-                                const pendingReturnFromMissingForGroup = new Set(returnFromMissingSpecial.filter(e => e.groupNum === groupNum).map(e => e.personName));
+                                const pendingForGroup = returnFromMissingSpecial.filter(e => e.groupNum === groupNum);
+                                const pendingReturnFromMissingForGroup = new Set(pendingForGroup.map(e => e.personName));
+                                // Order: earliest missed first, then baseline (groupPeople) order – so first available slot goes to who missed first, no one skipped.
+                                const sortedPendingByMissedThenBaseline = pendingForGroup.slice().sort((a, b) => {
+                                    const d = (a.missedDateKey || '').localeCompare(b.missedDateKey || '');
+                                    if (d !== 0) return d;
+                                    return groupPeople.indexOf(a.personName) - groupPeople.indexOf(b.personName);
+                                });
 
-                                // 2a) First: swap with a previous missing person (return-from-missing) who is not yet assigned – pick in baseline order (A then B).
-                                for (let i = 0; i < groupPeople.length && !foundReplacement; i++) {
-                                    const prevMissingPerson = groupPeople[i];
-                                    if (!pendingReturnFromMissingForGroup.has(prevMissingPerson)) continue;
-                                    if (!isUnassignedReturnFromMissing(prevMissingPerson, groupNum)) continue;
+                                // 2a) First: swap with a previous missing person (return-from-missing) who is not yet assigned – pick by missed-date order then baseline (A then B).
+                                for (const entry of sortedPendingByMissedThenBaseline) {
+                                    if (foundReplacement) break;
+                                    const prevMissingPerson = entry.personName;
+                                    if (!isUnassignedReturnFromMissingForDate(prevMissingPerson, groupNum)) continue;
                                     if (isPersonMissingOnDate(prevMissingPerson, groupNum, date, 'special')) continue;
                                     assignedPerson = prevMissingPerson;
                                     wasReplaced = true;
