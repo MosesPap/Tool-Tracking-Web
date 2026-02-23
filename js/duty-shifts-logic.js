@@ -2204,11 +2204,12 @@
                             if (baselineIsMissingHere) {
                                 let foundReplacement = false;
                                 const isUnassignedReturnFromMissing = (p, g) => !assignedReturnFromMissingInForEach.has(`${p}|${g}`) && !sortedSpecial.some(dk => tempSpecialAssignments[dk]?.[g] === p);
+                                const pendingReturnFromMissingForGroup = new Set(returnFromMissingSpecial.filter(e => e.groupNum === groupNum).map(e => e.personName));
 
-                                // 2a) First: swap with a previous missing person (return-from-missing) who is not yet assigned in this period.
-                                for (const entry of returnFromMissingSpecial) {
-                                    if (entry.groupNum !== groupNum) continue;
-                                    const prevMissingPerson = entry.personName;
+                                // 2a) First: swap with a previous missing person (return-from-missing) who is not yet assigned – pick in baseline order (A then B).
+                                for (let i = 0; i < groupPeople.length && !foundReplacement; i++) {
+                                    const prevMissingPerson = groupPeople[i];
+                                    if (!pendingReturnFromMissingForGroup.has(prevMissingPerson)) continue;
                                     if (!isUnassignedReturnFromMissing(prevMissingPerson, groupNum)) continue;
                                     if (isPersonMissingOnDate(prevMissingPerson, groupNum, date, 'special')) continue;
                                     assignedPerson = prevMissingPerson;
