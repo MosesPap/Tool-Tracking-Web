@@ -6350,10 +6350,10 @@
                 html += '<tr>';
                 html += '<th>Ημερομηνία</th>';
                 html += '<th>Όνομα Αργίας</th>';
-                html += `<th>${getGroupName(1)}</th>`;
-                html += `<th>${getGroupName(2)}</th>`;
-                html += `<th>${getGroupName(3)}</th>`;
-                html += `<th>${getGroupName(4)}</th>`;
+                html += `<th>${getGroupName(1)}<br><small class="fw-normal text-muted">Βασική Σειρά / Αντικατάσταση</small></th>`;
+                html += `<th>${getGroupName(2)}<br><small class="fw-normal text-muted">Βασική Σειρά / Αντικατάσταση</small></th>`;
+                html += `<th>${getGroupName(3)}<br><small class="fw-normal text-muted">Βασική Σειρά / Αντικατάσταση</small></th>`;
+                html += `<th>${getGroupName(4)}<br><small class="fw-normal text-muted">Βασική Σειρά / Αντικατάσταση</small></th>`;
                 html += '</tr>';
                 html += '</thead>';
                 html += '<tbody>';
@@ -6363,6 +6363,8 @@
                 
                 // Track skipped people per month (like the actual calculation)
                 const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
+                // Track who is already assigned a weekend in this month (so we don't assign same person twice in preview)
+                const assignedWeekendInMonthPreview = {}; // monthKey -> { groupNum -> Set of person names }
                 
                 // Track current rotation position globally (continues across months)
                 const globalWeekendRotationPosition = {}; // groupNum -> global position
@@ -6611,18 +6613,28 @@
                                 const reasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designatedWeekend.missingRangeStr || ''}) λόγω ${designatedWeekend.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
                                 storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonText, null, null, { returnFromMissing: true, insertedByShift: true, missingEnd: designatedWeekend.missingEnd, isBackwardAssignment: designatedWeekend.isBackwardAssignment });
                                 if (!weekendRotationPersons[dateKey]) weekendRotationPersons[dateKey] = {};
-                                weekendRotationPersons[dateKey][groupNum] = assignedPerson;
+                                // Keep baseline = displaced (rotation) person so we always show Βασική Σειρά + Αντικατάσταση
+                                weekendRotationPersons[dateKey][groupNum] = displacedPerson ?? assignedPerson;
                                 if (!assignedPeoplePreviewWeekend[monthKey][groupNum]) assignedPeoplePreviewWeekend[monthKey][groupNum] = {};
                                 assignedPeoplePreviewWeekend[monthKey][groupNum][assignedPerson] = dateKey;
                                 if (!simulatedWeekendAssignments[dateKey]) simulatedWeekendAssignments[dateKey] = {};
                                 simulatedWeekendAssignments[dateKey][groupNum] = assignedPerson;
                                 const lastDutyInfo = ''; const daysCountInfo = '';
-                                html += `<td>${buildBaselineComputedCellHtml(assignedPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                                html += `<td>${buildBaselineComputedCellHtml(displacedPerson ?? assignedPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                                if (!assignedWeekendInMonthPreview[monthKey]) assignedWeekendInMonthPreview[monthKey] = {};
+                                if (!assignedWeekendInMonthPreview[monthKey][groupNum]) assignedWeekendInMonthPreview[monthKey][groupNum] = new Set();
+                                assignedWeekendInMonthPreview[monthKey][groupNum].add(assignedPerson);
                                 continue;
                             }
                             // Initialize skipped set for this group and month if needed
                             if (!skippedInMonth[monthKey][groupNum]) {
                                 skippedInMonth[monthKey][groupNum] = new Set();
+                            }
+                            if (!assignedWeekendInMonthPreview[monthKey]) {
+                                assignedWeekendInMonthPreview[monthKey] = {};
+                            }
+                            if (!assignedWeekendInMonthPreview[monthKey][groupNum]) {
+                                assignedWeekendInMonthPreview[monthKey][groupNum] = new Set();
                             }
                             const rotationDays = groupPeople.length;
                             if (globalWeekendRotationPosition[groupNum] === undefined) {
@@ -6695,7 +6707,7 @@
                                     replacementIndex = idx;
                                     wasReplaced = true;
                                     foundEligible = true;
-                                    weekendRotationPersons[dateKey][groupNum] = candidate;
+                                    // Keep baseline as rotation person so we show Βασική Σειρά + Αντικατάσταση
                                     globalWeekendRotationPosition[groupNum] = (idx + 1) % rotationDays;
                                     break;
                                 }
@@ -6725,7 +6737,7 @@
                                     replacementIndex = idx;
                                     wasReplaced = true;
                                     foundEligible = true;
-                                    weekendRotationPersons[dateKey][groupNum] = candidate;
+                                    // Keep baseline as rotation person so we show Βασική Σειρά + Αντικατάσταση
                                     break;
                                 }
                                 if (!foundEligible) assignedPerson = null;
@@ -6778,8 +6790,9 @@
                             if (displayPerson) {
                                 const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(displayPerson) || false;
                                 const wasSkipped = skippedInMonth[monthKey][groupNum].has(displayPerson);
-                                if (hasSpecialHoliday || wasSkipped) {
-                                    skippedInMonth[monthKey][groupNum].add(displayPerson);
+                                const alreadyAssignedThisMonthPreview = assignedWeekendInMonthPreview[monthKey][groupNum].has(displayPerson);
+                                if (hasSpecialHoliday || wasSkipped || alreadyAssignedThisMonthPreview) {
+                                    if (hasSpecialHoliday || wasSkipped) skippedInMonth[monthKey][groupNum].add(displayPerson);
                                     const currentIndex = groupPeople.indexOf(displayPerson);
                                     let replacementPerson = null;
                                 for (let offset = 1; offset < rotationDays; offset++) {
@@ -6788,7 +6801,8 @@
                                         if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
                                     const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
                                     const candidateWasSkipped = skippedInMonth[monthKey][groupNum].has(candidate);
-                                    if (!candidateHasSpecial && !candidateWasSkipped) {
+                                    const candidateAlreadyAssigned = assignedWeekendInMonthPreview[monthKey][groupNum].has(candidate);
+                                    if (!candidateHasSpecial && !candidateWasSkipped && !candidateAlreadyAssigned) {
                                             replacementPerson = candidate;
                                         break;
                                     }
@@ -6848,6 +6862,7 @@
                             // Use stored baseline (weekendRotationPersons) so when rotation person was disabled we show replacement only, not "Βασική Σειρά: disabled" + "Αντικατάσταση"
                             const baselinePersonForDisplay = weekendRotationPersons[dateKey]?.[groupNum] ?? rotationPerson;
                             html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplay, displayPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                            if (displayPerson) assignedWeekendInMonthPreview[monthKey][groupNum].add(displayPerson);
                         }
                     }
                     
