@@ -2981,6 +2981,7 @@
                 const skippedPeople = []; // Array of { date, groupNum, skippedPerson, replacementPerson }
                 const sortedWeekends = [...weekendHolidays].sort();
                 const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
+                const assignedWeekendInMonth = {}; // monthKey -> { groupNum -> Set of person names } already assigned to a weekend this month (so we don't assign same person twice)
                 const updatedAssignments = {}; // dateKey -> { groupNum -> personName }
                 
                 // Load current weekend assignments from preview (tempWeekendAssignments)
@@ -3000,6 +3001,9 @@
                     if (!skippedInMonth[monthKey]) {
                         skippedInMonth[monthKey] = {};
                     }
+                    if (!assignedWeekendInMonth[monthKey]) {
+                        assignedWeekendInMonth[monthKey] = {};
+                    }
                     
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const groupData = groups[groupNum] || { weekend: [] };
@@ -3010,18 +3014,22 @@
                         if (!skippedInMonth[monthKey][groupNum]) {
                             skippedInMonth[monthKey][groupNum] = new Set();
                         }
+                        if (!assignedWeekendInMonth[monthKey][groupNum]) {
+                            assignedWeekendInMonth[monthKey][groupNum] = new Set();
+                        }
                         
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (!currentPerson) continue;
                         
-                        // Check if person has special holiday in same month
+                        // Check if person has special holiday in same month, or was already skipped, or already assigned a weekend this month (e.g. as replacement on previous weekend)
                         const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(currentPerson) || false;
                         const wasSkipped = skippedInMonth[monthKey][groupNum].has(currentPerson);
+                        const alreadyAssignedThisMonth = assignedWeekendInMonth[monthKey][groupNum].has(currentPerson);
                         
-                        if (hasSpecialHoliday || wasSkipped) {
-                            skippedInMonth[monthKey][groupNum].add(currentPerson);
+                        if (hasSpecialHoliday || wasSkipped || alreadyAssignedThisMonth) {
+                            if (hasSpecialHoliday || wasSkipped) skippedInMonth[monthKey][groupNum].add(currentPerson);
                             
-                            // Find replacement
+                            // Find replacement: next eligible person not yet assigned a weekend this month
                             const rotationDays = groupPeople.length;
                             const currentIndex = groupPeople.indexOf(currentPerson);
                             let replacementPerson = null;
@@ -3036,8 +3044,9 @@
                                 
                                 const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
                                 const candidateWasSkipped = skippedInMonth[monthKey][groupNum].has(candidate);
+                                const candidateAlreadyAssigned = assignedWeekendInMonth[monthKey][groupNum].has(candidate);
                                 
-                                if (!candidateHasSpecial && !candidateWasSkipped) {
+                                if (!candidateHasSpecial && !candidateWasSkipped && !candidateAlreadyAssigned) {
                                     replacementPerson = candidate;
                                     break;
                                 }
@@ -3071,6 +3080,9 @@
                                 );
                             }
                         }
+                        // Record who is assigned this weekend in this month so the next weekend gets the next eligible person (no double assignment)
+                        const assignedPerson = updatedAssignments[dateKey]?.[groupNum];
+                        if (assignedPerson) assignedWeekendInMonth[monthKey][groupNum].add(assignedPerson);
                     }
                 });
                 
