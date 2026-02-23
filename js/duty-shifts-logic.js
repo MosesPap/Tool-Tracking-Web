@@ -2089,6 +2089,8 @@
                 }
                 // When a slot opens (rotation person missing), we may assign an unassigned return-from-missing person here; track so the loop later skips them.
                 const assignedReturnFromMissingInForEach = new Set();
+                // When a return-from-missing person takes a slot, the displaced baseline gets the next available special (cascade).
+                const displacedByReturnFromMissing = { 1: [], 2: [], 3: [], 4: [] };
 
                 sortedSpecial.forEach((dateKey, specialIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
@@ -2141,9 +2143,23 @@
                             let wasReplaced = false;
                             let replacementIndex = null;
                             let wasDisabledOnlySkippedSpecial = false;
-                            const alreadyOnAnotherSpecial = sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === rotationPerson);
-                            // DISABLED: When rotation person is disabled, whole baseline shifts – skip them, no replacement line.
-                            const isRotationPersonDisabledSpecial = rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'special');
+                            const displacedQueue = displacedByReturnFromMissing[groupNum] || [];
+                            // Displaced cascade: someone was replaced by a return-from-missing on a previous date – assign them to this date; current baseline goes to queue.
+                            if (displacedQueue.length > 0) {
+                                const displacedPerson = displacedQueue.shift();
+                                assignedPerson = displacedPerson;
+                                wasReplaced = true;
+                                replacementIndex = rotationPosition;
+                                displacedByReturnFromMissing[groupNum].push(rotationPerson);
+                                const reasonDisplaced = `Βασική Σειρά: ${rotationPerson}. Αντικατάσταση: ${displacedPerson} (ανατέθηκε εδώ αφού αντικαταστάθηκε σε προηγούμενη ειδική αργία).`;
+                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonDisplaced, rotationPerson, null, {
+                                    baselinePerson: rotationPerson,
+                                    replacementType: 'displaced-cascade'
+                                });
+                            }
+                            const alreadyOnAnotherSpecial = !wasReplaced && sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === rotationPerson);
+                            // DISABLED: When rotation person is disabled, whole baseline shifts – skip them, no replacement line (only if we didn't already assign a displaced person).
+                            const isRotationPersonDisabledSpecial = !wasReplaced && rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'special');
                             if (isRotationPersonDisabledSpecial) {
                                 let foundEligible = false;
                                 const searchList = groupPeople;
@@ -2191,7 +2207,7 @@
                             specialRotationPersons[dateKey][groupNum] = rotationPerson;
 
                             // 2) If baseline (rotation) person is missing on this date: fill slot with (a) unassigned previous-missing, or (b) next eligible in baseline. Keep record.
-                            const baselineIsMissingHere = !isRotationPersonDisabledSpecial && !alreadyOnAnotherSpecial && isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
+                            const baselineIsMissingHere = !wasReplaced && !isRotationPersonDisabledSpecial && !alreadyOnAnotherSpecial && isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
                             if (baselineIsMissingHere) {
                                 let foundReplacement = false;
                                 // Unassigned = not in this run (forEach or temp) AND not already assigned in saved data (from Firebase) – don't use until their turn comes in baseline
@@ -2226,6 +2242,7 @@
                                     replacementIndex = rotationPosition;
                                     foundReplacement = true;
                                     assignedReturnFromMissingInForEach.add(`${prevMissingPerson}|${groupNum}`);
+                                    (displacedByReturnFromMissing[groupNum] = displacedByReturnFromMissing[groupNum] || []).push(rotationPerson);
                                     const reasonReturn = `Βασική σειρά: ${rotationPerson} (απουσία). Αντικατάσταση: ${assignedPerson} (επέστρεψε από απουσία).`;
                                     storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonReturn, rotationPerson, null, {
                                         baselinePerson: rotationPerson,
