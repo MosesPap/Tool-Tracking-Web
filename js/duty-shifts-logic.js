@@ -2096,6 +2096,8 @@
                     if (!reservedReturnFromMissingByGroup[e.groupNum]) reservedReturnFromMissingByGroup[e.groupNum] = new Set();
                     reservedReturnFromMissingByGroup[e.groupNum].add(e.personName);
                 }
+                // When a slot opens (rotation person missing), we may assign an unassigned return-from-missing person here; track so the loop later skips them.
+                const assignedReturnFromMissingInForEach = new Set();
 
                 sortedSpecial.forEach((dateKey, specialIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
@@ -2196,21 +2198,50 @@
                             }
                             // Store baseline for UI: always use rotation person so we show Βασική Σειρά and Αντικατάσταση when replaced (missing or disabled), as in all other steps.
                             specialRotationPersons[dateKey][groupNum] = rotationPerson;
-                            // MISSING (not disabled): show replacement and store reason.
+                            // MISSING (not disabled): first try to assign a previous missing person who is not yet assigned; only then use next in rotation.
                             if (!isRotationPersonDisabledSpecial && assignedPerson && !alreadyOnAnotherSpecial && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special')) {
                                 let foundReplacement = false;
-                                const searchListM = groupPeople;
-                                const searchLenM = searchListM.length;
-                                for (let offset = 1; offset <= searchLenM * 2 && !foundReplacement; offset++) {
-                                    const idx = (rotationPosition + offset) % searchLenM;
-                                    const candidate = searchListM[idx];
-                                    if (!candidate) continue;
-                                    if (reservedReturnFromMissingByGroup[groupNum]?.has(candidate)) continue;
-                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
-                                    // Do not use the same person to replace two missing people in this period
-                                    const alreadyAssignedOnAnotherSpecial = sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === candidate);
-                                    if (alreadyAssignedOnAnotherSpecial) continue;
-                                    assignedPerson = candidate;
+                                // First: check if there is a previous missing person (return-from-missing) not yet assigned – give them this slot.
+                                const keyAssigned = (p, g) => assignedReturnFromMissingInForEach.has(`${p}|${g}`);
+                                const alreadyOnAnySpecial = (p, g) => sortedSpecial.some(dk => tempSpecialAssignments[dk]?.[g] === p);
+                                for (const entry of returnFromMissingSpecial) {
+                                    if (entry.groupNum !== groupNum) continue;
+                                    const prevMissing = entry.personName;
+                                    if (keyAssigned(prevMissing, groupNum)) continue;
+                                    if (alreadyOnAnySpecial(prevMissing, groupNum)) continue;
+                                    if (isPersonMissingOnDate(prevMissing, groupNum, date, 'special')) continue;
+                                    assignedPerson = prevMissing;
+                                    wasReplaced = true;
+                                    replacementIndex = rotationPosition;
+                                    foundReplacement = true;
+                                    assignedReturnFromMissingInForEach.add(`${prevMissing}|${groupNum}`);
+                                    storeAssignmentReason(
+                                        dateKey,
+                                        groupNum,
+                                        assignedPerson,
+                                        'skip',
+                                        `Επέστρεψε από απουσία· η θέση του/της ${rotationPerson} (απουσία) δόθηκε στον/στην ${assignedPerson}.`,
+                                        rotationPerson,
+                                        null
+                                    );
+                                    returnFromMissingSpecial.push({ personName: rotationPerson, groupNum, missedDateKey: dateKey });
+                                    if (!reservedReturnFromMissingByGroup[groupNum]) reservedReturnFromMissingByGroup[groupNum] = new Set();
+                                    reservedReturnFromMissingByGroup[groupNum].add(rotationPerson);
+                                    break;
+                                }
+                                // Else: use next eligible person in baseline (rotation).
+                                if (!foundReplacement) {
+                                    const searchListM = groupPeople;
+                                    const searchLenM = searchListM.length;
+                                    for (let offset = 1; offset <= searchLenM * 2 && !foundReplacement; offset++) {
+                                        const idx = (rotationPosition + offset) % searchLenM;
+                                        const candidate = searchListM[idx];
+                                        if (!candidate) continue;
+                                        if (reservedReturnFromMissingByGroup[groupNum]?.has(candidate)) continue;
+                                        if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
+                                        const alreadyAssignedOnAnotherSpecial = sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === candidate);
+                                        if (alreadyAssignedOnAnotherSpecial) continue;
+                                        assignedPerson = candidate;
                                         replacementIndex = idx;
                                         wasReplaced = true;
                                         foundReplacement = true;
@@ -2233,6 +2264,7 @@
                                         if (!reservedReturnFromMissingByGroup[groupNum]) reservedReturnFromMissingByGroup[groupNum] = new Set();
                                         reservedReturnFromMissingByGroup[groupNum].add(rotationPerson);
                                         break;
+                                    }
                                 }
                                 if (!foundReplacement) assignedPerson = null;
                             }
@@ -2275,6 +2307,7 @@
                 const usedReturnFromMissingSpecial = new Set();
                 for (const entry of returnFromMissingSpecial) {
                     const { personName, groupNum, missedDateKey } = entry;
+                    if (assignedReturnFromMissingInForEach.has(`${personName}|${groupNum}`)) continue;
                     const missedDate = new Date(missedDateKey + 'T00:00:00');
                     const missedMonthKey = getMonthKeyFromDate(missedDate);
                     let targetKey = null;
