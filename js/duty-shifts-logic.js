@@ -2375,7 +2375,16 @@
                     }
                     return false;
                 };
-                for (const entry of returnFromMissingSpecial) {
+                // Process return-from-missing in baseline (rotation) order: A then B then C… so first slot goes to A, second to B.
+                const returnFromMissingSortedByBaselineOrder = returnFromMissingSpecial.slice().sort((a, b) => {
+                    if (a.groupNum !== b.groupNum) return a.groupNum - b.groupNum;
+                    const groupPeopleA = (groups[a.groupNum] || {}).special || [];
+                    const groupPeopleB = (groups[b.groupNum] || {}).special || [];
+                    const idxA = groupPeopleA.indexOf(a.personName);
+                    const idxB = groupPeopleB.indexOf(b.personName);
+                    return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+                });
+                for (const entry of returnFromMissingSortedByBaselineOrder) {
                     const { personName, groupNum, missedDateKey } = entry;
                     if (assignedReturnFromMissingInForEach.has(`${personName}|${groupNum}`)) continue;
                     if (isAlreadyAssignedInSavedForLoop(personName, groupNum)) continue;
