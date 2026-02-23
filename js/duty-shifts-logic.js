@@ -1809,6 +1809,12 @@
             installFor('calculateEndMonth');
         }
         async function calculateDutiesForSelectedMonths() {
+            const calcBtn = document.getElementById('calculateDutiesButton');
+            const originalBtnHtml = calcBtn ? calcBtn.innerHTML : '';
+            if (calcBtn) {
+                calcBtn.disabled = true;
+                calcBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Προετοιμασία...';
+            }
             try {
                 const startMonthInput = document.getElementById('calculateStartMonth');
                 const endMonthInput = document.getElementById('calculateEndMonth');
@@ -1885,6 +1891,11 @@
             } catch (error) {
                 console.error('Error in calculateDutiesForSelectedMonths:', error);
                 alert('Σφάλμα κατά τον υπολογισμό: ' + error.message);
+            } finally {
+                if (calcBtn) {
+                    calcBtn.disabled = false;
+                    calcBtn.innerHTML = originalBtnHtml;
+                }
             }
         }
         

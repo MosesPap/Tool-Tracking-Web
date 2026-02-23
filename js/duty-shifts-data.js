@@ -2567,11 +2567,13 @@
         }
 
         // Delete for selected month(s) from rotation baselines, lastRotationPositions, and assignment docs (when not preserving existing).
+        // Uses parallel reads and parallel writes to avoid long sequential round-trips.
         async function deleteSelectedMonthsFromDutyDocs(db, user, monthKeys) {
             if (!db || !user || !Array.isArray(monthKeys) || monthKeys.length === 0) return;
             const monthKeyRegex = /^[A-Za-z]+\s+\d{4}$/;
             const dateKeyRegex = /^\d{4}-\d{2}-\d{2}$/;
             const monthNamesToDelete = new Set(monthKeys.map(mk => getMonthNameFromMonthKey(mk)).filter(Boolean));
+            const monthKeySet = new Set(monthKeys);
             const dutyShifts = db.collection('dutyShifts');
 
             const monthOrganizedDocIds = [
@@ -2585,11 +2587,17 @@
                 'rotationBaselineNormalAssignments'
             ];
 
-            for (const docId of monthOrganizedDocIds) {
+            const docIdsToRead = [...monthOrganizedDocIds, 'assignmentReasons', 'lastRotationPositions'];
+            const snaps = await Promise.all(docIdsToRead.map(id => dutyShifts.doc(id).get()));
+
+            const writePromises = [];
+            const ts = firebase.firestore.FieldValue.serverTimestamp();
+            const meta = { lastUpdated: ts, updatedBy: user.uid };
+
+            monthOrganizedDocIds.forEach((docId, i) => {
+                const snap = snaps[i];
+                if (!snap || !snap.exists) return;
                 try {
-                    const docRef = dutyShifts.doc(docId);
-                    const snap = await docRef.get();
-                    if (!snap.exists) continue;
                     const data = snap.data() || {};
                     delete data.lastUpdated;
                     delete data.updatedBy;
@@ -2612,53 +2620,39 @@
                         }
                     }
                     const sanitized = sanitizeForFirestore(normalized);
-                    await docRef.set({
-                        ...sanitized,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    writePromises.push(dutyShifts.doc(docId).set({ ...sanitized, ...meta }));
                 } catch (err) {
-                    console.error(`Error deleting month(s) from ${docId}:`, err);
+                    console.error(`Error preparing delete for ${docId}:`, err);
                 }
-            }
+            });
 
-            // assignmentReasons: stored by dateKey; remove all dateKeys that fall in selected months
-            try {
-                const docRef = dutyShifts.doc('assignmentReasons');
-                const snap = await docRef.get();
-                if (snap.exists) {
-                    const data = snap.data() || {};
+            const assignmentReasonsSnap = snaps[monthOrganizedDocIds.length];
+            if (assignmentReasonsSnap && assignmentReasonsSnap.exists) {
+                try {
+                    const data = assignmentReasonsSnap.data() || {};
                     delete data.lastUpdated;
                     delete data.updatedBy;
-                    const monthKeySet = new Set(monthKeys);
                     const filtered = {};
                     for (const key in data) {
                         if (dateKeyRegex.test(key)) {
-                            const monthKey = key.substring(0, 7);
-                            if (monthKeySet.has(monthKey)) continue;
+                            const mk = key.substring(0, 7);
+                            if (monthKeySet.has(mk)) continue;
                         }
                         filtered[key] = data[key];
                     }
                     const sanitized = sanitizeForFirestore(filtered);
-                    await docRef.set({
-                        ...sanitized,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    writePromises.push(dutyShifts.doc('assignmentReasons').set({ ...sanitized, ...meta }));
+                } catch (err) {
+                    console.error('Error preparing delete for assignmentReasons:', err);
                 }
-            } catch (err) {
-                console.error('Error deleting month(s) from assignmentReasons:', err);
             }
 
-            // lastRotationPositions: structure is { normal: { [monthKey]: { [groupNum]: name } }, semi, weekend, special }
-            try {
-                const docRef = dutyShifts.doc('lastRotationPositions');
-                const snap = await docRef.get();
-                if (snap.exists) {
-                    const data = snap.data() || {};
+            const lastRotSnap = snaps[docIdsToRead.length - 1];
+            if (lastRotSnap && lastRotSnap.exists) {
+                try {
+                    const data = lastRotSnap.data() || {};
                     delete data.lastUpdated;
                     delete data.updatedBy;
-                    const monthKeySet = new Set(monthKeys);
                     const out = { normal: {}, semi: {}, weekend: {}, special: {} };
                     for (const dayType of ['normal', 'semi', 'weekend', 'special']) {
                         const byType = data[dayType];
@@ -2669,14 +2663,14 @@
                         }
                     }
                     const sanitized = sanitizeForFirestore(out);
-                    await docRef.set({
-                        ...sanitized,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
+                    writePromises.push(dutyShifts.doc('lastRotationPositions').set({ ...sanitized, ...meta }));
+                } catch (err) {
+                    console.error('Error preparing delete for lastRotationPositions:', err);
                 }
-            } catch (err) {
-                console.error('Error deleting month(s) from lastRotationPositions:', err);
+            }
+
+            if (writePromises.length > 0) {
+                await Promise.all(writePromises);
             }
         }
 
