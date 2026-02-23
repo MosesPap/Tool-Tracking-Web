@@ -2189,9 +2189,11 @@
                             const alreadyOnAnotherSpecialRaw = sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === rotationPerson);
                             const baselineWouldBeMissing = !rotationPersonDisabled && !alreadyOnAnotherSpecialRaw && isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
                             const hasUnassignedReturnFromMissing = returnFromMissingSpecial.some(e => e.groupNum === groupNum && isUnassignedReturnFromMissingForDate(e.personName, groupNum) && !isPersonMissingOnDate(e.personName, groupNum, date, 'special'));
-                            // Displaced cascade: only use displaced when this slot is not fillable by a return-from-missing person (so we never skip a return-from-missing).
-                            const useDisplacedQueue = displacedQueue.length > 0 && (!baselineWouldBeMissing || !hasUnassignedReturnFromMissing);
-                            // Displaced cascade: someone was replaced by a return-from-missing on a previous date – assign them to this date; current baseline goes to queue.
+                            const displacedPersonPeek = displacedQueue.length > 0 ? displacedQueue[0] : null;
+                            const displacedAvailableOnThisDate = displacedPersonPeek && !isPersonMissingOnDate(displacedPersonPeek, groupNum, date, 'special');
+                            // Displaced cascade: only use displaced when (1) they are not missing today, (2) slot not fillable by return-from-missing (so we never skip a return-from-missing).
+                            const useDisplacedQueue = displacedQueue.length > 0 && displacedAvailableOnThisDate && (!baselineWouldBeMissing || !hasUnassignedReturnFromMissing);
+                            // Displaced cascade: someone was replaced by a return-from-missing on a previous date – assign them to this date only if they are available (not missing) on this date.
                             if (useDisplacedQueue) {
                                 const displacedPerson = displacedQueue.shift();
                                 assignedPerson = displacedPerson;
