@@ -1999,55 +1999,46 @@
                 // For missing replacement: keep a simulated set of special assignments so hasConsecutiveDuty can validate neighbors.
                 const simulatedSpecialAssignmentsForConflict = {}; // monthKey -> { groupNum -> Set(person) }
                 
-                // Initialize global rotation positions for special holidays (once per group, before processing dates)
-                const globalSpecialRotationPosition = {}; // groupNum -> global position (continues across months)
+                // Initialize global rotation positions from baseline and assignments only (no lastRotationPositions).
+                const globalSpecialRotationPosition = {}; // groupNum -> position in group list
+                const firstDateKey = sortedSpecial.length > 0 ? sortedSpecial[0] : null;
+                const baselineDateKeysBeforePeriod = firstDateKey
+                    ? Object.keys(rotationBaselineSpecialAssignments || {}).filter(dk => dk < firstDateKey).sort().reverse()
+                    : [];
+                const getBaselinePersonForGroup = (dateKey, g) => {
+                    const raw = rotationBaselineSpecialAssignments?.[dateKey];
+                    if (!raw) return null;
+                    if (typeof raw === 'object' && !Array.isArray(raw) && typeof extractGroupAssignmentsMap === 'function')
+                        return (extractGroupAssignmentsMap(raw)[g] || null);
+                    if (typeof parseAssignedPersonForGroupFromAssignment === 'function')
+                        return parseAssignedPersonForGroupFromAssignment(raw, g);
+                    return null;
+                };
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const groupData = groups[groupNum] || { special: [] };
                     const groupPeople = groupData.special || [];
-                    
-                    if (groupPeople.length > 0) {
-                        const rotationDays = groupPeople.length;
-                        // If start date is February 2026, always start from first person (position 0)
-                        const isFebruary2026 = calculationSteps.startDate && 
-                            calculationSteps.startDate.getFullYear() === 2026 && 
-                            calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
-                        
-                        if (isFebruary2026) {
-                            // Always start from first person for February 2026
-                            globalSpecialRotationPosition[groupNum] = 0;
-                            console.log(`[SPECIAL ROTATION] Starting from first person (position 0) for group ${groupNum} - February 2026`);
+                    if (groupPeople.length === 0) continue;
+                    const rotationDays = groupPeople.length;
+                    const isFebruary2026 = calculationSteps.startDate &&
+                        calculationSteps.startDate.getFullYear() === 2026 &&
+                        calculationSteps.startDate.getMonth() === 1;
+                    if (isFebruary2026) {
+                        globalSpecialRotationPosition[groupNum] = 0;
+                        console.log(`[SPECIAL ROTATION] Starting from first person (position 0) for group ${groupNum} - February 2026`);
+                    } else if (baselineDateKeysBeforePeriod.length > 0) {
+                        const lastBaselineDateKey = baselineDateKeysBeforePeriod[0];
+                        const lastBaselinePerson = getBaselinePersonForGroup(lastBaselineDateKey, groupNum);
+                        const idx = lastBaselinePerson ? groupPeople.indexOf(lastBaselinePerson) : -1;
+                        if (idx >= 0) {
+                            globalSpecialRotationPosition[groupNum] = (idx + 1) % rotationDays;
+                            console.log(`[SPECIAL ROTATION] From baseline ${lastBaselineDateKey} last baseline person ${lastBaselinePerson} (index ${idx}) for group ${groupNum}, next position ${globalSpecialRotationPosition[groupNum]}`);
                         } else {
-                            // Continue from last person assigned in previous month (month-scoped; falls back to legacy)
-                            const seedDate = sortedSpecial.length > 0 ? new Date(sortedSpecial[0] + 'T00:00:00') : new Date(startDate);
-                            const seedDateKey = formatDateKey(seedDate);
-                            const seedMonthKey = getMonthKeyFromDate(seedDate);
-                            const prevMonthKey = getPreviousMonthKeyFromDate(seedDate);
-                            console.log(`[DEBUG ROTATION INIT] Group ${groupNum}: seedDate=${seedDateKey}, seedMonthKey=${seedMonthKey}, prevMonthKey=${prevMonthKey}`);
-                            console.log(`[DEBUG ROTATION INIT] lastRotationPositions.special[${prevMonthKey}][${groupNum}]=`, lastRotationPositions?.special?.[prevMonthKey]?.[groupNum] || 'NOT FOUND');
-                            console.log(`[DEBUG ROTATION INIT] rotationBaselineLastByType.special[${prevMonthKey}][${groupNum}]=`, rotationBaselineLastByType?.special?.[prevMonthKey]?.[groupNum] || 'NOT FOUND');
-                            console.log(`[DEBUG ROTATION INIT] Available months in rotationBaselineLastByType.special:`, Object.keys(rotationBaselineLastByType?.special || {}));
-                            console.log(`[DEBUG ROTATION INIT] Available months in lastRotationPositions.special:`, Object.keys(lastRotationPositions?.special || {}));
-                            const lastPersonName = getLastRotationPersonForDate('special', seedDate, groupNum);
-                            const lastPersonIndex = groupPeople.indexOf(lastPersonName);
-                            console.log(`[DEBUG ROTATION INIT] getLastRotationPersonForDate returned: "${lastPersonName}", index in groupPeople: ${lastPersonIndex}, groupPeople.length=${groupPeople.length}`);
-                            if (lastPersonName && lastPersonIndex >= 0) {
-                                // Found last person - start from next person
-                                globalSpecialRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
-                                console.log(`[SPECIAL ROTATION] Continuing from last person ${lastPersonName} (index ${lastPersonIndex}) for group ${groupNum}, starting at position ${globalSpecialRotationPosition[groupNum]}`);
-                            } else {
-                                // Last person not found in list - use rotation calculation from first date
-                                if (sortedSpecial.length > 0) {
-                                    const firstDate = new Date(sortedSpecial[0] + 'T00:00:00');
-                                    const daysSinceStart = getRotationPosition(firstDate, 'special', groupNum);
-                                    globalSpecialRotationPosition[groupNum] = daysSinceStart % rotationDays;
-                                    if (lastPersonName) {
-                                        console.log(`[SPECIAL ROTATION] Last person ${lastPersonName} not found in group ${groupNum} list, using rotation calculation: position ${globalSpecialRotationPosition[groupNum]}`);
-                                    }
-                                } else {
-                                    globalSpecialRotationPosition[groupNum] = 0;
-                                }
-                            }
+                            globalSpecialRotationPosition[groupNum] = 0;
+                            console.log(`[SPECIAL ROTATION] No baseline person found for group ${groupNum} in baseline, starting at 0`);
                         }
+                    } else {
+                        globalSpecialRotationPosition[groupNum] = 0;
+                        console.log(`[SPECIAL ROTATION] No baseline dates before period for group ${groupNum}, starting at 0`);
                     }
                 }
 
