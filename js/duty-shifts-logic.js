@@ -2050,7 +2050,46 @@
                         }
                     }
                 }
-                
+
+                // Pre-pass: add people who missed specials in previous months (outside current calculation range)
+                // so they get assigned when we calculate a later month (e.g. December).
+                const sortedSpecialSet = new Set(sortedSpecial);
+                const addedReturnFromPrevMonths = new Set();
+                const normPerson = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const g = groups[groupNum];
+                    const missingMap = g?.missingPeriods || {};
+                    const specialList = g?.special || [];
+                    if (specialList.length === 0) continue;
+                    for (const personName of Object.keys(missingMap)) {
+                        if (!specialList.some(p => normPerson(p) === normPerson(personName))) continue;
+                        const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
+                        for (const period of periods) {
+                            const pStartKey = inputValueToDateKey(period?.start);
+                            const pEndKey = inputValueToDateKey(period?.end);
+                            if (!pStartKey || !pEndKey) continue;
+                            const dedupeKey = `${personName}|${groupNum}`;
+                            if (addedReturnFromPrevMonths.has(dedupeKey)) break;
+                            const pStart = new Date(pStartKey + 'T00:00:00');
+                            const pEnd = new Date(pEndKey + 'T00:00:00');
+                            if (isNaN(pStart.getTime()) || isNaN(pEnd.getTime())) continue;
+                            let missedDateKey = null;
+                            for (const d = new Date(pStart); d <= pEnd; d.setDate(d.getDate() + 1)) {
+                                if (!isSpecialHoliday(d)) continue;
+                                const dk = formatDateKey(d);
+                                if (sortedSpecialSet.has(dk)) continue;
+                                missedDateKey = dk;
+                                break;
+                            }
+                            if (!missedDateKey) continue;
+                            addedReturnFromPrevMonths.add(dedupeKey);
+                            returnFromMissingSpecial.push({ personName, groupNum, missedDateKey });
+                            console.log(`[SPECIAL RETURN-FROM-MISSING] ${personName} (group ${groupNum}) missed special ${missedDateKey} (previous month); will assign in current range`);
+                            break;
+                        }
+                    }
+                }
+
                 sortedSpecial.forEach((dateKey, specialIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
