@@ -6881,9 +6881,8 @@
                                     assignedPerson = swapPerson;
                                     wasReplaced = true;
                                     replacementIndex = groupPeople.indexOf(swapPerson);
-                                } else {
-                                    assignedPerson = null;
                                 }
+                                // If no replacement found, keep assignedPerson (missing) so runWeekendSkipLogic can perform same-month swap when user clicks Next
                             }
 
                             const displayPerson = assignedPerson;
