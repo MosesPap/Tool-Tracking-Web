@@ -1979,10 +1979,10 @@
                 html += '<tr>';
                 html += '<th>Ημερομηνία</th>';
                 html += '<th>Όνομα Αργίας</th>';
-                for (let g = 1; g <= 4; g++) {
-                    html += `<th>${getGroupName(g)}<br><small class="fw-normal text-muted">Βασική Σειρά</small></th>`;
-                    html += `<th><small class="fw-normal text-muted">Αντικατάσταση</small></th>`;
-                }
+                html += `<th>${getGroupName(1)}</th>`;
+                html += `<th>${getGroupName(2)}</th>`;
+                html += `<th>${getGroupName(3)}</th>`;
+                html += `<th>${getGroupName(4)}</th>`;
                 html += '</tr>';
                 html += '</thead>';
                 html += '<tbody>';
@@ -2146,8 +2146,8 @@
                                 }
                                 if (!foundEligible) assignedPerson = null;
                             }
-                            // Store baseline for UI: strict baseline = rotation person. Only use assigned person for disabled-only skip (not for "already on another special").
-                            specialRotationPersons[dateKey][groupNum] = (wasDisabledOnlySkippedSpecial && !alreadyOnAnotherSpecial && assignedPerson) ? assignedPerson : rotationPerson;
+                            // Store baseline for UI: always use rotation person so we show Βασική Σειρά and Αντικατάσταση when replaced (missing or disabled), as in all other steps.
+                            specialRotationPersons[dateKey][groupNum] = rotationPerson;
                             // MISSING (not disabled): show replacement and store reason.
                             if (!isRotationPersonDisabledSpecial && assignedPerson && !alreadyOnAnotherSpecial && isPersonMissingOnDate(assignedPerson, groupNum, date, 'special')) {
                                 let foundReplacement = false;
@@ -2337,25 +2337,24 @@
                         const groupData = groups[groupNum] || { special: [] };
                         const groupPeople = groupData.special || [];
                         if (groupPeople.length === 0) {
-                            html += '<td class="text-muted">-</td><td class="text-muted">-</td>';
+                            html += '<td class="text-muted">-</td>';
                         } else {
+                            const rotationDays = groupPeople.length;
                             const baselinePersonForDisplaySpecial = specialRotationPersons[dateKey]?.[groupNum] ?? null;
                             const assignedPerson = tempSpecialAssignments[dateKey]?.[groupNum] ?? null;
-                            const rotationDays = groupPeople.length;
-                            let daysCountInfo = '';
                             let lastDutyInfo = '';
+                            let daysCountInfo = '';
                             if (assignedPerson) {
                                 const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'special', dayTypeLists, startDate);
                                 const dutyDates = getLastAndNextDutyDates(assignedPerson, groupNum, 'special', groupPeople.length);
                                 lastDutyInfo = dutyDates.lastDuty !== 'Δεν έχει' ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>` : '';
                                 if (daysSince !== null && daysSince !== Infinity) {
-                                    daysCountInfo = ` <span class="text-info small">${daysSince}/${rotationDays} ημέρες</span>`;
+                                    daysCountInfo = ` <span class="text-info">${daysSince}/${rotationDays} ημέρες</span>`;
                                 } else if (daysSince === Infinity) {
-                                    daysCountInfo = ' <span class="text-success small">πρώτη φορά</span>';
+                                    daysCountInfo = ' <span class="text-success">πρώτη φορά</span>';
                                 }
                             }
-                            html += `<td><strong>${baselinePersonForDisplaySpecial || '-'}</strong></td>`;
-                            html += `<td><strong>${assignedPerson || '-'}</strong>${daysCountInfo}${lastDutyInfo}</td>`;
+                            html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplaySpecial, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
                     html += '</tr>';
