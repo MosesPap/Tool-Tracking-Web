@@ -2203,12 +2203,15 @@
                             const baselineIsMissingHere = !isRotationPersonDisabledSpecial && !alreadyOnAnotherSpecial && isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
                             if (baselineIsMissingHere) {
                                 let foundReplacement = false;
-                                // Unassigned = not in this run (forEach or temp) AND not already assigned in saved data – don't use until their turn comes in baseline
+                                // Unassigned = not in this run (forEach or temp) AND not already assigned in saved data (from Firebase) – don't use until their turn comes in baseline
                                 const isAlreadyAssignedInSaved = (p, g) => {
-                                    if (!specialHolidayAssignments || typeof parseAssignedPersonForGroupFromAssignment !== 'function') return false;
+                                    if (!specialHolidayAssignments) return false;
                                     const normP = normalizePersonKey(p);
                                     for (const dk of Object.keys(specialHolidayAssignments)) {
-                                        const assigned = parseAssignedPersonForGroupFromAssignment(specialHolidayAssignments[dk], g);
+                                        const raw = specialHolidayAssignments[dk];
+                                        const assigned = (typeof extractGroupAssignmentsMap === 'function' && raw && typeof raw === 'object' && !Array.isArray(raw))
+                                            ? (extractGroupAssignmentsMap(raw)[g] || null)
+                                            : (typeof parseAssignedPersonForGroupFromAssignment === 'function' ? parseAssignedPersonForGroupFromAssignment(raw, g) : null);
                                         if (assigned && normalizePersonKey(assigned) === normP) return true;
                                     }
                                     return false;
@@ -2311,10 +2314,13 @@
                 // Target: same month first, else next available special.
                 const usedReturnFromMissingSpecial = new Set();
                 const isAlreadyAssignedInSavedForLoop = (p, g) => {
-                    if (!specialHolidayAssignments || typeof parseAssignedPersonForGroupFromAssignment !== 'function') return false;
+                    if (!specialHolidayAssignments) return false;
                     const normP = normalizePersonKey(p);
                     for (const dk of Object.keys(specialHolidayAssignments)) {
-                        const assigned = parseAssignedPersonForGroupFromAssignment(specialHolidayAssignments[dk], g);
+                        const raw = specialHolidayAssignments[dk];
+                        const assigned = (typeof extractGroupAssignmentsMap === 'function' && raw && typeof raw === 'object' && !Array.isArray(raw))
+                            ? (extractGroupAssignmentsMap(raw)[g] || null)
+                            : (typeof parseAssignedPersonForGroupFromAssignment === 'function' ? parseAssignedPersonForGroupFromAssignment(raw, g) : null);
                         if (assigned && normalizePersonKey(assigned) === normP) return true;
                     }
                     return false;

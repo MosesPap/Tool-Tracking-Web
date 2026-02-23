@@ -1003,8 +1003,8 @@
             }
         }
 
-        // Refresh only special-holiday baseline and last rotation positions from Firebase.
-        // Call this before calculating special holiday duty for any month so we continue from where the baseline was left.
+        // Refresh special-holiday baseline, last rotation positions, and saved assignments from Firebase.
+        // Call this before calculating special holiday duty so we have the latest baseline and can avoid assigning someone already assigned on a previous special.
         async function refreshSpecialBaselineFromFirebase() {
             try {
                 if (!window.db) return;
@@ -1013,12 +1013,24 @@
                 if (!user) return;
 
                 const dutyShifts = db.collection('dutyShifts');
-                const [rotationBaselineSpecialDoc, lastRotationPositionsDoc] = await Promise.all([
+                const [rotationBaselineSpecialDoc, lastRotationPositionsDoc, specialHolidayAssignmentsDoc] = await Promise.all([
                     dutyShifts.doc('rotationBaselineSpecialAssignments').get(),
-                    dutyShifts.doc('lastRotationPositions').get()
+                    dutyShifts.doc('lastRotationPositions').get(),
+                    dutyShifts.doc('specialHolidayAssignments').get()
                 ]);
 
                 const isMonthOrganizedDoc = (data) => Object.keys(data || {}).some(k => /^[A-Za-z]+\s+\d{4}$/.test(k) && typeof data[k] === 'object');
+
+                if (specialHolidayAssignmentsDoc.exists) {
+                    const data = specialHolidayAssignmentsDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    delete data._migratedFrom;
+                    delete data._migrationDate;
+                    specialHolidayAssignments = isMonthOrganizedDoc(data) ? flattenAssignmentsByMonth(data) : (data || {});
+                } else {
+                    specialHolidayAssignments = {};
+                }
 
                 if (rotationBaselineSpecialDoc.exists) {
                     const data = rotationBaselineSpecialDoc.data();
@@ -1064,7 +1076,7 @@
                 }
 
                 rebuildRotationBaselineLastByType();
-                console.log('Refreshed special-holiday baseline and last rotation positions from Firebase');
+                console.log('Refreshed special-holiday baseline, last rotation positions, and specialHolidayAssignments from Firebase');
             } catch (error) {
                 console.error('Error refreshing special baseline from Firebase:', error);
             }
