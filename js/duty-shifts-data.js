@@ -3064,18 +3064,14 @@
                             const writable = await handle.createWritable();
                             await writable.write(new Blob([bytes], { type: excelMime }));
                             await writable.close();
-                            return true;
+                            return { saved: true, cancelled: false };
                         }
                     } catch (e) {
-                        if (e.name === 'AbortError') { /* user cancelled */ }
-                        else { console.warn('Save file picker failed:', e); }
+                        if (e.name === 'AbortError') return { saved: false, cancelled: true };
+                        console.warn('Save file picker failed:', e);
                     }
-                    return false;
+                    return { saved: false, cancelled: false };
                 };
-
-                const zipAvailable = typeof JSZip !== 'undefined';
-                const zip = (!monthDirHandle && zipAvailable) ? new JSZip() : null;
-                const zipFolder = zip ? zip.folder(monthFolderName) : null;
 
                 const saveBytesToMonthFolder = async (fileName, bytes) => {
                     if (!monthDirHandle) return false;
@@ -3103,6 +3099,9 @@
                     alert('Δεν υπάρχουν ομάδες με άτομα για να δημιουργηθεί το Excel αρχείο.');
                     return;
                 }
+
+                let fileWasSaved = false;
+                let saveCancelled = false;
 
                 if (useExcelJS) {
                     const workbook = new ExcelJS.Workbook();
@@ -3372,11 +3371,15 @@
                     const fileName = buildExcelFilename(monthName, year);
                     const buffer = await workbook.xlsx.writeBuffer();
                     let saved = await saveBytesToMonthFolder(fileName, buffer);
-                    if (!saved) saved = await saveExcelWithSaveFilePicker(fileName, buffer);
                     if (!saved) {
-                        if (zipFolder) zipFolder.file(fileName, buffer);
-                        else downloadBytes(fileName, buffer);
+                        const pickerResult = await saveExcelWithSaveFilePicker(fileName, buffer);
+                        if (pickerResult.cancelled) saveCancelled = true;
+                        else {
+                            saved = pickerResult.saved;
+                            if (!saved) downloadBytes(fileName, buffer);
+                        }
                     }
+                    if (saved) fileWasSaved = true;
                 } else {
                     const wb = XLSX.utils.book_new();
                     const formatDateGreekAbbrSheet = (date) => {
@@ -3504,19 +3507,17 @@
                     const fileName = buildExcelFilename(monthName, year);
                     const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
                     let saved = await saveBytesToMonthFolder(fileName, out);
-                    if (!saved) saved = await saveExcelWithSaveFilePicker(fileName, out);
                     if (!saved) {
-                        if (zipFolder) zipFolder.file(fileName, out);
-                        else downloadBytes(fileName, out);
+                        const pickerResult = await saveExcelWithSaveFilePicker(fileName, out);
+                        if (pickerResult.cancelled) saveCancelled = true;
+                        else {
+                            saved = pickerResult.saved;
+                            if (!saved) downloadBytes(fileName, out);
+                        }
                     }
+                    if (saved) fileWasSaved = true;
                 }
 
-                // If we couldn't create a real folder, but we did collect files into a zip, download it once here.
-                if (zipFolder && zip) {
-                    const zipBlob = await zip.generateAsync({ type: 'blob' });
-                    downloadBlob(`${monthFolderName}.zip`, zipBlob, 'application/zip');
-                }
-                
                 // Remove loading message
                 if (document.body.contains(loadingAlert)) {
                     document.body.removeChild(loadingAlert);
@@ -3530,11 +3531,13 @@
                     }
                 }
                 
-                alert(monthDirHandle
-                    ? `Το Excel αρχείο (με ${groupNumbersToProcess.length} καρτέλες) αποθηκεύτηκε στον φάκελο "${monthFolderName}".`
-                    : (zipFolder
-                        ? `Το Excel αρχείο δημιουργήθηκε ως "${monthFolderName}.zip" (περιέχει φάκελο "${monthFolderName}").`
-                        : 'Το Excel αρχείο δημιουργήθηκε επιτυχώς (μία καρτέλα ανά ομάδα)!'));
+                if (saveCancelled) {
+                    // User cancelled the save dialog; no file saved, no alert
+                } else if (fileWasSaved) {
+                    alert(monthDirHandle
+                        ? `Το Excel αρχείο (με ${groupNumbersToProcess.length} καρτέλες) αποθηκεύτηκε στον φάκελο "${monthFolderName}".`
+                        : 'Το Excel αρχείο δημιουργήθηκε επιτυχώς (μία καρτέλα ανά ομάδα)!');
+                }
             } catch (error) {
                 console.error('Error generating Excel files:', error);
                 alert('Σφάλμα κατά τη δημιουργία του Excel αρχείου: ' + error.message);
