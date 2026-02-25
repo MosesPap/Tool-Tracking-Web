@@ -3048,20 +3048,31 @@
                     URL.revokeObjectURL(url);
                 };
 
-                // If supported (Chrome/Edge), ask user for a base folder and create a month subfolder (e.g. "ΙΑΝ 26")
-                // Otherwise we fall back to normal browser downloads (cannot auto-create folders there).
+                // Use showSaveFilePicker so the user can choose where to save. This avoids the "Can't open this
+                // folder because it contains system files" error that showDirectoryPicker causes on many PCs
+                // for folders like Documents, Downloads, Desktop. The save file picker still lets the user pick
+                // the folder (by navigating in the dialog) and the filename.
                 let monthDirHandle = null;
-                if (typeof window.showDirectoryPicker === 'function') {
-                    try {
-                        const baseDir = await window.showDirectoryPicker({ mode: 'readwrite' });
-                        monthDirHandle = await baseDir.getDirectoryHandle(monthFolderName, { create: true });
-                    } catch (e) {
-                        // user cancelled or not allowed; fallback to normal downloads
-                        monthDirHandle = null;
-                    }
-                }
 
-                // If folder saving isn't available/allowed, optionally package everything into a zip (so user gets a "folder-like" download).
+                const saveExcelWithSaveFilePicker = async (fileName, bytes) => {
+                    try {
+                        if (typeof window.showSaveFilePicker === 'function') {
+                            const handle = await window.showSaveFilePicker({
+                                suggestedName: fileName,
+                                types: [{ description: 'Excel workbook', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }]
+                            });
+                            const writable = await handle.createWritable();
+                            await writable.write(new Blob([bytes], { type: excelMime }));
+                            await writable.close();
+                            return true;
+                        }
+                    } catch (e) {
+                        if (e.name === 'AbortError') { /* user cancelled */ }
+                        else { console.warn('Save file picker failed:', e); }
+                    }
+                    return false;
+                };
+
                 const zipAvailable = typeof JSZip !== 'undefined';
                 const zip = (!monthDirHandle && zipAvailable) ? new JSZip() : null;
                 const zipFolder = zip ? zip.folder(monthFolderName) : null;
@@ -3360,7 +3371,8 @@
                     }
                     const fileName = buildExcelFilename(monthName, year);
                     const buffer = await workbook.xlsx.writeBuffer();
-                    const saved = await saveBytesToMonthFolder(fileName, buffer);
+                    let saved = await saveBytesToMonthFolder(fileName, buffer);
+                    if (!saved) saved = await saveExcelWithSaveFilePicker(fileName, buffer);
                     if (!saved) {
                         if (zipFolder) zipFolder.file(fileName, buffer);
                         else downloadBytes(fileName, buffer);
@@ -3491,7 +3503,8 @@
                     }
                     const fileName = buildExcelFilename(monthName, year);
                     const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-                    const saved = await saveBytesToMonthFolder(fileName, out);
+                    let saved = await saveBytesToMonthFolder(fileName, out);
+                    if (!saved) saved = await saveExcelWithSaveFilePicker(fileName, out);
                     if (!saved) {
                         if (zipFolder) zipFolder.file(fileName, out);
                         else downloadBytes(fileName, out);
