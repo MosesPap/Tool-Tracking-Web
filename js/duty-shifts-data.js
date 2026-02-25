@@ -2822,15 +2822,22 @@
                 if (personName) lastAssigned[rotationType] = personName;
             }
 
+            const isDisabledForType = (personName, dutyType) => {
+                const dp = groupData?.disabledPersons?.[personName];
+                if (!dp || typeof dp !== 'object') return false;
+                return !!(dp.all || dp[dutyType]);
+            };
+
             const nextTwoForType = (type) => {
-                const list = (groupData?.[type] || []).filter(Boolean);
+                const rawList = (groupData?.[type] || []).filter(Boolean);
+                const list = rawList.filter(p => !isDisabledForType(p, type));
                 if (list.length === 0) return ['', ''];
 
                 const last = lastAssigned[type];
                 let startIdx = 0;
-                if (last) {
+                if (last && list.indexOf(last) >= 0) {
                     const idx = list.indexOf(last);
-                    startIdx = idx >= 0 ? (idx + 1) : 0;
+                    startIdx = idx + 1;
                 }
 
                 const a = list[startIdx % list.length] || '';
