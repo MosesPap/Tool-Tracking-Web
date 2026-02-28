@@ -2,6 +2,36 @@
         // DUTY-SHIFTS-UI.JS - User Interface & Rendering
         // ============================================================================
 
+        // When true, after the current child modal closes we reopen the Person Actions (Ενεργειες Ατόμου) modal
+        let reopenPersonActionsModalWhenClosed = false;
+        let reopenPersonActionsAfterTransferFlow = false;
+
+        function reopenPersonActionsModalIfNeeded() {
+            if (reopenPersonActionsModalWhenClosed) {
+                reopenPersonActionsModalWhenClosed = false;
+                const m = new bootstrap.Modal(document.getElementById('personActionsModal'));
+                m.show();
+            }
+        }
+
+        let _personActionsReopenListenersWired = false;
+        function wirePersonActionsReopenListeners() {
+            if (_personActionsReopenListenersWired) return;
+            _personActionsReopenListenersWired = true;
+            const missingEl = document.getElementById('missingPeriodModal');
+            if (missingEl) missingEl.addEventListener('hidden.bs.modal', reopenPersonActionsModalIfNeeded);
+            const addPersonEl = document.getElementById('addPersonModal');
+            if (addPersonEl) addPersonEl.addEventListener('hidden.bs.modal', reopenPersonActionsModalIfNeeded);
+            const transferPosEl = document.getElementById('transferPositionModal');
+            if (transferPosEl) transferPosEl.addEventListener('hidden.bs.modal', function () {
+                if (reopenPersonActionsAfterTransferFlow) {
+                    reopenPersonActionsAfterTransferFlow = false;
+                    const m = new bootstrap.Modal(document.getElementById('personActionsModal'));
+                    m.show();
+                }
+            });
+        }
+
         // Centered confirm modal (replaces browser confirm for absence-period removal etc.)
         let _confirmModalOkWired = false;
         function showConfirmModal(options) {
@@ -1706,16 +1736,21 @@
             return parts.length ? `Απενεργοποιημένος (${parts.join(', ')})` : 'Απενεργοποιημένος';
         }
         function openEditPersonFromActions() {
+            wirePersonActionsReopenListeners();
+            reopenPersonActionsModalWhenClosed = true;
             const modal = bootstrap.Modal.getInstance(document.getElementById('personActionsModal'));
             modal.hide();
             editPerson(currentPersonActionsGroup, currentPersonActionsName);
         }
         function openMissingPeriodFromActions() {
+            wirePersonActionsReopenListeners();
+            reopenPersonActionsModalWhenClosed = true;
             const modal = bootstrap.Modal.getInstance(document.getElementById('personActionsModal'));
             modal.hide();
             openMissingPeriodModal(currentPersonActionsGroup, currentPersonActionsName);
         }
         function openTransferFromActions() {
+            wirePersonActionsReopenListeners();
             const modal = bootstrap.Modal.getInstance(document.getElementById('personActionsModal'));
             modal.hide();
             openTransferTargetGroupModal(
@@ -1763,11 +1798,12 @@
 
             const select = document.getElementById('transferTargetGroupSelect');
             const toGroup = parseInt(select.value, 10);
-            const { fromGroup, index, listType } = pendingTransferTargetGroup;
+            const { fromGroup, index, listType, reopenActionsOnCancel } = pendingTransferTargetGroup;
 
             const modal = bootstrap.Modal.getInstance(document.getElementById('transferTargetGroupModal'));
             if (modal) modal.hide();
 
+            if (reopenActionsOnCancel) reopenPersonActionsAfterTransferFlow = true;
             pendingTransferTargetGroup = null;
 
             if (!toGroup || toGroup === fromGroup || ![1, 2, 3, 4].includes(toGroup)) {
