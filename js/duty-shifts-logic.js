@@ -1168,6 +1168,69 @@
                         }
                     }
                 }
+                // When day after is in next month, predict assignment for semi/weekend/special (normal already handled above)
+                const calculationEndDate = calculationSteps?.endDate ? (calculationSteps.endDate instanceof Date ? calculationSteps.endDate : new Date(calculationSteps.endDate)) : null;
+                if (!hasDutyAfter && calculationEndDate && dayAfter > calculationEndDate) {
+                    const groupData = groups[groupNum] || {};
+                    if (afterDayType === 'semi-normal-day') {
+                        const groupPeople = groupData.semi || [];
+                        if (groupPeople.length > 0) {
+                            const rotationDays = groupPeople.length;
+                            const rotationPosition = getRotationPosition(dayAfter, 'semi', groupNum) % rotationDays;
+                            let expectedPerson = null;
+                            for (let off = 0; off < rotationDays; off++) {
+                                const idx = (rotationPosition + off) % rotationDays;
+                                const cand = groupPeople[idx];
+                                if (!cand) continue;
+                                if (isPersonMissingOnDate(cand, groupNum, dayAfter, 'semi')) continue;
+                                if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'semi')) continue;
+                                expectedPerson = cand;
+                                break;
+                            }
+                            if (expectedPerson === person && !isPersonMissingOnDate(person, groupNum, dayAfter, 'semi') && (typeof isPersonDisabledForDuty !== 'function' || !isPersonDisabledForDuty(person, groupNum, 'semi'))) {
+                                hasDutyAfter = true;
+                            }
+                        }
+                    } else if (afterDayType === 'weekend-holiday') {
+                        const groupPeople = groupData.weekend || [];
+                        if (groupPeople.length > 0) {
+                            const rotationDays = groupPeople.length;
+                            const rotationPosition = getRotationPosition(dayAfter, 'weekend', groupNum) % rotationDays;
+                            let expectedPerson = null;
+                            for (let off = 0; off < rotationDays; off++) {
+                                const idx = (rotationPosition + off) % rotationDays;
+                                const cand = groupPeople[idx];
+                                if (!cand) continue;
+                                if (isPersonMissingOnDate(cand, groupNum, dayAfter, 'weekend')) continue;
+                                if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'weekend')) continue;
+                                expectedPerson = cand;
+                                break;
+                            }
+                            if (expectedPerson === person && !isPersonMissingOnDate(person, groupNum, dayAfter, 'weekend') && (typeof isPersonDisabledForDuty !== 'function' || !isPersonDisabledForDuty(person, groupNum, 'weekend'))) {
+                                hasDutyAfter = true;
+                            }
+                        }
+                    } else if (afterDayType === 'special-holiday') {
+                        const groupPeople = groupData.special || [];
+                        if (groupPeople.length > 0) {
+                            const rotationDays = groupPeople.length;
+                            const rotationPosition = getRotationPosition(dayAfter, 'special', groupNum) % rotationDays;
+                            let expectedPerson = null;
+                            for (let off = 0; off < rotationDays; off++) {
+                                const idx = (rotationPosition + off) % rotationDays;
+                                const cand = groupPeople[idx];
+                                if (!cand) continue;
+                                if (isPersonMissingOnDate(cand, groupNum, dayAfter, 'special')) continue;
+                                if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'special')) continue;
+                                expectedPerson = cand;
+                                break;
+                            }
+                            if (expectedPerson === person && !isPersonMissingOnDate(person, groupNum, dayAfter, 'special') && (typeof isPersonDisabledForDuty !== 'function' || !isPersonDisabledForDuty(person, groupNum, 'special'))) {
+                                hasDutyAfter = true;
+                            }
+                        }
+                    }
+                }
             } else {
                 // Check permanent assignments
                 const dayAfterAssigned = dutyAssignments[dayAfterKey] || 
