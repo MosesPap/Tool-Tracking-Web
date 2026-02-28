@@ -30,6 +30,8 @@
                     m.show();
                 }
             });
+            const disableSettingsEl = document.getElementById('disableSettingsModal');
+            if (disableSettingsEl) disableSettingsEl.addEventListener('hidden.bs.modal', reopenPersonActionsModalIfNeeded);
         }
 
         // Centered confirm modal (replaces browser confirm for absence-period removal etc.)
@@ -1446,12 +1448,15 @@
                 };
             }
 
+            wirePersonActionsReopenListeners();
+            reopenPersonActionsModalWhenClosed = true;
             const actionsModal = bootstrap.Modal.getInstance(document.getElementById('personActionsModal'));
             if (actionsModal) actionsModal.hide();
             const modal = new bootstrap.Modal(document.getElementById('disableSettingsModal'));
             modal.show();
         }
         function saveDisableSettings() {
+            reopenPersonActionsModalWhenClosed = false;
             if (!currentPersonActionsGroup || !currentPersonActionsName) return;
             const groupNum = currentPersonActionsGroup;
             const personName = currentPersonActionsName;
