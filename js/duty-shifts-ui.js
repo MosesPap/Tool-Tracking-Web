@@ -1373,12 +1373,20 @@
             const noEl = document.getElementById('disableNormalSwitch');
 
             if (allEl) allEl.checked = !!st.all;
-            if (spEl) spEl.checked = !!st.special;
-            if (weEl) weEl.checked = !!st.weekend;
-            if (seEl) seEl.checked = !!st.semi;
-            if (noEl) noEl.checked = !!st.normal;
+            // When "complete disable" is on, show all four type toggles as checked (person disabled for all). When off, show each type from saved state.
+            if (st.all) {
+                if (spEl) spEl.checked = true;
+                if (weEl) weEl.checked = true;
+                if (seEl) seEl.checked = true;
+                if (noEl) noEl.checked = true;
+            } else {
+                if (spEl) spEl.checked = !!st.special;
+                if (weEl) weEl.checked = !!st.weekend;
+                if (seEl) seEl.checked = !!st.semi;
+                if (noEl) noEl.checked = !!st.normal;
+            }
 
-            // If "all" is on, disable individual toggles for clarity
+            // If "all" is on, disable individual toggles (user can only turn "all" off to then set types individually)
             const setDisabled = (disabled) => {
                 if (spEl) spEl.disabled = disabled;
                 if (weEl) weEl.disabled = disabled;
@@ -1391,6 +1399,19 @@
                 allEl.onchange = () => {
                     const on = !!allEl.checked;
                     setDisabled(on);
+                    if (on) {
+                        // Complete disable ON: set all four type toggles to checked (disabled for all four duty types)
+                        if (spEl) spEl.checked = true;
+                        if (weEl) weEl.checked = true;
+                        if (seEl) seEl.checked = true;
+                        if (noEl) noEl.checked = true;
+                    } else {
+                        // Complete disable OFF: set all four to unchecked (enabled for all); user can then toggle individual types
+                        if (spEl) spEl.checked = false;
+                        if (weEl) weEl.checked = false;
+                        if (seEl) seEl.checked = false;
+                        if (noEl) noEl.checked = false;
+                    }
                 };
             }
 
