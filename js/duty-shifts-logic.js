@@ -5265,32 +5265,16 @@
                                     }
                                 }
                                 
-                                // MONDAY/WEDNESDAY - Step 2b: Try BACKWARD – previous alternative day (Mon ↔ Wed). Loop weeks back in same month; use saved assignments if date not in range.
+                                // MONDAY/WEDNESDAY - Step 2b/c: Try BACKWARD in explicit order: prev same, prev alt, alt before prev, same 15d, alt 16d, same 14d, then 21,23,28,30...
+                                // Mon(1): [7, 5, 12, 15, 16, 14, 21, 23, 28, 30]  Wed(3): [7, 2, 9, 15, 16, 14, 21, 23, 28, 30]
                                 if (!swapFound) {
-                                    const firstAltOffset = dayOfWeek > alternativeDayOfWeek ? (dayOfWeek - alternativeDayOfWeek) : (7 + dayOfWeek - alternativeDayOfWeek);
-                                    for (let offset = firstAltOffset; offset <= 28; offset += 7) {
-                                        const prevAltDay = new Date(date);
-                                        prevAltDay.setDate(date.getDate() - offset);
-                                        if (prevAltDay.getMonth() !== month || prevAltDay.getFullYear() !== year) break;
-                                        const prevAltKey = formatDateKey(prevAltDay);
-                                        const result = tryBackwardSwapCandidate(prevAltKey);
-                                        if (result) {
-                                            swapDayKey = result.candidateKey;
-                                            swapDayIndex = normalDays.indexOf(swapDayKey);
-                                            if (swapDayIndex < 0) swapDayIndex = -1;
-                                            swapFound = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                                // MONDAY/WEDNESDAY - Step 2c: Try BACKWARD – previous same day (Mon or Wed). Loop 7, 14, 21... days back; use saved assignments if date not in range.
-                                if (!swapFound) {
-                                    for (let offset = 7; offset <= 28; offset += 7) {
-                                        const prevSameDay = new Date(date);
-                                        prevSameDay.setDate(date.getDate() - offset);
-                                        if (prevSameDay.getMonth() !== month || prevSameDay.getFullYear() !== year) break;
-                                        const prevSameDayKey = formatDateKey(prevSameDay);
-                                        const result = tryBackwardSwapCandidate(prevSameDayKey);
+                                    const mwOffsets = (dayOfWeek === 1) ? [7, 5, 12, 15, 16, 14, 21, 23, 28, 30] : [7, 2, 9, 15, 16, 14, 21, 23, 28, 30];
+                                    for (const offset of mwOffsets) {
+                                        const prevDay = new Date(date);
+                                        prevDay.setDate(date.getDate() - offset);
+                                        if (prevDay.getMonth() !== month || prevDay.getFullYear() !== year) break;
+                                        const prevKey = formatDateKey(prevDay);
+                                        const result = tryBackwardSwapCandidate(prevKey);
                                         if (result) {
                                             swapDayKey = result.candidateKey;
                                             swapDayIndex = normalDays.indexOf(swapDayKey);
@@ -5398,32 +5382,16 @@
                                 } else {
                                 }
                                 
-                                // TUESDAY/THURSDAY - Step 1b: Try BACKWARD – previous same day (Thu or Tue), then previous/nearest alternative. Loop weeks back in same month; use saved assignments if date not in range.
+                                // TUESDAY/THURSDAY - Step 1b: Try BACKWARD in explicit order: prev same, prev alt (same week), alt before prev, same 15d, alt 16d, same 14d, 21,23,28,30...
+                                // Thu(4): [7, 2, 9, 15, 16, 14, 21, 23, 28, 30]  Tue(2): [7, 5, 12, 15, 16, 14, 21, 23, 28, 30]
                                 if (!swapFound) {
-                                    for (let offset = 7; offset <= 28; offset += 7) {
-                                        const prevSameDay = new Date(date);
-                                        prevSameDay.setDate(date.getDate() - offset);
-                                        if (prevSameDay.getMonth() !== month || prevSameDay.getFullYear() !== year) break;
-                                        const prevSameDayKey = formatDateKey(prevSameDay);
-                                        const result = tryBackwardSwapCandidate(prevSameDayKey);
-                                        if (result) {
-                                            swapDayKey = result.candidateKey;
-                                            swapDayIndex = normalDays.indexOf(swapDayKey);
-                                            if (swapDayIndex < 0) swapDayIndex = -1;
-                                            swapFound = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                                // TUESDAY/THURSDAY - Step 1b-alt: If previous same day failed, try previous/nearest alternative day (Tue ↔ Thu) in same month
-                                if (!swapFound) {
-                                    const firstAltOffset = dayOfWeek > alternativeDayOfWeek ? (dayOfWeek - alternativeDayOfWeek) : (7 + dayOfWeek - alternativeDayOfWeek);
-                                    for (let offset = firstAltOffset; offset <= 28; offset += 7) {
-                                        const prevAltDay = new Date(date);
-                                        prevAltDay.setDate(date.getDate() - offset);
-                                        if (prevAltDay.getMonth() !== month || prevAltDay.getFullYear() !== year) break;
-                                        const prevAltKey = formatDateKey(prevAltDay);
-                                        const result = tryBackwardSwapCandidate(prevAltKey);
+                                    const ttOffsets = (dayOfWeek === 4) ? [7, 2, 9, 15, 16, 14, 21, 23, 28, 30] : [7, 5, 12, 15, 16, 14, 21, 23, 28, 30];
+                                    for (const offset of ttOffsets) {
+                                        const prevDay = new Date(date);
+                                        prevDay.setDate(date.getDate() - offset);
+                                        if (prevDay.getMonth() !== month || prevDay.getFullYear() !== year) break;
+                                        const prevKey = formatDateKey(prevDay);
+                                        const result = tryBackwardSwapCandidate(prevKey);
                                         if (result) {
                                             swapDayKey = result.candidateKey;
                                             swapDayIndex = normalDays.indexOf(swapDayKey);
