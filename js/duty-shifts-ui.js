@@ -572,7 +572,7 @@
                 return `Απενεργοποίηση: ${parts.join(', ')}`;
             })();
             const disabledBadge = isDisabledForThisList
-                ? `<span class="badge bg-secondary ms-2" title="${escapeHtml(disabledTitle)}"><i class="fas fa-user-slash me-1"></i>OFF</span>`
+                ? `<span class="badge bg-secondary ms-2" title="${escapeHtml(disabledTitle)}"><i class="fas fa-user-slash me-1"></i>Απενεργοποιημένος</span>`
                 : '';
             const missingBadge = isCurrentlyMissing ? '<span class="badge bg-warning ms-2"><i class="fas fa-user-slash me-1"></i>Απουσία</span>' : '';
             
@@ -599,8 +599,9 @@
                     ?
                 </div>`;
             
+            const disabledCardClass = isDisabledForThisList ? ' person-name-card-disabled' : '';
             personDiv.innerHTML = `
-                <div class="person-name-card" onclick="openPersonActionsModal(${groupNum}, '${person.replace(/'/g, "\\'")}', ${index}, '${listType}')">
+                <div class="person-name-card${disabledCardClass}" onclick="openPersonActionsModal(${groupNum}, '${person.replace(/'/g, "\\'")}', ${index}, '${listType}')">
                     <div style="display: flex; flex-direction: column;">
                         <div style="display: flex; align-items: center;">
                             <i class="fas fa-grip-vertical text-muted me-2" style="cursor: move;"></i>
