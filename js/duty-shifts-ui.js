@@ -9,8 +9,20 @@
         function reopenPersonActionsModalIfNeeded() {
             if (reopenPersonActionsModalWhenClosed) {
                 reopenPersonActionsModalWhenClosed = false;
-                const m = new bootstrap.Modal(document.getElementById('personActionsModal'));
-                m.show();
+                var groupNum = currentPersonActionsGroup;
+                var personName = currentPersonActionsName;
+                var index = currentPersonActionsIndex;
+                var listType = currentPersonActionsListType;
+                if (groupNum == null || !personName) return;
+                if (index == null || index < 0 || !listType) {
+                    var g = groups[groupNum] || {};
+                    ['special', 'weekend', 'semi', 'normal'].forEach(function (lt) {
+                        var list = g[lt] || [];
+                        var i = list.indexOf(personName);
+                        if (i >= 0) { index = i; listType = lt; }
+                    });
+                }
+                openPersonActionsModal(groupNum, personName, index != null ? index : 0, listType || 'normal');
             }
         }
 
@@ -26,8 +38,21 @@
             if (transferPosEl) transferPosEl.addEventListener('hidden.bs.modal', function () {
                 if (reopenPersonActionsAfterTransferFlow) {
                     reopenPersonActionsAfterTransferFlow = false;
-                    const m = new bootstrap.Modal(document.getElementById('personActionsModal'));
-                    m.show();
+                    var groupNum = currentPersonActionsGroup;
+                    var personName = currentPersonActionsName;
+                    var index = currentPersonActionsIndex;
+                    var listType = currentPersonActionsListType;
+                    if (groupNum != null && personName) {
+                        if (index == null || index < 0 || !listType) {
+                            var g = groups[groupNum] || {};
+                            ['special', 'weekend', 'semi', 'normal'].forEach(function (lt) {
+                                var list = g[lt] || [];
+                                var i = list.indexOf(personName);
+                                if (i >= 0) { index = i; listType = lt; }
+                            });
+                        }
+                        openPersonActionsModal(groupNum, personName, index != null ? index : 0, listType || 'normal');
+                    }
                 }
             });
             const disableSettingsEl = document.getElementById('disableSettingsModal');
@@ -1675,7 +1700,13 @@
                 currentPersonActionsName = personName;
                 openDisableSettingsFromActions();
             } else if (hasMissingPeriods) {
-                // Person has missing periods - open missing period management
+                // Person has missing periods - open missing period management; set current person so return goes to this person
+                currentPersonActionsGroup = groupNum;
+                currentPersonActionsName = personName;
+                currentPersonActionsIndex = -1;
+                currentPersonActionsListType = null;
+                wirePersonActionsReopenListeners();
+                reopenPersonActionsModalWhenClosed = true;
                 openMissingPeriodModal(groupNum, personName);
             } else {
                 // Neither disabled nor missing - open person actions modal
