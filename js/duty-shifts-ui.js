@@ -9,20 +9,25 @@
         function reopenPersonActionsModalIfNeeded() {
             if (reopenPersonActionsModalWhenClosed) {
                 reopenPersonActionsModalWhenClosed = false;
-                var groupNum = currentPersonActionsGroup;
-                var personName = currentPersonActionsName;
-                var index = currentPersonActionsIndex;
-                var listType = currentPersonActionsListType;
-                if (groupNum == null || !personName) return;
+                // Refresh and show Person Actions for the current person (correct when opened from disable/missing list)
+                const groupNum = currentPersonActionsGroup;
+                const personName = currentPersonActionsName;
+                let index = currentPersonActionsIndex;
+                let listType = currentPersonActionsListType;
                 if (index == null || index < 0 || !listType) {
-                    var g = groups[groupNum] || {};
-                    ['special', 'weekend', 'semi', 'normal'].forEach(function (lt) {
-                        var list = g[lt] || [];
-                        var i = list.indexOf(personName);
-                        if (i >= 0) { index = i; listType = lt; }
+                    const groupData = groups[groupNum] || {};
+                    ['special', 'weekend', 'semi', 'normal'].forEach(lt => {
+                        const list = groupData[lt] || [];
+                        const idx = list.indexOf(personName);
+                        if (idx >= 0) {
+                            index = idx;
+                            listType = lt;
+                        }
                     });
+                    if (index == null || index < 0) index = 0;
+                    if (!listType) listType = 'normal';
                 }
-                openPersonActionsModal(groupNum, personName, index != null ? index : 0, listType || 'normal');
+                openPersonActionsModal(groupNum, personName, index, listType);
             }
         }
 
@@ -38,21 +43,8 @@
             if (transferPosEl) transferPosEl.addEventListener('hidden.bs.modal', function () {
                 if (reopenPersonActionsAfterTransferFlow) {
                     reopenPersonActionsAfterTransferFlow = false;
-                    var groupNum = currentPersonActionsGroup;
-                    var personName = currentPersonActionsName;
-                    var index = currentPersonActionsIndex;
-                    var listType = currentPersonActionsListType;
-                    if (groupNum != null && personName) {
-                        if (index == null || index < 0 || !listType) {
-                            var g = groups[groupNum] || {};
-                            ['special', 'weekend', 'semi', 'normal'].forEach(function (lt) {
-                                var list = g[lt] || [];
-                                var i = list.indexOf(personName);
-                                if (i >= 0) { index = i; listType = lt; }
-                            });
-                        }
-                        openPersonActionsModal(groupNum, personName, index != null ? index : 0, listType || 'normal');
-                    }
+                    const m = new bootstrap.Modal(document.getElementById('personActionsModal'));
+                    m.show();
                 }
             });
             const disableSettingsEl = document.getElementById('disableSettingsModal');
@@ -1534,8 +1526,13 @@
 
             const modal = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
             if (modal) modal.hide();
-            const actionsModal = new bootstrap.Modal(document.getElementById('personActionsModal'));
-            actionsModal.show();
+            // Show Person Actions for the person we just edited (same as Cancel/close path)
+            openPersonActionsModal(
+                currentPersonActionsGroup,
+                currentPersonActionsName,
+                currentPersonActionsIndex != null ? currentPersonActionsIndex : 0,
+                currentPersonActionsListType || 'normal'
+            );
         }
         function openMissingDisabledPeopleModal() {
             const container = document.getElementById('missingDisabledPeopleList');
@@ -1695,18 +1692,38 @@
             const hasMissingPeriods = missingPeriods.length > 0;
             
             if (isDisabled) {
-                // Person is disabled - open disable settings modal
+                // Person is disabled - open disable settings modal (set full context so return goes to this person)
                 currentPersonActionsGroup = groupNum;
                 currentPersonActionsName = personName;
+                let foundIndex = -1;
+                let foundListType = null;
+                ['special', 'weekend', 'semi', 'normal'].forEach(listType => {
+                    const list = (groups[groupNum] || {})[listType] || [];
+                    const idx = list.indexOf(personName);
+                    if (idx >= 0 && foundIndex < 0) {
+                        foundIndex = idx;
+                        foundListType = listType;
+                    }
+                });
+                currentPersonActionsIndex = foundIndex >= 0 ? foundIndex : 0;
+                currentPersonActionsListType = foundListType || 'normal';
                 openDisableSettingsFromActions();
             } else if (hasMissingPeriods) {
-                // Person has missing periods - open missing period management; set current person so return goes to this person
+                // Person has missing periods - open missing period management (set full context so return goes to this person)
                 currentPersonActionsGroup = groupNum;
                 currentPersonActionsName = personName;
-                currentPersonActionsIndex = -1;
-                currentPersonActionsListType = null;
-                wirePersonActionsReopenListeners();
-                reopenPersonActionsModalWhenClosed = true;
+                let foundIndex = -1;
+                let foundListType = null;
+                ['special', 'weekend', 'semi', 'normal'].forEach(listType => {
+                    const list = (groups[groupNum] || {})[listType] || [];
+                    const idx = list.indexOf(personName);
+                    if (idx >= 0 && foundIndex < 0) {
+                        foundIndex = idx;
+                        foundListType = listType;
+                    }
+                });
+                currentPersonActionsIndex = foundIndex >= 0 ? foundIndex : 0;
+                currentPersonActionsListType = foundListType || 'normal';
                 openMissingPeriodModal(groupNum, personName);
             } else {
                 // Neither disabled nor missing - open person actions modal
