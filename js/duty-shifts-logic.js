@@ -5265,16 +5265,15 @@
                                     }
                                 }
                                 
-                                // MONDAY/WEDNESDAY - Step 2b/c: Try BACKWARD in explicit order: prev same, prev alt, alt before prev, same 15d, alt 16d, same 14d, then 21,23,28,30...
-                                // Mon(1): [7, 5, 12, 15, 16, 14, 21, 23, 28, 30]  Wed(3): [7, 2, 9, 15, 16, 14, 21, 23, 28, 30]
+                                // MONDAY/WEDNESDAY - Step 2b: Try BACKWARD in same fixed order as Tue/Thu: previous same day 7d, alternative 2d, 9d, same 14d, alternative 16d, same 21d (same month only)
                                 if (!swapFound) {
-                                    const mwOffsets = (dayOfWeek === 1) ? [7, 5, 12, 15, 16, 14, 21, 23, 28, 30] : [7, 2, 9, 15, 16, 14, 21, 23, 28, 30];
-                                    for (const offset of mwOffsets) {
+                                    const backwardOffsets = [7, 2, 9, 14, 16, 21];
+                                    for (const offset of backwardOffsets) {
                                         const prevDay = new Date(date);
                                         prevDay.setDate(date.getDate() - offset);
-                                        if (prevDay.getMonth() !== month || prevDay.getFullYear() !== year) break;
-                                        const prevKey = formatDateKey(prevDay);
-                                        const result = tryBackwardSwapCandidate(prevKey);
+                                        if (prevDay.getMonth() !== month || prevDay.getFullYear() !== year) continue;
+                                        const prevDayKey = formatDateKey(prevDay);
+                                        const result = tryBackwardSwapCandidate(prevDayKey);
                                         if (result) {
                                             swapDayKey = result.candidateKey;
                                             swapDayIndex = normalDays.indexOf(swapDayKey);
@@ -5284,7 +5283,7 @@
                                         }
                                     }
                                 }
-                                // MONDAY/WEDNESDAY - Step 3: ONLY if Step 2c failed, try alternative day in week after next OR next month
+                                // MONDAY/WEDNESDAY - Step 3: ONLY if Step 2b failed, try alternative day in week after next OR next month
                                 if (!swapFound) {
                                     // Try week after next (2 weeks later) - alternative day
                                     const weekAfterNextDate = new Date(date);
@@ -5382,16 +5381,15 @@
                                 } else {
                                 }
                                 
-                                // TUESDAY/THURSDAY - Step 1b: Try BACKWARD in explicit order: prev same, prev alt (same week), alt before prev, same 15d, alt 16d, same 14d, 21,23,28,30...
-                                // Thu(4): [7, 2, 9, 15, 16, 14, 21, 23, 28, 30]  Tue(2): [7, 5, 12, 15, 16, 14, 21, 23, 28, 30]
+                                // TUESDAY/THURSDAY - Step 1b: Try BACKWARD in fixed order: previous Thu 7d, Tue 2d, Tue 9d, Thu 14d, Tue 16d, Thu 21d (same month only)
                                 if (!swapFound) {
-                                    const ttOffsets = (dayOfWeek === 4) ? [7, 2, 9, 15, 16, 14, 21, 23, 28, 30] : [7, 5, 12, 15, 16, 14, 21, 23, 28, 30];
-                                    for (const offset of ttOffsets) {
+                                    const backwardOffsets = [7, 2, 9, 14, 16, 21];
+                                    for (const offset of backwardOffsets) {
                                         const prevDay = new Date(date);
                                         prevDay.setDate(date.getDate() - offset);
-                                        if (prevDay.getMonth() !== month || prevDay.getFullYear() !== year) break;
-                                        const prevKey = formatDateKey(prevDay);
-                                        const result = tryBackwardSwapCandidate(prevKey);
+                                        if (prevDay.getMonth() !== month || prevDay.getFullYear() !== year) continue;
+                                        const prevDayKey = formatDateKey(prevDay);
+                                        const result = tryBackwardSwapCandidate(prevDayKey);
                                         if (result) {
                                             swapDayKey = result.candidateKey;
                                             swapDayIndex = normalDays.indexOf(swapDayKey);
