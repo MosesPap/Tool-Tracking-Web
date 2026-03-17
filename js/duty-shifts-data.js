@@ -3116,6 +3116,22 @@
                         const groupName = getGroupName(groupNum);
                         const groupData = groups[groupNum];
                         const worksheet = workbook.addWorksheet(safeSheetName(groupName));
+
+                        // Page setup: A4, landscape, custom margins, fit all columns on one page
+                        worksheet.pageSetup = {
+                            paperSize: 9,            // A4
+                            orientation: 'landscape',
+                            margins: {
+                                left:   0.12,        // ≈ 0.3 cm
+                                right:  0.12,        // ≈ 0.3 cm
+                                top:    0.12,        // ≈ 0.3 cm
+                                bottom: 0.12,        // ≈ 0.3 cm
+                                header: 0.20,        // ≈ 0.5 cm
+                                footer: 0.20         // ≈ 0.5 cm
+                            },
+                            fitToWidth: 1,
+                            fitToHeight: 0
+                        };
                         
                         // Helper function to format date as "10 ΔΕΚ 2026"
                         const formatDateGreekAbbr = (date) => {
@@ -3277,7 +3293,7 @@
                                 };
                             });
                             
-                            row.height = 30;
+                            row.height = 23;
                         }
 
                         // Add signature cells under the duty list (with one blank row before)
@@ -3451,7 +3467,15 @@
                         ws['!cols'] = [{ wch: 14 }, { wch: 17 }, { wch: 57 }, { wch: 56.5 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 48 }, { wch: 25 }];
                         if (!ws['!merges']) ws['!merges'] = [];
                         ws['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: 8 } });
-                        ws['!rows'] = Array.from({ length: data.length }, () => ({ hpt: 30 }));
+                        ws['!rows'] = Array.from({ length: data.length }, () => ({ hpt: 23 }));
+                        ws['!margins'] = {
+                            left:   0.12,
+                            right:  0.12,
+                            top:    0.12,
+                            bottom: 0.12,
+                            header: 0.20,
+                            footer: 0.20
+                        };
                         const i1Cell = 'I1';
                         if (!ws[i1Cell]) ws[i1Cell] = { t: 's', v: data[0][8] || '' };
                         if (!ws[i1Cell].s) ws[i1Cell].s = {};
