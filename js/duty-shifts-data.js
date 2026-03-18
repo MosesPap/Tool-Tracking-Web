@@ -3366,7 +3366,7 @@
                         worksheet.getColumn(3).width = 57;
                         worksheet.getColumn(4).width = 56.5;   // ΑΛΛΑΓΕΣ column (D)
                         worksheet.getColumn(8).width = 53;  // right table (H)
-                        worksheet.getColumn(9).width = 25;  // header info (I)
+                        worksheet.getColumn(9).width = 21;  // header info / notes (I)
                         
                         // Data rows
                         for (let day = 1; day <= daysInMonth; day++) {
@@ -3677,7 +3677,7 @@
                             ];
 
                             const ws = XLSX.utils.aoa_to_sheet(data);
-                            ws['!cols'] = [{ wch: 14 }, { wch: 17 }, { wch: 57 }, { wch: 56.5 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 53 }, { wch: 25 }];
+                            ws['!cols'] = [{ wch: 14 }, { wch: 17 }, { wch: 57 }, { wch: 56.5 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 53 }, { wch: 21 }];
                             if (!ws['!merges']) ws['!merges'] = [];
                             ws['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: 8 } });
                             ws['!rows'] = Array.from({ length: data.length }, () => ({ hpt: 23 }));
