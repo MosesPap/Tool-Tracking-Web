@@ -3065,6 +3065,24 @@
                 // for folders like Documents, Downloads, Desktop. The save file picker still lets the user pick
                 // the folder (by navigating in the dialog) and the filename.
                 let monthDirHandle = null;
+                let baseDirHandle = null;
+
+                const pickOrCreateMonthFolder = async () => {
+                    // Ask once for a base folder, then create/use "<MMM> <YY>" inside it.
+                    // If the user cancels (or the browser blocks it), we simply fall back to per-file Save As.
+                    try {
+                        if (typeof window.showDirectoryPicker !== 'function') return null;
+                        if (!baseDirHandle) {
+                            baseDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                        }
+                        monthDirHandle = await baseDirHandle.getDirectoryHandle(monthFolderName, { create: true });
+                        return monthDirHandle;
+                    } catch (e) {
+                        if (e?.name === 'AbortError') return null;
+                        console.warn('Folder picker failed (will use Save As fallback):', e);
+                        return null;
+                    }
+                };
 
                 const saveExcelWithSaveFilePicker = async (fileName, bytes) => {
                     try {
@@ -3116,6 +3134,9 @@
                 let saveCancelled = false;
 
                 if (useExcelJS) {
+                    // If possible, save into a "<MMM> <YY>" subfolder inside a user-picked base folder
+                    await pickOrCreateMonthFolder();
+
                     const buildExcelJSWorkbook = ({ printout = false } = {}) => {
                         const workbook = new ExcelJS.Workbook();
                         const palette = printout ? {
@@ -3473,6 +3494,9 @@
                         if (savedPrint) fileWasSaved = true;
                     }
                 } else {
+                    // If possible, save into a "<MMM> <YY>" subfolder inside a user-picked base folder
+                    await pickOrCreateMonthFolder();
+
                     const buildSheetJSWorkbook = ({ printout = false } = {}) => {
                         const wb = XLSX.utils.book_new();
                         const palette = printout ? {
