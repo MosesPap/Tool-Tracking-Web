@@ -587,7 +587,7 @@
         ];
 
         // Missing-period reasons (global list)
-        let missingReasons = ['Κανονική Άδεια', 'Αναρρωτική Άδεια', 'Φύλλο Πορείας', 'Επιλαχών Αντικατάσταση'];
+        let missingReasons = ['Κανονική Άδεια', 'Αναρρωτική Άδεια', 'Φύλλο Πορείας'];
         let missingReasonsModified = false;
 
         // Track data loading to prevent duplicate loads
@@ -778,7 +778,7 @@
 
                 // Load missing reasons list (Firestore)
                 // NOTE: If Firestore contains the old default seed list, migrate it to the new 3-item seed list.
-                const DEFAULT_MISSING_REASONS = ['Κανονική Άδεια', 'Αναρρωτική Άδεια', 'Φύλλο Πορείας', 'Επιλαχών Αντικατάσταση'];
+                const DEFAULT_MISSING_REASONS = ['Κανονική Άδεια', 'Αναρρωτική Άδεια', 'Φύλλο Πορείας'];
                 const LEGACY_MISSING_REASONS = ['Άδεια', 'Ασθένεια', 'Εκπαίδευση', 'Υπηρεσιακό'];
                 if (missingReasonsDoc && missingReasonsDoc.exists) {
                     const data = missingReasonsDoc.data() || {};
@@ -799,41 +799,8 @@
                                 // ignore migration write errors
                             }
                         } else {
-                            // Keep existing custom list, but ensure required options exist
-                            const lower = new Set(list.map(s => String(s).trim().toLowerCase()).filter(Boolean));
-                            const merged = [...list];
-                            for (const r of DEFAULT_MISSING_REASONS) {
-                                const key = String(r).trim().toLowerCase();
-                                if (key && !lower.has(key)) merged.push(r);
-                            }
-                            missingReasons = merged;
-                            // Persist if we appended anything
-                            if (merged.length !== list.length) {
-                                try {
-                                    await db.collection('dutyShifts').doc('missingReasons').set({
-                                        list: missingReasons,
-                                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                                        updatedBy: user.uid,
-                                        _migratedFrom: 'append-required'
-                                    });
-                                } catch (_) {
-                                    // ignore migration write errors
-                                }
-                            }
+                            missingReasons = list;
                         }
-                    }
-                } else {
-                    // First-time seed
-                    missingReasons = [...DEFAULT_MISSING_REASONS];
-                    try {
-                        await db.collection('dutyShifts').doc('missingReasons').set({
-                            list: missingReasons,
-                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                            updatedBy: user.uid,
-                            _migratedFrom: 'seed-defaults'
-                        });
-                    } catch (_) {
-                        // ignore seed write errors
                     }
                 }
                 

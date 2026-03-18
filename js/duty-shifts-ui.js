@@ -1408,6 +1408,129 @@
             const modal = new bootstrap.Modal(document.getElementById('personActionsModal'));
             modal.show();
         }
+
+        function openAlternateReplacementFromActions() {
+            if (!currentPersonActionsGroup || !currentPersonActionsName) return;
+            const groupNum = currentPersonActionsGroup;
+            const personName = currentPersonActionsName;
+
+            const nameEl = document.getElementById('alternateReplacementPersonName');
+            const groupEl = document.getElementById('alternateReplacementGroupName');
+            const dateEl = document.getElementById('alternateReplacementDate');
+            if (nameEl) nameEl.textContent = personName;
+            if (groupEl) groupEl.textContent = getGroupName(groupNum);
+            if (dateEl) {
+                const d = new Date();
+                dateEl.value = formatDateKey(d);
+            }
+
+            wirePersonActionsReopenListeners();
+            reopenPersonActionsModalWhenClosed = true;
+            const actionsModal = bootstrap.Modal.getInstance(document.getElementById('personActionsModal'));
+            if (actionsModal) actionsModal.hide();
+            const modal = new bootstrap.Modal(document.getElementById('alternateReplacementModal'));
+            modal.show();
+        }
+
+        async function confirmAlternateReplacement() {
+            reopenPersonActionsModalWhenClosed = false;
+            if (!currentPersonActionsGroup || !currentPersonActionsName) return;
+            const groupNum = currentPersonActionsGroup;
+            const personName = currentPersonActionsName;
+            const dateKey = String(document.getElementById('alternateReplacementDate')?.value || '').trim();
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+                alert('Παρακαλώ επιλέξτε έγκυρη ημερομηνία.');
+                return;
+            }
+            await applyAlternateReplacementForDate(groupNum, personName, dateKey);
+            const modal = bootstrap.Modal.getInstance(document.getElementById('alternateReplacementModal'));
+            if (modal) modal.hide();
+        }
+
+        async function applyAlternateReplacementForDate(groupNum, personName, dateKey) {
+            try {
+                const dateObj = new Date(dateKey + 'T00:00:00');
+                if (isNaN(dateObj.getTime())) {
+                    alert('Μη έγκυρη ημερομηνία.');
+                    return;
+                }
+
+                const dayType = getDayType(dateObj);
+                const typeCategory = (typeof getDayTypeCategoryFromDayType === 'function')
+                    ? getDayTypeCategoryFromDayType(dayType)
+                    : (dayType === 'special-holiday' ? 'special' : (dayType === 'weekend-holiday' ? 'weekend' : (dayType === 'semi-normal-day' ? 'semi' : 'normal')));
+
+                const groupData = groups[groupNum];
+                const list = groupData?.[typeCategory] || [];
+                if (!Array.isArray(list) || list.length === 0) {
+                    alert('Δεν υπάρχει λίστα ατόμων για αυτόν τον τύπο υπηρεσίας.');
+                    return;
+                }
+
+                const getAssignmentsObj = () => {
+                    if (typeCategory === 'special') return specialHolidayAssignments;
+                    if (typeCategory === 'weekend') return weekendAssignments;
+                    if (typeCategory === 'semi') return semiNormalAssignments;
+                    return normalDayAssignments;
+                };
+                const assignmentsObj = getAssignmentsObj();
+
+                const rawAssignment = assignmentsObj?.[dateKey] || dutyAssignments?.[dateKey] || null;
+                if (!rawAssignment) {
+                    alert('Δεν υπάρχει ανάθεση υπηρεσίας σε αυτή την ημερομηνία.');
+                    return;
+                }
+                const groupMap = extractGroupAssignmentsMap(rawAssignment);
+                const assignedForGroup = groupMap?.[groupNum] || null;
+                const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                if (!assignedForGroup || norm(assignedForGroup) !== norm(personName)) {
+                    alert('Το άτομο δεν είναι ανατεθειμένο σε υπηρεσία σε αυτή την ημερομηνία.');
+                    return;
+                }
+
+                // Find next eligible in list order (skip missing/disabled on that date)
+                let startIdx = list.findIndex(p => norm(p) === norm(personName));
+                if (startIdx < 0) startIdx = 0;
+                let replacement = null;
+                for (let off = 1; off < list.length; off++) {
+                    const cand = list[(startIdx + off) % list.length];
+                    if (!cand) continue;
+                    if (norm(cand) === norm(personName)) continue;
+                    if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, typeCategory)) continue;
+                    if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(cand, groupNum, dateObj, typeCategory)) continue;
+                    replacement = cand;
+                    break;
+                }
+                if (!replacement) {
+                    alert('Δεν βρέθηκε επιλαχών διαθέσιμος/η για αντικατάσταση.');
+                    return;
+                }
+
+                groupMap[groupNum] = replacement;
+                const parts = [];
+                for (let g = 1; g <= 4; g++) {
+                    const pn = groupMap[g];
+                    if (pn) parts.push(`${pn} (Ομάδα ${g})`);
+                }
+                const newAssignmentStr = parts.join(', ');
+                assignmentsObj[dateKey] = newAssignmentStr;
+                dutyAssignments[dateKey] = newAssignmentStr;
+
+                const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const reason = `Αντικατάσταση Επιλαχών: Παραλείφθηκε ο/η ${personName} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}. Ανατέθηκε ο/η ${replacement}.`;
+                if (typeof storeAssignmentReason === 'function') {
+                    storeAssignmentReason(dateKey, groupNum, replacement, 'skip', reason, personName, null, { manualAlternateReplacement: true });
+                }
+
+                // Persist
+                await saveData();
+                renderCalendar();
+                updateStatistics();
+            } catch (e) {
+                console.error('Error applying alternate replacement:', e);
+                alert('Σφάλμα κατά την αντικατάσταση: ' + (e?.message || e));
+            }
+        }
         function openDisableSettingsFromActions() {
             if (!currentPersonActionsGroup || !currentPersonActionsName) return;
             const groupNum = currentPersonActionsGroup;

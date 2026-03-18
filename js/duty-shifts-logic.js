@@ -2022,8 +2022,6 @@
             const stepContent = document.getElementById('stepContent');
             const startDate = calculationSteps.startDate;
             const endDate = calculationSteps.endDate;
-            calculationSteps.skipOnlyHoldBack = calculationSteps.skipOnlyHoldBack || { special: {}, weekend: {}, semi: {}, normal: {} };
-            const holdBackSpecial = calculationSteps.skipOnlyHoldBack.special;
             
             // Build day type lists
             const dayTypeLists = {
@@ -2156,8 +2154,6 @@
                         if (!specialList.some(p => normPerson(p) === normPerson(personName))) continue;
                         const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                         for (const period of periods) {
-                            const reasonTrim = (period?.reason || '').toString().trim();
-                            if (isSkipOnlyReasonText(reasonTrim)) continue; // skip-only: no return-from-missing for specials
                             const pStartKey = inputValueToDateKey(period?.start);
                             const pEndKey = inputValueToDateKey(period?.end);
                             if (!pStartKey || !pEndKey) continue;
@@ -2259,11 +2255,6 @@
                             const rotationDays = groupPeople.length;
                             const rotationPosition = globalSpecialRotationPosition[groupNum] != null ? globalSpecialRotationPosition[groupNum] : 0;
                             const rotationPerson = groupPeople[rotationPosition % rotationDays];
-                            if (!holdBackSpecial[groupNum]) holdBackSpecial[groupNum] = new Set();
-                            // If it's this person's baseline turn, release them so they can be assigned normally.
-                            if (rotationPerson && holdBackSpecial[groupNum].has(rotationPerson)) {
-                                holdBackSpecial[groupNum].delete(rotationPerson);
-                            }
                             if (!specialRotationPersons[dateKey]) {
                                 specialRotationPersons[dateKey] = {};
                             }
@@ -2346,8 +2337,6 @@
                             // 2) If baseline (rotation) person is missing on this date: fill slot with (a) unassigned previous-missing, or (b) next eligible in baseline. Keep record.
                             const baselineIsMissingHere = !wasReplaced && !isRotationPersonDisabledSpecial && !alreadyOnAnotherSpecial && isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
                             if (baselineIsMissingHere) {
-                                const skipOnlyMissing = isSkipOnlyMissingReason(rotationPerson, groupNum, date);
-                                if (skipOnlyMissing && rotationPerson) holdBackSpecial[groupNum].add(rotationPerson);
                                 let foundReplacement = false;
                                 const pendingForGroup = returnFromMissingSpecial.filter(e => e.groupNum === groupNum);
                                 const pendingReturnFromMissingForGroup = new Set(pendingForGroup.map(e => e.personName));
@@ -2358,31 +2347,29 @@
                                     return groupPeople.indexOf(a.personName) - groupPeople.indexOf(b.personName);
                                 });
 
-                                // 2a) First: swap with a previous missing person (return-from-missing) who is not yet assigned – unless this missing is "Επιλαχών Αντικατάσταση" (skip-only).
-                                if (!skipOnlyMissing) {
-                                    for (const entry of sortedPendingByMissedThenBaseline) {
-                                        if (foundReplacement) break;
-                                        const prevMissingPerson = entry.personName;
-                                        if (!isUnassignedReturnFromMissingForDate(prevMissingPerson, groupNum)) continue;
-                                        if (isPersonMissingOnDate(prevMissingPerson, groupNum, date, 'special')) continue;
-                                        assignedPerson = prevMissingPerson;
-                                        wasReplaced = true;
-                                        replacementIndex = rotationPosition;
-                                        foundReplacement = true;
-                                        assignedReturnFromMissingInForEach.add(`${prevMissingPerson}|${groupNum}`);
-                                        (displacedByReturnFromMissing[groupNum] = displacedByReturnFromMissing[groupNum] || []).push(rotationPerson);
-                                        const reasonReturn = `Βασική σειρά: ${rotationPerson} (απουσία). Αντικατάσταση: ${assignedPerson} (επέστρεψε από απουσία).`;
-                                        storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonReturn, rotationPerson, null, {
-                                            baselinePerson: rotationPerson,
-                                            replacementType: 'return-from-missing',
-                                            missedDateKey: dateKey,
-                                            assignedReturnFromMissing: true
-                                        });
-                                        returnFromMissingSpecial.push({ personName: rotationPerson, groupNum, missedDateKey: dateKey });
-                                        if (!reservedReturnFromMissingByGroup[groupNum]) reservedReturnFromMissingByGroup[groupNum] = new Set();
-                                        reservedReturnFromMissingByGroup[groupNum].add(rotationPerson);
-                                        break;
-                                    }
+                                // 2a) First: swap with a previous missing person (return-from-missing) who is not yet assigned – pick by missed-date order then baseline (A then B).
+                                for (const entry of sortedPendingByMissedThenBaseline) {
+                                    if (foundReplacement) break;
+                                    const prevMissingPerson = entry.personName;
+                                    if (!isUnassignedReturnFromMissingForDate(prevMissingPerson, groupNum)) continue;
+                                    if (isPersonMissingOnDate(prevMissingPerson, groupNum, date, 'special')) continue;
+                                    assignedPerson = prevMissingPerson;
+                                    wasReplaced = true;
+                                    replacementIndex = rotationPosition;
+                                    foundReplacement = true;
+                                    assignedReturnFromMissingInForEach.add(`${prevMissingPerson}|${groupNum}`);
+                                    (displacedByReturnFromMissing[groupNum] = displacedByReturnFromMissing[groupNum] || []).push(rotationPerson);
+                                    const reasonReturn = `Βασική σειρά: ${rotationPerson} (απουσία). Αντικατάσταση: ${assignedPerson} (επέστρεψε από απουσία).`;
+                                    storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonReturn, rotationPerson, null, {
+                                        baselinePerson: rotationPerson,
+                                        replacementType: 'return-from-missing',
+                                        missedDateKey: dateKey,
+                                        assignedReturnFromMissing: true
+                                    });
+                                    returnFromMissingSpecial.push({ personName: rotationPerson, groupNum, missedDateKey: dateKey });
+                                    if (!reservedReturnFromMissingByGroup[groupNum]) reservedReturnFromMissingByGroup[groupNum] = new Set();
+                                    reservedReturnFromMissingByGroup[groupNum].add(rotationPerson);
+                                    break;
                                 }
 
                                 // 2b) If all previous missing are already assigned: replace with next eligible person from baseline (rotation).
@@ -2392,13 +2379,11 @@
                                         const candidate = groupPeople[idx];
                                         if (!candidate) continue;
                                         if (reservedReturnFromMissingByGroup[groupNum]?.has(candidate)) continue;
-                                        if (holdBackSpecial[groupNum]?.has(candidate)) continue; // do not pull forward skip-only people
                                         if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
                                         if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
                                         if (sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === candidate)) continue;
                                         assignedPerson = candidate;
-                                        // Skip-only missing: advance rotation from the skipped baseline person (rotationPosition), not from the replacement.
-                                        replacementIndex = skipOnlyMissing ? rotationPosition : idx;
+                                        replacementIndex = idx;
                                         wasReplaced = true;
                                         foundReplacement = true;
                                         const reasonNext = `Βασική σειρά: ${rotationPerson} (απουσία). Αντικατάσταση: ${assignedPerson} (επόμενος στη σειρά).`;
@@ -2407,12 +2392,9 @@
                                             replacementType: 'next-in-baseline',
                                             missedDateKey: dateKey
                                         });
-                                        // Skip-only missing: do NOT schedule a make-up (no return-from-missing)
-                                        if (!skipOnlyMissing) {
-                                            returnFromMissingSpecial.push({ personName: rotationPerson, groupNum, missedDateKey: dateKey });
-                                            if (!reservedReturnFromMissingByGroup[groupNum]) reservedReturnFromMissingByGroup[groupNum] = new Set();
-                                            reservedReturnFromMissingByGroup[groupNum].add(rotationPerson);
-                                        }
+                                        returnFromMissingSpecial.push({ personName: rotationPerson, groupNum, missedDateKey: dateKey });
+                                        if (!reservedReturnFromMissingByGroup[groupNum]) reservedReturnFromMissingByGroup[groupNum] = new Set();
+                                        reservedReturnFromMissingByGroup[groupNum].add(rotationPerson);
                                         break;
                                     }
                                 }
@@ -3062,8 +3044,6 @@
                 const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
                 const assignedWeekendInMonth = {}; // monthKey -> { groupNum -> Set of person names } already assigned to a weekend this month (so we don't assign same person twice)
                 const updatedAssignments = {}; // dateKey -> { groupNum -> personName }
-                calculationSteps.skipOnlyHoldBack = calculationSteps.skipOnlyHoldBack || { special: {}, weekend: {}, semi: {}, normal: {} };
-                const holdBackWeekend = calculationSteps.skipOnlyHoldBack.weekend;
                 
                 // Load current weekend assignments from preview (tempWeekendAssignments)
                 const tempWeekendAssignments = calculationSteps.tempWeekendAssignments || {};
@@ -3083,13 +3063,10 @@
                         const groupData = groups[groupNum] || { weekend: [] };
                         const groupPeople = groupData.weekend || [];
                         if (groupPeople.length === 0) continue;
-                        if (!holdBackWeekend[groupNum]) holdBackWeekend[groupNum] = new Set();
                         if (!skippedInMonth[monthKey][groupNum]) skippedInMonth[monthKey][groupNum] = new Set();
                         if (!assignedWeekendInMonth[monthKey][groupNum]) assignedWeekendInMonth[monthKey][groupNum] = new Set();
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (!currentPerson) continue;
-                        // If it's this person's baseline turn, release them so they can be assigned normally.
-                        if (holdBackWeekend[groupNum].has(currentPerson)) holdBackWeekend[groupNum].delete(currentPerson);
                         const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(currentPerson) || false;
                         const alreadyAssignedThisMonth = assignedWeekendInMonth[monthKey][groupNum].has(currentPerson);
                         if (!hasSpecialHoliday && !alreadyAssignedThisMonth) {
@@ -3106,7 +3083,6 @@
                             const nextIndex = (currentIndex + offset) % rotationDays;
                             const candidate = groupPeople[nextIndex];
                             if (!candidate) continue;
-                            if (holdBackWeekend[groupNum].has(candidate)) continue; // do not pull forward skip-only people
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
                             if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
                             const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
@@ -3152,14 +3128,10 @@
                         const groupData = groups[groupNum] || { weekend: [] };
                         const groupPeople = groupData.weekend || [];
                         if (groupPeople.length === 0) continue;
-                        if (!holdBackWeekend[groupNum]) holdBackWeekend[groupNum] = new Set();
                         if (!assignedWeekendInMonth[monthKey][groupNum]) assignedWeekendInMonth[monthKey][groupNum] = new Set();
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (!currentPerson) continue;
                         if (!isPersonMissingOnDate(currentPerson, groupNum, date, 'weekend')) continue;
-                        // If missing reason is "Επιλαχών Αντικατάσταση", do NOT swap to another date; only skip this date and continue rotation.
-                        const skipOnly = isSkipOnlyMissingReason(currentPerson, groupNum, date);
-                        if (skipOnly) holdBackWeekend[groupNum].add(currentPerson);
                         const rotationDays = groupPeople.length;
                         let currentIndex = groupPeople.indexOf(currentPerson);
                         if (currentIndex === -1) currentIndex = 0;
@@ -3167,7 +3139,7 @@
                         // Try to swap with another weekend date in the same month
                         let swapPartnerDateKey = null;
                         let swapPartnerPerson = null;
-                        for (const otherDateKey of (skipOnly ? [] : sortedWeekends)) {
+                        for (const otherDateKey of sortedWeekends) {
                             if (otherDateKey === dateKey) continue;
                             const otherDate = new Date(otherDateKey + 'T00:00:00');
                             const otherMonthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(otherDate) : `${otherDate.getFullYear()}-${String(otherDate.getMonth() + 1).padStart(2, '0')}`;
@@ -3224,7 +3196,6 @@
                             const nextIndex = (currentIndex + offset) % rotationDays;
                             const candidate = groupPeople[nextIndex];
                             if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                            if (holdBackWeekend[groupNum].has(candidate)) continue; // do not pull forward skip-only people
                             const candidateAlreadyAssigned = assignedWeekendInMonth[monthKey][groupNum].has(candidate);
                             if (!candidateAlreadyAssigned) {
                                 swapPerson = candidate;
@@ -4852,8 +4823,6 @@
                             for (const personName of Object.keys(missingMap)) {
                                 const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                                 for (const period of periods) {
-                                    const reasonTrim = (period?.reason || '').toString().trim();
-                                    if (isSkipOnlyReasonText(reasonTrim)) continue; // skip-only: no return-from-missing reinsertion
                                     const pStartKey = inputValueToDateKey(period?.start);
                                     const pEndKey = inputValueToDateKey(period?.end);
                                     if (!pStartKey || !pEndKey) continue;
@@ -6587,8 +6556,6 @@
                             if (!weekendList.some(p => normW(p) === normW(personName))) continue;
                             const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                             for (const period of periods) {
-                                    const reasonTrim = (period?.reason || '').toString().trim();
-                                    if (isSkipOnlyReasonText(reasonTrim)) continue; // skip-only: no return-from-missing placement
                                 const pStartKey = inputValueToDateKey(period?.start);
                                 const pEndKey = inputValueToDateKey(period?.end);
                                 if (!pStartKey || !pEndKey) continue;
@@ -6911,7 +6878,6 @@
                             }
                             // Phase 2: Swaps because person is missing on this date
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
-                                const skipOnlyMissing = isSkipOnlyMissingReason(assignedPerson, groupNum, date);
                                 let currentIndex = groupPeople.indexOf(assignedPerson);
                                 if (currentIndex === -1) currentIndex = 0;
                                 let swapPerson = null;
@@ -6943,8 +6909,7 @@
                                     );
                                     assignedPerson = swapPerson;
                                     wasReplaced = true;
-                                    // Skip-only missing: advance rotation from the skipped baseline position, not from the replacement.
-                                    replacementIndex = skipOnlyMissing ? rotationPosition : groupPeople.indexOf(swapPerson);
+                                    replacementIndex = groupPeople.indexOf(swapPerson);
                                 }
                                 // If no replacement found, keep assignedPerson (missing) so runWeekendSkipLogic can perform same-month swap when user clicks Next
                             }
@@ -7224,8 +7189,6 @@
                         if (!semiList.some(p => normSemiRun(p) === normSemiRun(personName))) continue;
                         const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                         for (const period of periods) {
-                            const reasonTrim = (period?.reason || '').toString().trim();
-                            if (isSkipOnlyReasonText(reasonTrim)) continue; // skip-only: no return-from-missing for semi
                             const pStartKey = inputValueToDateKey(period?.start);
                             const pEndKey = inputValueToDateKey(period?.end);
                             if (!pStartKey || !pEndKey) continue;
@@ -8098,7 +8061,6 @@
                             semiRotationPersons[dateKey][groupNum] = (wasDisabledOnlySkippedSemi && assignedPerson) ? assignedPerson : rotationPerson;
                             // MISSING (not disabled): show replacement and store reason.
                             if (!isRotationPersonDisabledSemi && assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
-                                const skipOnlyMissing = isSkipOnlyMissingReason(rotationPerson, groupNum, date);
                                 if (!assignedPeoplePreviewSemi[monthKey][groupNum]) {
                                     assignedPeoplePreviewSemi[monthKey][groupNum] = {};
                                 }
@@ -8116,8 +8078,7 @@
                                         if (daysDiff <= 5 && daysDiff > 0) continue;
                                         }
                                     assignedPerson = candidate;
-                                    // Skip-only missing: advance rotation from the skipped baseline position, not from the replacement.
-                                    replacementIndex = skipOnlyMissing ? rotationPosition : idx;
+                                    replacementIndex = idx;
                                     wasReplaced = true;
                                     foundReplacement = true;
                                     storeAssignmentReason(
@@ -10214,51 +10175,6 @@
             
             alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
         }
-        // Skip-only missing reason (should NOT trigger swaps/return-from-missing; only skip and continue rotation).
-        // Accept common spellings and ignore accents/case to avoid Firestore/UI text mismatches.
-        const MISSING_REASON_SKIP_ONLY_ALIASES = [
-            'Επιλαχών Αντικατάσταση',
-            'Επιλαχών Αντάλλαγης',
-            'Επιλαχών Ανταλλαγής',
-            'Επιλαχών Ανταλλαγη'
-        ];
-        const _normGreek = (s) => String(s || '')
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .trim()
-            .toUpperCase();
-        const _skipOnlyReasonNormSet = new Set(MISSING_REASON_SKIP_ONLY_ALIASES.map(_normGreek).filter(Boolean));
-        function isSkipOnlyReasonText(reasonText) {
-            return _skipOnlyReasonNormSet.has(_normGreek(reasonText));
-        }
-
-        function getMissingPeriodForDate(person, groupNum, date) {
-            const groupData = groups[groupNum] || { missingPeriods: {} };
-            const missingPeriods = groupData.missingPeriods?.[person] || [];
-            if (!Array.isArray(missingPeriods) || missingPeriods.length === 0) return null;
-
-            const checkDate = new Date(date);
-            if (isNaN(checkDate.getTime())) return null;
-            checkDate.setHours(0, 0, 0, 0);
-
-            for (const period of missingPeriods) {
-                const start = new Date(period.start + 'T00:00:00');
-                const end = new Date(period.end + 'T00:00:00');
-                if (isNaN(start.getTime()) || isNaN(end.getTime())) continue;
-                if (checkDate >= start && checkDate <= end) return period;
-            }
-            return null;
-        }
-
-        function getMissingReasonOnDate(person, groupNum, date) {
-            const p = getMissingPeriodForDate(person, groupNum, date);
-            return p && typeof p.reason === 'string' ? p.reason.trim() : '';
-        }
-
-        function isSkipOnlyMissingReason(person, groupNum, date) {
-            return isSkipOnlyReasonText(getMissingReasonOnDate(person, groupNum, date));
-        }
-
         function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return true;
