@@ -1516,6 +1516,48 @@
                 assignmentsObj[dateKey] = newAssignmentStr;
                 dutyAssignments[dateKey] = newAssignmentStr;
 
+                // CRITICAL: Preserve baseline rotation for this date as the skipped person (A),
+                // so rotation continuation stays B,C,E... (replacement D does NOT consume their rotation turn).
+                try {
+                    const getBaselineObj = () => {
+                        if (typeCategory === 'special') return rotationBaselineSpecialAssignments;
+                        if (typeCategory === 'weekend') return rotationBaselineWeekendAssignments;
+                        if (typeCategory === 'semi') return rotationBaselineSemiAssignments;
+                        return rotationBaselineNormalAssignments;
+                    };
+                    const baselineObj = getBaselineObj();
+                    const existingBaseline = baselineObj?.[dateKey] || null;
+                    const baselineMap = extractGroupAssignmentsMap(existingBaseline);
+                    baselineMap[groupNum] = personName;
+                    const baseParts = [];
+                    for (let g = 1; g <= 4; g++) {
+                        const pn = baselineMap[g];
+                        if (pn) baseParts.push(`${pn} (Ομάδα ${g})`);
+                    }
+                    const baselineStr = baseParts.join(', ');
+                    baselineObj[dateKey] = baselineStr;
+
+                    // Persist baseline doc for this month (without touching other months)
+                    if (window.db && firebase?.firestore) {
+                        const db = window.db || firebase.firestore();
+                        const user = window.auth?.currentUser;
+                        const monthName = (typeof getMonthNameFromDateKey === 'function') ? getMonthNameFromDateKey(dateKey) : null;
+                        const docId = typeCategory === 'special'
+                            ? 'rotationBaselineSpecialAssignments'
+                            : (typeCategory === 'weekend'
+                                ? 'rotationBaselineWeekendAssignments'
+                                : (typeCategory === 'semi'
+                                    ? 'rotationBaselineSemiAssignments'
+                                    : 'rotationBaselineNormalAssignments'));
+                        if (user && monthName && typeof mergeAndSaveMonthOrganizedAssignmentsDoc === 'function') {
+                            const patch = { [monthName]: { [dateKey]: baselineStr } };
+                            await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, docId, patch);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Failed to persist baseline after manual alternate replacement:', e);
+                }
+
                 const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 const reason = `Αντικατάσταση Επιλαχών: Παραλείφθηκε ο/η ${personName} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}. Ανατέθηκε ο/η ${replacement}.`;
                 if (typeof storeAssignmentReason === 'function') {

@@ -2817,8 +2817,16 @@
                 const dayType = getDayType(date);
                 const rotationType = mapDayTypeToRotationType(dayType);
 
+                // Prefer baseline (rotation) assignment when available, so replacements (e.g. manual skip)
+                // do not shift the computed "next on rotation" list.
+                const baseline = (typeof getRotationBaselineAssignmentForDate === 'function')
+                    ? getRotationBaselineAssignmentForDate(dayKey)
+                    : null;
+                const baselineMap = baseline ? extractGroupAssignmentsMap(baseline) : null;
+                const baselinePerson = baselineMap?.[groupNum] || '';
+
                 const assignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
-                const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
+                const personName = baselinePerson || getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
                 if (personName) lastAssigned[rotationType] = personName;
             }
 
