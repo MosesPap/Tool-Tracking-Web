@@ -2945,11 +2945,69 @@
             return colors[dayType] || [255, 255, 255]; // Default white
         }
 
+        // Excel export month selection (separate from calendar currentDate)
+        let _excelExportDate = null; // Date object set to 1st of selected month
+
+        // Open a Greek month picker for Excel export
+        function openExcelMonthPicker() {
+            const modalEl = document.getElementById('excelMonthPickerModal');
+            const yearEl = document.getElementById('excelMonthPickerYear');
+            const monthsEl = document.getElementById('excelMonthPickerMonths');
+            if (!modalEl || !yearEl || !monthsEl) return;
+
+            const greekMonthNames = (() => {
+                const names = [];
+                for (let m = 0; m < 12; m++) {
+                    names.push(new Date(2024, m, 1).toLocaleDateString('el-GR', { month: 'long' }));
+                }
+                return names;
+            })();
+
+            const base = (_excelExportDate instanceof Date && !isNaN(_excelExportDate.getTime())) ? _excelExportDate : currentDate;
+            let pickerYear = base.getFullYear();
+
+            const renderPickerMonths = () => {
+                yearEl.textContent = pickerYear;
+                monthsEl.innerHTML = '';
+                greekMonthNames.forEach((name, index) => {
+                    const col = document.createElement('div');
+                    col.className = 'col-4';
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'btn btn-outline-success w-100';
+                    btn.textContent = name;
+                    btn.addEventListener('click', () => {
+                        _excelExportDate = new Date(pickerYear, index, 1);
+                        const m = bootstrap.Modal.getInstance(modalEl);
+                        if (m) m.hide();
+                        showExcelPreview(_excelExportDate);
+                    });
+                    col.appendChild(btn);
+                    monthsEl.appendChild(col);
+                });
+            };
+
+            const prevBtn = document.getElementById('excelMonthPickerPrevYear');
+            const nextBtn = document.getElementById('excelMonthPickerNextYear');
+            if (prevBtn) prevBtn.onclick = () => { pickerYear--; renderPickerMonths(); };
+            if (nextBtn) nextBtn.onclick = () => { pickerYear++; renderPickerMonths(); };
+
+            renderPickerMonths();
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
         // Show Excel preview before generating files
-        function showExcelPreview() {
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth();
-            const monthName = getGreekMonthName(currentDate);
+        function showExcelPreview(selectedMonthDate = null) {
+            const base = (selectedMonthDate instanceof Date && !isNaN(selectedMonthDate.getTime()))
+                ? new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth(), 1)
+                : ((_excelExportDate instanceof Date && !isNaN(_excelExportDate.getTime()))
+                    ? new Date(_excelExportDate.getFullYear(), _excelExportDate.getMonth(), 1)
+                    : new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
+            _excelExportDate = base;
+            const year = base.getFullYear();
+            const month = base.getMonth();
+            const monthName = getGreekMonthName(base);
             
             // Get all days of the month
             const firstDay = new Date(year, month, 1);
@@ -3054,9 +3112,12 @@
         // Generate Excel files for current month for all groups
         async function generateExcelFilesForCurrentMonth(skipPreview = false) {
             try {
-                const year = currentDate.getFullYear();
-                const month = currentDate.getMonth();
-                const monthName = getGreekMonthName(currentDate);
+                const base = (_excelExportDate instanceof Date && !isNaN(_excelExportDate.getTime()))
+                    ? _excelExportDate
+                    : currentDate;
+                const year = base.getFullYear();
+                const month = base.getMonth();
+                const monthName = getGreekMonthName(base);
                 
                 // Get all days of the month
                 const firstDay = new Date(year, month, 1);
