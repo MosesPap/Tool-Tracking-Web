@@ -3017,6 +3017,11 @@
                     const safeMonth = sanitizeFilenameComponent(monthName);
                     return `${prefix}_${safeMonth}_${year}.xlsx`;
                 };
+                const buildExcelPrintoutFilename = (monthName, year) => {
+                    const prefix = 'ΥΠΗΡΕΣΙΑ';
+                    const safeMonth = sanitizeFilenameComponent(monthName);
+                    return `${prefix}_${safeMonth}_${year}_Printout.xlsx`;
+                };
                 const safeSheetName = (name, maxLen = 31) => {
                     const s = (name ?? '').toString().replace(/[\\/*?:\[\]]/g, '_').trim();
                     return s.slice(0, maxLen) || 'Sheet';
@@ -3111,11 +3116,38 @@
                 let saveCancelled = false;
 
                 if (useExcelJS) {
-                    const workbook = new ExcelJS.Workbook();
-                    for (const groupNum of groupNumbersToProcess) {
-                        const groupName = getGroupName(groupNum);
-                        const groupData = groups[groupNum];
-                        const worksheet = workbook.addWorksheet(safeSheetName(groupName));
+                    const buildExcelJSWorkbook = ({ printout = false } = {}) => {
+                        const workbook = new ExcelJS.Workbook();
+                        const palette = printout ? {
+                            titleFill: 'FF404040',
+                            titleFont: 'FFFFFFFF',
+                            headerFill: 'FF404040',
+                            headerFont: 'FFFFFFFF',
+                            day: {
+                                'normal-day':      { fill: 'FFFFFFFF', font: 'FF000000' }, // white / black
+                                'semi-normal-day': { fill: 'FFD9D9D9', font: 'FF000000' }, // light grey / black
+                                'weekend-holiday': { fill: 'FF808080', font: 'FFFFFFFF' }, // grey / white
+                                'special':         { fill: 'FF404040', font: 'FFFFFFFF' }  // dark grey / white
+                            },
+                            right: {
+                                normal:  { fill: 'FFFFFFFF', font: 'FF000000' },
+                                semi:    { fill: 'FFD9D9D9', font: 'FF000000' },
+                                weekend: { fill: 'FF808080', font: 'FFFFFFFF' },
+                                special: { fill: 'FF404040', font: 'FFFFFFFF' }
+                            }
+                        } : {
+                            titleFill: 'FF428BCA',
+                            titleFont: 'FFFFFFFF',
+                            headerFill: 'FF428BCA',
+                            headerFont: 'FFFFFFFF',
+                            day: null,
+                            right: null
+                        };
+
+                        for (const groupNum of groupNumbersToProcess) {
+                            const groupName = getGroupName(groupNum);
+                            const groupData = groups[groupNum];
+                            const worksheet = workbook.addWorksheet(safeSheetName(groupName));
 
                         // Page setup: A4, landscape, custom margins, fit all columns on one page
                         worksheet.pageSetup = {
@@ -3167,7 +3199,8 @@
                         titleCell.font = { 
                             name: 'Arial', 
                             bold: true, 
-                            size: 16
+                            size: 16,
+                            color: { argb: palette.titleFont }
                         };
                         titleCell.alignment = { 
                             horizontal: 'center', 
@@ -3176,9 +3209,8 @@
                         titleCell.fill = {
                             type: 'pattern',
                             pattern: 'solid',
-                            fgColor: { argb: 'FF428BCA' } // Blue background like in photo
+                            fgColor: { argb: palette.titleFill }
                         };
-                        titleCell.font.color = { argb: 'FFFFFFFF' }; // White text
                         // Add borders to title cell
                         titleCell.border = {
                             top: { style: 'thick' },
@@ -3205,12 +3237,12 @@
                                 name: 'Arial', 
                                 bold: true, 
                                 size: 16,
-                                color: { argb: 'FFFFFFFF' } // White text
+                                color: { argb: palette.headerFont }
                             };
                             cell.fill = {
                                 type: 'pattern',
                                 pattern: 'solid',
-                                fgColor: { argb: 'FF428BCA' } // Blue background
+                                fgColor: { argb: palette.headerFill }
                             };
                             cell.alignment = { 
                                 horizontal: 'center', 
@@ -3258,8 +3290,17 @@
                             row.getCell(4).value = ''; // ΑΛΛΑΓΕΣ column - empty for user to fill
                             
                             // Apply color based on day type
-                            const color = getDayTypeColor(dayType);
-                            const hexColor = 'FF' + color.map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase();
+                            let hexColor = null;
+                            let fontColor = 'FF000000';
+                            if (palette.day) {
+                                const mapped = palette.day[dayType] || palette.day['normal-day'];
+                                hexColor = mapped.fill;
+                                fontColor = mapped.font;
+                            } else {
+                                const color = getDayTypeColor(dayType);
+                                hexColor = 'FF' + color.map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase();
+                                fontColor = 'FF000000';
+                            }
                             
                             // Style each cell in the row
                             const isFirstDataRow = day === 1;
@@ -3274,7 +3315,8 @@
                                 };
                                 cell.font = { 
                                     name: 'Arial', 
-                                    size: 14
+                                    size: 14,
+                                    color: { argb: fontColor }
                                 };
                                 cell.alignment = { 
                                     horizontal: (colNum === 1 || colNum === 2) ? 'center' : 'left', 
@@ -3316,7 +3358,7 @@
                         
                         // Style signature cells (Ο ΣΥΝΤΑΞΑΣ, ΕΘ-ΘΗ, Ο ΔΚΤΗΣ): bold Arial 14
                         [sigRow1.getCell(2), sigRow2.getCell(2), sigRow1.getCell(8), sigRow2.getCell(8), sigRow3.getCell(8)].forEach(cell => {
-                            cell.font = { name: 'Arial', size: 14, bold: true };
+                            cell.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FF000000' } };
                             cell.alignment = { horizontal: 'center', vertical: 'middle' };
                         });
                         sigRow1.height = 25;
@@ -3349,16 +3391,16 @@
                             return 'FF' + hex;
                         };
 
-                        const normalFill = fillHex(getDayTypeColor('normal-day'));
-                        const semiFill = fillHex(getDayTypeColor('semi-normal-day'));
-                        const weekendFill = fillHex(getDayTypeColor('weekend-holiday'));
+                        const normalFill = palette.right ? palette.right.normal.fill : fillHex(getDayTypeColor('normal-day'));
+                        const semiFill = palette.right ? palette.right.semi.fill : fillHex(getDayTypeColor('semi-normal-day'));
+                        const weekendFill = palette.right ? palette.right.weekend.fill : fillHex(getDayTypeColor('weekend-holiday'));
                         // Use a vivid magenta for "ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ" as shown in your screenshot
-                        const specialFill = 'FFFF00FF';
+                        const specialFill = palette.right ? palette.right.special.fill : 'FFFF00FF';
 
-                        const writeRightRow = (rowNum, text, { bold = false, center = false, fill = null } = {}) => {
+                        const writeRightRow = (rowNum, text, { bold = false, center = false, fill = null, fontColor = 'FF000000' } = {}) => {
                             const cell = worksheet.getRow(rowNum).getCell(rightCol);
                             cell.value = text || '';
-                            cell.font = { name: 'Arial', size: 14, bold: !!bold, color: { argb: 'FF000000' } };
+                            cell.font = { name: 'Arial', size: 14, bold: !!bold, color: { argb: fontColor } };
                             cell.alignment = { horizontal: center ? 'center' : 'left', vertical: 'middle' };
                             if (fill) {
                                 cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
@@ -3368,201 +3410,275 @@
 
                         // Layout (matching screenshot): start around row 5, stacked blocks with blank separators.
                         let rr = 5; // Row 5 in Excel (after I1, title, empty, header)
-                        writeRightRow(rr, 'ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ', { bold: true, center: true });
+                        writeRightRow(rr, 'ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ', { bold: true, center: true, fontColor: 'FF000000' });
                         setBlockBorder(rr, true, true);
                         rr += 2; // blank row between title and first block
 
-                        const writeCategoryBlock = (title, fill, names) => {
-                            writeRightRow(rr, title, { bold: true, center: true, fill });
+                        const writeCategoryBlock = (title, fill, names, fontColor) => {
+                            writeRightRow(rr, title, { bold: true, center: true, fill, fontColor });
                             setBlockBorder(rr, true, false);
                             rr++;
 
-                            writeRightRow(rr, names?.[0] || '', { fill });
+                            writeRightRow(rr, names?.[0] || '', { fill, fontColor });
                             setBlockBorder(rr, false, false);
                             rr++;
 
-                            writeRightRow(rr, names?.[1] || '', { fill });
+                            writeRightRow(rr, names?.[1] || '', { fill, fontColor });
                             setBlockBorder(rr, false, true);
                             rr += 2; // blank row between blocks
                         };
 
-                        writeCategoryBlock('ΚΑΘΗΜΕΡΙΝΕΣ', normalFill, rotationInfo.next.normal);
-                        writeCategoryBlock('ΗΜΙΑΡΓΙΕΣ', semiFill, rotationInfo.next.semi);
-                        writeCategoryBlock('ΑΡΓΙΕΣ', weekendFill, rotationInfo.next.weekend);
-                        writeCategoryBlock('ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', specialFill, rotationInfo.next.special);
+                        const rightFontNormal = palette.right ? palette.right.normal.font : 'FF000000';
+                        const rightFontSemi = palette.right ? palette.right.semi.font : 'FF000000';
+                        const rightFontWeekend = palette.right ? palette.right.weekend.font : 'FF000000';
+                        const rightFontSpecial = palette.right ? palette.right.special.font : 'FF000000';
+
+                        writeCategoryBlock('ΚΑΘΗΜΕΡΙΝΕΣ', normalFill, rotationInfo.next.normal, rightFontNormal);
+                        writeCategoryBlock('ΗΜΙΑΡΓΙΕΣ', semiFill, rotationInfo.next.semi, rightFontSemi);
+                        writeCategoryBlock('ΑΡΓΙΕΣ', weekendFill, rotationInfo.next.weekend, rightFontWeekend);
+                        writeCategoryBlock('ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', specialFill, rotationInfo.next.special, rightFontSpecial);
                     }
+                        return workbook;
+                    };
+
                     const fileName = buildExcelFilename(monthName, year);
-                    const buffer = await workbook.xlsx.writeBuffer();
-                    let saved = await saveBytesToMonthFolder(fileName, buffer);
-                    if (!saved) {
-                        const pickerResult = await saveExcelWithSaveFilePicker(fileName, buffer);
+                    const printoutFileName = buildExcelPrintoutFilename(monthName, year);
+
+                    const workbookColor = buildExcelJSWorkbook({ printout: false });
+                    const bufferColor = await workbookColor.xlsx.writeBuffer();
+                    const workbookPrint = buildExcelJSWorkbook({ printout: true });
+                    const bufferPrint = await workbookPrint.xlsx.writeBuffer();
+
+                    // Save color version (keep naming), then printout
+                    let savedColor = await saveBytesToMonthFolder(fileName, bufferColor);
+                    if (!savedColor) {
+                        const pickerResult = await saveExcelWithSaveFilePicker(fileName, bufferColor);
                         if (pickerResult.cancelled) saveCancelled = true;
                         else {
-                            saved = pickerResult.saved;
-                            if (!saved) downloadBytes(fileName, buffer);
+                            savedColor = pickerResult.saved;
+                            if (!savedColor) downloadBytes(fileName, bufferColor);
                         }
                     }
-                    if (saved) fileWasSaved = true;
-                } else {
-                    const wb = XLSX.utils.book_new();
-                    const formatDateGreekAbbrSheet = (date) => {
-                        const day = date.getDate();
-                        const monthAbbr = ['ΙΑΝ', 'ΦΕΒ', 'ΜΑΡ', 'ΑΠΡ', 'ΜΑΪ', 'ΙΟΥΝ', 'ΙΟΥΛ', 'ΑΥΓ', 'ΣΕΠ', 'ΟΚΤ', 'ΝΟΕ', 'ΔΕΚ'];
-                        return `${day} ${monthAbbr[date.getMonth()]} ${date.getFullYear()}`;
-                    };
-                    for (const groupNum of groupNumbersToProcess) {
-                        const groupName = getGroupName(groupNum);
-                        const groupData = groups[groupNum];
-                        const data = [];
-                        const rowDayTypes = [];
-                        const today = new Date();
-                        const formattedDate = formatDateGreekAbbrSheet(today);
-                        data.push(['', '', '', '', '', '', '', '', `55 ΣΜ. ΜΑΧΗΣ\nΜΣΑ\nΤΜ. ΠΡΟΣΩΠΙΚΟΥ\nΤΙΜΗ, ${formattedDate}`]);
-                        rowDayTypes.push(null);
-                        data.push([`ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`]);
-                        rowDayTypes.push(null);
-                        data.push([]);
-                        rowDayTypes.push(null);
-                        data.push(['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΑΛΛΑΓΕΣ']);
-                        rowDayTypes.push(null);
-                        for (let day = 1; day <= daysInMonth; day++) {
-                            const date = new Date(year, month, day);
-                            const dayKey = formatDateKey(date);
-                            const dayType = getDayType(date);
-                            const dayName = getGreekDayNameUppercase(date);
-                            const assignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
-                            const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
-                            const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
-                            data.push([dateStr, dayName, personName, '', '', '', '', '']);
-                            rowDayTypes.push(dayType);
+                    if (savedColor) fileWasSaved = true;
+
+                    if (!saveCancelled) {
+                        let savedPrint = await saveBytesToMonthFolder(printoutFileName, bufferPrint);
+                        if (!savedPrint) {
+                            const pickerResult = await saveExcelWithSaveFilePicker(printoutFileName, bufferPrint);
+                            if (!pickerResult.cancelled) {
+                                savedPrint = pickerResult.saved;
+                                if (!savedPrint) downloadBytes(printoutFileName, bufferPrint);
+                            }
                         }
-                        data.push(['', '', '', '', '', '', '', '']);
-                        rowDayTypes.push(null);
-                        const lastDataRowIdx = data.length - 1;
-                        data.push(['', 'Ο', '', '', '', '', '', '']);
-                        data.push(['', 'ΣΥΝΤΑΞΑΣ', '', '', '', '', '', '']);
-                        const sigRow1Idx = data.length - 2;
-                        const sigRow2Idx = data.length - 1;
-                        data[sigRow1Idx][7] = 'ΕΘ-ΘΗ';
-                        data[sigRow2Idx][7] = 'Ο';
-                        data.push(['', '', '', '', '', '', '', 'ΔΚΤΗΣ']);
-                        rowDayTypes.push(null, null, null);
-                        const rotationInfo = getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments });
-                        const rightRows = [
-                            { row: 5, text: 'ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ', kind: 'title' },
-                            { row: 7, text: 'ΚΑΘΗΜΕΡΙΝΕΣ', kind: 'normalHeader' },
-                            { row: 8, text: rotationInfo.next.normal[0] || '', kind: 'normal' },
-                            { row: 9, text: rotationInfo.next.normal[1] || '', kind: 'normal' },
-                            { row: 11, text: 'ΗΜΙΑΡΓΙΕΣ', kind: 'semiHeader' },
-                            { row: 12, text: rotationInfo.next.semi[0] || '', kind: 'semi' },
-                            { row: 13, text: rotationInfo.next.semi[1] || '', kind: 'semi' },
-                            { row: 15, text: 'ΑΡΓΙΕΣ', kind: 'weekendHeader' },
-                            { row: 16, text: rotationInfo.next.weekend[0] || '', kind: 'weekend' },
-                            { row: 17, text: rotationInfo.next.weekend[1] || '', kind: 'weekend' },
-                            { row: 19, text: 'ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', kind: 'specialHeader' },
-                            { row: 20, text: rotationInfo.next.special[0] || '', kind: 'special' },
-                            { row: 21, text: rotationInfo.next.special[1] || '', kind: 'special' }
-                        ];
-                        const ws = XLSX.utils.aoa_to_sheet(data);
-                        ws['!cols'] = [{ wch: 14 }, { wch: 17 }, { wch: 57 }, { wch: 56.5 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 48 }, { wch: 25 }];
-                        if (!ws['!merges']) ws['!merges'] = [];
-                        ws['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: 8 } });
-                        ws['!rows'] = Array.from({ length: data.length }, () => ({ hpt: 23 }));
-                        ws['!margins'] = {
-                            left:   0.12,
-                            right:  0.12,
-                            top:    0.12,
-                            bottom: 0.12,
-                            header: 0.20,
-                            footer: 0.20
+                        if (savedPrint) fileWasSaved = true;
+                    }
+                } else {
+                    const buildSheetJSWorkbook = ({ printout = false } = {}) => {
+                        const wb = XLSX.utils.book_new();
+                        const palette = printout ? {
+                            titleFill: '404040',
+                            titleFont: 'FFFFFF',
+                            headerFill: '404040',
+                            headerFont: 'FFFFFF',
+                            day: {
+                                'normal-day':      { fill: 'FFFFFF', font: '000000' },
+                                'semi-normal-day': { fill: 'D9D9D9', font: '000000' },
+                                'weekend-holiday': { fill: '808080', font: 'FFFFFF' },
+                                'special':         { fill: '404040', font: 'FFFFFF' }
+                            },
+                            right: {
+                                normal:  { fill: 'FFFFFF', font: '000000' },
+                                semi:    { fill: 'D9D9D9', font: '000000' },
+                                weekend: { fill: '808080', font: 'FFFFFF' },
+                                special: { fill: '404040', font: 'FFFFFF' }
+                            }
+                        } : null;
+
+                        const formatDateGreekAbbrSheet = (date) => {
+                            const day = date.getDate();
+                            const monthAbbr = ['ΙΑΝ', 'ΦΕΒ', 'ΜΑΡ', 'ΑΠΡ', 'ΜΑΪ', 'ΙΟΥΝ', 'ΙΟΥΛ', 'ΑΥΓ', 'ΣΕΠ', 'ΟΚΤ', 'ΝΟΕ', 'ΔΕΚ'];
+                            return `${day} ${monthAbbr[date.getMonth()]} ${date.getFullYear()}`;
                         };
-                        const i1Cell = 'I1';
-                        if (!ws[i1Cell]) ws[i1Cell] = { t: 's', v: data[0][8] || '' };
-                        if (!ws[i1Cell].s) ws[i1Cell].s = {};
-                        ws[i1Cell].s.font = { name: 'Arial', bold: true, sz: 12, color: { rgb: '000000' } };
-                        ws[i1Cell].s.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
-                        const titleCell = 'A2';
-                        if (!ws[titleCell]) ws[titleCell] = { t: 's', v: data[1][0] || '' };
-                        if (!ws[titleCell].s) ws[titleCell].s = {};
-                        ws[titleCell].s.font = { name: 'Arial', bold: true, sz: 16, color: { rgb: 'FFFFFF' } };
-                        ws[titleCell].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
-                        ws[titleCell].s.alignment = { horizontal: 'center', vertical: 'center' };
-                        const headerRow = 3;
-                        ['A', 'B', 'C', 'D'].forEach((col, idx) => {
-                            const cellRef = col + (headerRow + 1);
-                            if (!ws[cellRef]) ws[cellRef] = { t: 's', v: data[headerRow][idx] || '' };
-                            if (!ws[cellRef].s) ws[cellRef].s = {};
-                            ws[cellRef].s.font = { name: 'Arial', bold: true, sz: 16, color: { rgb: 'FFFFFF' } };
-                            ws[cellRef].s.fill = { fgColor: { rgb: '428BCA' }, patternType: 'solid' };
-                            ws[cellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
-                        });
-                        const dayTypeToRgb = (dayType) => getDayTypeColor(dayType).map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
-                        const normalRgb = dayTypeToRgb('normal-day');
-                        const semiRgb = dayTypeToRgb('semi-normal-day');
-                        const weekendRgb = dayTypeToRgb('weekend-holiday');
-                        const specialRgb = 'FF00FF';
-                        const styleCell = (addr, { bold = false, center = false, fillRgb = null } = {}) => {
-                            if (!ws[addr]) ws[addr] = { t: 's', v: '' };
-                            if (!ws[addr].s) ws[addr].s = {};
-                            ws[addr].s.font = { name: 'Arial', bold: !!bold, sz: 14, color: { rgb: '000000' } };
-                            ws[addr].s.alignment = { horizontal: center ? 'center' : 'left', vertical: 'center' };
-                            if (fillRgb) ws[addr].s.fill = { fgColor: { rgb: fillRgb }, patternType: 'solid' };
-                        };
-                        rightRows.forEach(rr => {
-                            const hAddr = 'H' + (rr.row + 1);
-                            if (!ws[hAddr]) ws[hAddr] = { t: 's', v: rr.text || '' };
-                            else ws[hAddr].v = rr.text || '';
-                            const kind = rr.kind || '';
-                            if (kind === 'title') styleCell(hAddr, { bold: true, center: true });
-                            else if (kind.startsWith('normal')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: normalRgb });
-                            else if (kind.startsWith('semi')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: semiRgb });
-                            else if (kind.startsWith('weekend')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: weekendRgb });
-                            else if (kind.startsWith('special')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: specialRgb });
-                        });
-                        // Signature cells (Ο ΣΥΝΤΑΞΑΣ, ΕΘ-ΘΗ, Ο ΔΚΤΗΣ): bold Arial 14
-                        ['B', 'H'].forEach(col => {
-                            [sigRow1Idx + 1, sigRow2Idx + 1].forEach(row1 => {
-                                const addr = col + row1;
+
+                        for (const groupNum of groupNumbersToProcess) {
+                            const groupName = getGroupName(groupNum);
+                            const groupData = groups[groupNum];
+                            const data = [];
+                            const rowDayTypes = [];
+                            const today = new Date();
+                            const formattedDate = formatDateGreekAbbrSheet(today);
+                            data.push(['', '', '', '', '', '', '', '', `55 ΣΜ. ΜΑΧΗΣ\nΜΣΑ\nΤΜ. ΠΡΟΣΩΠΙΚΟΥ\nΤΙΜΗ, ${formattedDate}`]);
+                            rowDayTypes.push(null);
+                            data.push([`ΥΠΗΡΕΣΙΑ ${groupName} ΜΗΝΟΣ ${monthName.toUpperCase()} ${year}`]);
+                            rowDayTypes.push(null);
+                            data.push([]);
+                            rowDayTypes.push(null);
+                            data.push(['ΗΜΕΡ.', 'ΗΜΕΡΑ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΑΛΛΑΓΕΣ']);
+                            rowDayTypes.push(null);
+                            for (let day = 1; day <= daysInMonth; day++) {
+                                const date = new Date(year, month, day);
+                                const dayKey = formatDateKey(date);
+                                const dayType = getDayType(date);
+                                const dayName = getGreekDayNameUppercase(date);
+                                const assignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
+                                const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
+                                const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
+                                data.push([dateStr, dayName, personName, '', '', '', '', '']);
+                                rowDayTypes.push(dayType);
+                            }
+                            data.push(['', '', '', '', '', '', '', '']);
+                            rowDayTypes.push(null);
+                            data.push(['', 'Ο', '', '', '', '', '', '']);
+                            data.push(['', 'ΣΥΝΤΑΞΑΣ', '', '', '', '', '', '']);
+                            const sigRow1Idx = data.length - 2;
+                            const sigRow2Idx = data.length - 1;
+                            data[sigRow1Idx][7] = 'ΕΘ-ΘΗ';
+                            data[sigRow2Idx][7] = 'Ο';
+                            data.push(['', '', '', '', '', '', '', 'ΔΚΤΗΣ']);
+                            rowDayTypes.push(null, null, null);
+
+                            const rotationInfo = getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments });
+                            const rightRows = [
+                                { row: 5, text: 'ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ', kind: 'title' },
+                                { row: 7, text: 'ΚΑΘΗΜΕΡΙΝΕΣ', kind: 'normalHeader' },
+                                { row: 8, text: rotationInfo.next.normal[0] || '', kind: 'normal' },
+                                { row: 9, text: rotationInfo.next.normal[1] || '', kind: 'normal' },
+                                { row: 11, text: 'ΗΜΙΑΡΓΙΕΣ', kind: 'semiHeader' },
+                                { row: 12, text: rotationInfo.next.semi[0] || '', kind: 'semi' },
+                                { row: 13, text: rotationInfo.next.semi[1] || '', kind: 'semi' },
+                                { row: 15, text: 'ΑΡΓΙΕΣ', kind: 'weekendHeader' },
+                                { row: 16, text: rotationInfo.next.weekend[0] || '', kind: 'weekend' },
+                                { row: 17, text: rotationInfo.next.weekend[1] || '', kind: 'weekend' },
+                                { row: 19, text: 'ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', kind: 'specialHeader' },
+                                { row: 20, text: rotationInfo.next.special[0] || '', kind: 'special' },
+                                { row: 21, text: rotationInfo.next.special[1] || '', kind: 'special' }
+                            ];
+
+                            const ws = XLSX.utils.aoa_to_sheet(data);
+                            ws['!cols'] = [{ wch: 14 }, { wch: 17 }, { wch: 57 }, { wch: 56.5 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 53 }, { wch: 25 }];
+                            if (!ws['!merges']) ws['!merges'] = [];
+                            ws['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: 8 } });
+                            ws['!rows'] = Array.from({ length: data.length }, () => ({ hpt: 23 }));
+                            ws['!margins'] = { left: 0.12, right: 0.12, top: 0.12, bottom: 0.12, header: 0.20, footer: 0.20 };
+
+                            const i1Cell = 'I1';
+                            if (!ws[i1Cell]) ws[i1Cell] = { t: 's', v: data[0][8] || '' };
+                            if (!ws[i1Cell].s) ws[i1Cell].s = {};
+                            ws[i1Cell].s.font = { name: 'Arial', bold: true, sz: 12, color: { rgb: '000000' } };
+                            ws[i1Cell].s.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+
+                            const titleCell = 'A2';
+                            if (!ws[titleCell]) ws[titleCell] = { t: 's', v: data[1][0] || '' };
+                            if (!ws[titleCell].s) ws[titleCell].s = {};
+                            ws[titleCell].s.font = { name: 'Arial', bold: true, sz: 16, color: { rgb: palette ? palette.titleFont : 'FFFFFF' } };
+                            ws[titleCell].s.fill = { fgColor: { rgb: palette ? palette.titleFill : '428BCA' }, patternType: 'solid' };
+                            ws[titleCell].s.alignment = { horizontal: 'center', vertical: 'center' };
+
+                            const headerRow = 3;
+                            ['A', 'B', 'C', 'D'].forEach((col, idx) => {
+                                const cellRef = col + (headerRow + 1);
+                                if (!ws[cellRef]) ws[cellRef] = { t: 's', v: data[headerRow][idx] || '' };
+                                if (!ws[cellRef].s) ws[cellRef].s = {};
+                                ws[cellRef].s.font = { name: 'Arial', bold: true, sz: 16, color: { rgb: palette ? palette.headerFont : 'FFFFFF' } };
+                                ws[cellRef].s.fill = { fgColor: { rgb: palette ? palette.headerFill : '428BCA' }, patternType: 'solid' };
+                                ws[cellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
+                            });
+
+                            const dayTypeToRgb = (dayType) => getDayTypeColor(dayType).map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+                            const normalRgb = palette ? palette.right.normal.fill : dayTypeToRgb('normal-day');
+                            const semiRgb = palette ? palette.right.semi.fill : dayTypeToRgb('semi-normal-day');
+                            const weekendRgb = palette ? palette.right.weekend.fill : dayTypeToRgb('weekend-holiday');
+                            const specialRgb = palette ? palette.right.special.fill : 'FF00FF';
+
+                            const styleCell = (addr, { bold = false, center = false, fillRgb = null, fontRgb = '000000' } = {}) => {
                                 if (!ws[addr]) ws[addr] = { t: 's', v: '' };
                                 if (!ws[addr].s) ws[addr].s = {};
-                                ws[addr].s.font = { name: 'Arial', bold: true, sz: 14, color: { rgb: '000000' } };
-                                ws[addr].s.alignment = { horizontal: 'center', vertical: 'center' };
+                                ws[addr].s.font = { name: 'Arial', bold: !!bold, sz: 14, color: { rgb: fontRgb } };
+                                ws[addr].s.alignment = { horizontal: center ? 'center' : 'left', vertical: 'center' };
+                                if (fillRgb) ws[addr].s.fill = { fgColor: { rgb: fillRgb }, patternType: 'solid' };
+                            };
+
+                            rightRows.forEach(rr => {
+                                const hAddr = 'H' + (rr.row + 1);
+                                if (!ws[hAddr]) ws[hAddr] = { t: 's', v: rr.text || '' };
+                                else ws[hAddr].v = rr.text || '';
+                                const kind = rr.kind || '';
+                                if (kind === 'title') styleCell(hAddr, { bold: true, center: true, fontRgb: '000000' });
+                                else if (kind.startsWith('normal')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: normalRgb, fontRgb: palette ? palette.right.normal.font : '000000' });
+                                else if (kind.startsWith('semi')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: semiRgb, fontRgb: palette ? palette.right.semi.font : '000000' });
+                                else if (kind.startsWith('weekend')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: weekendRgb, fontRgb: palette ? palette.right.weekend.font : '000000' });
+                                else if (kind.startsWith('special')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: specialRgb, fontRgb: palette ? palette.right.special.font : '000000' });
                             });
-                        });
-                        const sigRow3Addr = 'H' + (sigRow2Idx + 2);
-                        if (!ws[sigRow3Addr]) ws[sigRow3Addr] = { t: 's', v: '' };
-                        if (!ws[sigRow3Addr].s) ws[sigRow3Addr].s = {};
-                        ws[sigRow3Addr].s.font = { name: 'Arial', bold: true, sz: 14, color: { rgb: '000000' } };
-                        ws[sigRow3Addr].s.alignment = { horizontal: 'center', vertical: 'center' };
-                        ws['!cols'][7] = { wch: 53 };  // column H
-                        for (let rowIdx = 4; rowIdx < rowDayTypes.length; rowIdx++) {
-                            const dayType = rowDayTypes[rowIdx];
-                            if (!dayType) continue;
-                            const hexColor = dayTypeToRgb(dayType);
-                            const excelRow = rowIdx + 1;
-                            ['A', 'B', 'C', 'D'].forEach((col, colIdx) => {
-                                const cellRef = col + excelRow;
-                                if (!ws[cellRef]) ws[cellRef] = { t: 's', v: data[rowIdx] ? (data[rowIdx][colIdx] || '') : '' };
-                                if (!ws[cellRef].s) ws[cellRef].s = {};
-                                ws[cellRef].s.fill = { fgColor: { rgb: hexColor }, patternType: 'solid' };
-                                ws[cellRef].s.font = { name: 'Arial', sz: 14 };
-                                ws[cellRef].s.alignment = { horizontal: (colIdx === 0 || colIdx === 1) ? 'center' : 'left', vertical: 'center' };
+
+                            // Signature cells (Ο ΣΥΝΤΑΞΑΣ, ΕΘ-ΘΗ, Ο ΔΚΤΗΣ): bold Arial 14
+                            ['B', 'H'].forEach(col => {
+                                [sigRow1Idx + 1, sigRow2Idx + 1].forEach(r1 => {
+                                    const addr = col + r1;
+                                    if (!ws[addr]) ws[addr] = { t: 's', v: '' };
+                                    if (!ws[addr].s) ws[addr].s = {};
+                                    ws[addr].s.font = { name: 'Arial', bold: true, sz: 14, color: { rgb: '000000' } };
+                                    ws[addr].s.alignment = { horizontal: 'center', vertical: 'center' };
+                                });
                             });
+                            const sigRow3Addr = 'H' + (sigRow2Idx + 2);
+                            if (!ws[sigRow3Addr]) ws[sigRow3Addr] = { t: 's', v: '' };
+                            if (!ws[sigRow3Addr].s) ws[sigRow3Addr].s = {};
+                            ws[sigRow3Addr].s.font = { name: 'Arial', bold: true, sz: 14, color: { rgb: '000000' } };
+                            ws[sigRow3Addr].s.alignment = { horizontal: 'center', vertical: 'center' };
+                            ws['!cols'][7] = { wch: 53 };  // column H
+
+                            for (let rowIdx = 4; rowIdx < rowDayTypes.length; rowIdx++) {
+                                const dayType = rowDayTypes[rowIdx];
+                                if (!dayType) continue;
+                                const fillRgb = palette ? (palette.day[dayType] || palette.day['normal-day']).fill : dayTypeToRgb(dayType);
+                                const fontRgb = palette ? (palette.day[dayType] || palette.day['normal-day']).font : '000000';
+                                const excelRow = rowIdx + 1;
+                                ['A', 'B', 'C', 'D'].forEach((col, colIdx) => {
+                                    const cellRef = col + excelRow;
+                                    if (!ws[cellRef]) ws[cellRef] = { t: 's', v: data[rowIdx] ? (data[rowIdx][colIdx] || '') : '' };
+                                    if (!ws[cellRef].s) ws[cellRef].s = {};
+                                    ws[cellRef].s.fill = { fgColor: { rgb: fillRgb }, patternType: 'solid' };
+                                    ws[cellRef].s.font = { name: 'Arial', sz: 14, color: { rgb: fontRgb } };
+                                    ws[cellRef].s.alignment = { horizontal: (colIdx === 0 || colIdx === 1) ? 'center' : 'left', vertical: 'center' };
+                                });
+                            }
+
+                            XLSX.utils.book_append_sheet(wb, ws, safeSheetName(groupName));
                         }
-                        XLSX.utils.book_append_sheet(wb, ws, safeSheetName(groupName));
-                    }
+
+                        return wb;
+                    };
+
                     const fileName = buildExcelFilename(monthName, year);
-                    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-                    let saved = await saveBytesToMonthFolder(fileName, out);
-                    if (!saved) {
-                        const pickerResult = await saveExcelWithSaveFilePicker(fileName, out);
+                    const printoutFileName = buildExcelPrintoutFilename(monthName, year);
+
+                    const wbColor = buildSheetJSWorkbook({ printout: false });
+                    const outColor = XLSX.write(wbColor, { bookType: 'xlsx', type: 'array' });
+                    const wbPrint = buildSheetJSWorkbook({ printout: true });
+                    const outPrint = XLSX.write(wbPrint, { bookType: 'xlsx', type: 'array' });
+
+                    let savedColor = await saveBytesToMonthFolder(fileName, outColor);
+                    if (!savedColor) {
+                        const pickerResult = await saveExcelWithSaveFilePicker(fileName, outColor);
                         if (pickerResult.cancelled) saveCancelled = true;
                         else {
-                            saved = pickerResult.saved;
-                            if (!saved) downloadBytes(fileName, out);
+                            savedColor = pickerResult.saved;
+                            if (!savedColor) downloadBytes(fileName, outColor);
                         }
                     }
-                    if (saved) fileWasSaved = true;
+                    if (savedColor) fileWasSaved = true;
+
+                    if (!saveCancelled) {
+                        let savedPrint = await saveBytesToMonthFolder(printoutFileName, outPrint);
+                        if (!savedPrint) {
+                            const pickerResult = await saveExcelWithSaveFilePicker(printoutFileName, outPrint);
+                            if (!pickerResult.cancelled) {
+                                savedPrint = pickerResult.saved;
+                                if (!savedPrint) downloadBytes(printoutFileName, outPrint);
+                            }
+                        }
+                        if (savedPrint) fileWasSaved = true;
+                    }
                 }
 
                 // Remove loading message
