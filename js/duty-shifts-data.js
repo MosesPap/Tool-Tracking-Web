@@ -3359,7 +3359,7 @@
                             const cell = worksheet.getRow(rowNum).getCell(rightCol);
                             cell.value = text || '';
                             cell.font = { name: 'Arial', size: 14, bold: !!bold, color: { argb: 'FF000000' } };
-                            cell.alignment = { horizontal: center ? 'center' : 'left', vertical: 'middle' };
+                            cell.alignment = { horizontal: center ? 'center' : 'left', vertical: 'middle', wrapText: true };
                             if (fill) {
                                 cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
                             }
@@ -3501,11 +3501,11 @@
                         const semiRgb = dayTypeToRgb('semi-normal-day');
                         const weekendRgb = dayTypeToRgb('weekend-holiday');
                         const specialRgb = 'FF00FF';
-                        const styleCell = (addr, { bold = false, center = false, fillRgb = null } = {}) => {
+                        const styleCell = (addr, { bold = false, center = false, fillRgb = null, wrapText = false } = {}) => {
                             if (!ws[addr]) ws[addr] = { t: 's', v: '' };
                             if (!ws[addr].s) ws[addr].s = {};
                             ws[addr].s.font = { name: 'Arial', bold: !!bold, sz: 14, color: { rgb: '000000' } };
-                            ws[addr].s.alignment = { horizontal: center ? 'center' : 'left', vertical: 'center' };
+                            ws[addr].s.alignment = { horizontal: center ? 'center' : 'left', vertical: 'center', wrapText: !!wrapText };
                             if (fillRgb) ws[addr].s.fill = { fgColor: { rgb: fillRgb }, patternType: 'solid' };
                         };
                         rightRows.forEach(rr => {
@@ -3513,11 +3513,11 @@
                             if (!ws[hAddr]) ws[hAddr] = { t: 's', v: rr.text || '' };
                             else ws[hAddr].v = rr.text || '';
                             const kind = rr.kind || '';
-                            if (kind === 'title') styleCell(hAddr, { bold: true, center: true });
-                            else if (kind.startsWith('normal')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: normalRgb });
-                            else if (kind.startsWith('semi')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: semiRgb });
-                            else if (kind.startsWith('weekend')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: weekendRgb });
-                            else if (kind.startsWith('special')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: specialRgb });
+                            if (kind === 'title') styleCell(hAddr, { bold: true, center: true, wrapText: true });
+                            else if (kind.startsWith('normal')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: normalRgb, wrapText: true });
+                            else if (kind.startsWith('semi')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: semiRgb, wrapText: true });
+                            else if (kind.startsWith('weekend')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: weekendRgb, wrapText: true });
+                            else if (kind.startsWith('special')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: specialRgb, wrapText: true });
                         });
                         // Signature cells (Ο ΣΥΝΤΑΞΑΣ, ΕΘ-ΘΗ, Ο ΔΚΤΗΣ): bold Arial 14
                         ['B', 'H'].forEach(col => {
