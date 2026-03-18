@@ -2157,7 +2157,7 @@
                         const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                         for (const period of periods) {
                             const reasonTrim = (period?.reason || '').toString().trim();
-                            if (reasonTrim === MISSING_REASON_SKIP_ONLY) continue; // skip-only: no return-from-missing for specials
+                            if (isSkipOnlyReasonText(reasonTrim)) continue; // skip-only: no return-from-missing for specials
                             const pStartKey = inputValueToDateKey(period?.start);
                             const pEndKey = inputValueToDateKey(period?.end);
                             if (!pStartKey || !pEndKey) continue;
@@ -4853,7 +4853,7 @@
                                 const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                                 for (const period of periods) {
                                     const reasonTrim = (period?.reason || '').toString().trim();
-                                    if (reasonTrim === MISSING_REASON_SKIP_ONLY) continue; // skip-only: no return-from-missing reinsertion
+                                    if (isSkipOnlyReasonText(reasonTrim)) continue; // skip-only: no return-from-missing reinsertion
                                     const pStartKey = inputValueToDateKey(period?.start);
                                     const pEndKey = inputValueToDateKey(period?.end);
                                     if (!pStartKey || !pEndKey) continue;
@@ -6588,7 +6588,7 @@
                             const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                             for (const period of periods) {
                                     const reasonTrim = (period?.reason || '').toString().trim();
-                                    if (reasonTrim === MISSING_REASON_SKIP_ONLY) continue; // skip-only: no return-from-missing placement
+                                    if (isSkipOnlyReasonText(reasonTrim)) continue; // skip-only: no return-from-missing placement
                                 const pStartKey = inputValueToDateKey(period?.start);
                                 const pEndKey = inputValueToDateKey(period?.end);
                                 if (!pStartKey || !pEndKey) continue;
@@ -7225,7 +7225,7 @@
                         const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                         for (const period of periods) {
                             const reasonTrim = (period?.reason || '').toString().trim();
-                            if (reasonTrim === MISSING_REASON_SKIP_ONLY) continue; // skip-only: no return-from-missing for semi
+                            if (isSkipOnlyReasonText(reasonTrim)) continue; // skip-only: no return-from-missing for semi
                             const pStartKey = inputValueToDateKey(period?.start);
                             const pEndKey = inputValueToDateKey(period?.end);
                             if (!pStartKey || !pEndKey) continue;
@@ -10214,7 +10214,23 @@
             
             alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
         }
-        const MISSING_REASON_SKIP_ONLY = 'Επιλαχών Αντικατάσταση';
+        // Skip-only missing reason (should NOT trigger swaps/return-from-missing; only skip and continue rotation).
+        // Accept common spellings and ignore accents/case to avoid Firestore/UI text mismatches.
+        const MISSING_REASON_SKIP_ONLY_ALIASES = [
+            'Επιλαχών Αντικατάσταση',
+            'Επιλαχών Αντάλλαγης',
+            'Επιλαχών Ανταλλαγής',
+            'Επιλαχών Ανταλλαγη'
+        ];
+        const _normGreek = (s) => String(s || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toUpperCase();
+        const _skipOnlyReasonNormSet = new Set(MISSING_REASON_SKIP_ONLY_ALIASES.map(_normGreek).filter(Boolean));
+        function isSkipOnlyReasonText(reasonText) {
+            return _skipOnlyReasonNormSet.has(_normGreek(reasonText));
+        }
 
         function getMissingPeriodForDate(person, groupNum, date) {
             const groupData = groups[groupNum] || { missingPeriods: {} };
@@ -10240,7 +10256,7 @@
         }
 
         function isSkipOnlyMissingReason(person, groupNum, date) {
-            return getMissingReasonOnDate(person, groupNum, date) === MISSING_REASON_SKIP_ONLY;
+            return isSkipOnlyReasonText(getMissingReasonOnDate(person, groupNum, date));
         }
 
         function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
