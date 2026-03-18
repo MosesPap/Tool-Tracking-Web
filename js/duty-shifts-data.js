@@ -799,8 +799,41 @@
                                 // ignore migration write errors
                             }
                         } else {
-                            missingReasons = list;
+                            // Keep existing custom list, but ensure required options exist
+                            const lower = new Set(list.map(s => String(s).trim().toLowerCase()).filter(Boolean));
+                            const merged = [...list];
+                            for (const r of DEFAULT_MISSING_REASONS) {
+                                const key = String(r).trim().toLowerCase();
+                                if (key && !lower.has(key)) merged.push(r);
+                            }
+                            missingReasons = merged;
+                            // Persist if we appended anything
+                            if (merged.length !== list.length) {
+                                try {
+                                    await db.collection('dutyShifts').doc('missingReasons').set({
+                                        list: missingReasons,
+                                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                        updatedBy: user.uid,
+                                        _migratedFrom: 'append-required'
+                                    });
+                                } catch (_) {
+                                    // ignore migration write errors
+                                }
+                            }
                         }
+                    }
+                } else {
+                    // First-time seed
+                    missingReasons = [...DEFAULT_MISSING_REASONS];
+                    try {
+                        await db.collection('dutyShifts').doc('missingReasons').set({
+                            list: missingReasons,
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedBy: user.uid,
+                            _migratedFrom: 'seed-defaults'
+                        });
+                    } catch (_) {
+                        // ignore seed write errors
                     }
                 }
                 
