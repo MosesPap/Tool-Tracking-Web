@@ -10189,7 +10189,22 @@
 
         function getMissingPeriodForDate(person, groupNum, date) {
             const groupData = groups[groupNum] || { missingPeriods: {} };
-            const missingPeriods = groupData.missingPeriods?.[person] || [];
+            const mp = groupData.missingPeriods || {};
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const key = norm(person);
+            if (!key) return null;
+
+            // Try exact key first (fast path)
+            let missingPeriods = mp?.[person] || [];
+            if (!Array.isArray(missingPeriods) || missingPeriods.length === 0) {
+                // Fallback: normalized-key match (handles storage/assignment name variations)
+                for (const k of Object.keys(mp || {})) {
+                    if (norm(k) === key) {
+                        missingPeriods = mp[k] || [];
+                        break;
+                    }
+                }
+            }
             if (!Array.isArray(missingPeriods) || missingPeriods.length === 0) return null;
 
             const checkDate = new Date(date);
@@ -10217,17 +10232,7 @@
         function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return true;
-            const missingPeriods = groupData.missingPeriods?.[person] || [];
-            if (missingPeriods.length === 0) return false;
-            
-            const checkDate = new Date(date);
-            checkDate.setHours(0, 0, 0, 0);
-            
-            return missingPeriods.some(period => {
-                const start = new Date(period.start + 'T00:00:00');
-                const end = new Date(period.end + 'T00:00:00');
-                return checkDate >= start && checkDate <= end;
-            });
+            return !!getMissingPeriodForDate(person, groupNum, date);
         }
         function findNextEligiblePersonAfterMissing({
             dateKey,
