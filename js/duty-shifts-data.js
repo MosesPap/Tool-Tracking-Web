@@ -3314,9 +3314,9 @@
                         const sigRow3 = worksheet.getRow(lastDataRow + 4);
                         sigRow3.getCell(8).value = 'ΔΚΤΗΣ';
                         
-                        // Style signature cells
+                        // Style signature cells (Ο ΣΥΝΤΑΞΑΣ, ΕΘ-ΘΗ, Ο ΔΚΤΗΣ): bold Arial 14
                         [sigRow1.getCell(2), sigRow2.getCell(2), sigRow1.getCell(8), sigRow2.getCell(8), sigRow3.getCell(8)].forEach(cell => {
-                            cell.font = { name: 'Arial', size: 12 };
+                            cell.font = { name: 'Arial', size: 14, bold: true };
                             cell.alignment = { horizontal: 'center', vertical: 'middle' };
                         });
                         sigRow1.height = 25;
@@ -3519,6 +3519,21 @@
                             else if (kind.startsWith('weekend')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: weekendRgb });
                             else if (kind.startsWith('special')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: specialRgb });
                         });
+                        // Signature cells (Ο ΣΥΝΤΑΞΑΣ, ΕΘ-ΘΗ, Ο ΔΚΤΗΣ): bold Arial 14
+                        ['B', 'H'].forEach(col => {
+                            [sigRow1Idx + 1, sigRow2Idx + 1].forEach(row1 => {
+                                const addr = col + row1;
+                                if (!ws[addr]) ws[addr] = { t: 's', v: '' };
+                                if (!ws[addr].s) ws[addr].s = {};
+                                ws[addr].s.font = { name: 'Arial', bold: true, sz: 14, color: { rgb: '000000' } };
+                                ws[addr].s.alignment = { horizontal: 'center', vertical: 'center' };
+                            });
+                        });
+                        const sigRow3Addr = 'H' + (sigRow2Idx + 2);
+                        if (!ws[sigRow3Addr]) ws[sigRow3Addr] = { t: 's', v: '' };
+                        if (!ws[sigRow3Addr].s) ws[sigRow3Addr].s = {};
+                        ws[sigRow3Addr].s.font = { name: 'Arial', bold: true, sz: 14, color: { rgb: '000000' } };
+                        ws[sigRow3Addr].s.alignment = { horizontal: 'center', vertical: 'center' };
                         for (let rowIdx = 4; rowIdx < rowDayTypes.length; rowIdx++) {
                             const dayType = rowDayTypes[rowIdx];
                             if (!dayType) continue;
