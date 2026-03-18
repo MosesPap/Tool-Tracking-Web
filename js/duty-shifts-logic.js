@@ -10189,22 +10189,7 @@
 
         function getMissingPeriodForDate(person, groupNum, date) {
             const groupData = groups[groupNum] || { missingPeriods: {} };
-            const mp = groupData.missingPeriods || {};
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            const key = norm(person);
-            if (!key) return null;
-
-            // Try exact key first (fast path)
-            let missingPeriods = mp?.[person] || [];
-            if (!Array.isArray(missingPeriods) || missingPeriods.length === 0) {
-                // Fallback: normalized-key match (handles storage/assignment name variations)
-                for (const k of Object.keys(mp || {})) {
-                    if (norm(k) === key) {
-                        missingPeriods = mp[k] || [];
-                        break;
-                    }
-                }
-            }
+            const missingPeriods = groupData.missingPeriods?.[person] || [];
             if (!Array.isArray(missingPeriods) || missingPeriods.length === 0) return null;
 
             const checkDate = new Date(date);
@@ -10232,7 +10217,38 @@
         function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return true;
-            return !!getMissingPeriodForDate(person, groupNum, date);
+            const missingPeriods = groupData.missingPeriods?.[person] || [];
+            if (missingPeriods.length === 0) return false;
+            
+            const checkDate = new Date(date);
+            checkDate.setHours(0, 0, 0, 0);
+
+            // "Επιλαχών Αντικατάσταση": once used in a month, the person is skipped for the whole month
+            // (no forward/back swaps, no immediate reassignment next day; they wait until rotation comes again in later months).
+            try {
+                const monthStart = new Date(checkDate.getFullYear(), checkDate.getMonth(), 1);
+                const monthEnd = new Date(checkDate.getFullYear(), checkDate.getMonth() + 1, 0);
+                monthStart.setHours(0, 0, 0, 0);
+                monthEnd.setHours(0, 0, 0, 0);
+                const hasSkipOnlyInMonth = missingPeriods.some(period => {
+                    const reason = (period?.reason || '').toString().trim();
+                    if (reason !== MISSING_REASON_SKIP_ONLY) return false;
+                    const start = new Date(period.start + 'T00:00:00');
+                    const end = new Date(period.end + 'T00:00:00');
+                    if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+                    // overlap with month range
+                    return !(end < monthStart || start > monthEnd);
+                });
+                if (hasSkipOnlyInMonth) return true;
+            } catch (_) {
+                // ignore and fall back to exact-date check
+            }
+            
+            return missingPeriods.some(period => {
+                const start = new Date(period.start + 'T00:00:00');
+                const end = new Date(period.end + 'T00:00:00');
+                return checkDate >= start && checkDate <= end;
+            });
         }
         function findNextEligiblePersonAfterMissing({
             dateKey,
