@@ -3171,7 +3171,8 @@
                     return abbr[date.getMonth()];
                 };
 
-                const monthFolderName = `${getGreekMonthAbbrev(currentDate)} ${String(year).slice(-2)}`;
+                // IMPORTANT: Folder name must match the selected export month (not the calendar's currentDate)
+                const monthFolderName = `${getGreekMonthAbbrev(base)} ${String(year).slice(-2)}`;
 
                 const excelMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
