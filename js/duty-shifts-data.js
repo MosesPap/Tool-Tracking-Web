@@ -2828,9 +2828,28 @@
                 return !!(dp.all || dp[dutyType]);
             };
 
+            // Exclude people who have a missing period that overlaps the NEXT month (month after the current Excel month).
+            // This keeps "ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ" realistic for immediate upcoming duties.
+            const firstDayOfNextMonth = new Date(year, month + 1, 1);
+            const lastDayOfNextMonth = new Date(year, month + 2, 0);
+            const nextMonthStartKey = formatDateKey(firstDayOfNextMonth);
+            const nextMonthEndKey = formatDateKey(lastDayOfNextMonth);
+            const isMissingOverNextMonth = (personName) => {
+                const periods = groupData?.missingPeriods?.[personName];
+                if (!Array.isArray(periods) || periods.length === 0) return false;
+                for (const p of periods) {
+                    const pStartKey = inputValueToDateKey(p?.start);
+                    const pEndKey = inputValueToDateKey(p?.end);
+                    if (!pStartKey || !pEndKey) continue;
+                    // Overlap check: [pStart,pEnd] intersects [nextMonthStart,nextMonthEnd]
+                    if (!(pEndKey < nextMonthStartKey || pStartKey > nextMonthEndKey)) return true;
+                }
+                return false;
+            };
+
             const nextTwoForType = (type) => {
                 const rawList = (groupData?.[type] || []).filter(Boolean);
-                const list = rawList.filter(p => !isDisabledForType(p, type));
+                const list = rawList.filter(p => !isDisabledForType(p, type) && !isMissingOverNextMonth(p));
                 if (list.length === 0) return ['', ''];
 
                 const last = lastAssigned[type];
