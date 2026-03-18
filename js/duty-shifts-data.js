@@ -2834,21 +2834,23 @@
             const lastDayOfNextMonth = new Date(year, month + 2, 0);
             const nextMonthStartKey = formatDateKey(firstDayOfNextMonth);
             const nextMonthEndKey = formatDateKey(lastDayOfNextMonth);
-            const getMissingReasonOverNextMonth = (personName) => {
+            const getMissingReasonOverRange = (personName, rangeStartKey, rangeEndKey) => {
                 const periods = groupData?.missingPeriods?.[personName];
-                if (!Array.isArray(periods) || periods.length === 0) return false;
+                if (!Array.isArray(periods) || periods.length === 0) return '';
+                if (!rangeStartKey || !rangeEndKey) return '';
                 for (const p of periods) {
                     const pStartKey = inputValueToDateKey(p?.start);
                     const pEndKey = inputValueToDateKey(p?.end);
                     if (!pStartKey || !pEndKey) continue;
-                    // Overlap check: [pStart,pEnd] intersects [nextMonthStart,nextMonthEnd]
-                    if (!(pEndKey < nextMonthStartKey || pStartKey > nextMonthEndKey)) {
+                    // Overlap check: [pStart,pEnd] intersects [rangeStart,rangeEnd]
+                    if (!(pEndKey < rangeStartKey || pStartKey > rangeEndKey)) {
                         const reason = (p?.reason || '').toString().trim();
                         return reason || 'Κώλυμα/Απουσία';
                     }
                 }
                 return '';
             };
+            const getMissingReasonOverNextMonth = (personName) => getMissingReasonOverRange(personName, nextMonthStartKey, nextMonthEndKey);
             const isMissingOverNextMonth = (personName) => !!getMissingReasonOverNextMonth(personName);
 
             const nextTwoForType = (type) => {
@@ -2868,7 +2870,8 @@
                 return [a, b];
             };
 
-            // Special: show next 3 even if disabled/missing next month; annotate unavailability.
+            // Special: show next 3 even if disabled/missing; annotate only if unavailable during the actual month
+            // of the next upcoming special-holiday duty dates (which can be far later than next month).
             const nextThreeForSpecial = () => {
                 const rawList = (groupData?.special || []).filter(Boolean);
                 if (rawList.length === 0) return { names: ['', '', ''], notes: ['', '', ''] };
@@ -2878,6 +2881,23 @@
                     const idx = rawList.indexOf(last);
                     startIdx = idx + 1;
                 }
+                const findNextSpecialDates = (count = 3, maxDays = 3650) => {
+                    const out = [];
+                    const start = new Date(year, month + 1, 1); // start scanning after current month
+                    for (let i = 0; i < maxDays && out.length < count; i++) {
+                        const d = new Date(start);
+                        d.setDate(start.getDate() + i);
+                        if (getDayType(d) === 'special-holiday') out.push(d);
+                    }
+                    return out;
+                };
+                const specialDates = findNextSpecialDates(3, 3650);
+                const getMonthRangeKeys = (dateObj) => {
+                    if (!dateObj || isNaN(dateObj.getTime())) return { startKey: '', endKey: '' };
+                    const start = new Date(dateObj.getFullYear(), dateObj.getMonth(), 1);
+                    const end = new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0);
+                    return { startKey: formatDateKey(start), endKey: formatDateKey(end) };
+                };
                 const outNames = [];
                 const outNotes = [];
                 for (let i = 0; i < 3; i++) {
@@ -2887,7 +2907,8 @@
                         if (isDisabledForType(name, 'special')) {
                             note = 'ΕΚΤΟΣ ΥΠΗΡΕΣΙΑΣ';
                         } else {
-                            const r = getMissingReasonOverNextMonth(name);
+                            const { startKey, endKey } = getMonthRangeKeys(specialDates[i]);
+                            const r = getMissingReasonOverRange(name, startKey, endKey);
                             if (r) note = r;
                         }
                     }
@@ -3475,6 +3496,7 @@
                         const weekendFill = palette.right ? palette.right.weekend.fill : fillHex(getDayTypeColor('weekend-holiday'));
                         // Use a vivid magenta for "ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ" as shown in your screenshot
                         const specialFill = palette.right ? palette.right.special.fill : 'FFFF00FF';
+                        const noteFillWhite = 'FFFFFFFF';
 
                         const writeRightRow = (rowNum, text, { col = rightCol, bold = false, center = false, fill = null, fontColor = 'FF000000', fontSize = 14, wrap = false } = {}) => {
                             const cell = worksheet.getRow(rowNum).getCell(col);
@@ -3499,12 +3521,12 @@
                             rr++;
 
                             writeRightRow(rr, names?.[0] || '', { fill, fontColor, col: rightCol });
-                            writeRightRow(rr, notes?.[0] || '', { fill, fontColor: 'FF000000', col: rightNoteCol, fontSize: 10, wrap: true });
+                            writeRightRow(rr, notes?.[0] || '', { fill: noteFillWhite, fontColor: 'FF000000', col: rightNoteCol, fontSize: 10, wrap: true });
                             setBlockBorder(rr, false, false);
                             rr++;
 
                             writeRightRow(rr, names?.[1] || '', { fill, fontColor, col: rightCol });
-                            writeRightRow(rr, notes?.[1] || '', { fill, fontColor: 'FF000000', col: rightNoteCol, fontSize: 10, wrap: true });
+                            writeRightRow(rr, notes?.[1] || '', { fill: noteFillWhite, fontColor: 'FF000000', col: rightNoteCol, fontSize: 10, wrap: true });
                             if (count === 2) {
                                 setBlockBorder(rr, false, true);
                                 rr += 2; // blank row between blocks
@@ -3514,7 +3536,7 @@
                             rr++;
 
                             writeRightRow(rr, names?.[2] || '', { fill, fontColor, col: rightCol });
-                            writeRightRow(rr, notes?.[2] || '', { fill, fontColor: 'FF000000', col: rightNoteCol, fontSize: 10, wrap: true });
+                            writeRightRow(rr, notes?.[2] || '', { fill: noteFillWhite, fontColor: 'FF000000', col: rightNoteCol, fontSize: 10, wrap: true });
                             setBlockBorder(rr, false, true);
                             rr += 2; // blank row between blocks
                         };
@@ -3713,7 +3735,7 @@
                                 const iAddr = 'I' + (rr.row + 1);
                                 if (!ws[iAddr]) ws[iAddr] = { t: 's', v: rr.text || '' };
                                 else ws[iAddr].v = rr.text || '';
-                                styleCell(iAddr, { bold: false, center: false, fillRgb: specialRgb, fontRgb: '000000', sz: 10, wrap: true });
+                                styleCell(iAddr, { bold: false, center: false, fillRgb: 'FFFFFF', fontRgb: '000000', sz: 10, wrap: true });
                             });
 
                             // Signature cells (Ο ΣΥΝΤΑΞΑΣ, ΕΘ-ΘΗ, Ο ΔΚΤΗΣ): bold Arial 14
