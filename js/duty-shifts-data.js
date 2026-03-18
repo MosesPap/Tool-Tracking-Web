@@ -3234,7 +3234,7 @@
                         worksheet.getColumn(2).width = 17;
                         worksheet.getColumn(3).width = 57;
                         worksheet.getColumn(4).width = 56.5;   // ΑΛΛΑΓΕΣ column (D)
-                        // Column H width set after right block content (fit to text)
+                        worksheet.getColumn(8).width = 53;  // right table (H)
                         worksheet.getColumn(9).width = 25;  // header info (I)
                         
                         // Data rows
@@ -3390,11 +3390,6 @@
                         writeCategoryBlock('ΗΜΙΑΡΓΙΕΣ', semiFill, rotationInfo.next.semi);
                         writeCategoryBlock('ΑΡΓΙΕΣ', weekendFill, rotationInfo.next.weekend);
                         writeCategoryBlock('ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', specialFill, rotationInfo.next.special);
-                        // Column H width to fit text (right block + signature labels)
-                        const hTexts = ['ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ', 'ΚΑΘΗΜΕΡΙΝΕΣ', 'ΗΜΙΑΡΓΙΕΣ', 'ΑΡΓΙΕΣ', 'ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', 'ΕΘ-ΘΗ', 'Ο', 'ΔΚΤΗΣ',
-                            ...(rotationInfo.next.normal || []), ...(rotationInfo.next.semi || []), ...(rotationInfo.next.weekend || []), ...(rotationInfo.next.special || [])];
-                        const maxHLen = Math.max(...hTexts.map(s => String(s || '').length), 10);
-                        worksheet.getColumn(8).width = Math.min(50, maxHLen + 2);
                     }
                     const fileName = buildExcelFilename(monthName, year);
                     const buffer = await workbook.xlsx.writeBuffer();
@@ -3539,10 +3534,7 @@
                         if (!ws[sigRow3Addr].s) ws[sigRow3Addr].s = {};
                         ws[sigRow3Addr].s.font = { name: 'Arial', bold: true, sz: 14, color: { rgb: '000000' } };
                         ws[sigRow3Addr].s.alignment = { horizontal: 'center', vertical: 'center' };
-                        // Column H width to fit text (right block + signature)
-                        const hColTexts = [...rightRows.map(rr => rr.text || ''), 'ΕΘ-ΘΗ', 'Ο', 'ΔΚΤΗΣ'];
-                        const maxHCh = Math.max(...hColTexts.map(s => String(s).length), 10) + 2;
-                        ws['!cols'][7] = { wch: Math.min(50, maxHCh) };
+                        ws['!cols'][7] = { wch: 53 };  // column H
                         for (let rowIdx = 4; rowIdx < rowDayTypes.length; rowIdx++) {
                             const dayType = rowDayTypes[rowIdx];
                             if (!dayType) continue;
