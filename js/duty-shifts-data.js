@@ -2834,7 +2834,7 @@
             const lastDayOfNextMonth = new Date(year, month + 2, 0);
             const nextMonthStartKey = formatDateKey(firstDayOfNextMonth);
             const nextMonthEndKey = formatDateKey(lastDayOfNextMonth);
-            const isMissingOverNextMonth = (personName) => {
+            const getMissingReasonOverNextMonth = (personName) => {
                 const periods = groupData?.missingPeriods?.[personName];
                 if (!Array.isArray(periods) || periods.length === 0) return false;
                 for (const p of periods) {
@@ -2842,10 +2842,14 @@
                     const pEndKey = inputValueToDateKey(p?.end);
                     if (!pStartKey || !pEndKey) continue;
                     // Overlap check: [pStart,pEnd] intersects [nextMonthStart,nextMonthEnd]
-                    if (!(pEndKey < nextMonthStartKey || pStartKey > nextMonthEndKey)) return true;
+                    if (!(pEndKey < nextMonthStartKey || pStartKey > nextMonthEndKey)) {
+                        const reason = (p?.reason || '').toString().trim();
+                        return reason || 'Κώλυμα/Απουσία';
+                    }
                 }
-                return false;
+                return '';
             };
+            const isMissingOverNextMonth = (personName) => !!getMissingReasonOverNextMonth(personName);
 
             const nextTwoForType = (type) => {
                 const rawList = (groupData?.[type] || []).filter(Boolean);
@@ -2864,13 +2868,47 @@
                 return [a, b];
             };
 
+            // Special: show next 3 even if disabled/missing next month; annotate unavailability.
+            const nextThreeForSpecial = () => {
+                const rawList = (groupData?.special || []).filter(Boolean);
+                if (rawList.length === 0) return { names: ['', '', ''], notes: ['', '', ''] };
+                const last = lastAssigned.special;
+                let startIdx = 0;
+                if (last && rawList.indexOf(last) >= 0) {
+                    const idx = rawList.indexOf(last);
+                    startIdx = idx + 1;
+                }
+                const outNames = [];
+                const outNotes = [];
+                for (let i = 0; i < 3; i++) {
+                    const name = rawList[(startIdx + i) % rawList.length] || '';
+                    let note = '';
+                    if (name) {
+                        if (isDisabledForType(name, 'special')) {
+                            note = 'ΕΚΤΟΣ ΥΠΗΡΕΣΙΑΣ';
+                        } else {
+                            const r = getMissingReasonOverNextMonth(name);
+                            if (r) note = r;
+                        }
+                    }
+                    outNames.push(name);
+                    outNotes.push(note);
+                }
+                return { names: outNames, notes: outNotes };
+            };
+            const specialNext = nextThreeForSpecial();
+
             return {
                 lastAssigned,
                 next: {
                     normal: nextTwoForType('normal'),
                     semi: nextTwoForType('semi'),
                     weekend: nextTwoForType('weekend'),
-                    special: nextTwoForType('special')
+                    special: specialNext.names
+                },
+                nextNotes: {
+                    // Only used for ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ (3 rows). Other categories keep blank notes.
+                    special: specialNext.notes
                 }
             };
         }
@@ -3415,15 +3453,16 @@
                             dutyAssignments
                         });
                         const rightCol = 8; // H (moved from I)
+                        const rightNoteCol = 9; // I (notes for ειδικές αργίες)
 
                         const setBlockBorder = (r, isTop, isBottom) => {
-                            const cell = worksheet.getRow(r).getCell(rightCol);
-                            cell.border = {
-                                top: isTop ? { style: 'thick' } : { style: 'thin' },
-                                bottom: isBottom ? { style: 'thick' } : { style: 'thin' },
-                                left: { style: 'thick' },
-                                right: { style: 'thick' }
-                            };
+                            const row = worksheet.getRow(r);
+                            const leftCell = row.getCell(rightCol);
+                            const rightCell = row.getCell(rightNoteCol);
+                            const top = isTop ? { style: 'thick' } : { style: 'thin' };
+                            const bottom = isBottom ? { style: 'thick' } : { style: 'thin' };
+                            leftCell.border = { top, bottom, left: { style: 'thick' }, right: { style: 'thin' } };
+                            rightCell.border = { top, bottom, left: { style: 'thin' }, right: { style: 'thick' } };
                         };
 
                         const fillHex = (rgbArr) => {
@@ -3437,11 +3476,11 @@
                         // Use a vivid magenta for "ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ" as shown in your screenshot
                         const specialFill = palette.right ? palette.right.special.fill : 'FFFF00FF';
 
-                        const writeRightRow = (rowNum, text, { bold = false, center = false, fill = null, fontColor = 'FF000000' } = {}) => {
-                            const cell = worksheet.getRow(rowNum).getCell(rightCol);
+                        const writeRightRow = (rowNum, text, { col = rightCol, bold = false, center = false, fill = null, fontColor = 'FF000000', fontSize = 14, wrap = false } = {}) => {
+                            const cell = worksheet.getRow(rowNum).getCell(col);
                             cell.value = text || '';
-                            cell.font = { name: 'Arial', size: 14, bold: !!bold, color: { argb: fontColor } };
-                            cell.alignment = { horizontal: center ? 'center' : 'left', vertical: 'middle' };
+                            cell.font = { name: 'Arial', size: fontSize, bold: !!bold, color: { argb: fontColor } };
+                            cell.alignment = { horizontal: center ? 'center' : 'left', vertical: 'middle', wrapText: !!wrap };
                             if (fill) {
                                 cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
                             }
@@ -3454,16 +3493,28 @@
                         setBlockBorder(rr, true, true);
                         rr += 2; // blank row between title and first block
 
-                        const writeCategoryBlock = (title, fill, names, fontColor) => {
+                        const writeCategoryBlock = (title, fill, names, fontColor, { notes = null, count = 2 } = {}) => {
                             writeRightRow(rr, title, { bold: true, center: true, fill, fontColor });
                             setBlockBorder(rr, true, false);
                             rr++;
 
-                            writeRightRow(rr, names?.[0] || '', { fill, fontColor });
+                            writeRightRow(rr, names?.[0] || '', { fill, fontColor, col: rightCol });
+                            writeRightRow(rr, notes?.[0] || '', { fill, fontColor: 'FF000000', col: rightNoteCol, fontSize: 10, wrap: true });
                             setBlockBorder(rr, false, false);
                             rr++;
 
-                            writeRightRow(rr, names?.[1] || '', { fill, fontColor });
+                            writeRightRow(rr, names?.[1] || '', { fill, fontColor, col: rightCol });
+                            writeRightRow(rr, notes?.[1] || '', { fill, fontColor: 'FF000000', col: rightNoteCol, fontSize: 10, wrap: true });
+                            if (count === 2) {
+                                setBlockBorder(rr, false, true);
+                                rr += 2; // blank row between blocks
+                                return;
+                            }
+                            setBlockBorder(rr, false, false);
+                            rr++;
+
+                            writeRightRow(rr, names?.[2] || '', { fill, fontColor, col: rightCol });
+                            writeRightRow(rr, notes?.[2] || '', { fill, fontColor: 'FF000000', col: rightNoteCol, fontSize: 10, wrap: true });
                             setBlockBorder(rr, false, true);
                             rr += 2; // blank row between blocks
                         };
@@ -3476,7 +3527,7 @@
                         writeCategoryBlock('ΚΑΘΗΜΕΡΙΝΕΣ', normalFill, rotationInfo.next.normal, rightFontNormal);
                         writeCategoryBlock('ΗΜΙΑΡΓΙΕΣ', semiFill, rotationInfo.next.semi, rightFontSemi);
                         writeCategoryBlock('ΑΡΓΙΕΣ', weekendFill, rotationInfo.next.weekend, rightFontWeekend);
-                        writeCategoryBlock('ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', specialFill, rotationInfo.next.special, rightFontSpecial);
+                        writeCategoryBlock('ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', specialFill, rotationInfo.next.special, rightFontSpecial, { notes: rotationInfo.nextNotes?.special || null, count: 3 });
                     }
                         return workbook;
                     };
@@ -3594,7 +3645,13 @@
                                 { row: 17, text: rotationInfo.next.weekend[1] || '', kind: 'weekend' },
                                 { row: 19, text: 'ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', kind: 'specialHeader' },
                                 { row: 20, text: rotationInfo.next.special[0] || '', kind: 'special' },
-                                { row: 21, text: rotationInfo.next.special[1] || '', kind: 'special' }
+                                { row: 21, text: rotationInfo.next.special[1] || '', kind: 'special' },
+                                { row: 22, text: rotationInfo.next.special[2] || '', kind: 'special' }
+                            ];
+                            const rightNotes = [
+                                { row: 20, text: rotationInfo.nextNotes?.special?.[0] || '', kind: 'specialNote' },
+                                { row: 21, text: rotationInfo.nextNotes?.special?.[1] || '', kind: 'specialNote' },
+                                { row: 22, text: rotationInfo.nextNotes?.special?.[2] || '', kind: 'specialNote' }
                             ];
 
                             const ws = XLSX.utils.aoa_to_sheet(data);
@@ -3633,11 +3690,11 @@
                             const weekendRgb = palette ? palette.right.weekend.fill : dayTypeToRgb('weekend-holiday');
                             const specialRgb = palette ? palette.right.special.fill : 'FF00FF';
 
-                            const styleCell = (addr, { bold = false, center = false, fillRgb = null, fontRgb = '000000' } = {}) => {
+                            const styleCell = (addr, { bold = false, center = false, fillRgb = null, fontRgb = '000000', sz = 14, wrap = false } = {}) => {
                                 if (!ws[addr]) ws[addr] = { t: 's', v: '' };
                                 if (!ws[addr].s) ws[addr].s = {};
-                                ws[addr].s.font = { name: 'Arial', bold: !!bold, sz: 14, color: { rgb: fontRgb } };
-                                ws[addr].s.alignment = { horizontal: center ? 'center' : 'left', vertical: 'center' };
+                                ws[addr].s.font = { name: 'Arial', bold: !!bold, sz: sz, color: { rgb: fontRgb } };
+                                ws[addr].s.alignment = { horizontal: center ? 'center' : 'left', vertical: 'center', wrapText: !!wrap };
                                 if (fillRgb) ws[addr].s.fill = { fgColor: { rgb: fillRgb }, patternType: 'solid' };
                             };
 
@@ -3651,6 +3708,12 @@
                                 else if (kind.startsWith('semi')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: semiRgb, fontRgb: palette ? palette.right.semi.font : '000000' });
                                 else if (kind.startsWith('weekend')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: weekendRgb, fontRgb: palette ? palette.right.weekend.font : '000000' });
                                 else if (kind.startsWith('special')) styleCell(hAddr, { bold: kind.endsWith('Header'), center: kind.endsWith('Header'), fillRgb: specialRgb, fontRgb: palette ? palette.right.special.font : '000000' });
+                            });
+                            rightNotes.forEach(rr => {
+                                const iAddr = 'I' + (rr.row + 1);
+                                if (!ws[iAddr]) ws[iAddr] = { t: 's', v: rr.text || '' };
+                                else ws[iAddr].v = rr.text || '';
+                                styleCell(iAddr, { bold: false, center: false, fillRgb: specialRgb, fontRgb: '000000', sz: 10, wrap: true });
                             });
 
                             // Signature cells (Ο ΣΥΝΤΑΞΑΣ, ΕΘ-ΘΗ, Ο ΔΚΤΗΣ): bold Arial 14
