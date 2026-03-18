@@ -2022,6 +2022,8 @@
             const stepContent = document.getElementById('stepContent');
             const startDate = calculationSteps.startDate;
             const endDate = calculationSteps.endDate;
+            calculationSteps.skipOnlyHoldBack = calculationSteps.skipOnlyHoldBack || { special: {}, weekend: {}, semi: {}, normal: {} };
+            const holdBackSpecial = calculationSteps.skipOnlyHoldBack.special;
             
             // Build day type lists
             const dayTypeLists = {
@@ -2257,6 +2259,11 @@
                             const rotationDays = groupPeople.length;
                             const rotationPosition = globalSpecialRotationPosition[groupNum] != null ? globalSpecialRotationPosition[groupNum] : 0;
                             const rotationPerson = groupPeople[rotationPosition % rotationDays];
+                            if (!holdBackSpecial[groupNum]) holdBackSpecial[groupNum] = new Set();
+                            // If it's this person's baseline turn, release them so they can be assigned normally.
+                            if (rotationPerson && holdBackSpecial[groupNum].has(rotationPerson)) {
+                                holdBackSpecial[groupNum].delete(rotationPerson);
+                            }
                             if (!specialRotationPersons[dateKey]) {
                                 specialRotationPersons[dateKey] = {};
                             }
@@ -2340,6 +2347,7 @@
                             const baselineIsMissingHere = !wasReplaced && !isRotationPersonDisabledSpecial && !alreadyOnAnotherSpecial && isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
                             if (baselineIsMissingHere) {
                                 const skipOnlyMissing = isSkipOnlyMissingReason(rotationPerson, groupNum, date);
+                                if (skipOnlyMissing && rotationPerson) holdBackSpecial[groupNum].add(rotationPerson);
                                 let foundReplacement = false;
                                 const pendingForGroup = returnFromMissingSpecial.filter(e => e.groupNum === groupNum);
                                 const pendingReturnFromMissingForGroup = new Set(pendingForGroup.map(e => e.personName));
@@ -2384,6 +2392,7 @@
                                         const candidate = groupPeople[idx];
                                         if (!candidate) continue;
                                         if (reservedReturnFromMissingByGroup[groupNum]?.has(candidate)) continue;
+                                        if (holdBackSpecial[groupNum]?.has(candidate)) continue; // do not pull forward skip-only people
                                         if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
                                         if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
                                         if (sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === candidate)) continue;
@@ -3053,6 +3062,8 @@
                 const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
                 const assignedWeekendInMonth = {}; // monthKey -> { groupNum -> Set of person names } already assigned to a weekend this month (so we don't assign same person twice)
                 const updatedAssignments = {}; // dateKey -> { groupNum -> personName }
+                calculationSteps.skipOnlyHoldBack = calculationSteps.skipOnlyHoldBack || { special: {}, weekend: {}, semi: {}, normal: {} };
+                const holdBackWeekend = calculationSteps.skipOnlyHoldBack.weekend;
                 
                 // Load current weekend assignments from preview (tempWeekendAssignments)
                 const tempWeekendAssignments = calculationSteps.tempWeekendAssignments || {};
@@ -3072,10 +3083,13 @@
                         const groupData = groups[groupNum] || { weekend: [] };
                         const groupPeople = groupData.weekend || [];
                         if (groupPeople.length === 0) continue;
+                        if (!holdBackWeekend[groupNum]) holdBackWeekend[groupNum] = new Set();
                         if (!skippedInMonth[monthKey][groupNum]) skippedInMonth[monthKey][groupNum] = new Set();
                         if (!assignedWeekendInMonth[monthKey][groupNum]) assignedWeekendInMonth[monthKey][groupNum] = new Set();
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (!currentPerson) continue;
+                        // If it's this person's baseline turn, release them so they can be assigned normally.
+                        if (holdBackWeekend[groupNum].has(currentPerson)) holdBackWeekend[groupNum].delete(currentPerson);
                         const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(currentPerson) || false;
                         const alreadyAssignedThisMonth = assignedWeekendInMonth[monthKey][groupNum].has(currentPerson);
                         if (!hasSpecialHoliday && !alreadyAssignedThisMonth) {
@@ -3092,6 +3106,7 @@
                             const nextIndex = (currentIndex + offset) % rotationDays;
                             const candidate = groupPeople[nextIndex];
                             if (!candidate) continue;
+                            if (holdBackWeekend[groupNum].has(candidate)) continue; // do not pull forward skip-only people
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
                             if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
                             const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
@@ -3137,12 +3152,14 @@
                         const groupData = groups[groupNum] || { weekend: [] };
                         const groupPeople = groupData.weekend || [];
                         if (groupPeople.length === 0) continue;
+                        if (!holdBackWeekend[groupNum]) holdBackWeekend[groupNum] = new Set();
                         if (!assignedWeekendInMonth[monthKey][groupNum]) assignedWeekendInMonth[monthKey][groupNum] = new Set();
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (!currentPerson) continue;
                         if (!isPersonMissingOnDate(currentPerson, groupNum, date, 'weekend')) continue;
                         // If missing reason is "Επιλαχών Αντικατάσταση", do NOT swap to another date; only skip this date and continue rotation.
                         const skipOnly = isSkipOnlyMissingReason(currentPerson, groupNum, date);
+                        if (skipOnly) holdBackWeekend[groupNum].add(currentPerson);
                         const rotationDays = groupPeople.length;
                         let currentIndex = groupPeople.indexOf(currentPerson);
                         if (currentIndex === -1) currentIndex = 0;
@@ -3207,6 +3224,7 @@
                             const nextIndex = (currentIndex + offset) % rotationDays;
                             const candidate = groupPeople[nextIndex];
                             if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                            if (holdBackWeekend[groupNum].has(candidate)) continue; // do not pull forward skip-only people
                             const candidateAlreadyAssigned = assignedWeekendInMonth[monthKey][groupNum].has(candidate);
                             if (!candidateAlreadyAssigned) {
                                 swapPerson = candidate;
