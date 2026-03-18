@@ -5105,6 +5105,30 @@
                 
                 // Track people who have already been swapped to prevent re-swapping
                 const swappedPeopleSet = new Set(); // Format: "dateKey:groupNum:personName"
+
+                // Skip-only protection (Επιλαχών Αντικατάσταση):
+                // If a person has a missing period with this reason overlapping the current month,
+                // they must NOT be moved forward/backward by swap logic in that month.
+                const monthKeyFromYM = (y, m0) => `${y}-${String((m0 ?? 0) + 1).padStart(2, '0')}`;
+                const overlapsMonth = (pStartKey, pEndKey, y, m0) => {
+                    const start = formatDateKey(new Date(y, m0, 1));
+                    const end = formatDateKey(new Date(y, m0 + 1, 0));
+                    return !(pEndKey < start || pStartKey > end);
+                };
+                const isSkipOnlyProtectedInMonth = (personName, groupNum, y, m0) => {
+                    const g = groups?.[groupNum];
+                    const periods = g?.missingPeriods?.[personName];
+                    if (!Array.isArray(periods) || periods.length === 0) return false;
+                    for (const p of periods) {
+                        const reason = (p?.reason || '').toString().trim();
+                        if (reason !== MISSING_REASON_SKIP_ONLY) continue;
+                        const pStartKey = inputValueToDateKey(p?.start);
+                        const pEndKey = inputValueToDateKey(p?.end);
+                        if (!pStartKey || !pEndKey) continue;
+                        if (overlapsMonth(pStartKey, pEndKey, y, m0)) return true;
+                    }
+                    return false;
+                };
                 
                 // Run swap logic (check for consecutive conflicts)
                 sortedNormal.forEach((dateKey) => {
@@ -5146,6 +5170,11 @@
                             const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                             const month = date.getMonth();
                             const year = date.getFullYear();
+
+                            // Skip-only: do not swap this person in this month (they must only be assigned on their natural rotation turn).
+                            if (isSkipOnlyProtectedInMonth(currentPerson, groupNum, year, month)) {
+                                continue;
+                            }
                             
                             // Get calculation range dates for validation
                             const calcStartDateRaw = calculationSteps.startDate || null;
@@ -5165,6 +5194,8 @@
                                         ? parseAssignedPersonForGroupFromAssignment(raw, groupNum) : null;
                                 }
                                 if (!swapCandidate) return null;
+                                // Skip-only: never pick a protected person as a swap candidate within this month.
+                                if (isSkipOnlyProtectedInMonth(swapCandidate, groupNum, year, month)) return null;
                                 if (isPersonMissingOnDate(swapCandidate, groupNum, d, 'normal')) return null;
                                 if (hasConsecutiveDuty(candidateKey, swapCandidate, groupNum, simulatedAssignments)) return null;
                                 if (hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) return null;
