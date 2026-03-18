@@ -587,7 +587,7 @@
         ];
 
         // Missing-period reasons (global list)
-        let missingReasons = ['Κανονική Άδεια', 'Αναρρωτική Άδεια', 'Φύλλο Πορείας'];
+        let missingReasons = ['Κανονική Άδεια', 'Αναρρωτική Άδεια', 'Φύλλο Πορείας', 'Επιλαχών Αντικατάσταση'];
         let missingReasonsModified = false;
 
         // Track data loading to prevent duplicate loads
@@ -778,7 +778,7 @@
 
                 // Load missing reasons list (Firestore)
                 // NOTE: If Firestore contains the old default seed list, migrate it to the new 3-item seed list.
-                const DEFAULT_MISSING_REASONS = ['Κανονική Άδεια', 'Αναρρωτική Άδεια', 'Φύλλο Πορείας'];
+                const DEFAULT_MISSING_REASONS = ['Κανονική Άδεια', 'Αναρρωτική Άδεια', 'Φύλλο Πορείας', 'Επιλαχών Αντικατάσταση'];
                 const LEGACY_MISSING_REASONS = ['Άδεια', 'Ασθένεια', 'Εκπαίδευση', 'Υπηρεσιακό'];
                 if (missingReasonsDoc && missingReasonsDoc.exists) {
                     const data = missingReasonsDoc.data() || {};

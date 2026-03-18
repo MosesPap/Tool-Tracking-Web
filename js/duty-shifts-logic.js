@@ -2154,6 +2154,8 @@
                         if (!specialList.some(p => normPerson(p) === normPerson(personName))) continue;
                         const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                         for (const period of periods) {
+                            const reasonTrim = (period?.reason || '').toString().trim();
+                            if (reasonTrim === MISSING_REASON_SKIP_ONLY) continue; // skip-only: no return-from-missing for specials
                             const pStartKey = inputValueToDateKey(period?.start);
                             const pEndKey = inputValueToDateKey(period?.end);
                             if (!pStartKey || !pEndKey) continue;
@@ -3132,6 +3134,8 @@
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (!currentPerson) continue;
                         if (!isPersonMissingOnDate(currentPerson, groupNum, date, 'weekend')) continue;
+                        // If missing reason is "Επιλαχών Αντικατάσταση", do NOT swap to another date; only skip this date and continue rotation.
+                        const skipOnly = isSkipOnlyMissingReason(currentPerson, groupNum, date);
                         const rotationDays = groupPeople.length;
                         let currentIndex = groupPeople.indexOf(currentPerson);
                         if (currentIndex === -1) currentIndex = 0;
@@ -3139,7 +3143,7 @@
                         // Try to swap with another weekend date in the same month
                         let swapPartnerDateKey = null;
                         let swapPartnerPerson = null;
-                        for (const otherDateKey of sortedWeekends) {
+                        for (const otherDateKey of (skipOnly ? [] : sortedWeekends)) {
                             if (otherDateKey === dateKey) continue;
                             const otherDate = new Date(otherDateKey + 'T00:00:00');
                             const otherMonthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(otherDate) : `${otherDate.getFullYear()}-${String(otherDate.getMonth() + 1).padStart(2, '0')}`;
@@ -4823,6 +4827,8 @@
                             for (const personName of Object.keys(missingMap)) {
                                 const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                                 for (const period of periods) {
+                                    const reasonTrim = (period?.reason || '').toString().trim();
+                                    if (reasonTrim === MISSING_REASON_SKIP_ONLY) continue; // skip-only: no return-from-missing reinsertion
                                     const pStartKey = inputValueToDateKey(period?.start);
                                     const pEndKey = inputValueToDateKey(period?.end);
                                     if (!pStartKey || !pEndKey) continue;
@@ -6556,6 +6562,8 @@
                             if (!weekendList.some(p => normW(p) === normW(personName))) continue;
                             const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                             for (const period of periods) {
+                                    const reasonTrim = (period?.reason || '').toString().trim();
+                                    if (reasonTrim === MISSING_REASON_SKIP_ONLY) continue; // skip-only: no return-from-missing placement
                                 const pStartKey = inputValueToDateKey(period?.start);
                                 const pEndKey = inputValueToDateKey(period?.end);
                                 if (!pStartKey || !pEndKey) continue;
@@ -7189,6 +7197,8 @@
                         if (!semiList.some(p => normSemiRun(p) === normSemiRun(personName))) continue;
                         const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                         for (const period of periods) {
+                            const reasonTrim = (period?.reason || '').toString().trim();
+                            if (reasonTrim === MISSING_REASON_SKIP_ONLY) continue; // skip-only: no return-from-missing for semi
                             const pStartKey = inputValueToDateKey(period?.start);
                             const pEndKey = inputValueToDateKey(period?.end);
                             if (!pStartKey || !pEndKey) continue;
@@ -10175,6 +10185,35 @@
             
             alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
         }
+        const MISSING_REASON_SKIP_ONLY = 'Επιλαχών Αντικατάσταση';
+
+        function getMissingPeriodForDate(person, groupNum, date) {
+            const groupData = groups[groupNum] || { missingPeriods: {} };
+            const missingPeriods = groupData.missingPeriods?.[person] || [];
+            if (!Array.isArray(missingPeriods) || missingPeriods.length === 0) return null;
+
+            const checkDate = new Date(date);
+            if (isNaN(checkDate.getTime())) return null;
+            checkDate.setHours(0, 0, 0, 0);
+
+            for (const period of missingPeriods) {
+                const start = new Date(period.start + 'T00:00:00');
+                const end = new Date(period.end + 'T00:00:00');
+                if (isNaN(start.getTime()) || isNaN(end.getTime())) continue;
+                if (checkDate >= start && checkDate <= end) return period;
+            }
+            return null;
+        }
+
+        function getMissingReasonOnDate(person, groupNum, date) {
+            const p = getMissingPeriodForDate(person, groupNum, date);
+            return p && typeof p.reason === 'string' ? p.reason.trim() : '';
+        }
+
+        function isSkipOnlyMissingReason(person, groupNum, date) {
+            return getMissingReasonOnDate(person, groupNum, date) === MISSING_REASON_SKIP_ONLY;
+        }
+
         function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return true;
