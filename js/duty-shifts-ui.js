@@ -2309,6 +2309,26 @@
             }
             return null;
         }
+        let selectedDutyHighlightPerson = null;
+        function normalizeSearchPersonName(name) {
+            return (typeof normalizePersonKey === 'function')
+                ? normalizePersonKey(name)
+                : String(name || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
+        }
+        function personIsAssignedInAssignment(assignment, personName) {
+            if (!assignment || !personName) return false;
+            const target = normalizeSearchPersonName(personName).toLowerCase();
+            if (!target) return false;
+            const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
+            const parts = assignmentStr.split(',').map(p => p.trim()).filter(Boolean);
+            for (const part of parts) {
+                const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                const parsed = m ? m[1] : part.replace(/\s*\(Ομάδα\s*\d+\)\s*/g, '');
+                const normParsed = normalizeSearchPersonName(parsed).toLowerCase();
+                if (normParsed === target) return true;
+            }
+            return false;
+        }
         function filterPeopleSearch() {
             const input = document.getElementById('personSearchInput');
             const dropdown = document.getElementById('peopleSearchDropdown');
@@ -2435,6 +2455,104 @@
                 items[prevIndex].scrollIntoView({ block: 'nearest' });
             }
         }
+        function filterDutyPersonSearch() {
+            const input = document.getElementById('dutyPersonSearchInput');
+            const dropdown = document.getElementById('dutyPersonSearchDropdown');
+            if (!input || !dropdown) return;
+            const searchTerm = (input.value || '').trim().toLowerCase();
+            const allPeople = getAllPeople();
+            let filtered;
+            if (searchTerm.length === 0) {
+                filtered = allPeople;
+            } else {
+                filtered = allPeople.map(person => {
+                    const personLower = person.toLowerCase();
+                    let score = 0;
+                    if (personLower === searchTerm) score = 3;
+                    else if (personLower.startsWith(searchTerm)) score = 2;
+                    else if (personLower.includes(searchTerm)) score = 1;
+                    else return null;
+                    return { person, score };
+                }).filter(Boolean).sort((a, b) => b.score - a.score).map(x => x.person).slice(0, 50);
+            }
+            if (filtered.length === 0) {
+                dropdown.innerHTML = '<div class="dropdown-item-text text-muted">Δεν βρέθηκαν αποτελέσματα</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+            dropdown.innerHTML = filtered.map((person) => {
+                const details = getPersonDetails(person);
+                const groupName = details ? getGroupName(details.groupNum) : '';
+                const escapedPerson = person.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                return `
+                    <a href="#" class="dropdown-item" data-person-name="${escapedPerson}" onclick="selectDutyPersonFromSearch('${escapedPerson}'); return false;">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span><strong>${escapeHtml(person)}</strong></span>
+                            ${groupName ? `<small class="text-muted">${groupName}</small>` : ''}
+                        </div>
+                    </a>
+                `;
+            }).join('');
+            dropdown.style.display = 'block';
+        }
+        function showDutyPersonSearchDropdown() {
+            filterDutyPersonSearch();
+        }
+        function hideDutyPersonSearchDropdown() {
+            const dropdown = document.getElementById('dutyPersonSearchDropdown');
+            if (dropdown) dropdown.style.display = 'none';
+        }
+        function selectDutyPersonFromSearch(personName) {
+            const input = document.getElementById('dutyPersonSearchInput');
+            const dropdown = document.getElementById('dutyPersonSearchDropdown');
+            if (input) input.value = personName || '';
+            if (dropdown) dropdown.style.display = 'none';
+            selectedDutyHighlightPerson = personName || null;
+            renderCalendar();
+        }
+        function clearDutyPersonSelection() {
+            selectedDutyHighlightPerson = null;
+            const input = document.getElementById('dutyPersonSearchInput');
+            const dropdown = document.getElementById('dutyPersonSearchDropdown');
+            if (input) input.value = '';
+            if (dropdown) dropdown.style.display = 'none';
+            renderCalendar();
+        }
+        function handleDutyPersonSearchKeydown(event) {
+            const dropdown = document.getElementById('dutyPersonSearchDropdown');
+            if (!dropdown) return;
+            if (event.key === 'Escape') {
+                hideDutyPersonSearchDropdown();
+                const input = document.getElementById('dutyPersonSearchInput');
+                if (input) input.blur();
+                return;
+            }
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                const activeItem = dropdown.querySelector('.dropdown-item.active') || dropdown.querySelector('.dropdown-item');
+                if (activeItem) {
+                    const personName = activeItem.getAttribute('data-person-name') || activeItem.querySelector('strong')?.textContent?.trim();
+                    if (personName) selectDutyPersonFromSearch(personName);
+                }
+                return;
+            }
+            const items = Array.from(dropdown.querySelectorAll('.dropdown-item'));
+            if (items.length === 0) return;
+            let currentIndex = items.findIndex(item => item.classList.contains('active'));
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                items.forEach(item => item.classList.remove('active'));
+                const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+                items[nextIndex].classList.add('active');
+                items[nextIndex].scrollIntoView({ block: 'nearest' });
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                items.forEach(item => item.classList.remove('active'));
+                const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+                items[prevIndex].classList.add('active');
+                items[prevIndex].scrollIntoView({ block: 'nearest' });
+            }
+        }
         // Expose person search functions to window for HTML handlers (data.js loads first and does not define these)
         if (typeof window !== 'undefined') {
             window.filterPeopleSearch = filterPeopleSearch;
@@ -2442,6 +2560,12 @@
             window.hidePeopleSearchDropdown = hidePeopleSearchDropdown;
             window.selectPersonFromSearch = selectPersonFromSearch;
             window.handlePersonSearchKeydown = handlePersonSearchKeydown;
+            window.filterDutyPersonSearch = filterDutyPersonSearch;
+            window.showDutyPersonSearchDropdown = showDutyPersonSearchDropdown;
+            window.hideDutyPersonSearchDropdown = hideDutyPersonSearchDropdown;
+            window.selectDutyPersonFromSearch = selectDutyPersonFromSearch;
+            window.clearDutyPersonSelection = clearDutyPersonSelection;
+            window.handleDutyPersonSearchKeydown = handleDutyPersonSearchKeydown;
         }
         function openRankingsModal() {
             const allPeople = getAllPeople();
@@ -3828,6 +3952,10 @@
                     ${holidayName ? `<div class="orthodox-holiday-name">${holidayName}</div>` : ''}
                     ${displayAssignmentHtml}
                 `;
+
+                if (selectedDutyHighlightPerson && personIsAssignedInAssignment(assignment, selectedDutyHighlightPerson)) {
+                    dayDiv.classList.add('person-duty-highlight');
+                }
                 
                 // Add click handler AFTER setting innerHTML to ensure it's not removed
                 dayDiv.style.cursor = 'pointer';
