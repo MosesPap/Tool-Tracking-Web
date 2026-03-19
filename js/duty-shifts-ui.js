@@ -581,8 +581,6 @@
                     });
                 }
                 
-                const rotationSpan = document.getElementById(`group${i}Rotation`);
-                rotationSpan.textContent = allPeople.size > 0 ? allPeople.size : '-';
             }
             
             // Restore open lists if preserveOpenLists is true
@@ -5951,9 +5949,11 @@
         function updateStatistics() {
             let totalPeople = 0;
             const statIds = { 1: 'statAym', 2: 'statDta', 3: 'statAw139', 4: 'statEpigeia' };
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
             
             for (let i = 1; i <= 4; i++) {
-                const groupData = groups[i] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
+                const groupData = groups[i] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
                 const specialList = groupData.special || [];
                 const weekendList = groupData.weekend || [];
                 const semiList = groupData.semi || [];
@@ -5964,6 +5964,36 @@
                 
                 const el = document.getElementById(statIds[i]);
                 if (el) el.textContent = peopleCount;
+
+                let missingCount = 0;
+                let disabledCount = 0;
+                let unavailableUnionCount = 0;
+                uniquePeople.forEach((person) => {
+                    const st = (typeof getDisabledState === 'function') ? getDisabledState(i, person) : {};
+                    const isDisabled = !!(st && (st.all || st.special || st.weekend || st.semi || st.normal));
+                    if (isDisabled) disabledCount++;
+
+                    const periods = groupData.missingPeriods?.[person] || [];
+                    const isMissingNow = Array.isArray(periods) && periods.some(period => {
+                        const start = new Date(String(period.start || '') + 'T00:00:00');
+                        const end = new Date(String(period.end || '') + 'T00:00:00');
+                        if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+                        return today >= start && today <= end;
+                    });
+                    if (isMissingNow) missingCount++;
+
+                    if (isDisabled || isMissingNow) unavailableUnionCount++;
+                });
+
+                const inServiceCount = Math.max(0, peopleCount - unavailableUnionCount);
+                const groupTotalEl = document.getElementById(`group${i}TotalPeople`);
+                const groupInServiceEl = document.getElementById(`group${i}InServicePeople`);
+                const groupMissingEl = document.getElementById(`group${i}MissingPeople`);
+                const groupDisabledEl = document.getElementById(`group${i}DisabledPeople`);
+                if (groupTotalEl) groupTotalEl.textContent = String(peopleCount);
+                if (groupInServiceEl) groupInServiceEl.textContent = String(inServiceCount);
+                if (groupMissingEl) groupMissingEl.textContent = String(missingCount);
+                if (groupDisabledEl) groupDisabledEl.textContent = String(disabledCount);
             }
             
             const totalEl = document.getElementById('totalPeople');
