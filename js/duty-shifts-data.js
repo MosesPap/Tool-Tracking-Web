@@ -3046,8 +3046,8 @@
         function getDayTypeColor(dayType) {
             const colors = {
                 'normal-day': [232, 245, 233],      // #E8F5E9 - light green
-                'semi-normal-day': [255, 249, 196], // #FFF9C4 - light yellow
-                'weekend-holiday': [255, 224, 178],  // #FFE0B2 - light orange
+                'semi-normal-day': [174, 174, 174], // #AEAEAE
+                'weekend-holiday': [123, 123, 123],  // #7B7B7B
                 'special-holiday': [225, 190, 231]   // #E1BEE7 - light purple
             };
             return colors[dayType] || [255, 255, 255]; // Default white
