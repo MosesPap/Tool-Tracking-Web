@@ -1589,6 +1589,14 @@
                         const idxSkipped = rotationList.findIndex(p => normName(p) === normName(personName));
                         let cursor = idxSkipped >= 0 ? ((idxSkipped + 1) % Math.max(1, rotationList.length)) : 0;
                         let deferredReplacement = replacement;
+                        const isUnavailableOnDate = (candidateName, dayKey) => {
+                            if (!candidateName || !dayKey) return true;
+                            const dd = new Date(dayKey + 'T00:00:00');
+                            if (isNaN(dd.getTime())) return true;
+                            if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidateName, groupNum, 'normal')) return true;
+                            if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(candidateName, groupNum, dd, 'normal')) return true;
+                            return false;
+                        };
 
                         const setGroupAssignmentForDay = (dk, personForGroup) => {
                             const existing = extractGroupAssignmentsMap(normalDayAssignments?.[dk] || dutyAssignments?.[dk] || '');
@@ -1618,8 +1626,18 @@
                                     cursor = (cursor + 1) % rotationList.length;
                                     deferredReplacement = null;
                                 }
-                                const personForGroup = rotationList[cursor];
+                                let personForGroup = rotationList[cursor];
                                 cursor = (cursor + 1) % rotationList.length;
+                                // Keep original missing/disabled behavior: skip unavailable people on each day.
+                                let searchGuard = 0;
+                                while (searchGuard++ <= rotationList.length + 1 && isUnavailableOnDate(personForGroup, dk)) {
+                                    personForGroup = rotationList[cursor];
+                                    cursor = (cursor + 1) % rotationList.length;
+                                }
+                                if (isUnavailableOnDate(personForGroup, dk)) {
+                                    // No eligible replacement found by rotation scan: keep previously assigned person for safety.
+                                    personForGroup = parseAssignedPersonForGroupFromAssignment(normalDayAssignments?.[dk] || dutyAssignments?.[dk] || '', groupNum) || personForGroup;
+                                }
                                 setGroupAssignmentForDay(dk, personForGroup);
                             }
                         }
@@ -1685,6 +1703,8 @@
                                     if (!cand) continue;
                                     const d1 = new Date(dk + 'T00:00:00');
                                     const d2 = new Date(dk2 + 'T00:00:00');
+                                    if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) continue;
+                                    if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(assigned, groupNum, 'normal')) continue;
                                     if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(cand, groupNum, d1, 'normal')) continue;
                                     if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(assigned, groupNum, d2, 'normal')) continue;
                                     const sim2 = { ...simulatedAssignments };
