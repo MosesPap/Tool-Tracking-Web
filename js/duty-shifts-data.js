@@ -3654,6 +3654,8 @@
                         // Use a vivid magenta for "ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ" as shown in your screenshot
                         const specialFill = palette.right ? palette.right.special.fill : 'FFFF00FF';
                         const noteFillWhite = 'FFFFFFFF';
+                        const specialNoteFill = palette.right ? palette.right.special.fill : noteFillWhite;
+                        const specialNoteFont = palette.right ? palette.right.special.font : 'FF000000';
 
                         const writeRightRow = (rowNum, text, { col = rightCol, bold = false, center = false, fill = null, fontColor = 'FF000000', fontSize = 14, wrap = false } = {}) => {
                             const cell = worksheet.getRow(rowNum).getCell(col);
@@ -3672,18 +3674,18 @@
                         setBlockBorder(rr, true, true);
                         rr += 2; // blank row between title and first block
 
-                        const writeCategoryBlock = (title, fill, names, fontColor, { notes = null, count = 2 } = {}) => {
+                        const writeCategoryBlock = (title, fill, names, fontColor, { notes = null, count = 2, noteFill = noteFillWhite, noteFontColor = 'FF000000' } = {}) => {
                             writeRightRow(rr, title, { bold: true, center: true, fill, fontColor });
                             setBlockBorder(rr, true, false);
                             rr++;
 
                             writeRightRow(rr, names?.[0] || '', { fill, fontColor, col: rightCol });
-                            writeRightRow(rr, notes?.[0] || '', { fill: noteFillWhite, fontColor: 'FF000000', col: rightNoteCol, fontSize: 10, wrap: true });
+                            writeRightRow(rr, notes?.[0] || '', { fill: noteFill, fontColor: noteFontColor, col: rightNoteCol, fontSize: 10, wrap: true });
                             setBlockBorder(rr, false, false);
                             rr++;
 
                             writeRightRow(rr, names?.[1] || '', { fill, fontColor, col: rightCol });
-                            writeRightRow(rr, notes?.[1] || '', { fill: noteFillWhite, fontColor: 'FF000000', col: rightNoteCol, fontSize: 10, wrap: true });
+                            writeRightRow(rr, notes?.[1] || '', { fill: noteFill, fontColor: noteFontColor, col: rightNoteCol, fontSize: 10, wrap: true });
                             if (count === 2) {
                                 setBlockBorder(rr, false, true);
                                 rr += 2; // blank row between blocks
@@ -3693,7 +3695,7 @@
                             rr++;
 
                             writeRightRow(rr, names?.[2] || '', { fill, fontColor, col: rightCol });
-                            writeRightRow(rr, notes?.[2] || '', { fill: noteFillWhite, fontColor: 'FF000000', col: rightNoteCol, fontSize: 10, wrap: true });
+                            writeRightRow(rr, notes?.[2] || '', { fill: noteFill, fontColor: noteFontColor, col: rightNoteCol, fontSize: 10, wrap: true });
                             setBlockBorder(rr, false, true);
                             rr += 2; // blank row between blocks
                         };
@@ -3706,7 +3708,12 @@
                         writeCategoryBlock('ΚΑΘΗΜΕΡΙΝΕΣ', normalFill, rotationInfo.next.normal, rightFontNormal);
                         writeCategoryBlock('ΗΜΙΑΡΓΙΕΣ', semiFill, rotationInfo.next.semi, rightFontSemi);
                         writeCategoryBlock('ΑΡΓΙΕΣ', weekendFill, rotationInfo.next.weekend, rightFontWeekend);
-                        writeCategoryBlock('ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', specialFill, rotationInfo.next.special, rightFontSpecial, { notes: rotationInfo.nextNotes?.special || null, count: 3 });
+                        writeCategoryBlock('ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ', specialFill, rotationInfo.next.special, rightFontSpecial, {
+                            notes: rotationInfo.nextNotes?.special || null,
+                            count: 3,
+                            noteFill: specialNoteFill,
+                            noteFontColor: specialNoteFont
+                        });
                     }
                         return workbook;
                     };
@@ -3892,7 +3899,14 @@
                                 const iAddr = 'I' + (rr.row + 1);
                                 if (!ws[iAddr]) ws[iAddr] = { t: 's', v: rr.text || '' };
                                 else ws[iAddr].v = rr.text || '';
-                                styleCell(iAddr, { bold: false, center: false, fillRgb: 'FFFFFF', fontRgb: '000000', sz: 10, wrap: true });
+                                styleCell(iAddr, {
+                                    bold: false,
+                                    center: false,
+                                    fillRgb: palette ? palette.right.special.fill : 'FFFFFF',
+                                    fontRgb: palette ? palette.right.special.font : '000000',
+                                    sz: 10,
+                                    wrap: true
+                                });
                             });
 
                             // Signature cells (Ο ΣΥΝΤΑΞΑΣ, ΕΘ-ΘΗ, Ο ΔΚΤΗΣ): bold Arial 14
