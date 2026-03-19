@@ -1564,6 +1564,74 @@
                     storeAssignmentReason(dateKey, groupNum, replacement, 'skip', reason, personName, null, { manualAlternateReplacement: true });
                 }
 
+                // If duties were already calculated with swaps, those swap pairs become stale after manual alternate.
+                // Remove affected normal swap pairs in the same month/group and restore baseline for those dates.
+                if (typeCategory === 'normal') {
+                    try {
+                        const monthPrefix = dateKey.slice(0, 7) + '-';
+                        const normName = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                        const targetNames = new Set([normName(personName), normName(replacement)]);
+                        const swapPairIdsToClear = new Set();
+
+                        for (const dk in assignmentReasons) {
+                            if (!dk || !dk.startsWith(monthPrefix)) continue;
+                            const gMap = assignmentReasons?.[dk]?.[groupNum];
+                            if (!gMap || typeof gMap !== 'object') continue;
+                            for (const pn in gMap) {
+                                const rr = gMap[pn];
+                                if (!rr || rr.type !== 'swap' || rr.swapPairId == null) continue;
+                                const n1 = normName(pn);
+                                const n2 = normName(rr.swappedWith);
+                                if (targetNames.has(n1) || targetNames.has(n2)) {
+                                    swapPairIdsToClear.add(String(rr.swapPairId));
+                                }
+                            }
+                        }
+
+                        if (swapPairIdsToClear.size > 0) {
+                            const datesToRebuild = new Set();
+                            for (const dk in assignmentReasons) {
+                                if (!dk || !dk.startsWith(monthPrefix)) continue;
+                                const gMap = assignmentReasons?.[dk]?.[groupNum];
+                                if (!gMap || typeof gMap !== 'object') continue;
+                                for (const pn in gMap) {
+                                    const rr = gMap[pn];
+                                    if (!rr) continue;
+                                    if (rr.type === 'swap' && rr.swapPairId != null && swapPairIdsToClear.has(String(rr.swapPairId))) {
+                                        delete gMap[pn];
+                                        datesToRebuild.add(dk);
+                                    }
+                                }
+                                if (Object.keys(gMap).length === 0) {
+                                    delete assignmentReasons[dk][groupNum];
+                                }
+                            }
+
+                            for (const dk of datesToRebuild) {
+                                if (dk === dateKey) continue; // keep manual alternate assignment as-is
+                                const baselineStr = (typeof getRotationBaselineAssignmentForType === 'function')
+                                    ? getRotationBaselineAssignmentForType('normal', dk)
+                                    : null;
+                                const baselineMap = extractGroupAssignmentsMap(baselineStr);
+                                const baselinePersonForGroup = baselineMap?.[groupNum] || null;
+                                if (!baselinePersonForGroup) continue;
+                                const dayMap = extractGroupAssignmentsMap(normalDayAssignments?.[dk] || dutyAssignments?.[dk] || '');
+                                dayMap[groupNum] = baselinePersonForGroup;
+                                const dayParts = [];
+                                for (let g = 1; g <= 4; g++) {
+                                    const pn = dayMap[g];
+                                    if (pn) dayParts.push(`${pn} (Ομάδα ${g})`);
+                                }
+                                const rebuilt = dayParts.join(', ');
+                                normalDayAssignments[dk] = rebuilt;
+                                dutyAssignments[dk] = rebuilt;
+                            }
+                        }
+                    } catch (swapCleanupErr) {
+                        console.warn('Manual alternate swap cleanup failed:', swapCleanupErr);
+                    }
+                }
+
                 // Persist
                 await saveData();
                 renderCalendar();
