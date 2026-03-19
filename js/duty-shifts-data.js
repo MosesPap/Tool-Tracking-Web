@@ -431,6 +431,93 @@
             }
             lastRotationPositions[dayType][monthKey][groupNum] = personName;
         }
+
+        /** Normalize person name for rotation comparisons (matches logic.js normalizePersonKey style). */
+        function normRotPersonName(n) {
+            return String(n || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
+        }
+
+        /**
+         * Manual "Αντικατάσταση Επιλαχών": replacement holds the duty but baseline (swappedWith) owns the rotation slot.
+         */
+        function findManualAlternateReplacementForGroup(dateKey, groupNum) {
+            const byGroup = assignmentReasons?.[dateKey]?.[groupNum];
+            if (!byGroup || typeof byGroup !== 'object') return null;
+            for (const replKey in byGroup) {
+                const r = byGroup[replKey];
+                if (!r || r.type !== 'skip' || !r.meta || !r.meta.manualAlternateReplacement) continue;
+                const baselinePerson = r.swappedWith || null;
+                if (!baselinePerson) continue;
+                return { replacementPerson: replKey, baselinePerson };
+            }
+            return null;
+        }
+
+        /**
+         * Expected rotation-slot holder for a date (accounts for manual alternate: D replaces A → continue A,B,C, then skip D once).
+         */
+        function computeExpectedRotationPersonForDate(dayTypeCategory, dateKey, groupNum) {
+            try {
+                const groupData = groups[groupNum] || {};
+                const people = groupData[dayTypeCategory] || [];
+                if (!Array.isArray(people) || people.length === 0) return null;
+                const d0 = new Date(dateKey + 'T00:00:00');
+                if (isNaN(d0.getTime())) return null;
+                const year = d0.getFullYear();
+                const month = d0.getMonth();
+                const monthSeedDate = new Date(year, month, 1);
+                const keys = [];
+                const cur = new Date(year, month, 1);
+                const endM = new Date(year, month + 1, 0);
+                while (cur <= endM) {
+                    const dk = formatDateKey(cur);
+                    const isSpecial = Array.isArray(specialHolidays) && specialHolidays.some(h => h && h.date === dk);
+                    const dtType = isSpecial ? 'special-holiday' : getDayType(cur);
+                    let cat = 'normal';
+                    if (dtType === 'special-holiday') cat = 'special';
+                    else if (dtType === 'weekend-holiday') cat = 'weekend';
+                    else if (dtType === 'semi-normal-day') cat = 'semi';
+                    if (cat === dayTypeCategory) keys.push(dk);
+                    cur.setDate(cur.getDate() + 1);
+                }
+                keys.sort();
+                const targetIdx = keys.indexOf(dateKey);
+                if (targetIdx < 0) return null;
+                const seed = getLastRotationPersonForDate(dayTypeCategory, monthSeedDate, groupNum);
+                let idx = 0;
+                if (seed) {
+                    const seedIdx = people.indexOf(seed);
+                    if (seedIdx >= 0) idx = (seedIdx + 1) % people.length;
+                }
+                let deferSkip = null;
+                for (let i = 0; i < keys.length; i++) {
+                    const dk = keys[i];
+                    const manual = findManualAlternateReplacementForGroup(dk, groupNum);
+                    const bIdx = manual ? people.indexOf(manual.baselinePerson) : -1;
+                    if (manual && bIdx >= 0) {
+                        if (i === targetIdx) return manual.baselinePerson;
+                        idx = (bIdx + 1) % people.length;
+                        deferSkip = manual.replacementPerson;
+                        continue;
+                    }
+                    if (i === targetIdx) {
+                        while (deferSkip && people[idx] && normRotPersonName(people[idx]) === normRotPersonName(deferSkip)) {
+                            idx = (idx + 1) % people.length;
+                            deferSkip = null;
+                        }
+                        return people[idx] || null;
+                    }
+                    while (deferSkip && people[idx] && normRotPersonName(people[idx]) === normRotPersonName(deferSkip)) {
+                        idx = (idx + 1) % people.length;
+                        deferSkip = null;
+                    }
+                    idx = (idx + 1) % people.length;
+                }
+                return null;
+            } catch (e) {
+                return null;
+            }
+        }
         
         // Helper functions to get/set assignments based on day type
         function getAssignmentsForDayType(dayTypeCategory) {

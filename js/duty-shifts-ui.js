@@ -3496,16 +3496,24 @@
                 for (const cat of ['special', 'weekend', 'semi', 'normal']) {
                     const people = gdata[cat] || [];
                     if (!Array.isArray(people) || people.length === 0) continue;
-                    const seed = getLastRotationPersonForDate(cat, monthSeedDate, groupNum);
-                    let idx = 0;
-                    if (seed) {
-                        const seedIdx = people.indexOf(seed);
-                        if (seedIdx >= 0) idx = (seedIdx + 1) % people.length;
-                    }
                     for (const dk of dayKeysByCategory[cat]) {
                         if (!monthExpectedByDateGroup[dk]) monthExpectedByDateGroup[dk] = {};
-                        monthExpectedByDateGroup[dk][groupNum] = people[idx];
-                        idx = (idx + 1) % people.length;
+                        let exp = null;
+                        if (typeof computeExpectedRotationPersonForDate === 'function') {
+                            exp = computeExpectedRotationPersonForDate(cat, dk, groupNum);
+                        }
+                        if (exp == null) {
+                            const seed = getLastRotationPersonForDate(cat, monthSeedDate, groupNum);
+                            let idx = 0;
+                            if (seed) {
+                                const seedIdx = people.indexOf(seed);
+                                if (seedIdx >= 0) idx = (seedIdx + 1) % people.length;
+                            }
+                            const ord = dayKeysByCategory[cat];
+                            const pos = ord.indexOf(dk);
+                            if (pos >= 0) exp = people[(idx + pos) % people.length];
+                        }
+                        monthExpectedByDateGroup[dk][groupNum] = exp;
                     }
                 }
             }
@@ -5213,6 +5221,10 @@
                 // Derive who SHOULD be assigned for this date/group, using month-scoped seeding from lastRotationPositions.
                 const getExpectedPersonForDay = (groupNum) => {
                     try {
+                        if (typeof computeExpectedRotationPersonForDate === 'function') {
+                            const exp = computeExpectedRotationPersonForDate(dayTypeCategory, key, groupNum);
+                            if (exp != null) return exp;
+                        }
                         const groupData = groups[groupNum] || {};
                         const groupPeople = groupData[dayTypeCategory] || [];
                         if (!Array.isArray(groupPeople) || groupPeople.length === 0) return null;
