@@ -5636,8 +5636,21 @@
                                                         break;
                                                     }
                                                     if (picked) {
+                                                    const prevAssigned = updatedAssignments?.[nextKey]?.[groupNum] || null;
                                                         if (!updatedAssignments[nextKey]) updatedAssignments[nextKey] = {};
                                                         updatedAssignments[nextKey][groupNum] = picked;
+                                                    if (prevAssigned && prevAssigned !== picked) {
+                                                        storeAssignmentReason(
+                                                            nextKey,
+                                                            groupNum,
+                                                            picked,
+                                                            'shift',
+                                                            '',
+                                                            prevAssigned,
+                                                            null,
+                                                            { swapContinuity: true, anchorSwapDay: laterKey }
+                                                        );
+                                                    }
                                                     }
                                                 }
                                             }
@@ -9864,8 +9877,21 @@
                                                     break;
                                                 }
                                                 if (picked) {
+                                                    const prevAssigned = normalAssignments?.[nextKey]?.[groupNum] || null;
                                                     if (!normalAssignments[nextKey]) normalAssignments[nextKey] = {};
                                                     normalAssignments[nextKey][groupNum] = picked;
+                                                    if (prevAssigned && prevAssigned !== picked) {
+                                                        storeAssignmentReason(
+                                                            nextKey,
+                                                            groupNum,
+                                                            picked,
+                                                            'shift',
+                                                            '',
+                                                            prevAssigned,
+                                                            null,
+                                                            { swapContinuity: true, anchorSwapDay: laterKey }
+                                                        );
+                                                    }
                                                 }
                                             }
                                         }
