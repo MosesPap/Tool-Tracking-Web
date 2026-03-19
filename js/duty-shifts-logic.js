@@ -4736,6 +4736,36 @@
                     const groups = tempNormalAssignments[dateKey];
                     updatedAssignments[dateKey] = { ...groups };
                 }
+
+                // Manual alternate defer guard:
+                // If D replaced A on date X, D must not be reintroduced by swap logic later in the same month-cycle.
+                const manualAlternateEntriesByGroup = {}; // groupNum -> [{ replacement, dateKey }]
+                for (const dk in assignmentReasons) {
+                    const byGroup = assignmentReasons[dk];
+                    if (!byGroup) continue;
+                    for (const gk in byGroup) {
+                        const gnum = parseInt(gk, 10);
+                        if (!Number.isFinite(gnum)) continue;
+                        const gReasons = byGroup[gk] || {};
+                        for (const pname in gReasons) {
+                            const rr = gReasons[pname];
+                            if (!(rr && rr.type === 'skip' && rr.meta && rr.meta.manualAlternateReplacement)) continue;
+                            if (!manualAlternateEntriesByGroup[gnum]) manualAlternateEntriesByGroup[gnum] = [];
+                            manualAlternateEntriesByGroup[gnum].push({ replacement: pname, dateKey: dk });
+                        }
+                    }
+                }
+                const isDeferredManualAlternatePersonOnDate = (personName, groupNum, candidateDateKey) => {
+                    const arr = manualAlternateEntriesByGroup[groupNum] || [];
+                    if (!arr.length || !personName || !candidateDateKey) return false;
+                    const pNorm = normName(personName);
+                    for (const e of arr) {
+                        if (normName(e.replacement) !== pNorm) continue;
+                        // Block this replacement on later normal dates in same run
+                        if (candidateDateKey > e.dateKey) return true;
+                    }
+                    return false;
+                };
                 
                 // Get global normal rotation positions
                 const globalNormalRotationPosition = calculationSteps.lastNormalRotationPositions || {};
@@ -5179,6 +5209,7 @@
                                 }
                                 if (!swapCandidate) return null;
                                 if (isPersonMissingOnDate(swapCandidate, groupNum, d, 'normal')) return null;
+                                if (isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, candidateKey)) return null;
                                 if (hasConsecutiveDuty(candidateKey, swapCandidate, groupNum, simulatedAssignments)) return null;
                                 if (hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) return null;
                                 if (!updatedAssignments[candidateKey]) {
@@ -5250,6 +5281,7 @@
                                     if (!hasRealConflict) {
                                     } else {
                                         if (!isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate, 'normal') &&
+                                            !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, sameWeekKey) &&
                                             !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                             swapDayKey = sameWeekKey;
                                             swapDayIndex = normalDays.indexOf(sameWeekKey);
@@ -5270,6 +5302,7 @@
                                             const swapCandidate = updatedAssignments[nextSameDayKey][groupNum];
 
                                             if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay, 'normal') &&
+                                                !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, nextSameDayKey) &&
                                                 !hasConsecutiveDuty(nextSameDayKey, swapCandidate, groupNum, simulatedAssignments) &&
                                                 !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 swapDayKey = nextSameDayKey;
@@ -5317,6 +5350,7 @@
                                         const swapCandidate = updatedAssignments[weekAfterNextKey][groupNum];
 
                                         if (!isPersonMissingOnDate(swapCandidate, groupNum, weekAfterNextDate, 'normal') &&
+                                            !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, weekAfterNextKey) &&
                                             !hasConsecutiveDuty(weekAfterNextKey, swapCandidate, groupNum, simulatedAssignments) &&
                                             !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                             swapDayKey = weekAfterNextKey;
@@ -5388,6 +5422,7 @@
                                     if (!hasRealConflict) {
                                     } else {
                                         if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay, 'normal') &&
+                                            !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, nextSameDayKey) &&
                                             !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                             swapDayKey = nextSameDayKey;
                                             swapDayIndex = normalDays.indexOf(nextSameDayKey);
@@ -5431,6 +5466,7 @@
                                             const swapCandidate = updatedAssignments[sameWeekKey][groupNum];
 
                                             if (!isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate, 'normal') &&
+                                                !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, sameWeekKey) &&
                                                 !hasConsecutiveDuty(sameWeekKey, swapCandidate, groupNum, simulatedAssignments) &&
                                                 !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 swapDayKey = sameWeekKey;
@@ -5458,6 +5494,7 @@
                                             const swapCandidate = updatedAssignments[nextAlternativeKey][groupNum];
 
                                             if (!isPersonMissingOnDate(swapCandidate, groupNum, nextAlternativeDay) &&
+                                                !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, nextAlternativeKey) &&
                                                 !hasConsecutiveDuty(nextAlternativeKey, swapCandidate, groupNum, simulatedAssignments) &&
                                                 !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 swapDayKey = nextAlternativeKey;
@@ -5499,6 +5536,7 @@
                                         if (prevAlternativeType === 'normal-day' && swapCandidate) {
 
                                             if (!isPersonMissingOnDate(swapCandidate, groupNum, prevAlternativeDay, 'normal') &&
+                                                !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, prevAlternativeKey) &&
                                                 !hasConsecutiveDuty(prevAlternativeKey, swapCandidate, groupNum, simulatedAssignments) &&
                                                 !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
                                                 swapDayKey = prevAlternativeKey;
