@@ -5598,6 +5598,54 @@
                                 console.log('[SWAP SAVE DEBUG] After two-slot swap:', dateKey, 'Group', groupNum, '->', swapCandidate, '|', swapDayKey, '->', currentPerson, '| updatedAssignments sample:', { [dateKey]: updatedAssignments[dateKey]?.[groupNum], [swapDayKey]: updatedAssignments[swapDayKey]?.[groupNum] });
                                 const isBackwardWithinMonth = false; // no track shift; swap only
                                 const isCrossMonthSwap = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
+
+                                // Maintain same-month rotation continuity after a two-slot swap.
+                                // Example: 06/04 A <-> 08/04 C => 08/04 becomes A, but next normal should continue after C (i.e. D), not after A.
+                                try {
+                                    if (!isCrossMonthSwap && Array.isArray(groupPeople) && groupPeople.length > 0) {
+                                        const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
+                                        const laterOriginalPerson = (laterKey === dateKey) ? currentPerson : swapCandidate;
+                                        const laterOriginalIdx = groupPeople.indexOf(laterOriginalPerson);
+                                        if (laterOriginalIdx >= 0) {
+                                            let cursorIdx = (laterOriginalIdx + 1) % groupPeople.length;
+                                            const laterPos = sortedNormal.indexOf(laterKey);
+                                            if (laterPos >= 0) {
+                                                for (let ni = laterPos + 1; ni < sortedNormal.length; ni++) {
+                                                    const nextKey = sortedNormal[ni];
+                                                    const nextDateObj = new Date(nextKey + 'T00:00:00');
+                                                    if (isNaN(nextDateObj.getTime())) continue;
+
+                                                    // Respect explicit return-from-missing placement and continue cursor from that person.
+                                                    const existingPerson = updatedAssignments?.[nextKey]?.[groupNum] || null;
+                                                    const existingReason = existingPerson ? getAssignmentReason(nextKey, groupNum, existingPerson) : null;
+                                                    if (existingReason && existingReason.meta && (existingReason.meta.returnFromMissing || existingReason.meta.shiftedByReturnFromMissing)) {
+                                                        const existingIdx = groupPeople.indexOf(existingPerson);
+                                                        if (existingIdx >= 0) cursorIdx = (existingIdx + 1) % groupPeople.length;
+                                                        continue;
+                                                    }
+
+                                                    let picked = null;
+                                                    for (let off = 0; off < groupPeople.length; off++) {
+                                                        const candIdx = (cursorIdx + off) % groupPeople.length;
+                                                        const cand = groupPeople[candIdx];
+                                                        if (!cand) continue;
+                                                        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) continue;
+                                                        if (isPersonMissingOnDate(cand, groupNum, nextDateObj, 'normal')) continue;
+                                                        picked = cand;
+                                                        cursorIdx = (candIdx + 1) % groupPeople.length;
+                                                        break;
+                                                    }
+                                                    if (picked) {
+                                                        if (!updatedAssignments[nextKey]) updatedAssignments[nextKey] = {};
+                                                        updatedAssignments[nextKey][groupNum] = picked;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } catch (contErr) {
+                                    console.warn('[SWAP CONTINUITY] Failed to reflow future normal days after swap:', contErr);
+                                }
                                 
                                 // Store assignment reasons for BOTH people involved in the swap with swap pair ID
                                 // Improved Greek reasons:
