@@ -3383,6 +3383,7 @@
                                 'normal-day':      { fill: 'FFFFFFFF', font: 'FF000000' }, // white / black
                                 'semi-normal-day': { fill: 'FFD9D9D9', font: 'FF000000' }, // light grey / black
                                 'weekend-holiday': { fill: 'FF808080', font: 'FFFFFFFF' }, // grey / white
+                                'special-holiday': { fill: 'FF404040', font: 'FFFFFFFF' }, // dark grey / white
                                 'special':         { fill: 'FF404040', font: 'FFFFFFFF' }  // dark grey / white
                             },
                             right: {
@@ -3764,6 +3765,7 @@
                                 'normal-day':      { fill: 'FFFFFF', font: '000000' },
                                 'semi-normal-day': { fill: 'D9D9D9', font: '000000' },
                                 'weekend-holiday': { fill: '808080', font: 'FFFFFF' },
+                                'special-holiday': { fill: '404040', font: 'FFFFFF' },
                                 'special':         { fill: '404040', font: 'FFFFFF' }
                             },
                             right: {
