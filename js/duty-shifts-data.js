@@ -2897,6 +2897,18 @@
 
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
+            const monthKeyForLookup = `${year}-${String(month + 1).padStart(2, '0')}`;
+            const normName = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
+
+            // Prefer authoritative month-scoped rotation continuity when available.
+            for (const t of ['normal', 'semi', 'weekend', 'special']) {
+                const byType = lastRotationPositions?.[t];
+                const byMonth = byType && typeof byType === 'object' ? byType[monthKeyForLookup] : null;
+                const fromMonth = (byMonth && typeof byMonth === 'object' && !Array.isArray(byMonth))
+                    ? (byMonth[groupNum] || byMonth[String(groupNum)] || '')
+                    : '';
+                if (fromMonth) lastAssigned[t] = normName(fromMonth);
+            }
 
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(year, month, day);
@@ -2913,8 +2925,9 @@
                 const baselinePerson = baselineMap?.[groupNum] || '';
 
                 const assignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
-                const personName = baselinePerson || getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
-                if (personName) lastAssigned[rotationType] = personName;
+                const personName = normName(baselinePerson || getAssignedPersonNameForGroupFromAssignment(assignment, groupNum));
+                // Fallback only: do not override month-scoped lastRotationPositions if we already have it.
+                if (personName && !lastAssigned[rotationType]) lastAssigned[rotationType] = personName;
             }
 
             const isDisabledForType = (personName, dutyType) => {
@@ -2955,8 +2968,8 @@
 
                 const last = lastAssigned[type];
                 let startIdx = 0;
-                if (last && list.indexOf(last) >= 0) {
-                    const idx = list.indexOf(last);
+                const idx = last ? list.findIndex(p => normName(p) === normName(last)) : -1;
+                if (idx >= 0) {
                     startIdx = idx + 1;
                 }
 
