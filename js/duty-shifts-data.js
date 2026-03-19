@@ -3046,8 +3046,8 @@
         function getDayTypeColor(dayType) {
             const colors = {
                 'normal-day': [232, 245, 233],      // #E8F5E9 - light green
-                'semi-normal-day': [174, 174, 174], // #AEAEAE
-                'weekend-holiday': [123, 123, 123],  // #7B7B7B
+                'semi-normal-day': [255, 249, 196], // #FFF9C4 - light yellow
+                'weekend-holiday': [255, 224, 178],  // #FFE0B2 - light orange
                 'special-holiday': [225, 190, 231]   // #E1BEE7 - light purple
             };
             return colors[dayType] || [255, 255, 255]; // Default white
@@ -3394,15 +3394,15 @@
                             headerFont: 'FFFFFFFF',
                             day: {
                                 'normal-day':      { fill: 'FFFFFFFF', font: 'FF000000' }, // white / black
-                                'semi-normal-day': { fill: 'FFD9D9D9', font: 'FF000000' }, // light grey / black
-                                'weekend-holiday': { fill: 'FF808080', font: 'FFFFFFFF' }, // grey / white
+                                'semi-normal-day': { fill: 'FFAEAEAE', font: 'FF000000' }, // requested printout grey / black
+                                'weekend-holiday': { fill: 'FF7B7B7B', font: 'FFFFFFFF' }, // requested printout dark grey / white
                                 'special-holiday': { fill: 'FF404040', font: 'FFFFFFFF' }, // dark grey / white
                                 'special':         { fill: 'FF404040', font: 'FFFFFFFF' }  // dark grey / white
                             },
                             right: {
                                 normal:  { fill: 'FFFFFFFF', font: 'FF000000' },
-                                semi:    { fill: 'FFD9D9D9', font: 'FF000000' },
-                                weekend: { fill: 'FF808080', font: 'FFFFFFFF' },
+                                semi:    { fill: 'FFAEAEAE', font: 'FF000000' },
+                                weekend: { fill: 'FF7B7B7B', font: 'FFFFFFFF' },
                                 special: { fill: 'FF404040', font: 'FFFFFFFF' }
                             }
                         } : {
@@ -3776,15 +3776,15 @@
                             headerFont: 'FFFFFF',
                             day: {
                                 'normal-day':      { fill: 'FFFFFF', font: '000000' },
-                                'semi-normal-day': { fill: 'D9D9D9', font: '000000' },
-                                'weekend-holiday': { fill: '808080', font: 'FFFFFF' },
+                                'semi-normal-day': { fill: 'AEAEAE', font: '000000' },
+                                'weekend-holiday': { fill: '7B7B7B', font: 'FFFFFF' },
                                 'special-holiday': { fill: '404040', font: 'FFFFFF' },
                                 'special':         { fill: '404040', font: 'FFFFFF' }
                             },
                             right: {
                                 normal:  { fill: 'FFFFFF', font: '000000' },
-                                semi:    { fill: 'D9D9D9', font: '000000' },
-                                weekend: { fill: '808080', font: 'FFFFFF' },
+                                semi:    { fill: 'AEAEAE', font: '000000' },
+                                weekend: { fill: '7B7B7B', font: 'FFFFFF' },
                                 special: { fill: '404040', font: 'FFFFFF' }
                             }
                         } : null;
