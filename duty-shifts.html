@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.387 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.388 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -1561,7 +1561,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.387</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.388</span></h4>
             </div>
             <div class="d-flex align-items-center flex-wrap gap-3 title-bar-stats" style="font-size: 1.25em; font-weight: 500; opacity: 0.98;">
                 <span>Σύνολο Ατόμων: <strong id="totalPeople">0</strong></span>
@@ -1682,11 +1682,21 @@
                         </button>
                         </div>
                     </div>
-                    <div class="mb-2 small text-muted">
-                        <div>Άτομα: <strong id="group1TotalPeople">0</strong></div>
-                        <div>Στην Υπηρεσία: <strong id="group1InServicePeople">0</strong></div>
-                        <div>Απόντες: <strong id="group1MissingPeople">0</strong></div>
-                        <div>Εκτός Υπηρεσίας: <strong id="group1DisabledPeople">0</strong></div>
+                    <div class="mb-2 small text-muted d-flex gap-4 flex-wrap">
+                        <div>
+                            <div><strong><u>Τρέχων Μήνας</u></strong></div>
+                            <div>Άτομα: <strong id="group1TotalPeople">0</strong></div>
+                            <div>Στην Υπηρεσία: <strong id="group1InServicePeople">0</strong></div>
+                            <div>Απόντες: <strong id="group1MissingPeople">0</strong></div>
+                            <div>Εκτός Υπηρεσίας: <strong id="group1DisabledPeople">0</strong></div>
+                        </div>
+                        <div>
+                            <div><strong><u>Επομ. Μήνας</u></strong></div>
+                            <div>Άτομα: <strong id="group1NextTotalPeople">0</strong></div>
+                            <div>Στην Υπηρεσία: <strong id="group1NextInServicePeople">0</strong></div>
+                            <div>Απόντες: <strong id="group1NextMissingPeople">0</strong></div>
+                            <div>Εκτός Υπηρεσίας: <strong id="group1NextDisabledPeople">0</strong></div>
+                        </div>
                     </div>
                     <div id="group1People"></div>
                 </div>
@@ -1707,11 +1717,21 @@
                         </button>
                         </div>
                     </div>
-                    <div class="mb-2 small text-muted">
-                        <div>Άτομα: <strong id="group2TotalPeople">0</strong></div>
-                        <div>Στην Υπηρεσία: <strong id="group2InServicePeople">0</strong></div>
-                        <div>Απόντες: <strong id="group2MissingPeople">0</strong></div>
-                        <div>Εκτός Υπηρεσίας: <strong id="group2DisabledPeople">0</strong></div>
+                    <div class="mb-2 small text-muted d-flex gap-4 flex-wrap">
+                        <div>
+                            <div><strong><u>Τρέχων Μήνας</u></strong></div>
+                            <div>Άτομα: <strong id="group2TotalPeople">0</strong></div>
+                            <div>Στην Υπηρεσία: <strong id="group2InServicePeople">0</strong></div>
+                            <div>Απόντες: <strong id="group2MissingPeople">0</strong></div>
+                            <div>Εκτός Υπηρεσίας: <strong id="group2DisabledPeople">0</strong></div>
+                        </div>
+                        <div>
+                            <div><strong><u>Επομ. Μήνας</u></strong></div>
+                            <div>Άτομα: <strong id="group2NextTotalPeople">0</strong></div>
+                            <div>Στην Υπηρεσία: <strong id="group2NextInServicePeople">0</strong></div>
+                            <div>Απόντες: <strong id="group2NextMissingPeople">0</strong></div>
+                            <div>Εκτός Υπηρεσίας: <strong id="group2NextDisabledPeople">0</strong></div>
+                        </div>
                     </div>
                     <div id="group2People"></div>
                 </div>
@@ -1732,11 +1752,21 @@
                         </button>
                         </div>
                     </div>
-                    <div class="mb-2 small text-muted">
-                        <div>Άτομα: <strong id="group3TotalPeople">0</strong></div>
-                        <div>Στην Υπηρεσία: <strong id="group3InServicePeople">0</strong></div>
-                        <div>Απόντες: <strong id="group3MissingPeople">0</strong></div>
-                        <div>Εκτός Υπηρεσίας: <strong id="group3DisabledPeople">0</strong></div>
+                    <div class="mb-2 small text-muted d-flex gap-4 flex-wrap">
+                        <div>
+                            <div><strong><u>Τρέχων Μήνας</u></strong></div>
+                            <div>Άτομα: <strong id="group3TotalPeople">0</strong></div>
+                            <div>Στην Υπηρεσία: <strong id="group3InServicePeople">0</strong></div>
+                            <div>Απόντες: <strong id="group3MissingPeople">0</strong></div>
+                            <div>Εκτός Υπηρεσίας: <strong id="group3DisabledPeople">0</strong></div>
+                        </div>
+                        <div>
+                            <div><strong><u>Επομ. Μήνας</u></strong></div>
+                            <div>Άτομα: <strong id="group3NextTotalPeople">0</strong></div>
+                            <div>Στην Υπηρεσία: <strong id="group3NextInServicePeople">0</strong></div>
+                            <div>Απόντες: <strong id="group3NextMissingPeople">0</strong></div>
+                            <div>Εκτός Υπηρεσίας: <strong id="group3NextDisabledPeople">0</strong></div>
+                        </div>
                     </div>
                     <div id="group3People"></div>
                 </div>
@@ -1757,11 +1787,21 @@
                         </button>
                         </div>
                     </div>
-                    <div class="mb-2 small text-muted">
-                        <div>Άτομα: <strong id="group4TotalPeople">0</strong></div>
-                        <div>Στην Υπηρεσία: <strong id="group4InServicePeople">0</strong></div>
-                        <div>Απόντες: <strong id="group4MissingPeople">0</strong></div>
-                        <div>Εκτός Υπηρεσίας: <strong id="group4DisabledPeople">0</strong></div>
+                    <div class="mb-2 small text-muted d-flex gap-4 flex-wrap">
+                        <div>
+                            <div><strong><u>Τρέχων Μήνας</u></strong></div>
+                            <div>Άτομα: <strong id="group4TotalPeople">0</strong></div>
+                            <div>Στην Υπηρεσία: <strong id="group4InServicePeople">0</strong></div>
+                            <div>Απόντες: <strong id="group4MissingPeople">0</strong></div>
+                            <div>Εκτός Υπηρεσίας: <strong id="group4DisabledPeople">0</strong></div>
+                        </div>
+                        <div>
+                            <div><strong><u>Επομ. Μήνας</u></strong></div>
+                            <div>Άτομα: <strong id="group4NextTotalPeople">0</strong></div>
+                            <div>Στην Υπηρεσία: <strong id="group4NextInServicePeople">0</strong></div>
+                            <div>Απόντες: <strong id="group4NextMissingPeople">0</strong></div>
+                            <div>Εκτός Υπηρεσίας: <strong id="group4NextDisabledPeople">0</strong></div>
+                        </div>
                     </div>
                     <div id="group4People"></div>
                 </div>
