@@ -763,18 +763,15 @@
         function getRotationPosition(date, dayTypeCategory, groupNum) {
             // Use the actual start date from calculationSteps if available, otherwise default to February 2026
             let initialMonth;
-            const targetDate = new Date(date);
-            targetDate.setHours(0, 0, 0, 0);
-
-            // Groups 1 and 2: reset rotation from April each year and ignore earlier months.
-            if (groupNum === 1 || groupNum === 2) {
-                initialMonth = new Date(targetDate.getFullYear(), 3, 1); // April 1st
-            } else if (calculationSteps && calculationSteps.startDate) {
+            if (calculationSteps && calculationSteps.startDate) {
                 initialMonth = new Date(calculationSteps.startDate);
                 initialMonth.setHours(0, 0, 0, 0);
             } else {
                 initialMonth = new Date(2026, 1, 1); // February 2026 (month 1 = February, 0-indexed)
             }
+            
+            const targetDate = new Date(date);
+            targetDate.setHours(0, 0, 0, 0);
             
             // Count how many days of this type have occurred since the start date
             // Start counting from 0 so the first day maps to index 0 (first person)
@@ -2139,9 +2136,14 @@
                     const isFebruary2026 = calculationSteps.startDate &&
                         calculationSteps.startDate.getFullYear() === 2026 &&
                         calculationSteps.startDate.getMonth() === 1;
-                    if (isFebruary2026) {
+                    const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3; // April
+                    if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
                         globalSpecialRotationPosition[groupNum] = 0;
-                        console.log(`[SPECIAL ROTATION] Starting from first person (position 0) for group ${groupNum} - February 2026`);
+                        console.log(
+                            `[SPECIAL ROTATION] Starting from first person (position 0) for group ${groupNum} - ${
+                                isAprilStart ? 'April start' : 'February 2026'
+                            }`
+                        );
                     } else if (baselineDateKeysBeforePeriod.length > 0) {
                         const lastBaselineDateKey = baselineDateKeysBeforePeriod[0];
                         const lastBaselinePerson = getBaselinePersonForGroup(lastBaselineDateKey, groupNum);
@@ -6616,7 +6618,8 @@
                         const rotLen = people.length;
                         if (baselineWeekendRotationPosition[g] === undefined) {
                             const isFeb2026 = calculationSteps.startDate && calculationSteps.startDate.getFullYear() === 2026 && calculationSteps.startDate.getMonth() === 1;
-                            if (isFeb2026) baselineWeekendRotationPosition[g] = 0;
+                            const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3; // April
+                            if (isFeb2026 || (isAprilStart && (g === 1 || g === 2))) baselineWeekendRotationPosition[g] = 0;
                             else {
                                 const last = getLastRotationPersonForDate('weekend', dt, g);
                                 const idx = people.indexOf(last);
@@ -6861,11 +6864,16 @@
                                 const isFebruary2026 = calculationSteps.startDate && 
                                     calculationSteps.startDate.getFullYear() === 2026 && 
                                     calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                                const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3; // April
                                 
-                                if (isFebruary2026) {
+                                if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
                                     // Always start from first person for February 2026
                                     globalWeekendRotationPosition[groupNum] = 0;
-                                    console.log(`[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} weekend - February 2026`);
+                                    console.log(
+                                        `[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} weekend - ${
+                                            isAprilStart ? 'April start' : 'February 2026'
+                                        }`
+                                    );
                                 } else {
                                     // Continue from last person assigned in previous month (month-scoped; falls back to legacy)
                                     const lastPersonName = getLastRotationPersonForDate('weekend', date, groupNum);
@@ -7252,7 +7260,8 @@
                     const rotLen = people.length;
                     if (baselineSemiRotationPosition[g] === undefined) {
                         const isFeb2026 = startDate && startDate.getFullYear() === 2026 && startDate.getMonth() === 1;
-                        if (isFeb2026) baselineSemiRotationPosition[g] = 0;
+                        const isAprilStart = startDate && startDate.getMonth() === 3; // April
+                        if (isFeb2026 || (isAprilStart && (g === 1 || g === 2))) baselineSemiRotationPosition[g] = 0;
                         else {
                             const last = getLastRotationPersonForDate('semi', dt, g);
                             const idx = people.indexOf(last);
@@ -7422,7 +7431,8 @@
                     }
                     if (globalSemiPos[groupNum] === undefined) {
                         const isFeb2026 = startDate && startDate.getFullYear() === 2026 && startDate.getMonth() === 1;
-                        if (isFeb2026) globalSemiPos[groupNum] = 0;
+                        const isAprilStart = startDate && startDate.getMonth() === 3; // April
+                        if (isFeb2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) globalSemiPos[groupNum] = 0;
                         else {
                             const lastPerson = getLastRotationPersonForDate('semi', date, groupNum);
                             const idx = groupPeople.indexOf(lastPerson);
@@ -7849,7 +7859,8 @@
                         const rotLen = people.length;
                         if (baselineSemiRotationPosition[g] === undefined) {
                             const isFeb2026 = calcStartDate && new Date(calcStartDate).getFullYear() === 2026 && new Date(calcStartDate).getMonth() === 1;
-                            if (isFeb2026) baselineSemiRotationPosition[g] = 0;
+                            const isAprilStart = calcStartDate && new Date(calcStartDate).getMonth() === 3; // April
+                            if (isFeb2026 || (isAprilStart && (g === 1 || g === 2))) baselineSemiRotationPosition[g] = 0;
                             else {
                                 const last = getLastRotationPersonForDate('semi', dt, g);
                                 const idx = people.indexOf(last);
@@ -8073,11 +8084,16 @@
                                 const isFebruary2026 = calculationSteps.startDate && 
                                     calculationSteps.startDate.getFullYear() === 2026 && 
                                     calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                                const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3; // April
                                 
-                                if (isFebruary2026) {
+                                if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
                                     // Always start from first person for February 2026
                                     globalSemiRotationPosition[groupNum] = 0;
-                                    console.log(`[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} semi - February 2026`);
+                                    console.log(
+                                        `[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} semi - ${
+                                            isAprilStart ? 'April start' : 'February 2026'
+                                        }`
+                                    );
                                 } else {
                                     // Continue from last person assigned in previous month (month-scoped; falls back to legacy)
                                     const lastPersonName = getLastRotationPersonForDate('semi', date, groupNum);
@@ -8670,11 +8686,16 @@
                                 const isFebruary2026 = calculationSteps.startDate && 
                                     calculationSteps.startDate.getFullYear() === 2026 && 
                                     calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
-                                
-                                if (isFebruary2026) {
+
+                                const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3; // April
+                                if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
                                     // Always start from first person for February 2026
                                     globalWeekendRotationPosition[groupNum] = 0;
-                                    console.log(`[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} weekend - February 2026`);
+                                    console.log(
+                                        `[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} weekend - ${
+                                            isAprilStart ? 'April start' : 'February 2026'
+                                        }`
+                                    );
                                 } else {
                                     // Initialize based on rotation count from start date
                             const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
@@ -9096,11 +9117,16 @@
                                 const isFebruary2026 = calculationSteps.startDate && 
                                     calculationSteps.startDate.getFullYear() === 2026 && 
                                     calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
+                                const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3; // April
                                 
-                                if (isFebruary2026) {
+                                if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
                                     // Always start from first person for February 2026
                                     globalNormalRotationPosition[groupNum] = 0;
-                                    console.log(`[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} - February 2026`);
+                                    console.log(
+                                        `[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} - ${
+                                            isAprilStart ? 'April start' : 'February 2026'
+                                        }`
+                                    );
                                 } else {
                                     // Continue from last person assigned in previous month (month-scoped; falls back to legacy)
                                     const lastPersonName = getLastRotationPersonForDate('normal', date, groupNum);
@@ -9135,7 +9161,8 @@
                                 const isFebruary2026 = calculationSteps.startDate && 
                                     calculationSteps.startDate.getFullYear() === 2026 && 
                                     calculationSteps.startDate.getMonth() === 1;
-                                if (isFebruary2026) {
+                                const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3; // April
+                                if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
                                     globalNormalRotationPosition[groupNum] = 0;
                                 } else {
                                     const lastPersonName = getLastRotationPersonForDate('normal', date, groupNum);
