@@ -763,15 +763,18 @@
         function getRotationPosition(date, dayTypeCategory, groupNum) {
             // Use the actual start date from calculationSteps if available, otherwise default to February 2026
             let initialMonth;
-            if (calculationSteps && calculationSteps.startDate) {
+            const targetDate = new Date(date);
+            targetDate.setHours(0, 0, 0, 0);
+
+            // Groups 1 and 2: reset rotation from April each year and ignore earlier months.
+            if (groupNum === 1 || groupNum === 2) {
+                initialMonth = new Date(targetDate.getFullYear(), 3, 1); // April 1st
+            } else if (calculationSteps && calculationSteps.startDate) {
                 initialMonth = new Date(calculationSteps.startDate);
                 initialMonth.setHours(0, 0, 0, 0);
             } else {
                 initialMonth = new Date(2026, 1, 1); // February 2026 (month 1 = February, 0-indexed)
             }
-            
-            const targetDate = new Date(date);
-            targetDate.setHours(0, 0, 0, 0);
             
             // Count how many days of this type have occurred since the start date
             // Start counting from 0 so the first day maps to index 0 (first person)
