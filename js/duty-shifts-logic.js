@@ -6035,6 +6035,21 @@
                 }
                 
                 if (Object.keys(updatedAssignments).length > 0) {
+                    // Ensure normal rotation baseline is also persisted alongside final normal assignments.
+                    // This is a safe idempotent merge and covers flows where Step 4 baseline save was skipped/interrupted.
+                    try {
+                        const baselineByDate = calculationSteps.tempNormalBaselineAssignments || {};
+                        if (Object.keys(baselineByDate).length > 0) {
+                            const formattedBaseline = formatGroupAssignmentsToStringMap(baselineByDate);
+                            const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
+                            await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineNormalAssignments', organizedBaseline);
+                            Object.assign(rotationBaselineNormalAssignments, formattedBaseline);
+                            console.log('Saved/merged normal baseline during final normal save');
+                        }
+                    } catch (baselineSaveError) {
+                        console.warn('Could not save normal baseline during final normal save:', baselineSaveError);
+                    }
+
                     // Debug: log what we're saving for swap-relevant dates (19 and 26 Feb 2026)
                     const d19 = updatedAssignments['2026-02-19'];
                     const d26 = updatedAssignments['2026-02-26'];
