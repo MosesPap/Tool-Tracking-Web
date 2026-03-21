@@ -4811,6 +4811,7 @@
                             }
                             if (!track) return true;
                             const groupPeopleForReturn = (groups?.[groupNum]?.normal || []);
+                            const preCleared = [];
                             for (const dk of sortedNormal) {
                                 if (dk < calcStartKey || dk > calcEndKey) continue;
                                 const curAssigned = updatedAssignments?.[dk]?.[groupNum] || null;
@@ -4820,8 +4821,8 @@
                                 const replacement = idxP >= 0 ? pickNextEligibleIgnoringConflicts(groupPeopleForReturn, idxP, groupNum, dateObj) : null;
                                 if (!replacement) continue;
                                 if (!updatedAssignments[dk]) updatedAssignments[dk] = {};
+                                preCleared.push({ dateKey: dk, prevPerson: curAssigned });
                                 updatedAssignments[dk][groupNum] = replacement;
-                                storeAssignmentReason(dk, groupNum, replacement, 'shift', '', personName, null, { returnFromMissing: true, clearedEarlyReturnAssignment: true, targetKey: null, missingEnd: pEndKey, preClearedForReinsertion: true });
                             }
                             const thirdNormalKey = findThirdNormalOnOrAfter(sortedNormal, returnKey);
                             if (!thirdNormalKey) return true;
@@ -4839,10 +4840,29 @@
                                 const nextThreshold = addDaysToDateKey(targetKey, 1);
                                 targetKey = nextThreshold ? findFirstMatchingTrackOnOrAfter(sortedNormal, nextThreshold, track) : null;
                             }
-                            if (!targetKey) return true;
+                            if (!targetKey) {
+                                for (const ch of preCleared) {
+                                    if (!updatedAssignments[ch.dateKey]) updatedAssignments[ch.dateKey] = {};
+                                    updatedAssignments[ch.dateKey][groupNum] = ch.prevPerson;
+                                }
+                                return true;
+                            }
                             const groupPeopleFinal = (groups?.[groupNum]?.normal || []);
                             const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
-                            if (!ins.ok) return true;
+                            if (!ins.ok) {
+                                for (const ch of preCleared) {
+                                    if (!updatedAssignments[ch.dateKey]) updatedAssignments[ch.dateKey] = {};
+                                    updatedAssignments[ch.dateKey][groupNum] = ch.prevPerson;
+                                }
+                                return true;
+                            }
+                            // Keep temporary pre-clear only before target; restore later dates to baseline assignment flow.
+                            for (const ch of preCleared) {
+                                if (ch.dateKey >= targetKey) {
+                                    if (!updatedAssignments[ch.dateKey]) updatedAssignments[ch.dateKey] = {};
+                                    updatedAssignments[ch.dateKey][groupNum] = ch.prevPerson;
+                                }
+                            }
                             try {
                                 for (const dk of sortedNormal) {
                                     if (dk < returnKey) continue;
@@ -4967,6 +4987,7 @@
                                     // see them as already assigned (which can block finding a targetKey when rotation assigned
                                     // them at end of month and duplicate/consecutive logic would otherwise prevent reinsertion).
                                     const groupPeopleForReturn = (groups?.[groupNum]?.normal || []);
+                                    const preCleared = [];
                                     for (const dk of sortedNormal) {
                                         if (dk < calcStartKey || dk > calcEndKey) continue;
                                         const curAssigned = updatedAssignments?.[dk]?.[groupNum] || null;
@@ -4976,17 +4997,8 @@
                                         const replacement = idxP >= 0 ? pickNextEligibleIgnoringConflicts(groupPeopleForReturn, idxP, groupNum, dateObj) : null;
                                         if (!replacement) continue;
                                         if (!updatedAssignments[dk]) updatedAssignments[dk] = {};
+                                        preCleared.push({ dateKey: dk, prevPerson: curAssigned });
                                         updatedAssignments[dk][groupNum] = replacement;
-                                        storeAssignmentReason(
-                                            dk,
-                                            groupNum,
-                                            replacement,
-                                            'shift',
-                                            '',
-                                            personName,
-                                            null,
-                                            { returnFromMissing: true, clearedEarlyReturnAssignment: true, targetKey: null, missingEnd: pEndKey, preClearedForReinsertion: true }
-                                        );
                                     }
 
                                     // Same month = CALCULATED month (not return month). Forward only possible when return is in calc month.
@@ -5083,13 +5095,32 @@
                                         calculationSteps.deferredReturnFromMissing.push({ personName, groupNum, pEndKey, returnKey, track });
                                     }
 
-                                    if (!targetKey) continue;
+                                    if (!targetKey) {
+                                        for (const ch of preCleared) {
+                                            if (!updatedAssignments[ch.dateKey]) updatedAssignments[ch.dateKey] = {};
+                                            updatedAssignments[ch.dateKey][groupNum] = ch.prevPerson;
+                                        }
+                                        continue;
+                                    }
 
                                     // Apply shift insertion (follow rotation): everyone moves to the next normal day.
                                     const groupPeopleFinal = (groups?.[groupNum]?.normal || []);
                                     const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
-                                    if (!ins.ok) continue;
+                                    if (!ins.ok) {
+                                        for (const ch of preCleared) {
+                                            if (!updatedAssignments[ch.dateKey]) updatedAssignments[ch.dateKey] = {};
+                                            updatedAssignments[ch.dateKey][groupNum] = ch.prevPerson;
+                                        }
+                                        continue;
+                                    }
                                     usedReturnFromMissingTargets.add(`${targetKey}:${groupNum}`);
+                                    // Keep temporary pre-clear only before target; restore later dates so person is not removed for the month.
+                                    for (const ch of preCleared) {
+                                        if (ch.dateKey >= targetKey) {
+                                            if (!updatedAssignments[ch.dateKey]) updatedAssignments[ch.dateKey] = {};
+                                            updatedAssignments[ch.dateKey][groupNum] = ch.prevPerson;
+                                        }
+                                    }
 
                                     // IMPORTANT: Enforce "after 3 normal days" by preventing any earlier normal-day assignment
                                     // of the returning person between returnKey (inclusive) and targetKey (exclusive).
