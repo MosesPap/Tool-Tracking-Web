@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.391 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.393 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -804,6 +804,30 @@
             box-sizing: border-box;
         }
 
+        .missing-banner {
+            display: none;
+            margin-bottom: 0.75rem;
+            border: 1px solid #ffe0b2;
+            background: #fff8e1;
+            border-radius: 8px;
+            padding: 0.45rem 0.6rem;
+            font-size: 0.85rem;
+            color: #5d4037;
+        }
+
+        .missing-banner.show {
+            display: block;
+        }
+
+        .missing-banner-title {
+            font-weight: 700;
+            margin-right: 0.4rem;
+        }
+
+        .missing-banner-list {
+            display: inline;
+        }
+
         .calendar-day-header {
             text-align: center;
             font-weight: bold;
@@ -1571,7 +1595,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.391</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.393</span></h4>
             </div>
             <div class="d-flex align-items-center flex-wrap gap-3 title-bar-stats" style="font-size: 1.25em; font-weight: 500; opacity: 0.98;">
                 <span>Σύνολο Ατόμων: <strong id="totalPeople">0</strong></span>
@@ -1688,6 +1712,10 @@
 
         <!-- Calendar grid directly below Ημερολόγιο Υπηρεσιών -->
         <div class="calendar-section mb-4">
+            <div id="missingBanner" class="missing-banner" aria-live="polite">
+                <span class="missing-banner-title">Απουσίες μήνα:</span>
+                <span id="missingBannerList" class="missing-banner-list"></span>
+            </div>
             <div class="calendar-grid" id="calendarGrid"></div>
         </div>
 

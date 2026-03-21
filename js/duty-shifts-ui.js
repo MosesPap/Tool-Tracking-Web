@@ -3709,6 +3709,66 @@
                 renderCalendar();
             }
         }
+        function renderMissingBannerForMonth(year, month) {
+            const banner = document.getElementById('missingBanner');
+            const bannerList = document.getElementById('missingBannerList');
+            if (!banner || !bannerList) return;
+
+            const monthStart = new Date(year, month, 1);
+            monthStart.setHours(0, 0, 0, 0);
+            const monthEnd = new Date(year, month + 1, 0);
+            monthEnd.setHours(0, 0, 0, 0);
+
+            const formatShort = (d) => d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit' });
+            const missingItems = [];
+
+            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                const groupData = groups[groupNum] || {};
+                const missingMap = groupData.missingPeriods || {};
+                for (const personName of Object.keys(missingMap)) {
+                    const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
+                    for (const period of periods) {
+                        const start = new Date((period?.start || '') + 'T00:00:00');
+                        const end = new Date((period?.end || '') + 'T00:00:00');
+                        if (isNaN(start.getTime()) || isNaN(end.getTime())) continue;
+                        start.setHours(0, 0, 0, 0);
+                        end.setHours(0, 0, 0, 0);
+                        if (end < monthStart || start > monthEnd) continue;
+                        const overlapStart = start > monthStart ? start : monthStart;
+                        const overlapEnd = end < monthEnd ? end : monthEnd;
+                        missingItems.push({
+                            personName,
+                            groupNum,
+                            overlapStart: new Date(overlapStart),
+                            overlapEnd: new Date(overlapEnd)
+                        });
+                    }
+                }
+            }
+
+            missingItems.sort((a, b) =>
+                a.overlapStart - b.overlapStart ||
+                a.groupNum - b.groupNum ||
+                a.personName.localeCompare(b.personName, 'el')
+            );
+
+            if (missingItems.length === 0) {
+                banner.classList.remove('show');
+                bannerList.textContent = '';
+                return;
+            }
+
+            const maxItems = 12;
+            const visible = missingItems.slice(0, maxItems).map(item =>
+                `${item.personName} (Ομ.${item.groupNum}: ${formatShort(item.overlapStart)}-${formatShort(item.overlapEnd)})`
+            );
+            if (missingItems.length > maxItems) {
+                visible.push(`+${missingItems.length - maxItems} ακόμη`);
+            }
+
+            bannerList.textContent = visible.join(' | ');
+            banner.classList.add('show');
+        }
         function renderCalendar() {
             const calendarGrid = document.getElementById('calendarGrid');
             const currentMonthYear = document.getElementById('currentMonthYear');
@@ -3724,6 +3784,7 @@
             
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth();
+            renderMissingBannerForMonth(year, month);
             
             currentMonthYear.textContent = 
                 currentDate.toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });

@@ -10425,7 +10425,7 @@
             
             alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
         }
-        function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
+        function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null, includeBoundaryDays = true) {
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return true;
             const missingPeriods = groupData.missingPeriods?.[person] || [];
@@ -10437,7 +10437,16 @@
             return missingPeriods.some(period => {
                 const start = new Date(period.start + 'T00:00:00');
                 const end = new Date(period.end + 'T00:00:00');
-                return checkDate >= start && checkDate <= end;
+                if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+                start.setHours(0, 0, 0, 0);
+                end.setHours(0, 0, 0, 0);
+                if (checkDate >= start && checkDate <= end) return true;
+                if (!includeBoundaryDays) return false;
+                const dayBeforeStart = new Date(start);
+                dayBeforeStart.setDate(dayBeforeStart.getDate() - 1);
+                const dayAfterEnd = new Date(end);
+                dayAfterEnd.setDate(dayAfterEnd.getDate() + 1);
+                return checkDate.getTime() === dayBeforeStart.getTime() || checkDate.getTime() === dayAfterEnd.getTime();
             });
         }
         function findNextEligiblePersonAfterMissing({
