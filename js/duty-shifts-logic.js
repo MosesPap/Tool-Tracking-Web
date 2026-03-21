@@ -4885,9 +4885,11 @@
                                     // Also accept when return day (day after period end) falls in calculation range
                                     const returnKeyForRange = addDaysToDateKey(pEndKey, 1);
                                     const returnInRange = returnKeyForRange && returnKeyForRange >= calcStartKey && returnKeyForRange <= calcEndKey;
+                                    const dayBeforeStartForRange = addDaysToDateKey(pStartKey, -1);
+                                    const dayBeforeStartInRange = dayBeforeStartForRange && dayBeforeStartForRange >= calcStartKey && dayBeforeStartForRange <= calcEndKey;
                                     // Also accept when period overlaps the calculation range at all (handles format/edge cases)
                                     const periodOverlapsRange = (pStartKey <= calcEndKey && pEndKey >= calcStartKey);
-                                    const acceptPeriod = endInRange || endInPrevMonth || returnInRange || periodOverlapsRange;
+                                    const acceptPeriod = endInRange || endInPrevMonth || returnInRange || dayBeforeStartInRange || periodOverlapsRange;
                                     if (!acceptPeriod) continue;
                                     const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                                     if (processed.has(dedupeKey)) continue;
@@ -6685,7 +6687,11 @@
                                 const prevMonthEndKey = prevMonthEnd ? formatDateKey(prevMonthEnd) : null;
                                 const periodEndsInRange = (pEndKey >= calcStartKeyW && pEndKey <= calcEndKeyW);
                                 const periodEndsInPrevMonth = (prevMonthStartKey && prevMonthEndKey && pEndKey >= prevMonthStartKey && pEndKey <= prevMonthEndKey);
-                                if (!periodEndsInRange && !periodEndsInPrevMonth) continue;
+                                const dayBeforeStartW = addDaysW(pStartKey, -1);
+                                const dayAfterEndW = addDaysW(pEndKey, 1);
+                                const boundaryInRangeW = (dayBeforeStartW && dayBeforeStartW >= calcStartKeyW && dayBeforeStartW <= calcEndKeyW)
+                                    || (dayAfterEndW && dayAfterEndW >= calcStartKeyW && dayAfterEndW <= calcEndKeyW);
+                                if (!periodEndsInRange && !periodEndsInPrevMonth && !boundaryInRangeW) continue;
                                 const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                                 if (processedWeekendReturn.has(dedupeKey)) continue;
                                 processedWeekendReturn.add(dedupeKey);
@@ -6706,8 +6712,8 @@
                                         }
                                     }
                                 } else {
-                                    const periodStartDate = new Date(pStartKey + 'T00:00:00');
-                                    const periodEndDate = new Date(pEndKey + 'T00:00:00');
+                                    const periodStartDate = new Date(((addDaysW(pStartKey, -1) || pStartKey)) + 'T00:00:00');
+                                    const periodEndDate = new Date(((addDaysW(pEndKey, 1) || pEndKey)) + 'T00:00:00');
                                     for (let checkDate = new Date(periodStartDate); checkDate <= periodEndDate; checkDate.setDate(checkDate.getDate() + 1)) {
                                         const checkDateKey = formatDateKey(checkDate);
                                         const dayType = getDayType(checkDate);
@@ -7326,7 +7332,11 @@
                             const prevMonthEndKey = prevMonthEnd ? formatDateKey(prevMonthEnd) : null;
                             const periodEndsInRange = (pEndKey >= calcStartKey && pEndKey <= calcEndKey);
                             const periodEndsInPrevMonth = (prevMonthStartKey && prevMonthEndKey && pEndKey >= prevMonthStartKey && pEndKey <= prevMonthEndKey);
-                            if (!periodEndsInRange && !periodEndsInPrevMonth) continue;
+                            const dayBeforeStartRun = addDaysToDateKeyRun(pStartKey, -1);
+                            const dayAfterEndRun = addDaysToDateKeyRun(pEndKey, 1);
+                            const boundaryInRangeRun = (dayBeforeStartRun && dayBeforeStartRun >= calcStartKey && dayBeforeStartRun <= calcEndKey)
+                                || (dayAfterEndRun && dayAfterEndRun >= calcStartKey && dayAfterEndRun <= calcEndKey);
+                            if (!periodEndsInRange && !periodEndsInPrevMonth && !boundaryInRangeRun) continue;
                             const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                             if (processedSemiReturnRun.has(dedupeKey)) continue;
                             processedSemiReturnRun.add(dedupeKey);
@@ -7345,8 +7355,8 @@
                                     if (baseSemi && normSemiRun(baseSemi) === normSemiRun(personName)) { hadMissedSemi = true; break; }
                                 }
                             } else {
-                                const periodStartDate = new Date(pStartKey + 'T00:00:00');
-                                const periodEndDate = new Date(pEndKey + 'T00:00:00');
+                                const periodStartDate = new Date(((addDaysToDateKeyRun(pStartKey, -1) || pStartKey)) + 'T00:00:00');
+                                const periodEndDate = new Date(((addDaysToDateKeyRun(pEndKey, 1) || pEndKey)) + 'T00:00:00');
                                 for (let checkDate = new Date(periodStartDate); checkDate <= periodEndDate; checkDate.setDate(checkDate.getDate() + 1)) {
                                     const checkDateKey = formatDateKey(checkDate);
                                     if (getDayType(checkDate) === 'semi-normal-day') {
@@ -7904,7 +7914,11 @@
                                 const prevMonthEndKey = prevMonthEnd ? formatDateKey(prevMonthEnd) : null;
                                 const periodEndsInRange = (pEndKey >= calcStartKey && pEndKey <= calcEndKey);
                                 const periodEndsInPrevMonth = (prevMonthStartKey && prevMonthEndKey && pEndKey >= prevMonthStartKey && pEndKey <= prevMonthEndKey);
-                                if (!periodEndsInRange && !periodEndsInPrevMonth) continue;
+                                const dayBeforeStartLocal = addDaysToDateKeyLocal(pStartKey, -1);
+                                const dayAfterEndLocal = addDaysToDateKeyLocal(pEndKey, 1);
+                                const boundaryInRangeLocal = (dayBeforeStartLocal && dayBeforeStartLocal >= calcStartKey && dayBeforeStartLocal <= calcEndKey)
+                                    || (dayAfterEndLocal && dayAfterEndLocal >= calcStartKey && dayAfterEndLocal <= calcEndKey);
+                                if (!periodEndsInRange && !periodEndsInPrevMonth && !boundaryInRangeLocal) continue;
                                 const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                                 if (processedSemiReturn.has(dedupeKey)) continue;
                                 processedSemiReturn.add(dedupeKey);
@@ -7961,8 +7975,8 @@
                                     // by rotation on any date in the period window that is a semi day
                                     // For simplicity, let's check if any date in the period window (pStartKey to pEndKey) is a semi-normal-day type
                                     // and if so, check if rotation would assign this person on that date
-                                    const periodStartDate = new Date(pStartKey + 'T00:00:00');
-                                    const periodEndDate = new Date(pEndKey + 'T00:00:00');
+                                    const periodStartDate = new Date(((addDaysToDateKeyLocal(pStartKey, -1) || pStartKey)) + 'T00:00:00');
+                                    const periodEndDate = new Date(((addDaysToDateKeyLocal(pEndKey, 1) || pEndKey)) + 'T00:00:00');
                                     for (let checkDate = new Date(periodStartDate); checkDate <= periodEndDate; checkDate.setDate(checkDate.getDate() + 1)) {
                                         const checkDateKey = formatDateKey(checkDate);
                                         const dayType = getDayType(checkDate);
