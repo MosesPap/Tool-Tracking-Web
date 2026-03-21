@@ -3012,7 +3012,11 @@
             } else if (direction === 'down' && index < list.length - 1) {
                 [list[index], list[index + 1]] = [list[index + 1], list[index]];
             }
-            
+
+            // UI sorting is priority-based (see renderGroups()), so we must renormalize priorities
+            // after swapping array entries, otherwise the visual order will appear unchanged.
+            normalizeGroupPriorities(groupNumber);
+
             saveData();
             renderGroups();
         }
