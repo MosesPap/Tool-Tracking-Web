@@ -10443,6 +10443,12 @@
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             const missingPeriods = groupData.missingPeriods?.[person] || [];
             if (missingPeriods.length === 0) return false;
+            const addDaysToDateKeySafe = (dk, days) => {
+                const d = new Date(dk + 'T00:00:00');
+                if (isNaN(d.getTime())) return null;
+                d.setDate(d.getDate() + days);
+                return (typeof formatDateKey === 'function') ? formatDateKey(d) : null;
+            };
 
             const checkDateKey = typeof formatDateKey === 'function'
                 ? formatDateKey(new Date(date))
@@ -10453,8 +10459,8 @@
                 const pStartKey = inputValueToDateKey(period?.start);
                 const pEndKey = inputValueToDateKey(period?.end);
                 if (!pStartKey || !pEndKey) return false;
-                const dayBeforeStartKey = addDaysToDateKey(pStartKey, -1);
-                const dayAfterEndKey = addDaysToDateKey(pEndKey, 1);
+                const dayBeforeStartKey = addDaysToDateKeySafe(pStartKey, -1);
+                const dayAfterEndKey = addDaysToDateKeySafe(pEndKey, 1);
                 return checkDateKey === dayBeforeStartKey || checkDateKey === dayAfterEndKey;
             });
         }
