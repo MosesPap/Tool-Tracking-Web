@@ -4811,7 +4811,6 @@
                             }
                             if (!track) return true;
                             const groupPeopleForReturn = (groups?.[groupNum]?.normal || []);
-                            const preCleared = [];
                             for (const dk of sortedNormal) {
                                 if (dk < calcStartKey || dk > calcEndKey) continue;
                                 const curAssigned = updatedAssignments?.[dk]?.[groupNum] || null;
@@ -4821,8 +4820,8 @@
                                 const replacement = idxP >= 0 ? pickNextEligibleIgnoringConflicts(groupPeopleForReturn, idxP, groupNum, dateObj) : null;
                                 if (!replacement) continue;
                                 if (!updatedAssignments[dk]) updatedAssignments[dk] = {};
-                                preCleared.push({ dateKey: dk, prevPerson: curAssigned });
                                 updatedAssignments[dk][groupNum] = replacement;
+                                storeAssignmentReason(dk, groupNum, replacement, 'shift', '', personName, null, { returnFromMissing: true, clearedEarlyReturnAssignment: true, targetKey: null, missingEnd: pEndKey, preClearedForReinsertion: true });
                             }
                             const thirdNormalKey = findThirdNormalOnOrAfter(sortedNormal, returnKey);
                             if (!thirdNormalKey) return true;
@@ -4840,29 +4839,10 @@
                                 const nextThreshold = addDaysToDateKey(targetKey, 1);
                                 targetKey = nextThreshold ? findFirstMatchingTrackOnOrAfter(sortedNormal, nextThreshold, track) : null;
                             }
-                            if (!targetKey) {
-                                for (const ch of preCleared) {
-                                    if (!updatedAssignments[ch.dateKey]) updatedAssignments[ch.dateKey] = {};
-                                    updatedAssignments[ch.dateKey][groupNum] = ch.prevPerson;
-                                }
-                                return true;
-                            }
+                            if (!targetKey) return true;
                             const groupPeopleFinal = (groups?.[groupNum]?.normal || []);
                             const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
-                            if (!ins.ok) {
-                                for (const ch of preCleared) {
-                                    if (!updatedAssignments[ch.dateKey]) updatedAssignments[ch.dateKey] = {};
-                                    updatedAssignments[ch.dateKey][groupNum] = ch.prevPerson;
-                                }
-                                return true;
-                            }
-                            // Keep temporary pre-clear only before target; restore later dates to baseline assignment flow.
-                            for (const ch of preCleared) {
-                                if (ch.dateKey >= targetKey) {
-                                    if (!updatedAssignments[ch.dateKey]) updatedAssignments[ch.dateKey] = {};
-                                    updatedAssignments[ch.dateKey][groupNum] = ch.prevPerson;
-                                }
-                            }
+                            if (!ins.ok) return true;
                             try {
                                 for (const dk of sortedNormal) {
                                     if (dk < returnKey) continue;
@@ -4905,11 +4885,9 @@
                                     // Also accept when return day (day after period end) falls in calculation range
                                     const returnKeyForRange = addDaysToDateKey(pEndKey, 1);
                                     const returnInRange = returnKeyForRange && returnKeyForRange >= calcStartKey && returnKeyForRange <= calcEndKey;
-                                    const dayBeforeStartForRange = addDaysToDateKey(pStartKey, -1);
-                                    const dayBeforeStartInRange = dayBeforeStartForRange && dayBeforeStartForRange >= calcStartKey && dayBeforeStartForRange <= calcEndKey;
                                     // Also accept when period overlaps the calculation range at all (handles format/edge cases)
                                     const periodOverlapsRange = (pStartKey <= calcEndKey && pEndKey >= calcStartKey);
-                                    const acceptPeriod = endInRange || endInPrevMonth || returnInRange || dayBeforeStartInRange || periodOverlapsRange;
+                                    const acceptPeriod = endInRange || endInPrevMonth || returnInRange || periodOverlapsRange;
                                     if (!acceptPeriod) continue;
                                     const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                                     if (processed.has(dedupeKey)) continue;
@@ -4927,23 +4905,6 @@
                                         for (const dk of sortedNormal) {
                                             if (dk < overlapStartKey) continue;
                                             if (dk > overlapEndKey) break;
-                                            const baselinePerson =
-                                                baselineNormalByDate?.[dk]?.[groupNum] ||
-                                                parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
-                                                null;
-                                            if (baselinePerson && normName(baselinePerson) === normName(personName)) {
-                                                firstMissedKey = dk;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    // Boundary-only loss: if baseline would have assigned the person on start-1 or end+1
-                                    // (and that boundary day is a normal day in this calculation), compensate without
-                                    // broadening baseline-window scans.
-                                    if (!firstMissedKey) {
-                                        const boundaryCandidates = [dayBeforeStartForRange, returnKeyForRange].filter(Boolean).sort();
-                                        for (const dk of boundaryCandidates) {
-                                            if (dk < calcStartKey || dk > calcEndKey) continue;
                                             const baselinePerson =
                                                 baselineNormalByDate?.[dk]?.[groupNum] ||
                                                 parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
@@ -4987,7 +4948,6 @@
                                     // see them as already assigned (which can block finding a targetKey when rotation assigned
                                     // them at end of month and duplicate/consecutive logic would otherwise prevent reinsertion).
                                     const groupPeopleForReturn = (groups?.[groupNum]?.normal || []);
-                                    const preCleared = [];
                                     for (const dk of sortedNormal) {
                                         if (dk < calcStartKey || dk > calcEndKey) continue;
                                         const curAssigned = updatedAssignments?.[dk]?.[groupNum] || null;
@@ -4997,8 +4957,17 @@
                                         const replacement = idxP >= 0 ? pickNextEligibleIgnoringConflicts(groupPeopleForReturn, idxP, groupNum, dateObj) : null;
                                         if (!replacement) continue;
                                         if (!updatedAssignments[dk]) updatedAssignments[dk] = {};
-                                        preCleared.push({ dateKey: dk, prevPerson: curAssigned });
                                         updatedAssignments[dk][groupNum] = replacement;
+                                        storeAssignmentReason(
+                                            dk,
+                                            groupNum,
+                                            replacement,
+                                            'shift',
+                                            '',
+                                            personName,
+                                            null,
+                                            { returnFromMissing: true, clearedEarlyReturnAssignment: true, targetKey: null, missingEnd: pEndKey, preClearedForReinsertion: true }
+                                        );
                                     }
 
                                     // Same month = CALCULATED month (not return month). Forward only possible when return is in calc month.
@@ -5095,32 +5064,13 @@
                                         calculationSteps.deferredReturnFromMissing.push({ personName, groupNum, pEndKey, returnKey, track });
                                     }
 
-                                    if (!targetKey) {
-                                        for (const ch of preCleared) {
-                                            if (!updatedAssignments[ch.dateKey]) updatedAssignments[ch.dateKey] = {};
-                                            updatedAssignments[ch.dateKey][groupNum] = ch.prevPerson;
-                                        }
-                                        continue;
-                                    }
+                                    if (!targetKey) continue;
 
                                     // Apply shift insertion (follow rotation): everyone moves to the next normal day.
                                     const groupPeopleFinal = (groups?.[groupNum]?.normal || []);
                                     const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
-                                    if (!ins.ok) {
-                                        for (const ch of preCleared) {
-                                            if (!updatedAssignments[ch.dateKey]) updatedAssignments[ch.dateKey] = {};
-                                            updatedAssignments[ch.dateKey][groupNum] = ch.prevPerson;
-                                        }
-                                        continue;
-                                    }
+                                    if (!ins.ok) continue;
                                     usedReturnFromMissingTargets.add(`${targetKey}:${groupNum}`);
-                                    // Keep temporary pre-clear only before target; restore later dates so person is not removed for the month.
-                                    for (const ch of preCleared) {
-                                        if (ch.dateKey >= targetKey) {
-                                            if (!updatedAssignments[ch.dateKey]) updatedAssignments[ch.dateKey] = {};
-                                            updatedAssignments[ch.dateKey][groupNum] = ch.prevPerson;
-                                        }
-                                    }
 
                                     // IMPORTANT: Enforce "after 3 normal days" by preventing any earlier normal-day assignment
                                     // of the returning person between returnKey (inclusive) and targetKey (exclusive).
@@ -7955,10 +7905,10 @@
                                 const monthStartKey = formatDateKey(new Date(pEndDate.getFullYear(), pEndDate.getMonth(), 1));
                                 // For scan window: if period ended in previous month, scan from period start to period end (within that month)
                                 // If period ended in current range, scan from max(monthStart, periodStart, calcStart) to min(periodEnd, calcEnd)
-                                const scanStartKey = periodEndsInPrevMonth
+                                const scanStartKey = periodEndsInPrevMonth 
                                     ? maxDateKeyLocal(monthStartKey, pStartKey)
                                     : maxDateKeyLocal(maxDateKeyLocal(monthStartKey, pStartKey), calcStartKey);
-                                const scanEndKey = periodEndsInPrevMonth
+                                const scanEndKey = periodEndsInPrevMonth 
                                     ? pEndKey
                                     : minDateKeyLocal(pEndKey, calcEndKey);
                                 if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
@@ -10475,29 +10425,44 @@
             
             alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
         }
-        function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null, includeBoundaryDays = true) {
+        function isPersonStrictlyMissingOnDate(person, groupNum, date) {
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
-            if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return true;
             const missingPeriods = groupData.missingPeriods?.[person] || [];
             if (missingPeriods.length === 0) return false;
-            
+
             const checkDate = new Date(date);
             checkDate.setHours(0, 0, 0, 0);
-            
+
             return missingPeriods.some(period => {
                 const start = new Date(period.start + 'T00:00:00');
                 const end = new Date(period.end + 'T00:00:00');
-                if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
-                start.setHours(0, 0, 0, 0);
-                end.setHours(0, 0, 0, 0);
-                if (checkDate >= start && checkDate <= end) return true;
-                if (!includeBoundaryDays) return false;
-                const dayBeforeStart = new Date(start);
-                dayBeforeStart.setDate(dayBeforeStart.getDate() - 1);
-                const dayAfterEnd = new Date(end);
-                dayAfterEnd.setDate(dayAfterEnd.getDate() + 1);
-                return checkDate.getTime() === dayBeforeStart.getTime() || checkDate.getTime() === dayAfterEnd.getTime();
+                return checkDate >= start && checkDate <= end;
             });
+        }
+        function isPersonBlockedByMissingBufferOnDate(person, groupNum, date) {
+            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
+            const missingPeriods = groupData.missingPeriods?.[person] || [];
+            if (missingPeriods.length === 0) return false;
+
+            const checkDateKey = typeof formatDateKey === 'function'
+                ? formatDateKey(new Date(date))
+                : null;
+            if (!checkDateKey) return false;
+
+            return missingPeriods.some(period => {
+                const pStartKey = inputValueToDateKey(period?.start);
+                const pEndKey = inputValueToDateKey(period?.end);
+                if (!pStartKey || !pEndKey) return false;
+                const dayBeforeStartKey = addDaysToDateKey(pStartKey, -1);
+                const dayAfterEndKey = addDaysToDateKey(pEndKey, 1);
+                return checkDateKey === dayBeforeStartKey || checkDateKey === dayAfterEndKey;
+            });
+        }
+        function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
+            if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return true;
+            if (isPersonStrictlyMissingOnDate(person, groupNum, date)) return true;
+            // Treat day-before-start and day-after-end as hard conflicts for assignment/swaps.
+            return isPersonBlockedByMissingBufferOnDate(person, groupNum, date);
         }
         function findNextEligiblePersonAfterMissing({
             dateKey,

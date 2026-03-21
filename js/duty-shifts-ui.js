@@ -3823,37 +3823,11 @@
             // Days of the month
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            const getMissingPeopleForDate = (dateObj) => {
-                const missing = [];
-                const checkDate = new Date(dateObj);
-                checkDate.setHours(0, 0, 0, 0);
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupData = groups[groupNum] || {};
-                    const missingMap = groupData.missingPeriods || {};
-                    for (const personName of Object.keys(missingMap)) {
-                        const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
-                        for (const period of periods) {
-                            const start = new Date((period?.start || '') + 'T00:00:00');
-                            const end = new Date((period?.end || '') + 'T00:00:00');
-                            if (isNaN(start.getTime()) || isNaN(end.getTime())) continue;
-                            start.setHours(0, 0, 0, 0);
-                            end.setHours(0, 0, 0, 0);
-                            if (checkDate >= start && checkDate <= end) {
-                                missing.push({ personName, groupNum });
-                                break;
-                            }
-                        }
-                    }
-                }
-                missing.sort((a, b) => a.groupNum - b.groupNum || a.personName.localeCompare(b.personName, 'el'));
-                return missing;
-            };
             
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(year, month, day);
                 const isToday = date.getTime() === today.getTime();
                 const key = formatDateKey(date);
-                const missingForDate = getMissingPeopleForDate(date);
                 // Get assignment from the correct day-type-specific document
                 const assignment = getAssignmentForDate(key);
                 
@@ -3875,9 +3849,6 @@
                 } else {
                     // For non-special holidays, use the normal dayType
                     dayDiv.className = `calendar-day ${dayType} ${isToday ? 'today' : ''}`;
-                }
-                if (missingForDate.length > 0) {
-                    dayDiv.classList.add('has-missing-banner');
                 }
                 
                 // Set special holiday background and border
@@ -3981,7 +3952,6 @@
                 }
                 
                 dayDiv.innerHTML = `
-                    ${missingForDate.length > 0 ? `<div class="calendar-day-missing-banner" title="${escapeHtml(missingForDate.map(m => `${m.personName} (Ομάδα ${m.groupNum})`).join(', '))}">Απουσία: ${escapeHtml(missingForDate.map(m => m.personName).join(', '))}</div>` : ''}
                     <div class="day-number">${day}</div>
                     ${holidayName ? `<div class="orthodox-holiday-name">${holidayName}</div>` : ''}
                     ${displayAssignmentHtml}
