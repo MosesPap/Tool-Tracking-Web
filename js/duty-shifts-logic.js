@@ -4898,8 +4898,10 @@
 
                                     // Find first missed baseline normal duty in CALCULATED MONTH only (missing period ∩ calc range).
                                     // Use normalized name comparison so storage format (e.g. with/without rank) doesn't skip assignment.
-                                    const overlapStartKey = maxDateKey(pStartKey, calcStartKey);
-                                    const overlapEndKey = minDateKey(pEndKey, calcEndKey);
+                                    const expandedStartKey = addDaysToDateKey(pStartKey, -1) || pStartKey;
+                                    const expandedEndKey = addDaysToDateKey(pEndKey, 1) || pEndKey;
+                                    const overlapStartKey = maxDateKey(expandedStartKey, calcStartKey);
+                                    const overlapEndKey = minDateKey(expandedEndKey, calcEndKey);
                                     let firstMissedKey = null;
                                     if (overlapStartKey && overlapEndKey && overlapStartKey <= overlapEndKey) {
                                         for (const dk of sortedNormal) {
@@ -6687,8 +6689,10 @@
                                 const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                                 if (processedWeekendReturn.has(dedupeKey)) continue;
                                 processedWeekendReturn.add(dedupeKey);
-                                const scanStartKey = periodEndsInPrevMonth ? maxKeyW(prevMonthStartKey, pStartKey) : maxKeyW(calcStartKeyW, pStartKey);
-                                const scanEndKey = periodEndsInPrevMonth ? pEndKey : minKeyW(pEndKey, calcEndKeyW);
+                                const expandedStartKeyW = addDaysW(pStartKey, -1) || pStartKey;
+                                const expandedEndKeyW = addDaysW(pEndKey, 1) || pEndKey;
+                                const scanStartKey = periodEndsInPrevMonth ? maxKeyW(prevMonthStartKey, expandedStartKeyW) : maxKeyW(calcStartKeyW, expandedStartKeyW);
+                                const scanEndKey = periodEndsInPrevMonth ? expandedEndKeyW : minKeyW(expandedEndKeyW, calcEndKeyW);
                                 if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
                                 let hadMissedWeekend = false;
                                 if (periodEndsInRange) {
@@ -7327,8 +7331,10 @@
                             if (processedSemiReturnRun.has(dedupeKey)) continue;
                             processedSemiReturnRun.add(dedupeKey);
                             const monthStartKey = formatDateKey(new Date(pEndDate.getFullYear(), pEndDate.getMonth(), 1));
-                            const scanStartKey = periodEndsInPrevMonth ? maxDateKeyRun(monthStartKey, pStartKey) : maxDateKeyRun(maxDateKeyRun(monthStartKey, pStartKey), calcStartKey);
-                            const scanEndKey = periodEndsInPrevMonth ? pEndKey : minDateKeyRun(pEndKey, calcEndKey);
+                            const expandedStartKeyRun = addDaysToDateKeyRun(pStartKey, -1) || pStartKey;
+                            const expandedEndKeyRun = addDaysToDateKeyRun(pEndKey, 1) || pEndKey;
+                            const scanStartKey = periodEndsInPrevMonth ? maxDateKeyRun(monthStartKey, expandedStartKeyRun) : maxDateKeyRun(maxDateKeyRun(monthStartKey, expandedStartKeyRun), calcStartKey);
+                            const scanEndKey = periodEndsInPrevMonth ? expandedEndKeyRun : minDateKeyRun(expandedEndKeyRun, calcEndKey);
                             if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
                             let hadMissedSemi = false;
                             if (periodEndsInRange) {
@@ -7905,12 +7911,14 @@
                                 const monthStartKey = formatDateKey(new Date(pEndDate.getFullYear(), pEndDate.getMonth(), 1));
                                 // For scan window: if period ended in previous month, scan from period start to period end (within that month)
                                 // If period ended in current range, scan from max(monthStart, periodStart, calcStart) to min(periodEnd, calcEnd)
-                                const scanStartKey = periodEndsInPrevMonth 
-                                    ? maxDateKeyLocal(monthStartKey, pStartKey)
-                                    : maxDateKeyLocal(maxDateKeyLocal(monthStartKey, pStartKey), calcStartKey);
-                                const scanEndKey = periodEndsInPrevMonth 
-                                    ? pEndKey
-                                    : minDateKeyLocal(pEndKey, calcEndKey);
+                                const expandedStartKeyLocal = addDaysToDateKeyLocal(pStartKey, -1) || pStartKey;
+                                const expandedEndKeyLocal = addDaysToDateKeyLocal(pEndKey, 1) || pEndKey;
+                                const scanStartKey = periodEndsInPrevMonth
+                                    ? maxDateKeyLocal(monthStartKey, expandedStartKeyLocal)
+                                    : maxDateKeyLocal(maxDateKeyLocal(monthStartKey, expandedStartKeyLocal), calcStartKey);
+                                const scanEndKey = periodEndsInPrevMonth
+                                    ? expandedEndKeyLocal
+                                    : minDateKeyLocal(expandedEndKeyLocal, calcEndKey);
                                 if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
                                 // Check if they had a missed semi duty during the missing period
                                 // We need to check semi days in the missing window, but baselineSemiByDate only has semi days in sortedSemi (current calculation range)
