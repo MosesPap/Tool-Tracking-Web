@@ -804,28 +804,28 @@
             box-sizing: border-box;
         }
 
-        .missing-banner {
-            display: none;
-            margin-bottom: 0.75rem;
-            border: 1px solid #ffe0b2;
-            background: #fff8e1;
-            border-radius: 8px;
-            padding: 0.45rem 0.6rem;
-            font-size: 0.85rem;
-            color: #5d4037;
+        .calendar-day-missing-banner {
+            position: absolute;
+            top: 0.08rem;
+            left: 50%;
+            transform: translateX(-50%);
+            max-width: calc(100% - 0.7rem);
+            font-size: 0.57rem;
+            line-height: 1.05;
+            color: #8a3300;
+            background: rgba(255, 243, 224, 0.96);
+            border: 1px solid #ffcc80;
+            border-radius: 999px;
+            padding: 0.04rem 0.32rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            pointer-events: none;
+            z-index: 2;
         }
 
-        .missing-banner.show {
-            display: block;
-        }
-
-        .missing-banner-title {
-            font-weight: 700;
-            margin-right: 0.4rem;
-        }
-
-        .missing-banner-list {
-            display: inline;
+        .calendar-day.has-missing-banner .day-number {
+            top: 0.82rem;
         }
 
         .calendar-day-header {
@@ -1712,10 +1712,6 @@
 
         <!-- Calendar grid directly below Ημερολόγιο Υπηρεσιών -->
         <div class="calendar-section mb-4">
-            <div id="missingBanner" class="missing-banner" aria-live="polite">
-                <span class="missing-banner-title">Απουσίες μήνα:</span>
-                <span id="missingBannerList" class="missing-banner-list"></span>
-            </div>
             <div class="calendar-grid" id="calendarGrid"></div>
         </div>
 
