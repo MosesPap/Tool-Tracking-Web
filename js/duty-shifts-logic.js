@@ -4900,15 +4900,30 @@
 
                                     // Find first missed baseline normal duty in CALCULATED MONTH only (missing period ∩ calc range).
                                     // Use normalized name comparison so storage format (e.g. with/without rank) doesn't skip assignment.
-                                    const expandedStartKey = addDaysToDateKey(pStartKey, -1) || pStartKey;
-                                    const expandedEndKey = addDaysToDateKey(pEndKey, 1) || pEndKey;
-                                    const overlapStartKey = maxDateKey(expandedStartKey, calcStartKey);
-                                    const overlapEndKey = minDateKey(expandedEndKey, calcEndKey);
+                                    const overlapStartKey = maxDateKey(pStartKey, calcStartKey);
+                                    const overlapEndKey = minDateKey(pEndKey, calcEndKey);
                                     let firstMissedKey = null;
                                     if (overlapStartKey && overlapEndKey && overlapStartKey <= overlapEndKey) {
                                         for (const dk of sortedNormal) {
                                             if (dk < overlapStartKey) continue;
                                             if (dk > overlapEndKey) break;
+                                            const baselinePerson =
+                                                baselineNormalByDate?.[dk]?.[groupNum] ||
+                                                parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
+                                                null;
+                                            if (baselinePerson && normName(baselinePerson) === normName(personName)) {
+                                                firstMissedKey = dk;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    // Boundary-only loss: if baseline would have assigned the person on start-1 or end+1
+                                    // (and that boundary day is a normal day in this calculation), compensate without
+                                    // broadening baseline-window scans.
+                                    if (!firstMissedKey) {
+                                        const boundaryCandidates = [dayBeforeStartForRange, returnKeyForRange].filter(Boolean).sort();
+                                        for (const dk of boundaryCandidates) {
+                                            if (dk < calcStartKey || dk > calcEndKey) continue;
                                             const baselinePerson =
                                                 baselineNormalByDate?.[dk]?.[groupNum] ||
                                                 parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
@@ -6035,21 +6050,6 @@
                 }
                 
                 if (Object.keys(updatedAssignments).length > 0) {
-                    // Ensure normal rotation baseline is also persisted alongside final normal assignments.
-                    // This is a safe idempotent merge and covers flows where Step 4 baseline save was skipped/interrupted.
-                    try {
-                        const baselineByDate = calculationSteps.tempNormalBaselineAssignments || {};
-                        if (Object.keys(baselineByDate).length > 0) {
-                            const formattedBaseline = formatGroupAssignmentsToStringMap(baselineByDate);
-                            const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
-                            await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineNormalAssignments', organizedBaseline);
-                            Object.assign(rotationBaselineNormalAssignments, formattedBaseline);
-                            console.log('Saved/merged normal baseline during final normal save');
-                        }
-                    } catch (baselineSaveError) {
-                        console.warn('Could not save normal baseline during final normal save:', baselineSaveError);
-                    }
-
                     // Debug: log what we're saving for swap-relevant dates (19 and 26 Feb 2026)
                     const d19 = updatedAssignments['2026-02-19'];
                     const d26 = updatedAssignments['2026-02-26'];
@@ -6702,18 +6702,12 @@
                                 const prevMonthEndKey = prevMonthEnd ? formatDateKey(prevMonthEnd) : null;
                                 const periodEndsInRange = (pEndKey >= calcStartKeyW && pEndKey <= calcEndKeyW);
                                 const periodEndsInPrevMonth = (prevMonthStartKey && prevMonthEndKey && pEndKey >= prevMonthStartKey && pEndKey <= prevMonthEndKey);
-                                const dayBeforeStartW = addDaysW(pStartKey, -1);
-                                const dayAfterEndW = addDaysW(pEndKey, 1);
-                                const boundaryInRangeW = (dayBeforeStartW && dayBeforeStartW >= calcStartKeyW && dayBeforeStartW <= calcEndKeyW)
-                                    || (dayAfterEndW && dayAfterEndW >= calcStartKeyW && dayAfterEndW <= calcEndKeyW);
-                                if (!periodEndsInRange && !periodEndsInPrevMonth && !boundaryInRangeW) continue;
+                                if (!periodEndsInRange && !periodEndsInPrevMonth) continue;
                                 const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                                 if (processedWeekendReturn.has(dedupeKey)) continue;
                                 processedWeekendReturn.add(dedupeKey);
-                                const expandedStartKeyW = addDaysW(pStartKey, -1) || pStartKey;
-                                const expandedEndKeyW = addDaysW(pEndKey, 1) || pEndKey;
-                                const scanStartKey = periodEndsInPrevMonth ? maxKeyW(prevMonthStartKey, expandedStartKeyW) : maxKeyW(calcStartKeyW, expandedStartKeyW);
-                                const scanEndKey = periodEndsInPrevMonth ? expandedEndKeyW : minKeyW(expandedEndKeyW, calcEndKeyW);
+                                const scanStartKey = periodEndsInPrevMonth ? maxKeyW(prevMonthStartKey, pStartKey) : maxKeyW(calcStartKeyW, pStartKey);
+                                const scanEndKey = periodEndsInPrevMonth ? pEndKey : minKeyW(pEndKey, calcEndKeyW);
                                 if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
                                 let hadMissedWeekend = false;
                                 if (periodEndsInRange) {
@@ -6727,8 +6721,8 @@
                                         }
                                     }
                                 } else {
-                                    const periodStartDate = new Date(((addDaysW(pStartKey, -1) || pStartKey)) + 'T00:00:00');
-                                    const periodEndDate = new Date(((addDaysW(pEndKey, 1) || pEndKey)) + 'T00:00:00');
+                                    const periodStartDate = new Date(pStartKey + 'T00:00:00');
+                                    const periodEndDate = new Date(pEndKey + 'T00:00:00');
                                     for (let checkDate = new Date(periodStartDate); checkDate <= periodEndDate; checkDate.setDate(checkDate.getDate() + 1)) {
                                         const checkDateKey = formatDateKey(checkDate);
                                         const dayType = getDayType(checkDate);
@@ -7347,19 +7341,13 @@
                             const prevMonthEndKey = prevMonthEnd ? formatDateKey(prevMonthEnd) : null;
                             const periodEndsInRange = (pEndKey >= calcStartKey && pEndKey <= calcEndKey);
                             const periodEndsInPrevMonth = (prevMonthStartKey && prevMonthEndKey && pEndKey >= prevMonthStartKey && pEndKey <= prevMonthEndKey);
-                            const dayBeforeStartRun = addDaysToDateKeyRun(pStartKey, -1);
-                            const dayAfterEndRun = addDaysToDateKeyRun(pEndKey, 1);
-                            const boundaryInRangeRun = (dayBeforeStartRun && dayBeforeStartRun >= calcStartKey && dayBeforeStartRun <= calcEndKey)
-                                || (dayAfterEndRun && dayAfterEndRun >= calcStartKey && dayAfterEndRun <= calcEndKey);
-                            if (!periodEndsInRange && !periodEndsInPrevMonth && !boundaryInRangeRun) continue;
+                            if (!periodEndsInRange && !periodEndsInPrevMonth) continue;
                             const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                             if (processedSemiReturnRun.has(dedupeKey)) continue;
                             processedSemiReturnRun.add(dedupeKey);
                             const monthStartKey = formatDateKey(new Date(pEndDate.getFullYear(), pEndDate.getMonth(), 1));
-                            const expandedStartKeyRun = addDaysToDateKeyRun(pStartKey, -1) || pStartKey;
-                            const expandedEndKeyRun = addDaysToDateKeyRun(pEndKey, 1) || pEndKey;
-                            const scanStartKey = periodEndsInPrevMonth ? maxDateKeyRun(monthStartKey, expandedStartKeyRun) : maxDateKeyRun(maxDateKeyRun(monthStartKey, expandedStartKeyRun), calcStartKey);
-                            const scanEndKey = periodEndsInPrevMonth ? expandedEndKeyRun : minDateKeyRun(expandedEndKeyRun, calcEndKey);
+                            const scanStartKey = periodEndsInPrevMonth ? maxDateKeyRun(monthStartKey, pStartKey) : maxDateKeyRun(maxDateKeyRun(monthStartKey, pStartKey), calcStartKey);
+                            const scanEndKey = periodEndsInPrevMonth ? pEndKey : minDateKeyRun(pEndKey, calcEndKey);
                             if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
                             let hadMissedSemi = false;
                             if (periodEndsInRange) {
@@ -7370,8 +7358,8 @@
                                     if (baseSemi && normSemiRun(baseSemi) === normSemiRun(personName)) { hadMissedSemi = true; break; }
                                 }
                             } else {
-                                const periodStartDate = new Date(((addDaysToDateKeyRun(pStartKey, -1) || pStartKey)) + 'T00:00:00');
-                                const periodEndDate = new Date(((addDaysToDateKeyRun(pEndKey, 1) || pEndKey)) + 'T00:00:00');
+                                const periodStartDate = new Date(pStartKey + 'T00:00:00');
+                                const periodEndDate = new Date(pEndKey + 'T00:00:00');
                                 for (let checkDate = new Date(periodStartDate); checkDate <= periodEndDate; checkDate.setDate(checkDate.getDate() + 1)) {
                                     const checkDateKey = formatDateKey(checkDate);
                                     if (getDayType(checkDate) === 'semi-normal-day') {
@@ -7929,25 +7917,19 @@
                                 const prevMonthEndKey = prevMonthEnd ? formatDateKey(prevMonthEnd) : null;
                                 const periodEndsInRange = (pEndKey >= calcStartKey && pEndKey <= calcEndKey);
                                 const periodEndsInPrevMonth = (prevMonthStartKey && prevMonthEndKey && pEndKey >= prevMonthStartKey && pEndKey <= prevMonthEndKey);
-                                const dayBeforeStartLocal = addDaysToDateKeyLocal(pStartKey, -1);
-                                const dayAfterEndLocal = addDaysToDateKeyLocal(pEndKey, 1);
-                                const boundaryInRangeLocal = (dayBeforeStartLocal && dayBeforeStartLocal >= calcStartKey && dayBeforeStartLocal <= calcEndKey)
-                                    || (dayAfterEndLocal && dayAfterEndLocal >= calcStartKey && dayAfterEndLocal <= calcEndKey);
-                                if (!periodEndsInRange && !periodEndsInPrevMonth && !boundaryInRangeLocal) continue;
+                                if (!periodEndsInRange && !periodEndsInPrevMonth) continue;
                                 const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                                 if (processedSemiReturn.has(dedupeKey)) continue;
                                 processedSemiReturn.add(dedupeKey);
                                 const monthStartKey = formatDateKey(new Date(pEndDate.getFullYear(), pEndDate.getMonth(), 1));
                                 // For scan window: if period ended in previous month, scan from period start to period end (within that month)
                                 // If period ended in current range, scan from max(monthStart, periodStart, calcStart) to min(periodEnd, calcEnd)
-                                const expandedStartKeyLocal = addDaysToDateKeyLocal(pStartKey, -1) || pStartKey;
-                                const expandedEndKeyLocal = addDaysToDateKeyLocal(pEndKey, 1) || pEndKey;
                                 const scanStartKey = periodEndsInPrevMonth
-                                    ? maxDateKeyLocal(monthStartKey, expandedStartKeyLocal)
-                                    : maxDateKeyLocal(maxDateKeyLocal(monthStartKey, expandedStartKeyLocal), calcStartKey);
+                                    ? maxDateKeyLocal(monthStartKey, pStartKey)
+                                    : maxDateKeyLocal(maxDateKeyLocal(monthStartKey, pStartKey), calcStartKey);
                                 const scanEndKey = periodEndsInPrevMonth
-                                    ? expandedEndKeyLocal
-                                    : minDateKeyLocal(expandedEndKeyLocal, calcEndKey);
+                                    ? pEndKey
+                                    : minDateKeyLocal(pEndKey, calcEndKey);
                                 if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
                                 // Check if they had a missed semi duty during the missing period
                                 // We need to check semi days in the missing window, but baselineSemiByDate only has semi days in sortedSemi (current calculation range)
@@ -7990,8 +7972,8 @@
                                     // by rotation on any date in the period window that is a semi day
                                     // For simplicity, let's check if any date in the period window (pStartKey to pEndKey) is a semi-normal-day type
                                     // and if so, check if rotation would assign this person on that date
-                                    const periodStartDate = new Date(((addDaysToDateKeyLocal(pStartKey, -1) || pStartKey)) + 'T00:00:00');
-                                    const periodEndDate = new Date(((addDaysToDateKeyLocal(pEndKey, 1) || pEndKey)) + 'T00:00:00');
+                                    const periodStartDate = new Date(pStartKey + 'T00:00:00');
+                                    const periodEndDate = new Date(pEndKey + 'T00:00:00');
                                     for (let checkDate = new Date(periodStartDate); checkDate <= periodEndDate; checkDate.setDate(checkDate.getDate() + 1)) {
                                         const checkDateKey = formatDateKey(checkDate);
                                         const dayType = getDayType(checkDate);
