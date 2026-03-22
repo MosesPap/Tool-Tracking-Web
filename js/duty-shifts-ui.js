@@ -4315,17 +4315,20 @@
             const items = entries
                 .map((row) => {
                     const tag = String(row.tag || '');
-                    const badgeClass =
-                        tag === 'Απενεργοπ.' ? 'bg-secondary' : 'bg-warning text-dark';
+                    let reasonClass = 'md-popup-reason--missing';
+                    if (tag === 'Απενεργοπ.') reasonClass = 'md-popup-reason--disabled';
+                    else if (tag === 'Απ.+Απεν.') reasonClass = 'md-popup-reason--both';
                     return (
                         '<div class="hierarchy-popup-item hierarchy-popup-item-md">' +
                         '<span class="md-popup-group">' +
                         escapeHtml(String(row.groupNum)) +
-                        '.</span> ' +
+                        '.</span>' +
+                        '<span class="md-popup-name">' +
                         escapeHtml(String(row.personName || '')) +
-                        ' <span class="badge ' +
-                        badgeClass +
-                        '" style="font-size:0.65rem;vertical-align:middle;">' +
+                        '</span>' +
+                        '<span class="md-popup-reason ' +
+                        reasonClass +
+                        '">' +
                         escapeHtml(tag) +
                         '</span></div>'
                     );
@@ -4341,19 +4344,21 @@
             document.body.appendChild(missingDisabledCalendarPopup);
 
             const rect = dayDiv.getBoundingClientRect();
-            const popupRect = missingDisabledCalendarPopup.getBoundingClientRect();
-            const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
-            const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            const pad = 10;
 
             let left = rect.right + 10;
-            if (left + popupRect.width > window.innerWidth) {
+            let popupRect = missingDisabledCalendarPopup.getBoundingClientRect();
+            if (left + popupRect.width > vw - pad) {
                 left = rect.left - popupRect.width - 10;
             }
+            if (left < pad) left = pad;
+
             let top = rect.top + rect.height / 2 - popupRect.height / 2;
-            if (top < scrollY + 10) {
-                top = scrollY + 10;
-            } else if (top + popupRect.height > scrollY + window.innerHeight - 10) {
-                top = scrollY + window.innerHeight - popupRect.height - 10;
+            if (top < pad) top = pad;
+            if (top + popupRect.height > vh - pad) {
+                top = Math.max(pad, vh - popupRect.height - pad);
             }
 
             missingDisabledCalendarPopup.style.left = left + 'px';
