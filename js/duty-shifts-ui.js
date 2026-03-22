@@ -6064,6 +6064,8 @@
                 pendingOtherKeyStrings.set(otherKey, finalStr);
             }
 
+            const mutualGroupsDone = new Set(mutualSwapPlans.map((p) => p.group));
+
             // Σύγκρουση διαδοχικών υπηρεσιών: προσομοίωση όλων των αλλαγών (ημέρα + αμοιβαία άλλη ημέρα) πριν την αποθήκευση
             const conflictCheckPatches = {};
             if (newAssignments.length > 0) {
@@ -6139,7 +6141,6 @@
                 delete dutyAssignments[currentEditingDayKey];
             }
             
-            const mutualGroupsDone = new Set(mutualSwapPlans.map(p => p.group));
             if (typeof storeAssignmentReason === 'function') {
                 for (const p of mutualSwapPlans) {
                     const pairId = typeof getNextSwapPairIdForAssignmentReasons === 'function'
