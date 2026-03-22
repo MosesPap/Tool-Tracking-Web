@@ -659,7 +659,9 @@
             startDate: null,
             endDate: null,
             preserveExisting: true,
-            dayTypeLists: null
+            dayTypeLists: null,
+            /** Captured before month recalc clear; used to restore manual modal / mutual swap / alternate replacement. */
+            dutyProtectionSnapshot: null
         };
         
         // Configuration for recurring special holidays
@@ -2281,6 +2283,136 @@
                 if (person && g >= 1 && g <= 4) out[g] = person;
             }
             return out;
+        }
+
+        /** Reasons from day modal, mutual swap, or αντικατάσταση επιλαχών — do not overwrite on month recalc. */
+        function isProtectedManualDutyReasonEntry(r) {
+            return !!(r && r.meta && (r.meta.manualDayModal || r.meta.manualAlternateReplacement || r.meta.mutualTwoDaySwap));
+        }
+
+        function hasProtectedManualDutyReasonOnDateGroup(dateKey, groupNum) {
+            const gmap = assignmentReasons?.[dateKey]?.[groupNum];
+            if (!gmap || typeof gmap !== 'object') return false;
+            for (const pk in gmap) {
+                if (isProtectedManualDutyReasonEntry(gmap[pk])) return true;
+            }
+            return false;
+        }
+
+        function _monthKeySetFromRangeArray(monthKeys) {
+            return new Set(Array.isArray(monthKeys) ? monthKeys : []);
+        }
+
+        /**
+         * Capture assigned persons + reason fragments for dates/groups with protected manual reasons.
+         * Includes mutual two-day swap partner dates even if outside the selected month range.
+         */
+        function captureManualDutyProtectionSnapshot(startDate, endDate) {
+            const snapshot = { slots: {}, reasonsFragments: {} };
+            if (!startDate || !endDate) return snapshot;
+
+            const collectDate = (dk) => {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) return;
+                for (let g = 1; g <= 4; g++) {
+                    if (!hasProtectedManualDutyReasonOnDateGroup(dk, g)) continue;
+                    if (!snapshot.slots[dk]) snapshot.slots[dk] = {};
+                    const str = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dk) : null;
+                    const person = typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                        ? parseAssignedPersonForGroupFromAssignment(str, g)
+                        : null;
+                    if (person) snapshot.slots[dk][g] = person;
+                    if (!snapshot.reasonsFragments[dk]) snapshot.reasonsFragments[dk] = {};
+                    const srcG = assignmentReasons?.[dk]?.[g];
+                    if (srcG && typeof srcG === 'object') {
+                        try {
+                            snapshot.reasonsFragments[dk][g] = JSON.parse(JSON.stringify(srcG));
+                        } catch (_) {
+                            snapshot.reasonsFragments[dk][g] = srcG;
+                        }
+                    }
+                }
+            };
+
+            const di = new Date(startDate);
+            while (di <= endDate) {
+                collectDate(formatDateKey(di));
+                di.setDate(di.getDate() + 1);
+            }
+
+            const pending = [];
+            for (const dk of Object.keys(snapshot.reasonsFragments)) {
+                const frag = snapshot.reasonsFragments[dk];
+                for (const gn of Object.keys(frag)) {
+                    const gmap = frag[gn];
+                    if (!gmap || typeof gmap !== 'object') continue;
+                    for (const pk in gmap) {
+                        const r = gmap[pk];
+                        const other = r?.meta?.otherDateKey;
+                        if (r?.meta?.mutualTwoDaySwap && other && /^\d{4}-\d{2}-\d{2}$/.test(String(other))) {
+                            pending.push(String(other));
+                        }
+                    }
+                }
+            }
+            for (const otherDk of [...new Set(pending)]) {
+                collectDate(otherDk);
+            }
+
+            return snapshot;
+        }
+
+        /** Restore reasons only for dates in cleared months (after clearSelectedMonthsInMemory). */
+        function restoreManualDutyProtectionReasonsAfterClear(snapshot, monthKeysForRange) {
+            if (!snapshot?.reasonsFragments) return;
+            const clearedMonths = _monthKeySetFromRangeArray(monthKeysForRange);
+            for (const dk of Object.keys(snapshot.reasonsFragments)) {
+                const mk = dk.substring(0, 7);
+                if (clearedMonths.size > 0 && !clearedMonths.has(mk)) continue;
+                const frag = snapshot.reasonsFragments[dk];
+                if (!assignmentReasons[dk]) assignmentReasons[dk] = {};
+                for (const gStr of Object.keys(frag)) {
+                    try {
+                        assignmentReasons[dk][gStr] = JSON.parse(JSON.stringify(frag[gStr]));
+                    } catch (_) {
+                        assignmentReasons[dk][gStr] = frag[gStr];
+                    }
+                }
+            }
+        }
+
+        /** Re-apply protected reason rows at end of execute (preview may have touched assignmentReasons). */
+        function mergeManualDutyProtectionReasonsFinal(snapshot) {
+            if (!snapshot?.reasonsFragments) return;
+            for (const dk of Object.keys(snapshot.reasonsFragments)) {
+                const frag = snapshot.reasonsFragments[dk];
+                if (!assignmentReasons[dk]) assignmentReasons[dk] = {};
+                for (const gStr of Object.keys(frag)) {
+                    try {
+                        assignmentReasons[dk][gStr] = JSON.parse(JSON.stringify(frag[gStr]));
+                    } catch (_) {
+                        assignmentReasons[dk][gStr] = frag[gStr];
+                    }
+                }
+            }
+        }
+
+        /** Merge protected group slots over calculated assignments for each affected date. */
+        function applyManualDutyProtectionAssignmentOverlay(snapshot) {
+            if (!snapshot?.slots) return;
+            for (const dk of Object.keys(snapshot.slots)) {
+                const prot = snapshot.slots[dk];
+                const curStr = typeof getAssignmentForDate === 'function' ? (getAssignmentForDate(dk) || '') : '';
+                const map = typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(curStr) : {};
+                for (const gStr of Object.keys(prot)) {
+                    const g = parseInt(gStr, 10);
+                    const person = prot[gStr];
+                    if (person && g >= 1 && g <= 4) map[g] = String(person).trim();
+                }
+                const newStr = typeof groupMapToAssignmentString === 'function' ? groupMapToAssignmentString(map) : '';
+                if (newStr && typeof setAssignmentForDate === 'function') {
+                    setAssignmentForDate(dk, newStr);
+                }
+            }
         }
 
         // Transfer auto-positioning reference date selection (per duty type):

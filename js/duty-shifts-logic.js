@@ -1981,6 +1981,13 @@
                     d.setMonth(d.getMonth() + 1);
                 }
                 
+                // Preserve manual modal / mutual swap / alternate-replacement across full recalc
+                if (typeof captureManualDutyProtectionSnapshot === 'function') {
+                    calculationSteps.dutyProtectionSnapshot = captureManualDutyProtectionSnapshot(startDate, endDate);
+                } else {
+                    calculationSteps.dutyProtectionSnapshot = null;
+                }
+                
                 // If not preserving existing: delete selected months from Firebase and in-memory so calculation starts fresh
                 if (!preserveExisting && monthKeysForRange.length > 0) {
                     const db = window.db || (typeof firebase !== 'undefined' && firebase.firestore && firebase.firestore());
@@ -1990,6 +1997,9 @@
                     }
                     if (typeof clearSelectedMonthsInMemory === 'function') {
                         clearSelectedMonthsInMemory(monthKeysForRange);
+                    }
+                    if (calculationSteps.dutyProtectionSnapshot && typeof restoreManualDutyProtectionReasonsAfterClear === 'function') {
+                        restoreManualDutyProtectionReasonsAfterClear(calculationSteps.dutyProtectionSnapshot, monthKeysForRange);
                     }
                 }
                 
@@ -6424,6 +6434,15 @@
                     }
                 }
                 
+                if (calculationSteps.dutyProtectionSnapshot) {
+                    if (typeof applyManualDutyProtectionAssignmentOverlay === 'function') {
+                        applyManualDutyProtectionAssignmentOverlay(calculationSteps.dutyProtectionSnapshot);
+                    }
+                    if (typeof mergeManualDutyProtectionReasonsFinal === 'function') {
+                        mergeManualDutyProtectionReasonsFinal(calculationSteps.dutyProtectionSnapshot);
+                    }
+                }
+                
                 console.log('[CALCULATE DEBUG] Converted temp assignments to permanent format');
                 console.log('[CALCULATE DEBUG] Final assignment counts:');
                 console.log('[CALCULATE DEBUG] - normalDayAssignments:', Object.keys(normalDayAssignments).length);
@@ -6541,6 +6560,7 @@
             } finally {
                 // Always clear temp assignments when computation ends (success, early return, or error)
                 calculationSteps.tempAssignments = null;
+                calculationSteps.dutyProtectionSnapshot = null;
 
                 try {
                     if (window.firebase && firebase.firestore) {
