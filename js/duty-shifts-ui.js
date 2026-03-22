@@ -4637,11 +4637,15 @@
                 startMonthInput.value = `${currentYear}-${currentMonth}`;
             }
             for (let g = 1; g <= 4; g++) {
-                const cb = document.getElementById(`recalcGroup${g}`);
-                const lb = document.getElementById(`recalcGroupLabel${g}`);
-                if (cb) cb.checked = true;
-                if (lb && typeof getGroupName === 'function') {
-                    lb.textContent = `${getGroupName(g)}`;
+                const stripCb = document.getElementById(`calcStripManualOverridesG${g}`);
+                if (stripCb) stripCb.checked = false;
+                const lab = document.getElementById(`calcStripGroupLabel${g}`);
+                if (lab && typeof getGroupName === 'function') {
+                    try {
+                        lab.textContent = getGroupName(g);
+                    } catch (_) {
+                        lab.textContent = `Ομάδα ${g}`;
+                    }
                 }
             }
 

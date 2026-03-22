@@ -1852,11 +1852,15 @@
                 startMonthInput.value = `${currentYear}-${currentMonth}`;
             }
             for (let g = 1; g <= 4; g++) {
-                const cb = document.getElementById(`recalcGroup${g}`);
-                const lb = document.getElementById(`recalcGroupLabel${g}`);
-                if (cb) cb.checked = true;
-                if (lb && typeof getGroupName === 'function') {
-                    lb.textContent = `${getGroupName(g)}`;
+                const stripCb = document.getElementById(`calcStripManualOverridesG${g}`);
+                if (stripCb) stripCb.checked = false;
+                const lab = document.getElementById(`calcStripGroupLabel${g}`);
+                if (lab && typeof getGroupName === 'function') {
+                    try {
+                        lab.textContent = getGroupName(g);
+                    } catch (_) {
+                        lab.textContent = `Ομάδα ${g}`;
+                    }
                 }
             }
 
@@ -1940,23 +1944,20 @@
                     return;
                 }
                 
-                const recalcGroupNums = Array.from(document.querySelectorAll('.recalc-group-cb:checked'))
-                    .map((cb) => parseInt(cb.value, 10))
-                    .filter((g) => g >= 1 && g <= 4);
-                
-                if (recalcGroupNums.length === 0) {
-                    alert('Παρακαλώ επιλέξτε τουλάχιστον μία ομάδα για επαναϋπολογισμό.');
-                    return;
-                }
-                
                 const startMonth = startMonthInput.value;
+                const stripManualOverrideGroups = [];
+                for (let g = 1; g <= 4; g++) {
+                    const el = document.getElementById(`calcStripManualOverridesG${g}`);
+                    if (el && el.checked) stripManualOverrideGroups.push(g);
+                }
+                /** No strip selections => keep manual/swap/alternate (same as former "preserve"). Any strip => clear month & recalc those groups without overrides. */
+                const preserveExisting = stripManualOverrideGroups.length === 0;
                 
                 if (!startMonth) {
-                    alert('Παρακαλώ επιλέξτε μήνα υπολογισμού');
+                    alert('Παρακαλώ επιλέξτε τον μήνα υπολογισμού');
                     return;
                 }
                 
-                // Parse start date — single month only (first through last day of selected month)
                 const [startYear, startMonthNum] = startMonth.split('-').map(Number);
                 const startDate = new Date(startYear, startMonthNum - 1, 1);
                 const endDate = new Date(startYear, startMonthNum, 0);
@@ -1964,22 +1965,28 @@
                 // Store calculation parameters for step-by-step process
                 calculationSteps.startDate = startDate;
                 calculationSteps.endDate = endDate;
-                calculationSteps.recalcGroupNums = recalcGroupNums.slice();
+                calculationSteps.preserveExisting = preserveExisting;
+                calculationSteps.stripManualOverrideGroups = stripManualOverrideGroups.slice();
                 calculationSteps.currentStep = 1;
                 
-                const monthKeysForRange = [`${startYear}-${String(startMonthNum).padStart(2, '0')}`];
-                
-                // Pure rotation for selected groups — do not re-apply manual modal / swap / alternate overlay
-                calculationSteps.dutyProtectionSnapshot = null;
-                
-                const allGroups = [1, 2, 3, 4];
-                const preserveGroups = allGroups.filter((g) => !recalcGroupNums.includes(g));
-                calculationSteps.groupPreserveSnapshot = null;
-                if (preserveGroups.length > 0 && typeof captureGroupPreserveSnapshot === 'function') {
-                    calculationSteps.groupPreserveSnapshot = captureGroupPreserveSnapshot(startDate, endDate, preserveGroups);
+                // Build month keys for the selected range (YYYY-MM)
+                const monthKeysForRange = [];
+                const d = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+                const rangeEndMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+                while (d <= rangeEndMonth) {
+                    monthKeysForRange.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                    d.setMonth(d.getMonth() + 1);
                 }
                 
-                if (monthKeysForRange.length > 0) {
+                // Preserve manual modal / mutual swap / alternate-replacement across full recalc
+                if (typeof captureManualDutyProtectionSnapshot === 'function') {
+                    calculationSteps.dutyProtectionSnapshot = captureManualDutyProtectionSnapshot(startDate, endDate);
+                } else {
+                    calculationSteps.dutyProtectionSnapshot = null;
+                }
+                
+                // If not preserving existing: delete selected months from Firebase and in-memory so calculation starts fresh
+                if (!preserveExisting && monthKeysForRange.length > 0) {
                     const db = window.db || (typeof firebase !== 'undefined' && firebase.firestore && firebase.firestore());
                     const user = window.auth && window.auth.currentUser;
                     if (db && user && typeof deleteSelectedMonthsFromDutyDocs === 'function') {
@@ -1987,6 +1994,13 @@
                     }
                     if (typeof clearSelectedMonthsInMemory === 'function') {
                         clearSelectedMonthsInMemory(monthKeysForRange);
+                    }
+                    if (calculationSteps.dutyProtectionSnapshot && typeof restoreManualDutyProtectionReasonsAfterClear === 'function') {
+                        restoreManualDutyProtectionReasonsAfterClear(
+                            calculationSteps.dutyProtectionSnapshot,
+                            monthKeysForRange,
+                            calculationSteps.stripManualOverrideGroups
+                        );
                     }
                 }
                 
@@ -6202,17 +6216,22 @@
             // Execute the actual calculation
             const startDate = calculationSteps.startDate;
             const endDate = calculationSteps.endDate;
+            const preserveExisting = calculationSteps.preserveExisting;
             
-            // Clear assignments for the selected date range before applying temp results
-            const dateIterator = new Date(startDate);
-            while (dateIterator <= endDate) {
-                const key = formatDateKey(dateIterator);
-                delete dutyAssignments[key];
-                delete normalDayAssignments[key];
-                delete semiNormalAssignments[key];
-                delete weekendAssignments[key];
-                delete specialHolidayAssignments[key];
-                dateIterator.setDate(dateIterator.getDate() + 1);
+            // Clear assignments only for the selected date range if not preserving
+            if (!preserveExisting) {
+                const dateIterator = new Date(startDate);
+                while (dateIterator <= endDate) {
+                    const key = formatDateKey(dateIterator);
+                    // Delete assignments for the selected date range
+                        delete dutyAssignments[key];
+                            // Also delete from day-type-specific assignments
+                            delete normalDayAssignments[key];
+                            delete semiNormalAssignments[key];
+                            delete weekendAssignments[key];
+                            delete specialHolidayAssignments[key];
+                    dateIterator.setDate(dateIterator.getDate() + 1);
+                }
             }
             
             // Load temp assignments from Firestore (use preview logic results)
@@ -6416,20 +6435,13 @@
                     }
                 }
                 
-                // Restore non-recalculated groups (manual edits / swaps / alternates kept only for those groups)
-                const recalcNums = calculationSteps.recalcGroupNums || [1, 2, 3, 4];
-                const preserveGroupsExec = [1, 2, 3, 4].filter((g) => !recalcNums.includes(g));
-                if (calculationSteps.groupPreserveSnapshot && preserveGroupsExec.length > 0 && typeof mergeGroupPreserveSnapshotInExecute === 'function') {
-                    mergeGroupPreserveSnapshotInExecute(calculationSteps.groupPreserveSnapshot, preserveGroupsExec);
-                    calculationSteps.groupPreserveSnapshot = null;
-                    // Sync legacy dutyAssignments for the calculation range from merged day-type stores
-                    const syncDi = new Date(startDate);
-                    while (syncDi <= endDate) {
-                        const dk = formatDateKey(syncDi);
-                        const merged = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dk) : null;
-                        if (merged) dutyAssignments[dk] = merged;
-                        else delete dutyAssignments[dk];
-                        syncDi.setDate(syncDi.getDate() + 1);
+                if (calculationSteps.dutyProtectionSnapshot) {
+                    const stripNums = calculationSteps.stripManualOverrideGroups;
+                    if (typeof applyManualDutyProtectionAssignmentOverlay === 'function') {
+                        applyManualDutyProtectionAssignmentOverlay(calculationSteps.dutyProtectionSnapshot, stripNums);
+                    }
+                    if (typeof mergeManualDutyProtectionReasonsFinal === 'function') {
+                        mergeManualDutyProtectionReasonsFinal(calculationSteps.dutyProtectionSnapshot, stripNums);
                     }
                 }
                 
@@ -6551,8 +6563,6 @@
                 // Always clear temp assignments when computation ends (success, early return, or error)
                 calculationSteps.tempAssignments = null;
                 calculationSteps.dutyProtectionSnapshot = null;
-                calculationSteps.groupPreserveSnapshot = null;
-                calculationSteps.recalcGroupNums = null;
 
                 try {
                     if (window.firebase && firebase.firestore) {
