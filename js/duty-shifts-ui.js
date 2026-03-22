@@ -2,6 +2,10 @@
         // DUTY-SHIFTS-UI.JS - User Interface & Rendering
         // ============================================================================
 
+        /** Calendar cell hover popups (hierarchy vs missing/disabled list — only one at a time) */
+        let hierarchyPopup = null;
+        let missingDisabledCalendarPopup = null;
+
         // When true, after the current child modal closes we reopen the Person Actions (Ενεργειες Ατόμου) modal
         let reopenPersonActionsModalWhenClosed = false;
         let reopenPersonActionsAfterTransferFlow = false;
@@ -4003,7 +4007,21 @@
                             a.groupNum - b.groupNum ||
                             (a.personName || '').localeCompare(b.personName || '', 'el')
                     );
-                    displayAssignmentHtml = '<div class="duty-person-container calendar-missing-disabled-view">';
+                    const mdPayload = rows.length > 0
+                        ? encodeURIComponent(
+                              JSON.stringify(
+                                  rows.map((r) => ({
+                                      personName: r.personName,
+                                      groupNum: r.groupNum,
+                                      tag: r.tag
+                                  }))
+                              )
+                          )
+                        : '';
+                    displayAssignmentHtml =
+                        '<div class="duty-person-container calendar-missing-disabled-view"' +
+                        (mdPayload ? ' data-missing-disabled-list="' + mdPayload + '"' : '') +
+                        '><div class="calendar-missing-disabled-inner">';
                     if (rows.length === 0) {
                         displayAssignmentHtml += '<div class="duty-person small text-muted fst-italic">—</div>';
                     } else {
@@ -4014,7 +4032,7 @@
                             displayAssignmentHtml += `<div class="duty-person duty-missing-disabled-cell text-dark" title="${escapeHtml(tit)}">${row.groupNum}. ${escapeHtml(row.personName)} <span class="badge ${badgeClass}" style="font-size:0.58rem;vertical-align:middle;">${escapeHtml(row.tag)}</span></div>`;
                         }
                     }
-                    displayAssignmentHtml += '</div>';
+                    displayAssignmentHtml += '</div></div>';
                 } else if (assignment) {
                     const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
                     const parts = assignmentStr.split(',').map(p => p.trim()).filter(p => p);
@@ -4152,7 +4170,23 @@
                         hideHierarchyPopup();
                     });
                 }
-                
+
+                let mdHoverTimeout = null;
+                if (container && container.getAttribute('data-missing-disabled-list')) {
+                    dayDiv.addEventListener('mouseenter', () => {
+                        mdHoverTimeout = setTimeout(() => {
+                            showMissingDisabledCalendarPopup(dayDiv, container);
+                        }, 400);
+                    });
+                    dayDiv.addEventListener('mouseleave', () => {
+                        if (mdHoverTimeout) {
+                            clearTimeout(mdHoverTimeout);
+                            mdHoverTimeout = null;
+                        }
+                        hideMissingDisabledCalendarPopup();
+                    });
+                }
+
                 frag.appendChild(dayDiv);
             }
             
@@ -4171,11 +4205,13 @@
             }
         }
         function showHierarchyPopup(dayDiv, container) {
+            hideMissingDisabledCalendarPopup(true);
             // Remove existing popup if any
             if (hierarchyPopup) {
                 hierarchyPopup.remove();
+                hierarchyPopup = null;
             }
-            
+
             const hierarchyData = container.getAttribute('data-hierarchy-order');
             if (!hierarchyData) return;
             
@@ -4241,6 +4277,93 @@
                     }
                 }, 300); // Wait for fade-out animation
             }
+        }
+
+        /** @param {boolean} [immediate] skip fade when replacing with another popup */
+        function hideMissingDisabledCalendarPopup(immediate) {
+            if (!missingDisabledCalendarPopup) return;
+            const el = missingDisabledCalendarPopup;
+            missingDisabledCalendarPopup = null;
+            if (immediate) {
+                el.remove();
+                return;
+            }
+            el.classList.remove('hierarchy-popup-visible');
+            setTimeout(() => {
+                el.remove();
+            }, 300);
+        }
+
+        function showMissingDisabledCalendarPopup(dayDiv, container) {
+            hideHierarchyPopup();
+            document.querySelectorAll('.hierarchy-popup.calendar-md-list-popup').forEach((n) => n.remove());
+            missingDisabledCalendarPopup = null;
+
+            const raw = container.getAttribute('data-missing-disabled-list');
+            if (!raw) return;
+            let entries;
+            try {
+                entries = JSON.parse(decodeURIComponent(raw));
+            } catch (e) {
+                console.error('showMissingDisabledCalendarPopup: bad data', e);
+                return;
+            }
+            if (!Array.isArray(entries) || entries.length === 0) return;
+
+            missingDisabledCalendarPopup = document.createElement('div');
+            missingDisabledCalendarPopup.className = 'hierarchy-popup calendar-md-list-popup';
+            const items = entries
+                .map((row) => {
+                    const tag = String(row.tag || '');
+                    const badgeClass =
+                        tag === 'Απενεργοπ.' ? 'bg-secondary' : 'bg-warning text-dark';
+                    return (
+                        '<div class="hierarchy-popup-item hierarchy-popup-item-md">' +
+                        '<span class="md-popup-group">' +
+                        escapeHtml(String(row.groupNum)) +
+                        '.</span> ' +
+                        escapeHtml(String(row.personName || '')) +
+                        ' <span class="badge ' +
+                        badgeClass +
+                        '" style="font-size:0.65rem;vertical-align:middle;">' +
+                        escapeHtml(tag) +
+                        '</span></div>'
+                    );
+                })
+                .join('');
+            missingDisabledCalendarPopup.innerHTML =
+                '<div class="hierarchy-popup-content">' +
+                '<div class="hierarchy-popup-title">Απόντες / απενεργοποιημένοι</div>' +
+                '<div class="hierarchy-popup-list hierarchy-popup-list-md">' +
+                items +
+                '</div></div>';
+
+            document.body.appendChild(missingDisabledCalendarPopup);
+
+            const rect = dayDiv.getBoundingClientRect();
+            const popupRect = missingDisabledCalendarPopup.getBoundingClientRect();
+            const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+            const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+
+            let left = rect.right + 10;
+            if (left + popupRect.width > window.innerWidth) {
+                left = rect.left - popupRect.width - 10;
+            }
+            let top = rect.top + rect.height / 2 - popupRect.height / 2;
+            if (top < scrollY + 10) {
+                top = scrollY + 10;
+            } else if (top + popupRect.height > scrollY + window.innerHeight - 10) {
+                top = scrollY + window.innerHeight - popupRect.height - 10;
+            }
+
+            missingDisabledCalendarPopup.style.left = left + 'px';
+            missingDisabledCalendarPopup.style.top = top + 'px';
+
+            setTimeout(() => {
+                if (missingDisabledCalendarPopup) {
+                    missingDisabledCalendarPopup.classList.add('hierarchy-popup-visible');
+                }
+            }, 10);
         }
         function getDayTypeLabel(dayType) {
             switch(dayType) {

@@ -4450,11 +4450,7 @@
             window.applyCalendarCellHeight = applyCalendarCellHeight;
         }
 
-        // Render calendar
-
-        // Show hierarchy popup on hover
-        let hierarchyPopup = null;
-        
+        // Render calendar (hierarchy / calendar popups live in duty-shifts-ui.js)
 
         // Get day type label
         
