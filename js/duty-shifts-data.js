@@ -2195,6 +2195,8 @@
         /**
          * Find another calendar day (same duty category store) where personName is assigned for groupNum.
          * Excludes excludeDateKey (the day being edited).
+         * Only searches the same calendar month (YYYY-MM) as excludeDateKey so mutual swap from the day modal
+         * does not pair with an old duty (e.g. February) when editing April.
          */
         function findOtherDateKeyForPersonInGroupDutyCategory(personName, groupNum, excludeDateKey, dayTypeCategory) {
             if (!personName || !Number.isFinite(groupNum) || groupNum < 1) return null;
@@ -2202,16 +2204,34 @@
             if (!map || typeof map !== 'object') return null;
             const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
             const target = norm(personName);
-            const keys = Object.keys(map).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
+            const monthPrefix =
+                excludeDateKey && /^\d{4}-\d{2}-\d{2}$/.test(String(excludeDateKey))
+                    ? String(excludeDateKey).substring(0, 7)
+                    : null;
+            let keys = Object.keys(map).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k));
+            if (monthPrefix) {
+                keys = keys.filter((k) => k.startsWith(monthPrefix + '-'));
+            }
+            keys.sort();
+            const matches = [];
             for (const dk of keys) {
                 if (dk === excludeDateKey) continue;
                 const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dk) : null;
                 if (!raw) continue;
                 const str = typeof raw === 'string' ? raw : String(raw);
                 const assigned = parseAssignedPersonForGroupFromAssignment(str, groupNum);
-                if (assigned && norm(assigned) === target) return dk;
+                if (assigned && norm(assigned) === target) matches.push(dk);
             }
-            return null;
+            if (matches.length === 0) return null;
+            if (matches.length === 1) return matches[0];
+            const t0 = new Date(excludeDateKey + 'T00:00:00').getTime();
+            if (isNaN(t0)) return matches[0];
+            matches.sort(
+                (a, b) =>
+                    Math.abs(new Date(a + 'T00:00:00').getTime() - t0) -
+                    Math.abs(new Date(b + 'T00:00:00').getTime() - t0)
+            );
+            return matches[0];
         }
 
         /** Build canonical assignment string from group → name map (groups 1–4 in order). */
